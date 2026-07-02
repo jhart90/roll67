@@ -8,7 +8,7 @@ import { CharactersPanel } from '../panels/CharactersPanel';
 import { ChatPanel } from '../panels/ChatPanel';
 import { CharacterSheet } from '../panels/CharacterSheet';
 import { InitiativePanel } from '../panels/InitiativePanel';
-import { HandoutsPanel } from '../panels/HandoutsPanel';
+import { DirectoryPanel } from '../panels/DirectoryPanel';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { PresenceBar } from '../table/PresenceBar';
@@ -28,7 +28,7 @@ const DM_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'light', icon: '💡', label: 'Lights' },
 ];
 
-type DockTab = 'chat' | 'characters' | 'handouts' | 'initiative';
+type DockTab = 'chat' | 'characters' | 'directory' | 'initiative';
 
 export function Table({ campaignId, onExit }: { campaignId: string; onExit: () => void }) {
   const you = useGameStore((s) => s.you);
@@ -115,7 +115,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         <aside className="dock">
           <div className="dock-tabs">
-            {(['characters', 'chat', 'initiative', 'handouts'] as DockTab[]).map((t) => (
+            {(['characters', 'chat', 'initiative', 'directory'] as DockTab[]).map((t) => (
               <button
                 key={t}
                 className={dockTab === t ? 'active' : ''}
@@ -128,7 +128,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           {dockTab === 'characters' && <CharactersPanel />}
           {dockTab === 'chat' && <ChatPanel />}
           {dockTab === 'initiative' && <InitiativePanel />}
-          {dockTab === 'handouts' && <HandoutsPanel />}
+          {dockTab === 'directory' && <DirectoryPanel />}
         </aside>
 
         {showMaps && isDm && (

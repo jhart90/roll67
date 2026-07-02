@@ -484,6 +484,37 @@ async function main() {
   ok(true, 'handout shared to specific player arrives');
   dmSock.emit('deleteHandout', { handoutId: created.id });
 
+  // ---------- directory ----------
+  console.log('directory:');
+  // Give the PC a compendium weapon so it shows in the shared directory.
+  dmSock.emit('updateCharacter', {
+    characterId: pc.id,
+    patch: { attacks: [{ name: 'Longsword', bonus: 5, damage: '1d8+3', notes: 'slashing' }] },
+  });
+  const dmDir = waitFor(dmSock, 'directory', 5000, (p) => p.weapons.includes('Longsword'));
+  const playerDir = waitFor(playerSock, 'directory', 5000, (p) => p.weapons.includes('Longsword'));
+  dmSock.emit('requestDirectory');
+  const dir = await dmDir;
+  ok(dir.maps.some((m) => m.id === mapId), 'directory lists campaign maps');
+  ok(dir.characters.some((c) => c.name === 'Smoke PC'), 'directory lists characters');
+  ok(dir.weapons.includes('Longsword'), 'directory aggregates party weapons');
+  const pdir = await playerDir;
+  ok(pdir.weapons.includes('Longsword'), 'players see the shared directory too');
+  // NPC-only gear must not leak to players: give the NPC a secret weapon.
+  dmSock.emit('updateCharacter', {
+    characterId: npc.id,
+    patch: { attacks: [{ name: 'Cursed Scythe', bonus: 9, damage: '4d10', notes: '' }] },
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const pdir2 = await new Promise((res) => {
+    playerSock.once('directory', res);
+    playerSock.emit('requestDirectory');
+  });
+  ok(!pdir2.weapons.includes('Cursed Scythe'), 'NPC-only gear stays hidden from players');
+  // cleanup the added attacks
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { attacks: [] } });
+  dmSock.emit('updateCharacter', { characterId: npc.id, patch: { attacks: [] } });
+
   // ---------- cleanup: restore the campaign exactly as we found it ----------
   dmSock.emit('initClear');
   if (originalActiveMapId) dmSock.emit('switchActiveMap', { mapId: originalActiveMapId });

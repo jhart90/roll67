@@ -15,6 +15,9 @@ A hex-grid virtual tabletop (Roll20-style) for playing **D&D 5e** and **Stars Wi
 - **Layers** — GM token layer for hidden monsters/notes; GM drawing layer for private sketches.
 - **DM tools** — wall polylines (trace your map art; Shift snaps to hex corners), doors (players can open/close when adjacent), light sources with bright/dim radii, **View as player** to see exactly what any player sees, and God mode.
 - **Character sheets** — full 5e and SWN templates with auto-calculated modifiers, saves, skills, spell slots / psionics, inventory and XP. Every stat is click-to-roll straight into chat, with advantage/disadvantage.
+- **Compendium** — an SRD-based content library (weapons, armor, gear, magic items, ~95 spells, SWN cyberware & psychic powers). Add any item to a character from the sheet and its rolls apply automatically: a weapon becomes a click-to-roll attack with the right ability + proficiency baked in, a damaging spell becomes a clickable damage roll.
+- **NPC library** — ~280 pre-built SRD monsters/NPCs (5e) and SWN NPCs, searchable and one-click to add as a DM-controlled NPC with full stats.
+- **Directory** — a shared campaign reference (below Handouts): a collapsible tree of every map, character, token, weapon, spell, and item introduced so far, visible to the whole party. NPC-only secrets stay hidden from players.
 - **Chat & dice** — `/r 2d6+3` rolls (with `kh`/`kl`, `adv`, `dis`, parentheses), `/gr` GM-only rolls, `/w name` whispers, saved macros (`#stab`), roll cards with die breakdowns and crit highlighting.
 - **Initiative tracker** — roll from sheets, hidden entries for surprise monsters, turn/round advancement.
 - **Table tools** — freehand drawing, hex ruler (broadcasts a live measurement to everyone), pings, and handouts/journal shareable to all or specific players.

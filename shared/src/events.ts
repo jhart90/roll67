@@ -67,6 +67,8 @@ export const C2S = {
   UPDATE_HANDOUT: 'updateHandout',
   DELETE_HANDOUT: 'deleteHandout',
   SHARE_HANDOUT: 'shareHandout',
+  // directory
+  REQUEST_DIRECTORY: 'requestDirectory',
 } as const;
 
 export interface JoinCampaignPayload { campaignId: string }
@@ -190,6 +192,7 @@ export const S2C = {
   PING_SHOWN: 'pingShown',
   MEASURE_SHOWN: 'measureShown',
   HANDOUTS: 'handouts',
+  DIRECTORY: 'directory',
   MEMBER_PRESENCE: 'memberPresence',
   ACTIVE_MAP: 'activeMap',
   ERROR_MSG: 'errorMsg',
@@ -280,6 +283,16 @@ export interface PingShownPayload extends PingInfo {}
 export interface MeasureShownPayload extends MeasureInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
+
+/** Campaign-wide shared reference of everything introduced so far. */
+export interface DirectoryPayload {
+  maps: Array<{ id: string; name: string }>;
+  characters: Array<{ id: string; name: string; owner: string | null; system: GameSystem }>;
+  tokens: Array<{ name: string; mapName: string; gm: boolean }>;
+  weapons: string[];
+  spells: string[];
+  items: string[];
+}
 export interface MemberPresencePayload { userId: string; online: boolean; mapId: string | null }
 /** The campaign's party (default) map changed. */
 export interface ActiveMapPayload { mapId: string | null }

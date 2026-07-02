@@ -11,6 +11,7 @@ import { newId } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata } from '../hub.js';
 import { canReachDoor, dropMapVisionCaches, syncMapVision } from '../visionService.js';
 import { broadcastPresence, sendMapState } from './session.js';
+import { broadcastDirectory } from '../directory.js';
 
 function requireDmMap(socket: Socket, mapId: string) {
   const d = sdata(socket);
@@ -36,6 +37,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
         if (sdata(s).campaignId === d.campaignId) sendMapState(s);
       }
     }
+    broadcastDirectory(io, d.campaignId);
   }));
 
   socket.on(C2S.DELETE_MAP, safe(socket, ({ mapId }: DeleteMapPayload) => {

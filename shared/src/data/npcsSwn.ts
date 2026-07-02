@@ -83,6 +83,30 @@ const ROWS: Row[] = [
   ['Explorer', 'Spacers & Adventurers', 'Expert', 3, 14, 15, 3, [['Rifle', 4, '1d10+1']], [['Survive', 2], ['Notice', 2]]],
   ['Archaeotech Hunter', 'Spacers & Adventurers', 'Expert', 4, 14, 20, 4, [['Laser Rifle', 5, '1d8+1']], [['Know', 3], ['Fix', 2]], 'Obsessed with pretech relics'],
   ['Ship Medic', 'Spacers & Adventurers', 'Expert', 2, 12, 9, 1, [['Laser Pistol', 2, '1d6']], [['Heal', 3]]],
+
+  // ---------- More Civilians & Criminals ----------
+  ['Street Urchin', 'Civilians', 'Expert', 1, 11, 3, 0, [['Shiv', 0, '1d4']], [['Sneak', 1]]],
+  ['Bureaucrat', 'Civilians', 'Expert', 2, 10, 6, 0, [['Holdout Pistol', 1, '1d4']], [['Administer', 2], ['Know', 1]]],
+  ['Ship Engineer', 'Civilians', 'Expert', 3, 12, 12, 1, [['Wrench', 1, '1d4']], [['Fix', 3], ['Program', 2]]],
+  ['Journalist', 'Civilians', 'Expert', 1, 10, 4, 0, [['Holdout Pistol', 1, '1d4']], [['Connect', 2], ['Notice', 1]]],
+  ['Slaver', 'Criminals', 'Warrior', 3, 14, 16, 3, [['Shock Whip', 4, '1d6'], ['Stun Gun', 4, '1d4']], [['Talk', 1]]],
+  ['Data Thief', 'Criminals', 'Expert', 3, 13, 12, 2, [['Silenced Pistol', 3, '1d6']], [['Program', 3], ['Sneak', 2]]],
+  ['Cartel Sicario', 'Criminals', 'Warrior', 4, 15, 22, 4, [['Mag Rifle', 6, '2d8+1']], [['Shoot', 2]]],
+
+  // ---------- More Military & Robots ----------
+  ['Ship Trooper', 'Military', 'Warrior', 2, 16, 10, 3, [['Combat Rifle', 4, '1d12']], [['Shoot', 1]], 'Vacuum-rated'],
+  ['Field Commander', 'Military', 'Warrior', 6, 16, 34, 6, [['Mag Pistol', 7, '2d6+2']], [['Lead', 3], ['Shoot', 2]]],
+  ['Drone Operator', 'Military', 'Expert', 3, 13, 14, 2, [['Combat Drone', 4, '1d10']], [['Program', 2], ['Pilot', 2]]],
+  ['Maintenance Bot', 'Robots & VIs', 'Expert', 1, 12, 6, 0, [['Tool Arm', 0, '1d4']], [['Fix', 2]], 'Robot'],
+  ['Medical Bot', 'Robots & VIs', 'Expert', 2, 13, 10, 0, [['Injector', 1, '1d4']], [['Heal', 3]], 'Robot'],
+  ['Hunter-Killer Drone', 'Robots & VIs', 'Warrior', 4, 16, 20, 5, [['Integral Laser', 6, '1d8']], [['Shoot', 2]], 'Robot; Fly'],
+
+  // ---------- More Alien Fauna ----------
+  ['Burrowing Ambusher', 'Alien Fauna & Sophonts', 'Warrior', 3, 15, 18, 4, [['Claws', 5, '1d10']], [], 'Burrows; surprise attack'],
+  ['Aquatic Hunter', 'Alien Fauna & Sophonts', 'Warrior', 4, 14, 22, 5, [['Bite', 6, '1d12']], [], 'Swim only; drags prey under'],
+  ['Hive Drone', 'Alien Fauna & Sophonts', 'Warrior', 1, 13, 4, 2, [['Mandibles', 2, '1d6']], [], 'Swarms; mindless'],
+  ['Hive Queen', 'Alien Fauna & Sophonts', 'Warrior', 8, 16, 50, 8, [['Mandibles', 9, '2d8'], ['Acid Spray', 8, '2d6']], [], 'Spawns drones; terrifying'],
+  ['Xenobeast Alpha', 'Alien Fauna & Sophonts', 'Warrior', 6, 15, 38, 7, [['Bite', 8, '1d12'], ['Tail', 8, '1d10']], [['Survive', 2]], 'Regenerates'],
 ];
 
 export const NPCS_SWN: NpcEntry[] = ROWS.map((row) => {

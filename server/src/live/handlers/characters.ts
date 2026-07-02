@@ -8,6 +8,7 @@ import { npcById } from 'shared';
 import { campaigns, characters, tokens } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
+import { broadcastDirectory } from '../directory.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -37,6 +38,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const sheet = systemFor(payload.system).defaultSheet();
     const character = characters.create(d.campaignId, owner, name, payload.system, sheet);
     emitCharacter(io, d.campaignId, character);
+    broadcastDirectory(io, d.campaignId);
   }));
 
   socket.on(C2S.CREATE_NPC, safe(socket, ({ libraryId, name }: CreateNpcPayload) => {
@@ -69,6 +71,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     }
     characters.delete(characterId);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHARACTER_REMOVED, { characterId });
+    broadcastDirectory(io, d.campaignId);
   }));
 
   socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name }: UpdateCharacterPayload) => {
@@ -96,5 +99,6 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       touchedMaps.add(t.mapId);
     }
     for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
+    broadcastDirectory(io, d.campaignId);
   }));
 }

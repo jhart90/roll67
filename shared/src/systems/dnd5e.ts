@@ -272,6 +272,7 @@ const spellsTab: SheetTab = {
       kind: 'list', id: 'cantrips', title: 'Cantrips',
       columns: [
         { id: 'name', label: 'Name', type: 'text', width: 'third' },
+        { id: 'damage', label: 'Damage', type: 'text', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },
@@ -281,7 +282,8 @@ const spellsTab: SheetTab = {
         { id: 'name', label: 'Name', type: 'text', width: 'third' },
         { id: 'level', label: 'Lvl', type: 'number', width: 'sixth', default: 1 },
         { id: 'prepared', label: 'Prep', type: 'checkbox', width: 'sixth' },
-        { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
+        { id: 'damage', label: 'Damage', type: 'text', width: 'sixth' },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
   ],
@@ -359,6 +361,17 @@ export const dnd5e: SystemSchema = {
     const spellAbility = str(sheet, 'spellAbility', 'int');
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.push({ id: 'spellAttack', label: 'Spell attack', expr: `1d20${fmtMod(pb + spellMod)}`, group: 'Combat', d20: true });
+    // Spells and cantrips with a damage/heal expression become click-to-roll.
+    const spellDamage = (rowsList: SheetData[], prefix: string) => {
+      rowsList.forEach((sp, i) => {
+        const dmg = str(sp, 'damage', '').trim();
+        if (!dmg || !/\d*d\d/i.test(dmg)) return;
+        const name = str(sp, 'name', `${prefix} ${i + 1}`);
+        out.push({ id: `${prefix}_${i}`, label: `${name}`, expr: dmg, group: 'Spells', d20: /^1d20/i.test(dmg) });
+      });
+    };
+    spellDamage(rows(sheet, 'cantrips'), 'cantrip');
+    spellDamage(rows(sheet, 'spells'), 'spell');
     return out;
   },
 

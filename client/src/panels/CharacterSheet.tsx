@@ -5,6 +5,7 @@ import {
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { Compendium } from './Compendium';
 
 type AdvMode = null | 'adv' | 'dis';
 
@@ -289,6 +290,7 @@ export function CharacterSheet() {
   const character = useGameStore((s) =>
     s.sheetCharacterId ? s.characters.find((c) => c.id === s.sheetCharacterId) : undefined);
   const [tabId, setTabId] = useState<string | null>(null);
+  const [showCompendium, setShowCompendium] = useState(false);
 
   if (!character || !you) return null;
   const schema = systemFor(character.system);
@@ -319,8 +321,11 @@ export function CharacterSheet() {
           />
           <span className="dim">{schema.name}{character.ownerUserId ? '' : ' · NPC'}</span>
           <span className="spacer" />
+          {editable && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
           <button className="link" onClick={() => useGameStore.getState().openSheet(null)}>close</button>
         </div>
+
+        {showCompendium && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (

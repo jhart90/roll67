@@ -7,6 +7,7 @@ import {
 import { characters, maps, tokens } from '../../db/repos.js';
 import { dmRoom, emitError, safe, sdata } from '../hub.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
+import { broadcastDirectory } from '../directory.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -42,6 +43,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     const created = tokens.forMap(payload.mapId).at(-1)!;
     io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: created });
     syncMapVision(io, d.campaignId, payload.mapId);
+    broadcastDirectory(io, d.campaignId);
   }));
 
   socket.on(C2S.DELETE_TOKEN, safe(socket, ({ tokenId }: DeleteTokenPayload) => {
@@ -57,6 +59,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     tokens.delete(tokenId);
     io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId });
     syncMapVision(io, d.campaignId, token.mapId);
+    broadcastDirectory(io, d.campaignId);
   }));
 
   socket.on(C2S.UPDATE_TOKEN, safe(socket, ({ tokenId, patch }: UpdateTokenPayload) => {
@@ -73,6 +76,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     const updated = tokens.byId(tokenId)!;
     io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: updated });
     syncMapVision(io, d.campaignId, token.mapId);
+    broadcastDirectory(io, d.campaignId);
   }));
 
   socket.on(C2S.MOVE_TOKEN, safe(socket, ({ tokenId, q, r }: MoveTokenPayload) => {

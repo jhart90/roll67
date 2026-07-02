@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import {
   C2S, S2C,
-  type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage, type DieRoll,
+  type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
+  type DieRoll, type DirectoryPayload,
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type MapStatePayload, type MapView, type MeasureShownPayload, type MemberInfo,
@@ -33,6 +34,7 @@ interface GameState {
   mapsMeta: MapMeta[];
   handoutList: Handout[];
   macroList: Macro[];
+  directory: DirectoryPayload | null;
   initiativeState: InitiativeState;
   chatLog: ChatMessage[];
 
@@ -89,6 +91,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   mapsMeta: [],
   handoutList: [],
   macroList: [],
+  directory: null,
   initiativeState: { entries: [], turnIdx: 0, round: 1, active: false },
   chatLog: [],
 
@@ -342,6 +345,10 @@ export function wireSocket(): void {
     useGameStore.setState({ handoutList: handouts });
   });
 
+  socket.on(S2C.DIRECTORY, (payload: DirectoryPayload) => {
+    useGameStore.setState({ directory: payload });
+  });
+
   socket.on(S2C.DRAWING_ADDED, ({ drawing }: { drawing: Drawing }) => {
     const s = useGameStore.getState();
     if (s.map?.id !== drawing.mapId) return;
@@ -476,4 +483,5 @@ export const intents = {
   deleteHandout: (handoutId: string) => socket.emit(C2S.DELETE_HANDOUT, { handoutId }),
   shareHandout: (handoutId: string, to: string[] | 'all' | 'none') =>
     socket.emit(C2S.SHARE_HANDOUT, { handoutId, to }),
+  requestDirectory: () => socket.emit(C2S.REQUEST_DIRECTORY),
 };

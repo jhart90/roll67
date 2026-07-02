@@ -92,7 +92,9 @@ function ShareControls({ handout }: { handout: Handout }) {
   );
 }
 
-export function HandoutsPanel() {
+/** Handouts UI as a plain section (no outer dock-panel) for composing into
+ * the Directory panel. */
+export function HandoutsSection() {
   const you = useGameStore((s) => s.you);
   const handoutList = useGameStore((s) => s.handoutList);
   const [editing, setEditing] = useState<Handout | null | 'new'>(null);
@@ -104,7 +106,7 @@ export function HandoutsPanel() {
 
   if (editing !== null) {
     return (
-      <div className="dock-panel">
+      <div className="dir-section">
         <div className="dock-header"><h3>{editing === 'new' ? 'New handout' : 'Edit handout'}</h3></div>
         <HandoutEditor handout={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />
       </div>
@@ -113,7 +115,7 @@ export function HandoutsPanel() {
 
   if (open) {
     return (
-      <div className="dock-panel">
+      <div className="dir-section">
         <div className="dock-header">
           <h3>{open.title}</h3>
           <button className="link" onClick={() => setOpenId(null)}>back</button>
@@ -144,7 +146,7 @@ export function HandoutsPanel() {
   }
 
   return (
-    <div className="dock-panel">
+    <div className="dir-section">
       <div className="dock-header">
         <h3>Handouts & Journal</h3>
         {isDm && <button className="link" onClick={() => setEditing('new')}>+ new</button>}

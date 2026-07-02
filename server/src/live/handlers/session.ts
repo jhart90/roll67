@@ -11,6 +11,7 @@ import {
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
 import { initiativeViewFor } from './combat.js';
+import { buildDirectory } from '../directory.js';
 
 function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   const all = handouts.forCampaign(campaignId);
@@ -104,8 +105,15 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
 
     socket.emit(S2C.YOU_ARE, { userId: d.userId, username: d.username, role });
     socket.emit(S2C.CAMPAIGN_STATE, buildCampaignState(campaignId, d.userId, d.username, role === 'dm'));
+    socket.emit(S2C.DIRECTORY, buildDirectory(campaignId, role === 'dm'));
     sendMapState(socket);
     broadcastPresence(io, campaignId);
+  }));
+
+  socket.on(C2S.REQUEST_DIRECTORY, safe(socket, () => {
+    const d = sdata(socket);
+    if (!d.campaignId || !d.role) return;
+    socket.emit(S2C.DIRECTORY, buildDirectory(d.campaignId, d.role === 'dm'));
   }));
 
   socket.on(C2S.LEAVE_CAMPAIGN, safe(socket, () => {

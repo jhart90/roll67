@@ -1,0 +1,146 @@
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS campaigns (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn')),
+  dm_user_id TEXT NOT NULL REFERENCES users(id),
+  invite_code TEXT UNIQUE NOT NULL,
+  active_map_id TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS campaign_members (
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('dm', 'player')),
+  PRIMARY KEY (campaign_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS assets (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  uploader_id TEXT NOT NULL REFERENCES users(id),
+  kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'handout')),
+  filename TEXT NOT NULL,
+  ext TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  bytes INTEGER NOT NULL,
+  width INTEGER NOT NULL DEFAULT 0,
+  height INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS characters (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  owner_user_id TEXT REFERENCES users(id),
+  name TEXT NOT NULL,
+  system TEXT NOT NULL,
+  sheet_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS maps (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  bg_asset_id TEXT REFERENCES assets(id),
+  grid_json TEXT NOT NULL,
+  walls_json TEXT NOT NULL DEFAULT '[]',
+  doors_json TEXT NOT NULL DEFAULT '[]',
+  lights_json TEXT NOT NULL DEFAULT '[]',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS tokens (
+  id TEXT PRIMARY KEY,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  character_id TEXT REFERENCES characters(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  art_asset_id TEXT REFERENCES assets(id),
+  q INTEGER NOT NULL,
+  r INTEGER NOT NULL,
+  layer TEXT NOT NULL CHECK (layer IN ('token', 'gm')),
+  size INTEGER NOT NULL DEFAULT 1,
+  color TEXT NOT NULL DEFAULT '#6c9bd2',
+  vision_json TEXT,
+  bar_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS fog_explored (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  hexes BLOB NOT NULL,
+  PRIMARY KEY (user_id, map_id)
+);
+
+CREATE TABLE IF NOT EXISTS handouts (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body_md TEXT NOT NULL DEFAULT '',
+  asset_id TEXT REFERENCES assets(id),
+  shared_all INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS handout_shares (
+  handout_id TEXT NOT NULL REFERENCES handouts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (handout_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS macros (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  command TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id),
+  from_name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('say', 'roll', 'whisper', 'system')),
+  text TEXT NOT NULL,
+  roll_json TEXT,
+  recipients_json TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_campaign ON chat_messages(campaign_id, id);
+
+CREATE TABLE IF NOT EXISTS initiative (
+  campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+  state_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS drawings (
+  id TEXT PRIMARY KEY,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  author_id TEXT NOT NULL,
+  layer TEXT NOT NULL CHECK (layer IN ('map', 'gm')),
+  shape_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);

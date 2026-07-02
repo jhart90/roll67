@@ -7,6 +7,7 @@ export * from './hex/line.js';
 export * from './hex/pack.js';
 export * from './vision/raycast.js';
 export * from './vision/fov.js';
+export * from './vision/movement.js';
 export * from './dice/parser.js';
 export * from './dice/roller.js';
 export * from './systems/index.js';

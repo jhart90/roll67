@@ -112,18 +112,32 @@ async function main() {
 
   // Run everything on a dedicated smoke-test map so real campaign maps,
   // geometry and fog are never touched. Restored + deleted at the end.
-  const originalActiveMapId = dmCampaign.campaign.activeMapId;
   dmMap.catch(() => undefined); // original active map state (if any) — unused
 
-  // Delete stale smoke maps from crashed runs, then create a fresh one.
-  for (const m of dmCampaign.maps.filter((x) => x.name === 'Smoke Test Map')) {
-    dmSock.emit('deleteMap', { mapId: m.id });
+  // Delete stale smoke maps from crashed runs (a crash can even leave one
+  // as the active map), then create a fresh one and identify it by id.
+  const staleIds = new Set(
+    dmCampaign.maps.filter((x) => x.name === 'Smoke Test Map' || x.name === 'Smoke Annex').map((x) => x.id),
+  );
+  for (const id of staleIds) dmSock.emit('deleteMap', { mapId: id });
+  await new Promise((r) => setTimeout(r, 500));
+
+  // The map to restore afterwards: the pre-test active map unless it was a
+  // stale smoke map, in which case fall back to the first real map.
+  let originalActiveMapId = dmCampaign.campaign.activeMapId;
+  if (!originalActiveMapId || staleIds.has(originalActiveMapId)) {
+    originalActiveMapId = dmCampaign.maps.find((m) => !staleIds.has(m.id))?.id ?? null;
   }
-  const mapList = waitFor(dmSock, 'mapList', 5000, (p) => p.maps.some((m) => m.name === 'Smoke Test Map'));
+
+  const mapList = waitFor(dmSock, 'mapList', 5000, (p) =>
+    p.maps.some((m) => m.name === 'Smoke Test Map' && !staleIds.has(m.id)));
   dmSock.emit('createMap', { name: 'Smoke Test Map' });
-  const smokeMapId = (await mapList).maps.find((m) => m.name === 'Smoke Test Map').id;
+  const smokeMapId = (await mapList).maps.find((m) => m.name === 'Smoke Test Map' && !staleIds.has(m.id)).id;
   const dmMapPromise = waitFor(dmSock, 'mapState', 5000, (p) => p.map.id === smokeMapId);
   dmSock.emit('switchActiveMap', { mapId: smokeMapId });
+  // The DM may have a personal working-map override pinned; explicitly view
+  // the smoke map so the test runs there regardless.
+  dmSock.emit('viewMap', { mapId: smokeMapId });
   const dmMapState = await dmMapPromise;
   ok(!!dmMapState.map, `DM switched to "${dmMapState.map?.name}"`);
   ok(dmMapState.dmGeometry !== null, 'DM receives walls/doors/lights geometry');
@@ -227,10 +241,13 @@ async function main() {
 
   // Replace a middle chunk of wall with a closed door: build the stubs and
   // the closed door first, THEN remove the long wall (no transient gap).
+  // Stubs must span the WHOLE map height (rows*1.5*hexSize) or movement can
+  // legitimately path around their ends.
+  const mapBottom = g.rows * 1.5 * g.hexSize + 200;
   const doorTop = { x: wallX, y: px(12, 5).y - 30 };
   const doorBottom = { x: wallX, y: px(12, 5).y + 30 };
-  dmSock.emit('upsertWall', { mapId, wall: { points: [{ x: wallX, y: px(6, 0).y - 100 }, doorTop] } });
-  dmSock.emit('upsertWall', { mapId, wall: { points: [doorBottom, { x: wallX, y: px(6, 12).y + 100 }] } });
+  dmSock.emit('upsertWall', { mapId, wall: { points: [{ x: wallX, y: -200 }, doorTop] } });
+  dmSock.emit('upsertWall', { mapId, wall: { points: [doorBottom, { x: wallX, y: mapBottom }] } });
   dmSock.emit('upsertDoor', { mapId, door: { a: doorTop, b: doorBottom, open: false } });
   await new Promise((r) => setTimeout(r, 300));
   dmSock.emit('deleteWall', { mapId, wallId });
@@ -243,11 +260,25 @@ async function main() {
   const dmMap2 = await waitFor(dmSock, 'mapState');
   const door = dmMap2.dmGeometry.doors.at(-1);
 
+  // Movement blocking: the player cannot walk through the closed door/wall.
+  const moveBlocked = waitFor(playerSock, 'errorMsg');
+  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 10, r: 5 });
+  ok(!!(await moveBlocked).message, `player cannot move through wall/closed door ("${(await moveBlocked).message}")`);
+
   // DM opens the door -> monster appears to the player.
   const revealed = waitFor(playerSock, 'visionUpdate', 5000, (p) => p.tokens.some((t) => t.id === beast.id));
   dmSock.emit('toggleDoor', { mapId, doorId: door.id });
   await revealed;
   ok(true, 'opening the door reveals the monster');
+
+  // With the door open the same move is legal.
+  const moveThrough = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === 10);
+  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 10, r: 5 });
+  await moveThrough;
+  ok(true, 'player walks through the open door');
+  const moveHome = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === 6);
+  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 6, r: 5 });
+  await moveHome;
 
   // Player got doorState + knows the door now.
   const playerDoorKnown = await waitFor(playerSock, 'visionUpdate', 5000, (p) =>

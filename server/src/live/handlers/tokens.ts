@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canMoveToken, inBounds,
+  C2S, S2C, canMoveToken, canReachHex, inBounds,
   type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type MoveTokenPayload, type UpdateTokenPayload,
 } from 'shared';
@@ -88,6 +88,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     }
     if (!inBounds({ q, r }, map.grid)) {
       emitError(socket, 'That is off the map.');
+      return;
+    }
+    // Players cannot walk through walls or closed doors; the DM may
+    // reposition tokens freely.
+    if (d.role !== 'dm' && !canReachHex(
+      { q: token.q, r: token.r },
+      { q, r },
+      { grid: map.grid, walls: map.walls, doors: map.doors },
+    )) {
+      emitError(socket, 'Something blocks the way.');
       return;
     }
     tokens.move(tokenId, q, r);

@@ -12,6 +12,7 @@ import { HandoutsPanel } from '../panels/HandoutsPanel';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { PresenceBar } from '../table/PresenceBar';
+import { DiceRoller } from '../table/DiceRoller';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -40,6 +41,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const drawColor = useGameStore((s) => s.drawColor);
   const drawLayer = useGameStore((s) => s.drawLayer);
   const [showMaps, setShowMaps] = useState(false);
+  const [showDice, setShowDice] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab>('characters');
 
   useEffect(() => {
@@ -99,6 +101,14 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               {t.icon}
             </button>
           ))}
+          <div className="rail-gap" />
+          <button
+            className={`tool-btn ${showDice ? 'active' : ''}`}
+            title="Roll dice"
+            onClick={() => setShowDice((v) => !v)}
+          >
+            🎲
+          </button>
         </nav>
 
         <MapStage />
@@ -151,6 +161,8 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
             )}
           </div>
         )}
+
+        {showDice && <DiceRoller onClose={() => setShowDice(false)} />}
 
         <TokenInspector />
         <LightInspector />

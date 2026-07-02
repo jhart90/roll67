@@ -1,0 +1,236 @@
+// Pre-built 5e NPCs/monsters based on the SRD 5.1 (CC-BY-4.0).
+// Compact rows: [name, category, cr, ac, hp, speed, [STR,DEX,CON,INT,WIS,CHA], attacks, darkvisionFt, note]
+
+import { dnd5e } from '../systems/dnd5e.js';
+import { attackRows, crToNumber, slug, type AttackRow, type NpcEntry } from './npcTypes.js';
+
+type Row = [
+  string, string, string, number, number, number,
+  [number, number, number, number, number, number],
+  AttackRow[], number?, string?,
+];
+
+const ROWS: Row[] = [
+  // ---------- People & NPCs ----------
+  ['Commoner', 'People & NPCs', '0', 10, 4, 30, [10, 10, 10, 10, 10, 10], [['Club', 2, '1d4']]],
+  ['Bandit', 'People & NPCs', '1/8', 12, 11, 30, [11, 12, 12, 10, 10, 10], [['Scimitar', 3, '1d6+1'], ['Light Crossbow', 3, '1d8+1']]],
+  ['Guard', 'People & NPCs', '1/8', 16, 11, 30, [13, 12, 12, 10, 11, 10], [['Spear', 3, '1d6+1']]],
+  ['Cultist', 'People & NPCs', '1/8', 12, 9, 30, [11, 12, 10, 10, 11, 10], [['Scimitar', 3, '1d6+1']], 0, 'Dark Devotion: advantage vs charm/fright'],
+  ['Noble', 'People & NPCs', '1/8', 15, 9, 30, [11, 12, 11, 12, 14, 16], [['Rapier', 3, '1d8+1']]],
+  ['Tribal Warrior', 'People & NPCs', '1/8', 12, 11, 30, [13, 11, 12, 8, 11, 8], [['Spear', 3, '1d6+1']]],
+  ['Acolyte', 'People & NPCs', '1/4', 10, 9, 30, [10, 10, 10, 10, 14, 11], [['Club', 2, '1d4']], 0, 'Spellcasting: bless, cure wounds, sanctuary'],
+  ['Scout', 'People & NPCs', '1/2', 13, 16, 30, [11, 14, 12, 11, 13, 11], [['Shortsword', 4, '1d6+2'], ['Longbow', 4, '1d8+2']], 0, 'Keen Hearing and Sight; Perception +5, Stealth +6'],
+  ['Thug', 'People & NPCs', '1/2', 11, 32, 30, [15, 11, 14, 10, 10, 11], [['Mace', 4, '1d6+2'], ['Heavy Crossbow', 2, '1d10']], 0, 'Pack Tactics'],
+  ['Spy', 'People & NPCs', '1', 12, 27, 30, [10, 15, 10, 12, 14, 16], [['Shortsword', 4, '1d6+2'], ['Hand Crossbow', 4, '1d6+2']], 0, 'Sneak Attack +2d6, Cunning Action'],
+  ['Bandit Captain', 'People & NPCs', '2', 15, 65, 30, [15, 16, 14, 14, 11, 14], [['Scimitar (x2) + Dagger', 5, '1d6+3'], ['Dagger (thrown)', 5, '1d4+3']], 0, 'Multiattack; Parry reaction'],
+  ['Berserker', 'People & NPCs', '2', 13, 67, 30, [16, 12, 17, 9, 11, 9], [['Greataxe', 5, '1d12+3']], 0, 'Reckless: advantage on attacks, attacks vs it have advantage'],
+  ['Druid', 'People & NPCs', '2', 11, 27, 30, [10, 12, 13, 12, 15, 11], [['Quarterstaff', 2, '1d6']], 0, 'Spellcasting: entangle, thunderwave, barkskin'],
+  ['Priest', 'People & NPCs', '2', 13, 27, 25, [10, 10, 12, 13, 16, 13], [['Mace', 2, '1d6']], 0, 'Spellcasting: cure wounds, spirit guardians, spiritual weapon'],
+  ['Veteran', 'People & NPCs', '3', 17, 58, 30, [16, 13, 14, 10, 11, 10], [['Longsword', 5, '1d8+3'], ['Shortsword', 5, '1d6+3'], ['Heavy Crossbow', 3, '1d10+1']], 0, 'Multiattack (2 longsword + shortsword)'],
+  ['Knight', 'People & NPCs', '3', 18, 52, 30, [16, 11, 14, 11, 11, 15], [['Greatsword', 5, '2d6+3'], ['Heavy Crossbow', 2, '1d10']], 0, 'Leadership, Brave'],
+  ['Gladiator', 'People & NPCs', '5', 16, 112, 30, [18, 15, 16, 10, 12, 15], [['Spear', 7, '2d6+4'], ['Shield Bash', 7, '2d4+4']], 0, 'Brute, Parry; Multiattack x3'],
+  ['Mage', 'People & NPCs', '6', 12, 40, 30, [9, 14, 11, 17, 12, 11], [['Dagger', 5, '1d4+2']], 0, 'Spellcasting: fireball, counterspell, misty step, shield'],
+  ['Assassin', 'People & NPCs', '8', 15, 78, 30, [11, 16, 14, 13, 11, 10], [['Shortsword', 6, '1d6+3'], ['Light Crossbow', 6, '1d8+3']], 0, 'Assassinate, Sneak Attack +4d6, poison (7d6)'],
+  ['Archmage', 'People & NPCs', '12', 12, 99, 30, [10, 14, 12, 20, 15, 16], [['Dagger', 6, '1d4+2']], 0, 'Spellcasting: time stop, cone of cold, globe of invulnerability'],
+
+  // ---------- Goblinoids & Orcs ----------
+  ['Kobold', 'Goblinoids & Orcs', '1/8', 12, 5, 30, [7, 15, 9, 8, 7, 8], [['Dagger', 4, '1d4+2'], ['Sling', 4, '1d4+2']], 60, 'Pack Tactics; Sunlight Sensitivity'],
+  ['Winged Kobold', 'Goblinoids & Orcs', '1/4', 13, 7, 30, [7, 16, 9, 8, 7, 8], [['Dagger', 5, '1d4+3'], ['Dropped Rock', 5, '1d6+3']], 60, 'Fly 30 ft; Sunlight Sensitivity'],
+  ['Goblin', 'Goblinoids & Orcs', '1/4', 15, 7, 30, [8, 14, 10, 10, 8, 8], [['Scimitar', 4, '1d6+2'], ['Shortbow', 4, '1d6+2']], 60, 'Nimble Escape (bonus disengage/hide)'],
+  ['Goblin Boss', 'Goblinoids & Orcs', '1', 17, 21, 30, [10, 14, 10, 10, 8, 10], [['Scimitar', 4, '1d6+2'], ['Javelin', 2, '1d6']], 60, 'Multiattack x2; Redirect Attack'],
+  ['Hobgoblin', 'Goblinoids & Orcs', '1/2', 18, 11, 30, [13, 12, 12, 10, 10, 9], [['Longsword', 3, '1d8+1'], ['Longbow', 3, '1d8+1']], 60, 'Martial Advantage +2d6'],
+  ['Hobgoblin Captain', 'Goblinoids & Orcs', '3', 17, 39, 30, [15, 14, 14, 12, 10, 13], [['Greatsword', 4, '2d6+2'], ['Javelin', 4, '1d6+2']], 60, 'Multiattack x2; Leadership'],
+  ['Bugbear', 'Goblinoids & Orcs', '1', 16, 27, 30, [15, 14, 13, 8, 11, 9], [['Morningstar', 4, '2d8+2'], ['Javelin', 4, '1d6+2']], 60, 'Brute; Surprise Attack +2d6'],
+  ['Orc', 'Goblinoids & Orcs', '1/2', 13, 15, 30, [16, 12, 16, 7, 11, 10], [['Greataxe', 5, '1d12+3'], ['Javelin', 5, '1d6+3']], 60, 'Aggressive (bonus move toward enemy)'],
+  ['Orog', 'Goblinoids & Orcs', '2', 18, 42, 30, [18, 12, 18, 12, 11, 12], [['Greataxe', 6, '1d12+4'], ['Javelin', 6, '1d6+4']], 60, 'Multiattack x2; Aggressive'],
+  ['Orc War Chief', 'Goblinoids & Orcs', '4', 16, 93, 30, [18, 12, 18, 11, 11, 16], [['Greataxe', 6, '1d12+4+1d8'], ['Spear', 6, '1d6+4']], 60, "Multiattack x2; Gruumsh's Fury; Battle Cry"],
+
+  // ---------- Savage Humanoids ----------
+  ['Gnoll', 'Savage Humanoids', '1/2', 15, 22, 30, [14, 12, 11, 6, 10, 7], [['Bite', 4, '1d4+2'], ['Spear', 4, '1d6+2'], ['Longbow', 3, '1d8+1']], 60, 'Rampage (bonus bite on kill)'],
+  ['Gnoll Pack Lord', 'Savage Humanoids', '2', 15, 49, 30, [16, 14, 13, 8, 11, 9], [['Glaive', 5, '1d10+3'], ['Longbow', 4, '1d8+2']], 60, 'Multiattack x2; Incite Rampage'],
+  ['Lizardfolk', 'Savage Humanoids', '1/2', 15, 22, 30, [15, 10, 13, 7, 12, 7], [['Bite', 4, '1d6+2'], ['Heavy Club', 4, '1d6+2'], ['Javelin', 4, '1d6+2']], 0, 'Swim 30 ft; Hold Breath 15 min'],
+  ['Sahuagin', 'Savage Humanoids', '1/2', 12, 22, 30, [13, 11, 12, 12, 13, 9], [['Bite', 3, '1d4+1'], ['Spear', 3, '1d6+1']], 120, 'Swim 40 ft; Blood Frenzy; Shark Telepathy'],
+  ['Kuo-toa', 'Savage Humanoids', '1/4', 13, 18, 30, [13, 10, 11, 11, 10, 8], [['Bite', 3, '1d4+1'], ['Spear', 3, '1d6+1']], 120, 'Swim 30 ft; Sticky Shield; Sunlight Sensitivity'],
+  ['Grimlock', 'Savage Humanoids', '1/4', 11, 11, 30, [16, 12, 12, 9, 8, 6], [['Spiked Bone Club', 5, '1d4+3']], 0, 'Blindsight 30 ft (blind beyond); Keen Hearing and Smell'],
+  ['Merfolk', 'Savage Humanoids', '1/8', 11, 11, 10, [10, 13, 12, 11, 11, 12], [['Spear', 2, '1d6']], 0, 'Swim 40 ft; Amphibious'],
+  ['Yuan-ti Pureblood', 'Savage Humanoids', '1', 11, 40, 30, [11, 12, 11, 13, 12, 14], [['Scimitar', 3, '1d6+1'], ['Shortbow', 3, '1d6+1']], 60, 'Magic Resistance; Innate: suggestion, poison spray'],
+
+  // ---------- Undead ----------
+  ['Skeleton', 'Undead', '1/4', 13, 13, 30, [10, 14, 15, 6, 8, 5], [['Shortsword', 4, '1d6+2'], ['Shortbow', 4, '1d6+2']], 60, 'Vulnerable bludgeoning; immune poison'],
+  ['Zombie', 'Undead', '1/4', 8, 22, 20, [13, 6, 16, 3, 6, 5], [['Slam', 3, '1d6+1']], 60, 'Undead Fortitude'],
+  ['Shadow', 'Undead', '1/2', 12, 16, 40, [6, 14, 13, 6, 10, 8], [['Strength Drain', 4, '2d6+2']], 60, 'Amorphous; Shadow Stealth; drains STR'],
+  ['Ghoul', 'Undead', '1', 12, 22, 30, [13, 15, 10, 7, 10, 6], [['Bite', 2, '2d6+2'], ['Claws', 4, '2d4+2']], 60, 'Claws paralyze (DC 10 CON)'],
+  ['Specter', 'Undead', '1', 12, 22, 0, [1, 14, 11, 10, 10, 11], [['Life Drain', 4, '3d6']], 60, 'Fly 50 ft; Incorporeal Movement; Sunlight Sensitivity'],
+  ['Ghast', 'Undead', '2', 13, 36, 30, [16, 17, 10, 11, 10, 8], [['Bite', 3, '2d8+3'], ['Claws', 5, '2d6+3']], 60, 'Stench; claws paralyze (DC 10 CON)'],
+  ['Wight', 'Undead', '3', 14, 45, 30, [15, 14, 16, 10, 13, 15], [['Life Drain', 4, '1d6+2'], ['Longsword', 4, '1d8+2'], ['Longbow', 4, '1d8+2']], 60, 'Multiattack x2; Sunlight Sensitivity; raises zombies'],
+  ['Mummy', 'Undead', '3', 11, 58, 20, [16, 8, 15, 6, 10, 12], [['Rotting Fist', 5, '2d6+3']], 60, 'Dreadful Glare; Mummy Rot; vulnerable fire'],
+  ['Ghost', 'Undead', '4', 11, 45, 0, [7, 13, 10, 10, 12, 17], [['Withering Touch', 5, '4d6+3']], 60, 'Fly 40 ft; Etherealness; Horrifying Visage; Possession'],
+  ['Banshee', 'Undead', '4', 12, 58, 0, [1, 14, 10, 12, 11, 17], [['Corrupting Touch', 4, '3d6+2']], 60, 'Fly 40 ft; Wail (DC 13 CON or drop to 0 hp); Horrifying Visage'],
+  ['Vampire Spawn', 'Undead', '5', 15, 82, 30, [16, 16, 16, 11, 10, 12], [['Bite', 6, '1d6+3+2d6'], ['Claws', 6, '2d4+3']], 60, 'Regeneration 10; Spider Climb; sunlight weakness'],
+  ['Wraith', 'Undead', '5', 13, 67, 0, [6, 16, 16, 12, 14, 15], [['Life Drain', 6, '4d8+3']], 60, 'Fly 60 ft; Incorporeal; Create Specter; Sunlight Sensitivity'],
+  ['Vampire', 'Undead', '13', 16, 144, 30, [18, 18, 18, 17, 15, 18], [['Bite', 9, '1d6+4+3d6'], ['Unarmed Strike', 9, '1d8+4']], 120, 'Legendary; Charm; Shapechanger; Regeneration 20'],
+  ['Mummy Lord', 'Undead', '15', 17, 97, 20, [18, 10, 17, 11, 18, 16], [['Rotting Fist', 9, '3d6+4']], 60, 'Legendary; Spellcasting (insect plague, harm); Mummy Rot'],
+  ['Lich', 'Undead', '21', 17, 135, 30, [11, 16, 16, 20, 14, 16], [['Paralyzing Touch', 12, '3d6']], 0, 'Legendary; truesight; Spellcasting (power word kill, disintegrate)'],
+
+  // ---------- Beasts ----------
+  ['Rat', 'Beasts', '0', 10, 1, 20, [2, 11, 9, 2, 10, 4], [['Bite', 0, '1']], 30, 'Keen Smell'],
+  ['Hawk', 'Beasts', '0', 13, 1, 10, [5, 16, 8, 2, 14, 6], [['Talons', 5, '1']], 0, 'Fly 60 ft; Keen Sight'],
+  ['Giant Rat', 'Beasts', '1/8', 12, 7, 30, [7, 15, 11, 2, 10, 4], [['Bite', 4, '1d4+2']], 60, 'Pack Tactics'],
+  ['Mastiff', 'Beasts', '1/8', 12, 5, 40, [13, 14, 12, 3, 12, 7], [['Bite', 3, '1d6+1']], 0, 'Bite knocks prone (DC 11 STR)'],
+  ['Wolf', 'Beasts', '1/4', 13, 11, 40, [12, 15, 12, 3, 12, 6], [['Bite', 4, '2d4+2']], 0, 'Pack Tactics; bite knocks prone'],
+  ['Boar', 'Beasts', '1/4', 11, 11, 40, [13, 11, 12, 2, 9, 5], [['Tusk', 3, '1d6+1']], 0, 'Charge +1d6; Relentless'],
+  ['Panther', 'Beasts', '1/4', 12, 13, 50, [14, 15, 10, 3, 14, 7], [['Bite', 4, '1d6+2'], ['Claw', 4, '1d4+2']], 0, 'Climb 40 ft; Pounce'],
+  ['Elk', 'Beasts', '1/4', 10, 13, 50, [16, 10, 12, 2, 10, 6], [['Ram', 5, '1d6+3'], ['Hooves', 5, '2d4+3']], 0, 'Charge +2d6'],
+  ['Riding Horse', 'Beasts', '1/4', 10, 13, 60, [16, 10, 12, 2, 11, 7], [['Hooves', 5, '2d4+3']]],
+  ['Constrictor Snake', 'Beasts', '1/4', 12, 13, 30, [15, 14, 12, 1, 10, 3], [['Bite', 4, '1d6+2'], ['Constrict', 4, '1d8+2']], 0, 'Swim 30 ft; constrict grapples'],
+  ['Poisonous Snake', 'Beasts', '1/8', 13, 2, 30, [2, 16, 11, 1, 10, 3], [['Bite', 5, '1+2d4']], 0, 'Bite poison (DC 10 CON)'],
+  ['Black Bear', 'Beasts', '1/2', 11, 19, 40, [15, 10, 14, 2, 12, 7], [['Bite', 3, '1d6+2'], ['Claws', 3, '2d4+2']], 0, 'Climb 30 ft; Keen Smell'],
+  ['Crocodile', 'Beasts', '1/2', 12, 19, 20, [15, 10, 13, 2, 10, 5], [['Bite', 4, '1d10+2']], 0, 'Swim 30 ft; Hold Breath; bite grapples'],
+  ['Warhorse', 'Beasts', '1/2', 11, 19, 60, [18, 12, 13, 2, 12, 7], [['Hooves', 6, '2d6+4']], 0, 'Trampling Charge'],
+  ['Ape', 'Beasts', '1/2', 12, 19, 30, [16, 14, 14, 6, 12, 7], [['Fist', 5, '1d6+3'], ['Rock', 5, '1d6+3']], 0, 'Climb 30 ft; Multiattack x2'],
+  ['Brown Bear', 'Beasts', '1', 11, 34, 40, [19, 10, 16, 2, 13, 7], [['Bite', 5, '1d8+4'], ['Claws', 5, '2d6+4']], 0, 'Multiattack; Keen Smell'],
+  ['Dire Wolf', 'Beasts', '1', 14, 37, 50, [17, 15, 15, 3, 12, 7], [['Bite', 5, '2d6+3']], 0, 'Pack Tactics; bite knocks prone'],
+  ['Lion', 'Beasts', '1', 12, 26, 50, [17, 15, 13, 3, 12, 8], [['Bite', 5, '1d8+3'], ['Claw', 5, '1d6+3']], 0, 'Pack Tactics; Pounce; Running Leap'],
+  ['Tiger', 'Beasts', '1', 12, 37, 40, [17, 15, 14, 3, 12, 8], [['Bite', 5, '1d10+3'], ['Claw', 5, '1d8+3']], 60, 'Pounce; Keen Smell'],
+  ['Giant Spider', 'Beasts', '1', 14, 26, 30, [14, 16, 12, 2, 11, 4], [['Bite', 5, '1d8+3+2d8'], ['Web (restrains)', 5, '0']], 60, 'Climb 30 ft; Web Sense; Web Walker'],
+  ['Giant Eagle', 'Beasts', '1', 13, 26, 10, [16, 17, 13, 8, 14, 10], [['Beak', 5, '1d6+3'], ['Talons', 5, '2d6+3']], 0, 'Fly 80 ft; Keen Sight; Multiattack'],
+  ['Giant Boar', 'Beasts', '2', 12, 42, 40, [17, 10, 16, 2, 7, 5], [['Tusk', 5, '2d6+3']], 0, 'Charge +2d6; Relentless'],
+  ['Giant Constrictor Snake', 'Beasts', '2', 12, 60, 30, [19, 14, 12, 1, 10, 3], [['Bite', 6, '2d6+4'], ['Constrict', 6, '2d8+4']], 0, 'Swim 30 ft; constrict grapples'],
+  ['Giant Crocodile', 'Beasts', '5', 14, 85, 30, [21, 9, 17, 2, 10, 7], [['Bite', 8, '3d10+5'], ['Tail', 8, '2d8+5']], 0, 'Swim 50 ft; Multiattack; bite grapples'],
+  ['Giant Ape', 'Beasts', '7', 12, 157, 40, [23, 14, 18, 7, 12, 7], [['Fist', 9, '3d10+6'], ['Rock', 9, '7d6+6']], 0, 'Climb 40 ft; Multiattack x2'],
+
+  // ---------- Monstrosities ----------
+  ['Cockatrice', 'Monstrosities', '1/2', 11, 27, 20, [6, 12, 12, 2, 13, 5], [['Bite', 3, '1d4+1']], 60, 'Fly 40 ft; bite petrifies (DC 11 CON)'],
+  ['Darkmantle', 'Monstrosities', '1/2', 11, 22, 10, [16, 12, 13, 2, 10, 5], [['Crush', 5, '1d6+3']], 0, 'Fly 30 ft; Echolocation; Darkness Aura; attaches to head'],
+  ['Harpy', 'Monstrosities', '1', 11, 38, 20, [12, 13, 12, 7, 10, 13], [['Claws', 3, '2d4+1'], ['Club', 3, '1d4+1']], 0, 'Fly 40 ft; Luring Song (DC 11 WIS charm)'],
+  ['Hippogriff', 'Monstrosities', '1', 11, 19, 40, [17, 13, 13, 2, 12, 8], [['Beak', 5, '1d10+3'], ['Claws', 5, '2d6+3']], 0, 'Fly 60 ft; Keen Sight; Multiattack'],
+  ['Griffon', 'Monstrosities', '2', 12, 59, 30, [18, 15, 16, 2, 13, 8], [['Beak', 6, '1d8+4'], ['Claws', 6, '2d6+4']], 60, 'Fly 80 ft; Keen Sight; Multiattack'],
+  ['Mimic', 'Monstrosities', '2', 12, 58, 15, [17, 12, 15, 5, 13, 8], [['Pseudopod', 5, '1d8+3'], ['Bite', 5, '1d8+3+1d8']], 60, 'Shapechanger; Adhesive; False Appearance'],
+  ['Ankheg', 'Monstrosities', '2', 14, 39, 30, [17, 11, 13, 1, 13, 6], [['Bite', 5, '2d6+3+1d6'], ['Acid Spray', 0, '3d6']], 60, 'Burrow 10 ft; Tremorsense 60 ft; bite grapples'],
+  ['Ettercap', 'Monstrosities', '2', 13, 44, 30, [14, 15, 13, 7, 12, 8], [['Bite', 4, '1d8+2+1d8'], ['Claws', 4, '2d4+2'], ['Web (restrains)', 4, '0']], 60, 'Climb 30 ft; Spider Climb; Web Sense'],
+  ['Basilisk', 'Monstrosities', '3', 15, 52, 20, [16, 8, 15, 2, 8, 7], [['Bite', 5, '2d6+3+2d6']], 60, 'Petrifying Gaze (DC 12 CON)'],
+  ['Manticore', 'Monstrosities', '3', 14, 68, 30, [17, 16, 17, 7, 12, 8], [['Bite', 5, '1d8+3'], ['Claw', 5, '1d6+3'], ['Tail Spike', 5, '1d8+3']], 60, 'Fly 50 ft; Multiattack x3'],
+  ['Minotaur', 'Monstrosities', '3', 14, 76, 40, [18, 11, 16, 6, 16, 9], [['Greataxe', 6, '2d12+4'], ['Gore', 6, '2d8+4']], 60, 'Charge +2d8 push; Labyrinthine Recall; Reckless'],
+  ['Owlbear', 'Monstrosities', '3', 13, 59, 40, [20, 12, 17, 3, 12, 7], [['Beak', 7, '1d10+5'], ['Claws', 7, '2d8+5']], 60, 'Multiattack; Keen Sight and Smell'],
+  ['Chuul', 'Monstrosities', '4', 16, 93, 30, [19, 10, 16, 5, 11, 5], [['Pincer', 6, '2d6+4'], ['Tentacles (paralyze)', 6, '0']], 60, 'Swim 30 ft; Multiattack x2 + tentacles; Sense Magic'],
+  ['Bulette', 'Monstrosities', '5', 17, 94, 40, [19, 11, 21, 2, 10, 5], [['Bite', 7, '4d12+4'], ['Deadly Leap', 0, '3d6+4']], 60, 'Burrow 40 ft; Tremorsense 60 ft'],
+  ['Chimera', 'Monstrosities', '6', 14, 114, 30, [19, 11, 19, 3, 14, 10], [['Bite', 7, '2d6+4'], ['Horns', 7, '1d12+4'], ['Claws', 7, '2d6+4'], ['Fire Breath', 0, '7d8']], 60, 'Fly 60 ft; Multiattack x3'],
+  ['Medusa', 'Monstrosities', '6', 15, 127, 30, [10, 15, 16, 12, 13, 15], [['Snake Hair', 5, '1d4+2+4d6'], ['Shortsword', 5, '1d6+2'], ['Longbow', 5, '1d8+2+2d6']], 60, 'Petrifying Gaze (DC 14 CON)'],
+  ['Hydra', 'Monstrosities', '8', 15, 172, 30, [20, 12, 20, 2, 10, 7], [['Bite (x5 heads)', 8, '1d10+5']], 60, 'Swim 30 ft; Multiple Heads (regrows two per lost head)'],
+  ['Roc', 'Monstrosities', '11', 15, 248, 20, [28, 10, 20, 3, 10, 9], [['Beak', 13, '4d8+9'], ['Talons', 13, '4d6+9']], 0, 'Fly 120 ft; Multiattack; talons grapple'],
+  ['Purple Worm', 'Monstrosities', '15', 18, 247, 50, [28, 7, 22, 1, 8, 4], [['Bite (swallow)', 14, '3d8+9'], ['Tail Stinger', 14, '3d6+9+12d6']], 0, 'Burrow 30 ft; Tremorsense 60 ft'],
+
+  // ---------- Giants & Ogres ----------
+  ['Ogre', 'Giants & Ogres', '2', 11, 59, 40, [19, 8, 16, 5, 7, 7], [['Greatclub', 6, '2d8+4'], ['Javelin', 6, '2d6+4']], 60],
+  ['Ettin', 'Giants & Ogres', '4', 12, 85, 40, [21, 8, 17, 6, 10, 8], [['Battleaxe', 7, '2d8+5'], ['Morningstar', 7, '2d8+5']], 60, 'Two Heads (advantage vs blind/charm/stun); Wakeful'],
+  ['Troll', 'Giants & Ogres', '5', 15, 84, 30, [18, 13, 20, 7, 9, 7], [['Bite', 7, '1d6+4'], ['Claw', 7, '2d6+4']], 60, 'Regeneration 10 (stopped by acid/fire); Multiattack x3'],
+  ['Hill Giant', 'Giants & Ogres', '5', 13, 105, 40, [21, 8, 19, 5, 9, 6], [['Greatclub', 8, '3d8+5'], ['Rock', 8, '3d10+5']], 0, 'Multiattack x2'],
+  ['Cyclops', 'Giants & Ogres', '6', 14, 138, 30, [22, 11, 20, 8, 6, 10], [['Greatclub', 9, '3d8+6'], ['Rock', 9, '4d10+6']], 0, 'Poor Depth Perception; Multiattack x2'],
+  ['Stone Giant', 'Giants & Ogres', '7', 17, 126, 40, [23, 15, 20, 10, 12, 9], [['Greatclub', 9, '3d8+6'], ['Rock', 9, '4d10+6']], 60, 'Stone Camouflage; Rock Catching; Multiattack x2'],
+  ['Frost Giant', 'Giants & Ogres', '8', 15, 138, 40, [23, 9, 21, 9, 10, 12], [['Greataxe', 9, '3d12+6'], ['Rock', 9, '4d10+6']], 0, 'Multiattack x2'],
+  ['Fire Giant', 'Giants & Ogres', '9', 18, 162, 30, [25, 9, 23, 10, 14, 13], [['Greatsword', 11, '6d6+7'], ['Rock', 11, '4d10+7']], 0, 'Multiattack x2; fire immunity'],
+  ['Cloud Giant', 'Giants & Ogres', '9', 14, 200, 40, [27, 10, 22, 12, 16, 16], [['Morningstar', 12, '3d8+8'], ['Rock', 12, '4d10+8']], 0, 'Multiattack x2; Innate: fog cloud, telekinesis, fly'],
+  ['Storm Giant', 'Giants & Ogres', '13', 16, 230, 50, [29, 14, 20, 16, 18, 18], [['Greatsword', 14, '6d6+9'], ['Lightning Strike', 0, '12d8']], 0, 'Swim 50 ft; Amphibious; Innate: control weather, levitate'],
+
+  // ---------- Dragons ----------
+  ['White Dragon Wyrmling', 'Dragons', '2', 16, 32, 30, [14, 10, 14, 5, 10, 11], [['Bite', 4, '1d10+2+1d4'], ['Cold Breath', 0, '5d8']], 60, 'Fly 60 ft; Swim/Burrow; blindsight 10 ft'],
+  ['Black Dragon Wyrmling', 'Dragons', '2', 17, 33, 30, [15, 14, 13, 10, 11, 13], [['Bite', 4, '1d10+2+1d4'], ['Acid Breath', 0, '5d8']], 60, 'Fly 60 ft; Swim 30 ft; Amphibious'],
+  ['Green Dragon Wyrmling', 'Dragons', '2', 17, 38, 30, [15, 12, 13, 14, 11, 13], [['Bite', 4, '1d10+2+1d6'], ['Poison Breath', 0, '6d6']], 60, 'Fly 60 ft; Swim 30 ft; Amphibious'],
+  ['Blue Dragon Wyrmling', 'Dragons', '3', 17, 52, 30, [17, 10, 15, 12, 11, 15], [['Bite', 5, '1d10+3+1d6'], ['Lightning Breath', 0, '4d10']], 60, 'Fly 60 ft; Burrow 15 ft'],
+  ['Red Dragon Wyrmling', 'Dragons', '4', 17, 75, 30, [19, 10, 17, 12, 11, 15], [['Bite', 6, '1d10+4+1d6'], ['Fire Breath', 0, '7d6']], 60, 'Fly 60 ft; Climb 30 ft'],
+  ['Young White Dragon', 'Dragons', '6', 17, 133, 40, [18, 10, 18, 6, 11, 12], [['Bite', 7, '2d10+4+1d8'], ['Claw', 7, '2d6+4'], ['Cold Breath', 0, '10d8']], 120, 'Fly 80 ft; Multiattack x3; Ice Walk'],
+  ['Young Black Dragon', 'Dragons', '7', 18, 127, 40, [19, 14, 17, 12, 11, 15], [['Bite', 7, '2d10+4+1d8'], ['Claw', 7, '2d6+4'], ['Acid Breath', 0, '11d8']], 120, 'Fly 80 ft; Swim 40 ft; Multiattack x3'],
+  ['Young Green Dragon', 'Dragons', '8', 18, 136, 40, [19, 12, 17, 16, 13, 15], [['Bite', 7, '2d10+4+2d6'], ['Claw', 7, '2d6+4'], ['Poison Breath', 0, '12d6']], 120, 'Fly 80 ft; Multiattack x3; Amphibious'],
+  ['Young Blue Dragon', 'Dragons', '9', 18, 152, 40, [21, 10, 19, 14, 13, 17], [['Bite', 9, '2d10+5+1d10'], ['Claw', 9, '2d6+5'], ['Lightning Breath', 0, '10d10']], 120, 'Fly 80 ft; Burrow 20 ft; Multiattack x3'],
+  ['Young Red Dragon', 'Dragons', '10', 18, 178, 40, [23, 10, 21, 14, 11, 19], [['Bite', 10, '2d10+6+1d6'], ['Claw', 10, '2d6+6'], ['Fire Breath', 0, '16d6']], 120, 'Fly 80 ft; Climb 40 ft; Multiattack x3'],
+  ['Adult Blue Dragon', 'Dragons', '16', 19, 225, 40, [25, 10, 23, 16, 15, 19], [['Bite', 12, '2d10+7+1d10'], ['Claw', 12, '2d6+7'], ['Tail', 12, '2d8+7'], ['Lightning Breath', 0, '12d10']], 120, 'Legendary; Frightful Presence; Fly 80 ft'],
+  ['Adult Red Dragon', 'Dragons', '17', 19, 256, 40, [27, 10, 25, 16, 13, 21], [['Bite', 14, '2d10+8+2d6'], ['Claw', 14, '2d6+8'], ['Tail', 14, '2d8+8'], ['Fire Breath', 0, '18d6']], 120, 'Legendary; Frightful Presence; Fly 80 ft'],
+
+  // ---------- Fiends ----------
+  ['Lemure', 'Fiends', '0', 7, 13, 15, [10, 5, 11, 1, 11, 3], [['Fist', 3, '1d4']], 120, 'Hellish Rejuvenation'],
+  ['Dretch', 'Fiends', '1/4', 11, 18, 20, [11, 11, 12, 5, 8, 3], [['Bite', 2, '1d6'], ['Claws', 2, '2d4'], ['Fetid Cloud', 0, '0']], 60, 'Multiattack'],
+  ['Imp', 'Fiends', '1', 13, 10, 20, [6, 17, 13, 11, 12, 14], [['Sting', 5, '1d4+3+3d6']], 120, 'Fly 40 ft; Invisibility; Shapechanger; Magic Resistance'],
+  ['Quasit', 'Fiends', '1', 13, 7, 40, [5, 17, 10, 7, 10, 10], [['Claws', 4, '1d4+3']], 120, 'Claw poison; Scare; Invisibility; Shapechanger'],
+  ['Hell Hound', 'Fiends', '3', 15, 45, 50, [17, 12, 14, 6, 13, 6], [['Bite', 5, '1d8+3+2d6'], ['Fire Breath', 0, '6d6']], 60, 'Pack Tactics; Keen Hearing and Smell; fire immunity'],
+  ['Bearded Devil', 'Fiends', '3', 13, 52, 30, [16, 15, 15, 9, 11, 11], [['Beard', 5, '1d8+2'], ['Glaive', 5, '1d10+3']], 120, 'Multiattack; beard poisons; glaive wounds'],
+  ['Succubus/Incubus', 'Fiends', '4', 15, 66, 30, [8, 17, 13, 15, 12, 20], [['Claw', 5, '1d6+3'], ['Draining Kiss', 0, '5d10+5']], 60, 'Fly 60 ft; Charm; Shapechanger; Telepathic Bond'],
+  ['Barbed Devil', 'Fiends', '5', 15, 110, 30, [16, 17, 18, 12, 14, 14], [['Claw', 6, '1d6+3'], ['Tail', 6, '2d6+3'], ['Hurl Flame', 5, '3d6']], 120, 'Multiattack x3; Barbed Hide'],
+  ['Vrock', 'Fiends', '6', 15, 104, 40, [17, 15, 18, 8, 13, 8], [['Beak', 6, '2d6+3'], ['Talons', 6, '2d10+3'], ['Stunning Screech', 0, '0']], 120, 'Fly 60 ft; Spores; Magic Resistance'],
+  ['Hezrou', 'Fiends', '8', 16, 136, 30, [19, 17, 20, 5, 12, 13], [['Bite', 7, '2d10+4'], ['Claws', 7, '2d6+4']], 120, 'Multiattack x3; Stench; Magic Resistance'],
+  ['Glabrezu', 'Fiends', '9', 17, 157, 40, [20, 15, 21, 19, 17, 16], [['Pincer', 9, '2d10+5'], ['Fist', 9, '2d4+5']], 0, 'Truesight; Multiattack; pincers grapple; Innate: darkness, dispel magic'],
+  ['Horned Devil', 'Fiends', '11', 18, 178, 20, [22, 17, 21, 12, 16, 17], [['Fork', 10, '2d8+6'], ['Tail', 10, '1d8+6'], ['Hurl Flame', 7, '4d6']], 120, 'Fly 60 ft; Multiattack x3; infernal wound'],
+  ['Balor', 'Fiends', '19', 19, 262, 40, [26, 15, 22, 20, 16, 22], [['Longsword', 14, '3d8+8+3d8'], ['Whip', 14, '2d6+8+3d6']], 0, 'Truesight; Fly 80 ft; Fire Aura; Death Throes 20d6'],
+  ['Pit Fiend', 'Fiends', '20', 19, 300, 30, [26, 14, 24, 22, 18, 24], [['Bite', 14, '4d6+8'], ['Claw', 14, '2d8+8'], ['Mace', 14, '2d6+8+6d6'], ['Tail', 14, '3d10+8']], 0, 'Truesight; Fly 60 ft; Fear Aura; bite poisons'],
+
+  // ---------- Elementals & Constructs ----------
+  ['Flying Sword', 'Elementals & Constructs', '1/4', 17, 17, 0, [12, 15, 11, 1, 5, 1], [['Longsword', 3, '1d8+1']], 0, 'Fly 50 ft; blindsight 60 ft; False Appearance'],
+  ['Animated Armor', 'Elementals & Constructs', '1', 18, 33, 25, [14, 11, 13, 1, 3, 1], [['Slam', 4, '1d6+2']], 0, 'Blindsight 60 ft; Multiattack x2; False Appearance'],
+  ['Gargoyle', 'Elementals & Constructs', '2', 15, 52, 30, [15, 11, 16, 6, 11, 7], [['Bite', 4, '1d6+2'], ['Claws', 4, '1d6+2']], 60, 'Fly 60 ft; False Appearance (statue); Multiattack'],
+  ['Air Elemental', 'Elementals & Constructs', '5', 15, 90, 0, [14, 20, 14, 6, 10, 6], [['Slam', 8, '2d8+5'], ['Whirlwind', 0, '3d8+2']], 60, 'Fly 90 ft (hover); Air Form; Multiattack x2'],
+  ['Fire Elemental', 'Elementals & Constructs', '5', 13, 102, 50, [10, 17, 16, 6, 10, 7], [['Touch', 6, '2d6+3']], 60, 'Fire Form (ignites); Water Susceptibility; Multiattack x2'],
+  ['Water Elemental', 'Elementals & Constructs', '5', 14, 114, 30, [18, 14, 18, 5, 10, 8], [['Slam', 7, '2d8+4'], ['Whelm', 0, '2d8+4']], 60, 'Swim 90 ft; Water Form; Freeze weakness; Multiattack x2'],
+  ['Earth Elemental', 'Elementals & Constructs', '5', 17, 126, 30, [20, 8, 20, 5, 10, 5], [['Slam', 8, '2d8+5']], 60, 'Burrow 30 ft; Tremorsense 60 ft; Earth Glide; Multiattack x2'],
+  ['Flesh Golem', 'Elementals & Constructs', '5', 9, 93, 30, [19, 9, 18, 6, 10, 5], [['Slam', 7, '2d8+4']], 60, 'Multiattack x2; Berserk; Lightning Absorption; Immutable Form'],
+  ['Clay Golem', 'Elementals & Constructs', '9', 14, 133, 20, [20, 9, 18, 3, 8, 1], [['Slam', 8, '2d10+5']], 60, 'Multiattack x2; Haste; Acid Absorption; Berserk'],
+  ['Stone Golem', 'Elementals & Constructs', '10', 17, 178, 30, [22, 9, 20, 3, 11, 1], [['Slam', 10, '3d8+6'], ['Slow', 0, '0']], 60, 'Multiattack x2; Magic Resistance; Immutable Form'],
+  ['Iron Golem', 'Elementals & Constructs', '16', 20, 210, 30, [24, 9, 20, 3, 11, 1], [['Slam', 13, '3d8+7'], ['Sword', 13, '3d10+7'], ['Poison Breath', 0, '10d8']], 60, 'Multiattack x2; Fire Absorption; Magic Resistance'],
+
+  // ---------- Aberrations & Oozes ----------
+  ['Gray Ooze', 'Aberrations & Oozes', '1/2', 8, 22, 10, [12, 6, 16, 1, 6, 2], [['Pseudopod', 3, '1d6+1+2d6']], 0, 'Blindsight 60 ft; corrodes metal; Amorphous; False Appearance'],
+  ['Gibbering Mouther', 'Aberrations & Oozes', '2', 9, 67, 10, [10, 8, 16, 3, 10, 6], [['Bites', 2, '5d6'], ['Blinding Spittle', 0, '0']], 60, 'Swim 10 ft; Gibbering (DC 10 WIS); Aberrant Ground'],
+  ['Gelatinous Cube', 'Aberrations & Oozes', '2', 6, 84, 15, [14, 3, 20, 1, 6, 1], [['Pseudopod', 4, '3d6'], ['Engulf', 0, '6d6']], 0, 'Blindsight 60 ft; Transparent; Ooze Cube'],
+  ['Ochre Jelly', 'Aberrations & Oozes', '2', 8, 45, 10, [15, 6, 14, 2, 6, 1], [['Pseudopod', 4, '2d6+2+1d6']], 0, 'Blindsight 60 ft; Climb 10 ft; Splits when slashed'],
+  ['Black Pudding', 'Aberrations & Oozes', '4', 7, 85, 20, [16, 5, 16, 1, 6, 1], [['Pseudopod', 5, '1d6+3+4d8']], 0, 'Blindsight 60 ft; Climb 20 ft; Corrosive Form; Splits'],
+  ['Otyugh', 'Aberrations & Oozes', '5', 14, 114, 30, [16, 11, 19, 6, 13, 6], [['Bite', 6, '2d8+3'], ['Tentacle', 6, '1d8+3']], 120, 'Multiattack x3; bite diseases; Limited Telepathy'],
+  ['Roper', 'Aberrations & Oozes', '5', 20, 93, 10, [18, 8, 17, 7, 16, 6], [['Tendril (grapple)', 7, '0'], ['Bite', 7, '4d8+4']], 60, 'Climb 10 ft; False Appearance; Grasping Tendrils x4'],
+  ['Cloaker', 'Aberrations & Oozes', '8', 14, 78, 10, [17, 15, 12, 13, 12, 14], [['Bite', 6, '2d6+3'], ['Tail', 6, '1d8+3'], ['Moan', 0, '0']], 60, 'Fly 40 ft; attaches; Phantasms; Damage Transfer'],
+  ['Aboleth', 'Aberrations & Oozes', '10', 17, 135, 10, [21, 9, 15, 18, 15, 18], [['Tentacle', 9, '2d6+5'], ['Tail', 9, '3d6+5'], ['Enslave', 0, '0']], 120, 'Swim 40 ft; Legendary; Mucous Cloud; Probing Telepathy'],
+
+  // ---------- Fey, Celestials & Plants ----------
+  ['Sprite', 'Fey, Celestials & Plants', '1/4', 15, 2, 10, [3, 18, 10, 14, 13, 11], [['Longsword', 2, '1'], ['Shortbow', 6, '1']], 0, 'Fly 40 ft; bow poison sleeps; Invisibility; Heart Sight'],
+  ['Satyr', 'Fey, Celestials & Plants', '1/2', 14, 31, 40, [12, 16, 11, 12, 10, 14], [['Ram', 3, '2d4+1'], ['Shortsword', 5, '1d6+3'], ['Shortbow', 5, '1d6+3']], 0, 'Magic Resistance'],
+  ['Dryad', 'Fey, Celestials & Plants', '1', 11, 22, 30, [10, 12, 11, 14, 15, 18], [['Club', 2, '1d4'], ['Fey Charm', 0, '0']], 60, 'Tree Stride; Speak with Beasts and Plants; Magic Resistance'],
+  ['Awakened Tree', 'Fey, Celestials & Plants', '2', 13, 59, 20, [19, 6, 15, 10, 10, 7], [['Slam', 6, '3d6+4']], 0, 'False Appearance (tree)'],
+  ['Couatl', 'Fey, Celestials & Plants', '4', 19, 97, 30, [16, 20, 17, 18, 20, 18], [['Bite', 8, '1d6+5'], ['Constrict', 6, '2d6+3']], 0, 'Truesight; Fly 90 ft; bite sleeps; Shielded Mind; Innate spells'],
+  ['Shambling Mound', 'Fey, Celestials & Plants', '5', 15, 136, 20, [18, 8, 16, 5, 10, 5], [['Slam', 7, '2d8+4'], ['Engulf', 0, '2d8+4']], 0, 'Blindsight 60 ft; Swim 20 ft; Lightning Absorption'],
+  ['Treant', 'Fey, Celestials & Plants', '9', 16, 138, 30, [23, 8, 21, 12, 16, 12], [['Slam', 10, '3d6+6'], ['Rock', 10, '4d10+6']], 0, 'Multiattack x2; False Appearance; Animate Trees'],
+  ['Deva', 'Fey, Celestials & Plants', '10', 17, 136, 30, [18, 18, 18, 17, 20, 20], [['Mace', 8, '1d6+4+4d8']], 120, 'Fly 90 ft; Multiattack x2; Angelic Weapons; Healing Touch; Change Shape'],
+];
+
+function crToLevel(cr: number): number {
+  return Math.max(1, Math.round(cr));
+}
+
+export const NPCS_5E: NpcEntry[] = ROWS.map((row) => {
+  const [name, category, cr, ac, hp, speed, scores, attacks, dvFt = 0, note = ''] = row;
+  const challenge = crToNumber(cr);
+  const sheet = {
+    ...dnd5e.defaultSheet(),
+    class: 'Monster',
+    race: category,
+    background: '',
+    alignment: '',
+    level: crToLevel(challenge),
+    ac,
+    speed,
+    hp,
+    maxHp: hp,
+    str: scores[0], dex: scores[1], con: scores[2],
+    int: scores[3], wis: scores[4], cha: scores[5],
+    visionRange: 24,
+    darkvision: Math.round(dvFt / 5),
+    attacks: attackRows(attacks),
+    notes: note,
+  };
+  return {
+    id: slug('dnd5e', name),
+    system: 'dnd5e' as const,
+    name,
+    category,
+    challenge,
+    challengeLabel: `CR ${cr}`,
+    ac,
+    hp,
+    sheet,
+  };
+});

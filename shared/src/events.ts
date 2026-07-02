@@ -15,6 +15,8 @@ export const C2S = {
   JOIN_CAMPAIGN: 'joinCampaign',
   LEAVE_CAMPAIGN: 'leaveCampaign',
   SWITCH_ACTIVE_MAP: 'switchActiveMap',
+  VIEW_MAP: 'viewMap',
+  ASSIGN_PLAYER_MAP: 'assignPlayerMap',
   DM_VIEW_AS: 'dmViewAs',
   // maps (DM)
   CREATE_MAP: 'createMap',
@@ -69,6 +71,10 @@ export const C2S = {
 
 export interface JoinCampaignPayload { campaignId: string }
 export interface SwitchActiveMapPayload { mapId: string }
+/** DM: view a map yourself without changing anyone else's map. null = follow party. */
+export interface ViewMapPayload { mapId: string | null }
+/** DM: put a player on a specific map. null = follow the party map. */
+export interface AssignPlayerMapPayload { userId: string; mapId: string | null }
 export interface DmViewAsPayload { userId: string | null }
 
 export interface CreateMapPayload { name: string }
@@ -185,6 +191,7 @@ export const S2C = {
   MEASURE_SHOWN: 'measureShown',
   HANDOUTS: 'handouts',
   MEMBER_PRESENCE: 'memberPresence',
+  ACTIVE_MAP: 'activeMap',
   ERROR_MSG: 'errorMsg',
 } as const;
 
@@ -273,5 +280,7 @@ export interface PingShownPayload extends PingInfo {}
 export interface MeasureShownPayload extends MeasureInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
-export interface MemberPresencePayload { userId: string; online: boolean }
+export interface MemberPresencePayload { userId: string; online: boolean; mapId: string | null }
+/** The campaign's party (default) map changed. */
+export interface ActiveMapPayload { mapId: string | null }
 export interface ErrorMsgPayload { message: string }

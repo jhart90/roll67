@@ -563,6 +563,67 @@ button.link:hover { text-decoration: underline; }
 .draw-options select { margin: 0; width: auto; padding: 3px 6px; font-size: 12px; }
 .draw-options button { font-size: 12px; }
 
+/* ---------- presence pills ---------- */
+
+.presence-bar {
+  position: absolute;
+  bottom: 8px;
+  left: 60px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 15;
+  max-width: calc(100% - 400px);
+}
+.presence-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 12px;
+  user-select: none;
+}
+.presence-pill.offline { opacity: 0.45; }
+.presence-pill.you { border-color: var(--accent); }
+.presence-pill.clickable { cursor: pointer; }
+.presence-pill.clickable:hover { border-color: var(--accent-2); }
+.presence-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.presence-role {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--accent-2);
+  border: 1px solid var(--accent-2);
+  border-radius: 6px;
+  padding: 0 4px;
+}
+.presence-map { color: var(--text-dim); font-size: 11px; }
+.presence-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 180px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+.presence-menu-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.presence-menu .link { text-align: left; padding: 3px 4px; }
+.presence-menu .link:hover { background: var(--panel-2); border-radius: 4px; text-decoration: none; }
+
+.map-badges { display: inline-flex; gap: 4px; }
+.party-tag { color: var(--accent-2); }
+
 /* ---------- NPC library ---------- */
 
 .npc-library { width: min(760px, 94vw); }

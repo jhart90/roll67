@@ -6,7 +6,8 @@ A hex-grid virtual tabletop (Roll20-style) for playing **D&D 5e** and **Stars Wi
 
 - **Persistent accounts** — username/password login; characters, maps, tokens, fog of war and chat history all live in a SQLite database and survive restarts.
 - **Campaigns** — a DM creates a campaign (choosing 5e or SWN) and shares a 6-letter invite code; players join with it.
-- **Hex maps** — upload any battle-map image, then align the pointy-top hex grid over it with size/origin controls. Multiple maps per campaign; the DM switches which one is live.
+- **Hex maps** — upload any battle-map image, then align the pointy-top hex grid over it with size/origin controls. Multiple maps per campaign with a **party map** players follow by default; the DM can privately view/edit any other map, and can split the party by assigning individual players to different maps.
+- **Presence pills** — everyone sees who's connected at the bottom of the screen; the DM also sees which map each player is on and can click a pill to move them.
 - **Tokens** — drag-and-drop with hex snap, token art uploads, HP bars, name plates. Players can only move their own characters; NPCs are DM-only.
 - **True line-of-sight vision** — the server computes each player's field of view from their token(s): walls block sight, closed doors block until opened, lights create visible pockets in darkness, and darkvision works in the dark. Players are **never sent** what they can't see — hidden tokens and DM geometry never leave the server.
 - **Fog of war** — unexplored areas are black; explored-but-not-visible areas are dimmed. Explored fog persists per player per map.

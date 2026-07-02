@@ -9,8 +9,8 @@ import {
 import { assets, campaigns, fog, maps } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata } from '../hub.js';
-import { canReachDoor, syncMapVision } from '../visionService.js';
-import { sendMapState } from './session.js';
+import { canReachDoor, dropMapVisionCaches, syncMapVision } from '../visionService.js';
+import { broadcastPresence, sendMapState } from './session.js';
 
 function requireDmMap(socket: Socket, mapId: string) {
   const d = sdata(socket);
@@ -43,14 +43,20 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     const campaign = campaigns.byId(d.campaignId!)!;
     maps.delete(mapId);
     fog.clearMap(mapId);
+    dropMapVisionCaches(mapId);
+    // Anyone assigned to this map falls back to the party map.
+    campaigns.clearMapAssignments(mapId);
     if (campaign.activeMapId === mapId) {
       const remaining = maps.forCampaign(d.campaignId!);
-      campaigns.setActiveMap(d.campaignId!, remaining[0]?.id ?? null);
-      for (const s of io.sockets.sockets.values()) {
-        if (sdata(s).campaignId === d.campaignId) sendMapState(s);
-      }
+      const next = remaining[0]?.id ?? null;
+      campaigns.setActiveMap(d.campaignId!, next);
+      io.to(campaignRoom(d.campaignId!)).emit(S2C.ACTIVE_MAP, { mapId: next });
+    }
+    for (const s of io.sockets.sockets.values()) {
+      if (sdata(s).campaignId === d.campaignId) sendMapState(s);
     }
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_LIST, { maps: maps.forCampaign(d.campaignId!) });
+    broadcastPresence(io, d.campaignId!);
   }));
 
   socket.on(C2S.UPDATE_MAP, safe(socket, (payload: UpdateMapPayload) => {

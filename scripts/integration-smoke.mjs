@@ -291,6 +291,43 @@ async function main() {
   // Cleanup the beast.
   dmSock.emit('deleteToken', { tokenId: beast.id });
 
+  // ---------- multi-map: DM working map + per-player assignment ----------
+  console.log('multi-map:');
+  const annexList = waitFor(dmSock, 'mapList', 5000, (p) => p.maps.some((m) => m.name === 'Smoke Annex'));
+  dmSock.emit('createMap', { name: 'Smoke Annex' });
+  const annexId = (await annexList).maps.find((m) => m.name === 'Smoke Annex').id;
+
+  // DM views the annex privately: DM gets its map state, the player gets NOTHING.
+  const dmAnnex = waitFor(dmSock, 'mapState', 5000, (p) => p.map.id === annexId);
+  const playerUndisturbed = expectSilence(playerSock, 'mapState', 1200);
+  dmSock.emit('viewMap', { mapId: annexId });
+  await dmAnnex;
+  ok(true, 'DM can view/edit a non-party map');
+  ok((await playerUndisturbed) === null, 'player is NOT dragged along when DM views another map');
+
+  // DM assigns the player to the annex: only that player moves.
+  const playerMoved = waitFor(playerSock, 'mapState', 5000, (p) => p.map.id === annexId);
+  dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: annexId });
+  const pAnnex = await playerMoved;
+  ok(pAnnex.map.id === annexId, 'assigned player lands on the annex map');
+  ok(Array.isArray(pAnnex.visible) && pAnnex.visible.length === 0, 'no token on annex -> player sees nothing');
+
+  // Presence carries the map: DM hears the player is on the annex.
+  const presence = await waitFor(dmSock, 'memberPresence', 5000, (p) => p.userId === player.user.id && p.mapId === annexId)
+    .catch(() => null);
+  ok(presence !== null, 'presence reports which map each member is on');
+
+  // Back to the party map (clear override), DM back to party too.
+  const playerBack = waitFor(playerSock, 'mapState', 5000, (p) => p.map.id === mapId);
+  dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: null });
+  await playerBack;
+  ok(true, 'clearing the assignment returns the player to the party map');
+  const dmBack = waitFor(dmSock, 'mapState', 5000, (p) => p.map.id === mapId);
+  dmSock.emit('viewMap', { mapId: null });
+  await dmBack;
+  dmSock.emit('deleteMap', { mapId: annexId });
+  await new Promise((r) => setTimeout(r, 300));
+
   // ---------- chat, dice, whispers ----------
   console.log('chat & dice:');
   const sayBoth = Promise.all([

@@ -377,11 +377,18 @@ export function wireSocket(): void {
     useGameStore.setState({ measures });
   });
 
-  socket.on(S2C.MEMBER_PRESENCE, ({ userId, online }: { userId: string; online: boolean }) => {
+  socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId }: { userId: string; online: boolean; mapId: string | null }) => {
     const s = useGameStore.getState();
     useGameStore.setState({
-      members: s.members.map((m) => (m.userId === userId ? { ...m, online } : m)),
+      members: s.members.map((m) => (m.userId === userId ? { ...m, online, mapId } : m)),
     });
+  });
+
+  socket.on(S2C.ACTIVE_MAP, ({ mapId }: { mapId: string | null }) => {
+    const s = useGameStore.getState();
+    if (s.campaign) {
+      useGameStore.setState({ campaign: { ...s.campaign, activeMapId: mapId } });
+    }
   });
 
   socket.on(S2C.ERROR_MSG, ({ message }: { message: string }) => {
@@ -398,6 +405,9 @@ export function wireSocket(): void {
 
 export const intents = {
   switchMap: (mapId: string) => socket.emit(C2S.SWITCH_ACTIVE_MAP, { mapId }),
+  viewMap: (mapId: string | null) => socket.emit(C2S.VIEW_MAP, { mapId }),
+  assignPlayerMap: (userId: string, mapId: string | null) =>
+    socket.emit(C2S.ASSIGN_PLAYER_MAP, { userId, mapId }),
   dmViewAs: (userId: string | null) => socket.emit(C2S.DM_VIEW_AS, { userId }),
 
   createMap: (name: string) => socket.emit(C2S.CREATE_MAP, { name }),

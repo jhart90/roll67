@@ -34,6 +34,7 @@ export function MapManager({ onClose }: { onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign);
   const mapsMeta = useGameStore((s) => s.mapsMeta);
   const map = useGameStore((s) => s.map);
+  const activeMapId = campaign?.activeMapId ?? null;
   const [newName, setNewName] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -71,10 +72,26 @@ export function MapManager({ onClose }: { onClose: () => void }) {
       <ul className="map-list">
         {mapsMeta.map((m) => (
           <li key={m.id} className={m.id === map?.id ? 'active' : ''}>
-            <button className="map-row" onClick={() => intents.switchMap(m.id)}>
+            <button
+              className="map-row"
+              title="View/edit this map (players stay where they are)"
+              onClick={() => intents.viewMap(m.id)}
+            >
               {m.name}
-              {m.id === map?.id && <span className="tag">active</span>}
+              <span className="map-badges">
+                {m.id === activeMapId && <span className="tag party-tag">party</span>}
+                {m.id === map?.id && <span className="tag">viewing</span>}
+              </span>
             </button>
+            {m.id !== activeMapId && (
+              <button
+                className="link"
+                title="Make this the party map — players without a personal assignment move here"
+                onClick={() => intents.switchMap(m.id)}
+              >
+                ⭐
+              </button>
+            )}
             <button
               className="link danger"
               title="Delete map"
@@ -89,6 +106,9 @@ export function MapManager({ onClose }: { onClose: () => void }) {
           </li>
         ))}
       </ul>
+      <p className="dim" style={{ fontSize: 11, margin: '0 0 10px' }}>
+        Click a map to view/edit it privately · ⭐ makes it the party map for players.
+      </p>
 
       <form
         className="row"

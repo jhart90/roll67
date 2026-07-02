@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS campaign_members (
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('dm', 'player')),
+  -- Per-member map override; NULL = follow the campaign's active (party) map.
+  map_id TEXT,
   PRIMARY KEY (campaign_id, user_id)
 );
 

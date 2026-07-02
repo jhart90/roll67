@@ -119,14 +119,40 @@ export const campaigns = {
       .get(campaignId, userId) as { role: Role } | undefined;
     return row?.role;
   },
-  members(campaignId: string): Array<{ userId: string; username: string; role: Role }> {
+  members(campaignId: string): Array<{ userId: string; username: string; role: Role; mapId: string | null }> {
     return (db.prepare(
-      `SELECT m.user_id as userId, u.username, m.role FROM campaign_members m
+      `SELECT m.user_id as userId, u.username, m.role, m.map_id as mapId FROM campaign_members m
        JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ?`,
-    ).all(campaignId) as Array<{ userId: string; username: string; role: Role }>);
+    ).all(campaignId) as Array<{ userId: string; username: string; role: Role; mapId: string | null }>);
   },
   setActiveMap(campaignId: string, mapId: string | null): void {
     db.prepare('UPDATE campaigns SET active_map_id = ? WHERE id = ?').run(mapId, campaignId);
+  },
+  /** Set (or clear) a member's personal map override. */
+  setMemberMap(campaignId: string, userId: string, mapId: string | null): void {
+    db.prepare('UPDATE campaign_members SET map_id = ? WHERE campaign_id = ? AND user_id = ?')
+      .run(mapId, campaignId, userId);
+  },
+  /** Clear every member override pointing at a (deleted) map. */
+  clearMapAssignments(mapId: string): void {
+    db.prepare('UPDATE campaign_members SET map_id = NULL WHERE map_id = ?').run(mapId);
+  },
+  /**
+   * The map a member is currently viewing: their personal override if it
+   * still exists, else the campaign's active (party) map.
+   */
+  viewMapIdFor(campaignId: string, userId: string): string | null {
+    const row = db.prepare(
+      `SELECT m.map_id as mapId, c.active_map_id as activeMapId
+       FROM campaign_members m JOIN campaigns c ON c.id = m.campaign_id
+       WHERE m.campaign_id = ? AND m.user_id = ?`,
+    ).get(campaignId, userId) as { mapId: string | null; activeMapId: string | null } | undefined;
+    if (!row) return null;
+    if (row.mapId) {
+      const exists = db.prepare('SELECT 1 FROM maps WHERE id = ?').get(row.mapId);
+      if (exists) return row.mapId;
+    }
+    return row.activeMapId;
   },
 };
 
@@ -354,6 +380,10 @@ export const tokens = {
     const rows = db.prepare('SELECT * FROM tokens WHERE map_id = ?').all(mapId) as TokenRow[];
     return rows.map(toToken);
   },
+  forCharacter(characterId: string): Token[] {
+    const rows = db.prepare('SELECT * FROM tokens WHERE character_id = ?').all(characterId) as TokenRow[];
+    return rows.map(toToken);
+  },
   move(id: string, q: number, r: number): void {
     db.prepare('UPDATE tokens SET q = ?, r = ? WHERE id = ?').run(q, r, id);
   },
@@ -394,11 +424,18 @@ export const fog = {
     return new Int32Array(row.hexes.buffer, row.hexes.byteOffset, row.hexes.byteLength / 4);
   },
   set(userId: string, mapId: string, hexes: Int32Array): void {
+    // The map (or user) may have been deleted between compute and flush;
+    // losing fog memory for a deleted map is correct, crashing is not.
+    if (!db.prepare('SELECT 1 FROM maps WHERE id = ?').get(mapId)) return;
     const buf = Buffer.from(hexes.buffer, hexes.byteOffset, hexes.byteLength);
-    db.prepare(
-      `INSERT INTO fog_explored (user_id, map_id, hexes) VALUES (?, ?, ?)
-       ON CONFLICT(user_id, map_id) DO UPDATE SET hexes = excluded.hexes`,
-    ).run(userId, mapId, buf);
+    try {
+      db.prepare(
+        `INSERT INTO fog_explored (user_id, map_id, hexes) VALUES (?, ?, ?)
+         ON CONFLICT(user_id, map_id) DO UPDATE SET hexes = excluded.hexes`,
+      ).run(userId, mapId, buf);
+    } catch (err) {
+      console.warn('fog flush skipped:', err instanceof Error ? err.message : err);
+    }
   },
   clearMap(mapId: string): void {
     db.prepare('DELETE FROM fog_explored WHERE map_id = ?').run(mapId);

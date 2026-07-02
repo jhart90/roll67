@@ -24,6 +24,8 @@ export interface MemberInfo {
   username: string;
   role: Role;
   online: boolean;
+  /** The map this member is currently viewing (override or party map). */
+  mapId: string | null;
 }
 
 // ---------- Map geometry ----------

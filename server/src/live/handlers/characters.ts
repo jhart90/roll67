@@ -84,21 +84,17 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const updated = characters.byId(characterId)!;
     emitCharacter(io, d.campaignId, updated);
 
-    // Mirror HP onto token bars and refresh vision (sheet vision may change).
+    // Mirror HP onto this character's token bars on every map, and refresh
+    // vision on those maps (sheet vision may change).
     const schema = systemFor(updated.system);
     const hp = schema.hp(updated.sheet);
-    const campaign = campaigns.byId(d.campaignId)!;
-    if (campaign.activeMapId) {
-      let touched = false;
-      for (const t of tokens.forMap(campaign.activeMapId)) {
-        if (t.characterId === characterId) {
-          tokens.update(t.id, { bar: hp });
-          const refreshed = tokens.byId(t.id)!;
-          io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: refreshed });
-          touched = true;
-        }
-      }
-      if (touched) syncMapVision(io, d.campaignId, campaign.activeMapId);
+    const touchedMaps = new Set<string>();
+    for (const t of tokens.forCharacter(characterId)) {
+      tokens.update(t.id, { bar: hp });
+      const refreshed = tokens.byId(t.id)!;
+      io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: refreshed });
+      touchedMaps.add(t.mapId);
     }
+    for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
   }));
 }

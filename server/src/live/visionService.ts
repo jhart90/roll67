@@ -193,9 +193,9 @@ export function buildMapState(
  */
 export function syncMapVision(io: Server, campaignId: string, mapId: string): void {
   const campaign = campaigns.byId(campaignId);
-  if (!campaign || campaign.activeMapId !== mapId) return;
+  if (!campaign) return;
   const map = maps.byId(mapId);
-  if (!map) return;
+  if (!map || map.campaignId !== campaignId) return;
   const allTokens = tokens.forMap(mapId);
 
   const sockets = campaignSockets(io, campaignId);
@@ -203,6 +203,9 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
 
   for (const socket of sockets) {
     const d = sdata(socket);
+    // Members can be on different maps; only update viewers of THIS map.
+    const effectiveUser = d.role === 'dm' ? d.viewingAs : d.userId;
+    if (effectiveUser && campaigns.viewMapIdFor(campaignId, effectiveUser) !== mapId) continue;
     if (d.role === 'dm') {
       // God mode: DM already receives raw token/map events; only a view-as
       // preview needs a vision update.
@@ -248,6 +251,8 @@ export function socketsSeeingToken(io: Server, campaignId: string, token: Token)
       continue;
     }
     if (token.layer === 'gm') continue;
+    // A stale vision cache from a map the player left must not leak events.
+    if (campaigns.viewMapIdFor(campaignId, d.userId) !== token.mapId) continue;
     const cache = visionCache.get(cacheKey(d.userId, token.mapId));
     if (cache?.visible.has(tokenKey)) out.push(socket);
     else if (token.characterId && characters.byId(token.characterId)?.ownerUserId === d.userId) out.push(socket);
@@ -271,6 +276,20 @@ export function dropVisionCache(userId: string): void {
       const [, mapId] = key.split(':');
       fog.set(userId, mapId, Int32Array.from(cache.explored));
       visionCache.delete(key);
+    }
+  }
+}
+
+/** Forget all cached vision and pending fog flushes for a deleted map. */
+export function dropMapVisionCaches(mapId: string): void {
+  for (const key of [...visionCache.keys()]) {
+    if (key.endsWith(`:${mapId}`)) {
+      visionCache.delete(key);
+      const timer = fogFlushTimers.get(key);
+      if (timer) {
+        clearTimeout(timer);
+        fogFlushTimers.delete(key);
+      }
     }
   }
 }

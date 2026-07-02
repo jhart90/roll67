@@ -1,8 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
-  type CampaignStatePayload, type DmViewAsPayload, type JoinCampaignPayload,
-  type SwitchActiveMapPayload,
+  type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
+  type JoinCampaignPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import {
@@ -24,7 +24,11 @@ export function buildCampaignState(campaignId: string, userId: string, username:
   const campaign = campaigns.byId(campaignId)!;
   return {
     campaign: isDm ? campaign : { ...campaign, inviteCode: '' },
-    members: campaigns.members(campaignId).map((m) => ({ ...m, online: false })),
+    members: campaigns.members(campaignId).map((m) => ({
+      ...m,
+      online: false,
+      mapId: campaigns.viewMapIdFor(campaignId, m.userId),
+    })),
     // Players only receive character sheets they own; the DM sees all
     // (NPC and other-player sheets stay private).
     characters: isDm
@@ -38,13 +42,18 @@ export function buildCampaignState(campaignId: string, userId: string, username:
   };
 }
 
-/** Send the full map state for the campaign's active map to one socket. */
+/**
+ * Send the full map state for the viewer's current map to one socket.
+ * "Current map" = the effective viewer's personal override, else the party
+ * map. When the DM previews a player (view-as), the target's map is used.
+ */
 export function sendMapState(socket: Socket): void {
   const d = sdata(socket);
   if (!d.campaignId) return;
-  const campaign = campaigns.byId(d.campaignId);
-  if (!campaign?.activeMapId) return;
-  const map = maps.byId(campaign.activeMapId);
+  const effectiveUser = d.viewingAs ?? d.userId;
+  const mapId = campaigns.viewMapIdFor(d.campaignId, effectiveUser);
+  if (!mapId) return;
+  const map = maps.byId(mapId);
   if (!map) return;
   const payload = buildMapState(
     map,
@@ -54,12 +63,22 @@ export function sendMapState(socket: Socket): void {
   socket.emit(S2C.MAP_STATE, payload);
 }
 
+/** Re-send map state to every connected socket of one user. */
+export function sendMapStateToUser(io: Server, campaignId: string, userId: string): void {
+  for (const s of io.sockets.sockets.values()) {
+    const sd = sdata(s);
+    if (sd.campaignId !== campaignId) continue;
+    if (sd.userId === userId || sd.viewingAs === userId) sendMapState(s);
+  }
+}
+
 export function broadcastPresence(io: Server, campaignId: string): void {
   const online = onlineUsers(io, campaignId);
   for (const m of campaigns.members(campaignId)) {
     io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, {
       userId: m.userId,
       online: online.has(m.userId),
+      mapId: campaigns.viewMapIdFor(campaignId, m.userId),
     });
   }
 }
@@ -113,10 +132,54 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       return;
     }
     campaigns.setActiveMap(d.campaignId, mapId);
-    // Everyone gets a fresh full map state for the new map.
+    io.to(campaignRoom(d.campaignId)).emit(S2C.ACTIVE_MAP, { mapId });
+    // Everyone follows their own resolved map (party movers get the new one,
+    // members with a personal override stay put).
     for (const s of io.sockets.sockets.values()) {
       if (sdata(s).campaignId === d.campaignId) sendMapState(s);
     }
+    broadcastPresence(io, d.campaignId);
+  }));
+
+  socket.on(C2S.VIEW_MAP, safe(socket, ({ mapId }: ViewMapPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId || d.role !== 'dm') {
+      emitError(socket, 'Only the DM can view other maps.');
+      return;
+    }
+    if (mapId !== null) {
+      const map = maps.byId(mapId);
+      if (!map || map.campaignId !== d.campaignId) {
+        emitError(socket, 'Unknown map.');
+        return;
+      }
+    }
+    campaigns.setMemberMap(d.campaignId, d.userId, mapId);
+    d.viewingAs = undefined; // working on a map exits any view-as preview
+    sendMapStateToUser(io, d.campaignId, d.userId);
+    broadcastPresence(io, d.campaignId);
+  }));
+
+  socket.on(C2S.ASSIGN_PLAYER_MAP, safe(socket, ({ userId, mapId }: AssignPlayerMapPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId || d.role !== 'dm') {
+      emitError(socket, 'Only the DM can move players between maps.');
+      return;
+    }
+    if (!campaigns.memberRole(d.campaignId, userId)) {
+      emitError(socket, 'That user is not in this campaign.');
+      return;
+    }
+    if (mapId !== null) {
+      const map = maps.byId(mapId);
+      if (!map || map.campaignId !== d.campaignId) {
+        emitError(socket, 'Unknown map.');
+        return;
+      }
+    }
+    campaigns.setMemberMap(d.campaignId, userId, mapId);
+    sendMapStateToUser(io, d.campaignId, userId);
+    broadcastPresence(io, d.campaignId);
   }));
 
   socket.on(C2S.DM_VIEW_AS, safe(socket, ({ userId }: DmViewAsPayload) => {

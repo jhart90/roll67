@@ -11,6 +11,7 @@ import { InitiativePanel } from '../panels/InitiativePanel';
 import { HandoutsPanel } from '../panels/HandoutsPanel';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
+import { PresenceBar } from '../table/PresenceBar';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -155,6 +156,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <LightInspector />
         <CharacterSheet />
         <DiceOverlay />
+        <PresenceBar />
       </div>
 
       {viewingAs && (

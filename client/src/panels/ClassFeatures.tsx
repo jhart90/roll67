@@ -1,5 +1,5 @@
 import type { Character, SheetData } from 'shared';
-import { attacksPerAction, classResources, isRaging, rageDamage, sneakAttackDice } from 'shared';
+import { attacksPerAction, classId, classResources, isRaging, martialArtsDie, rageDamage, sneakAttackDice } from 'shared';
 import { intents } from '../store/game';
 
 /** Class resource trackers (rage/ki/…), Extra Attack / Sneak Attack notes, and
@@ -11,9 +11,14 @@ export function ClassFeatures({ character, editable }: { character: Character; e
   const sneak = sneakAttackDice(sheet);
   const raging = isRaging(sheet);
   const level = Number(sheet.level) || 1;
-  const isBarbarian = String(sheet.class ?? '').toLowerCase().includes('barbarian');
+  const cls = classId(sheet);
+  const isBarbarian = cls === 'barbarian';
+  const isMonk = cls === 'monk';
+  const style = String(sheet.fightingStyle ?? '');
+  const hasStyle = style && style !== '—';
+  const ki = resources.find((r) => r.id === 'ki');
 
-  if (resources.length === 0 && attacks <= 1 && sneak === 0 && !isBarbarian) return null;
+  if (resources.length === 0 && attacks <= 1 && sneak === 0 && !isBarbarian && !isMonk && !hasStyle) return null;
 
   function setUsed(id: string, used: number) {
     intents.updateCharacter(character.id, { [`res_${id}`]: Math.max(0, used) });
@@ -35,6 +40,11 @@ export function ClassFeatures({ character, editable }: { character: Character; e
     if (rage && rage.remaining <= 0) return;
     intents.updateCharacter(character.id, { rageActive: true, res_rage: (rage?.used ?? 0) + 1 });
   }
+  function kiAction(name: string, cost: number) {
+    if (!ki || ki.remaining < cost) return;
+    intents.updateCharacter(character.id, { res_ki: ki.used + cost });
+    intents.chat(`${character.name} uses ${name} (−${cost} ki)`);
+  }
 
   const rageOut = (resources.find((r) => r.id === 'rage')?.remaining ?? 0) <= 0;
 
@@ -50,10 +60,12 @@ export function ClassFeatures({ character, editable }: { character: Character; e
         )}
       </h4>
 
-      {(attacks > 1 || sneak > 0 || isBarbarian) && (
+      {(attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle) && (
         <div className="cf-notes">
           {attacks > 1 && <span className="cf-chip">Extra Attack — {attacks} attacks / action</span>}
           {sneak > 0 && <span className="cf-chip">Sneak Attack {sneak}d6</span>}
+          {isMonk && <span className="cf-chip">Martial Arts {martialArtsDie(level)}</span>}
+          {hasStyle && <span className="cf-chip">Fighting Style: {style}</span>}
           {isBarbarian && (raging ? (
             <button className="cf-rage on" disabled={!editable} onClick={toggleRage}>
               ● RAGING +{rageDamage(level)} · end rage
@@ -63,6 +75,22 @@ export function ClassFeatures({ character, editable }: { character: Character; e
               {rageOut ? 'No rages left' : 'Enter Rage'}
             </button>
           ))}
+        </div>
+      )}
+
+      {isMonk && ki && (
+        <div className="cf-ki-actions">
+          {[['Flurry of Blows', 1], ['Patient Defense', 1], ['Step of the Wind', 1]].map(([name, cost]) => (
+            <button
+              key={name as string}
+              className="btn btn-sm"
+              disabled={!editable || ki.remaining < (cost as number)}
+              onClick={() => kiAction(name as string, cost as number)}
+            >
+              {name} (−{cost} ki)
+            </button>
+          ))}
+          <span className="dim" style={{ fontSize: 11 }}>Stunning Strike: spend 1 ki on a hit</span>
         </div>
       )}
 

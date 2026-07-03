@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dnd5e } from '../src/systems/dnd5e.js';
 import {
-  attacksPerAction, classResources, rageDamage, sneakAttackDice,
+  attacksPerAction, classResources, fightingStyleBonus, martialArtsDie, rageDamage, sneakAttackDice,
 } from '../src/systems/features5e.js';
 
 describe('martial feature math', () => {
@@ -69,5 +69,46 @@ describe('features feed into rollables', () => {
   it('rogue gets a Sneak Attack rollable that scales', () => {
     const rolls = dnd5e.rollables({ ...dnd5e.defaultSheet(), class: 'Rogue', level: 7 });
     expect(rolls.find((r) => r.id === 'sneak')?.expr).toBe('4d6');
+  });
+});
+
+describe('monk martial arts', () => {
+  it('martial arts die scales 1d4/1d6/1d8/1d10', () => {
+    expect(martialArtsDie(1)).toBe('1d4');
+    expect(martialArtsDie(5)).toBe('1d6');
+    expect(martialArtsDie(11)).toBe('1d8');
+    expect(martialArtsDie(17)).toBe('1d10');
+  });
+
+  it('monk gets a DEX-based unarmed strike using the martial-arts die', () => {
+    const rolls = dnd5e.rollables({ ...dnd5e.defaultSheet(), class: 'Monk', level: 5, dex: 16 });
+    expect(rolls.find((r) => r.id === 'unarmed_attack')?.expr).toBe('1d20+6'); // +3 DEX +3 prof
+    expect(rolls.find((r) => r.id === 'unarmed_damage')?.expr).toBe('1d6+3');
+  });
+});
+
+describe('fighting styles', () => {
+  it('archery adds +2 to ranged attacks; dueling adds +2 to melee damage', () => {
+    expect(fightingStyleBonus('Archery', true)).toEqual({ attack: 2, damage: 0 });
+    expect(fightingStyleBonus('Archery', false)).toEqual({ attack: 0, damage: 0 });
+    expect(fightingStyleBonus('Dueling', false)).toEqual({ attack: 0, damage: 2 });
+    expect(fightingStyleBonus('Defense', false)).toEqual({ attack: 0, damage: 0 });
+  });
+
+  it('archery/dueling flow into the attack rollables', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(), class: 'Fighter', level: 3, fightingStyle: 'Archery',
+      attacks: [
+        { name: 'Longbow', bonus: 5, damage: '1d8+3', range: 150 },
+        { name: 'Longsword', bonus: 5, damage: '1d8+3', range: 5 },
+      ],
+    };
+    const archery = dnd5e.rollables(sheet);
+    expect(archery.find((r) => r.id === 'attack_0')?.expr).toBe('1d20+7'); // ranged +2
+    expect(archery.find((r) => r.id === 'attack_1')?.expr).toBe('1d20+5'); // melee unaffected
+
+    const dueling = dnd5e.rollables({ ...sheet, fightingStyle: 'Dueling' });
+    expect(dueling.find((r) => r.id === 'damage_1')?.expr).toBe('1d8+3+2'); // melee dmg +2
+    expect(dueling.find((r) => r.id === 'damage_0')?.expr).toBe('1d8+3');   // ranged unaffected
   });
 });

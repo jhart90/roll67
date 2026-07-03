@@ -3,7 +3,7 @@ import {
   bool, fmtMod, num, rows, str,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
-import { isRaging, rageDamage, sneakAttackDice } from './features5e.js';
+import { classId, fightingStyleBonus, isRaging, martialArtsDie, rageDamage, sneakAttackDice } from './features5e.js';
 
 const ABILITIES = [
   { id: 'str', label: 'STR' },
@@ -140,6 +140,10 @@ const combatFields: FieldDef[] = [
   { id: 'hitDice', label: 'Hit Dice', type: 'text', width: 'sixth', default: '1d8' },
   { id: 'deathSuccesses', label: 'Death Saves ✓', type: 'number', width: 'sixth', default: 0 },
   { id: 'deathFailures', label: 'Death Saves ✗', type: 'number', width: 'sixth', default: 0 },
+  {
+    id: 'fightingStyle', label: 'Fighting Style', type: 'select', width: 'third', default: '—',
+    options: ['—', 'Archery', 'Defense', 'Dueling', 'Great Weapon Fighting', 'Protection', 'Two-Weapon Fighting'],
+  },
 ];
 
 const saveFields: FieldDef[] = ABILITIES.map((a) => ({
@@ -364,19 +368,30 @@ export const dnd5e: SystemSchema = {
     }
     out.push({ id: 'initiative', label: 'Initiative', expr: `1d20${fmtMod(abilityMod(num(sheet, 'dex', 10)))}`, group: 'Combat', d20: true });
     const rageBonus = isRaging(sheet) ? rageDamage(level) : 0;
+    const style = str(sheet, 'fightingStyle', '');
     rows(sheet, 'attacks').forEach((atk, i) => {
       const name = str(atk, 'name', `Attack ${i + 1}`);
-      out.push({ id: `attack_${i}`, label: `${name} (attack)`, expr: `1d20${fmtMod(num(atk, 'bonus', 0))}`, group: 'Attacks', d20: true });
+      const ranged = num(atk, 'range', 5) > 5;
+      const fs = fightingStyleBonus(style, ranged);
+      out.push({ id: `attack_${i}`, label: `${name} (attack)`, expr: `1d20${fmtMod(num(atk, 'bonus', 0) + fs.attack)}`, group: 'Attacks', d20: true });
       let dmg = str(atk, 'damage', '').trim();
       if (dmg) {
-        // Rage adds bonus damage to melee (reach ≤ 5 ft) weapon attacks.
-        if (rageBonus > 0 && num(atk, 'range', 5) <= 5) dmg = `${dmg}+${rageBonus}`;
+        // Melee-only bonuses stack: Rage damage + Dueling fighting style.
+        const bonus = (!ranged ? rageBonus : 0) + fs.damage;
+        if (bonus > 0) dmg = `${dmg}+${bonus}`;
         out.push({ id: `damage_${i}`, label: `${name} (damage)`, expr: dmg, group: 'Attacks', d20: false });
       }
     });
     // Rogue Sneak Attack: extra dice you add to a qualifying attack.
     const sneak = sneakAttackDice(sheet);
     if (sneak > 0) out.push({ id: 'sneak', label: `Sneak Attack (${sneak}d6)`, expr: `${sneak}d6`, group: 'Attacks', d20: false });
+    // Monk Martial Arts: DEX-based unarmed strike using the martial-arts die.
+    if (classId(sheet) === 'monk') {
+      const dexMod = abilityMod(num(sheet, 'dex', 10));
+      const ma = martialArtsDie(level);
+      out.push({ id: 'unarmed_attack', label: 'Unarmed Strike (attack)', expr: `1d20${fmtMod(dexMod + pb)}`, group: 'Attacks', d20: true });
+      out.push({ id: 'unarmed_damage', label: `Unarmed Strike (${ma})`, expr: `${ma}${fmtMod(dexMod)}`, group: 'Attacks', d20: false });
+    }
     const spellAbility = str(sheet, 'spellAbility', 'int');
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.push({ id: 'spellAttack', label: 'Spell attack', expr: `1d20${fmtMod(pb + spellMod)}`, group: 'Combat', d20: true });

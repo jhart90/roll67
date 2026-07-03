@@ -36,6 +36,26 @@ export function isRaging(sheet: SheetData): boolean {
   return sheet.rageActive === true;
 }
 
+export function classId(sheet: SheetData): string {
+  return getClass5e(str(sheet, 'class', ''))?.id ?? '';
+}
+
+/** Monk Martial Arts damage die by level. */
+export function martialArtsDie(level: number): string {
+  return level >= 17 ? '1d10' : level >= 11 ? '1d8' : level >= 5 ? '1d6' : '1d4';
+}
+
+export const FIGHTING_STYLES = [
+  '—', 'Archery', 'Defense', 'Dueling', 'Great Weapon Fighting', 'Protection', 'Two-Weapon Fighting',
+];
+
+/** Numeric bonuses a fighting style adds. `ranged` = the attack's reach > 5 ft. */
+export function fightingStyleBonus(style: string, ranged: boolean): { attack: number; damage: number } {
+  if (style === 'Archery' && ranged) return { attack: 2, damage: 0 };
+  if (style === 'Dueling' && !ranged) return { attack: 0, damage: 2 };
+  return { attack: 0, damage: 0 };
+}
+
 /** Rogue Sneak Attack dice count (0 if not a rogue). */
 export function sneakAttackDice(sheet: SheetData): number {
   const cls = getClass5e(str(sheet, 'class', ''));

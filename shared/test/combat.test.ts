@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Character } from '../src/types.js';
 import { combatActions } from '../src/systems/combat.js';
+import { castableLevels, spellSlots } from '../src/systems/spells.js';
 import { dnd5e } from '../src/systems/dnd5e.js';
 import { applyEntry } from '../src/data/compendiumTypes.js';
 
@@ -61,5 +62,35 @@ describe('combatActions', () => {
     expect(res?.listId).toBe('inventory');
     expect(res?.row.effect).toBe('heal');
     expect(res?.row.amount).toBe('2d4+2');
+  });
+
+  it('leveled spells carry a slotLevel; cantrips do not', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(),
+      cantrips: [{ name: 'Fire Bolt', damage: '1d10' }],
+      spells: [{ name: 'Fireball', level: 3, damage: '8d6' }],
+    };
+    const rolls = dnd5e.rollables(sheet);
+    expect(rolls.find((r) => r.id === 'cantrip_0')?.slotLevel).toBeUndefined();
+    expect(rolls.find((r) => r.id === 'spell_0')?.slotLevel).toBe(3);
+  });
+});
+
+describe('spell slots', () => {
+  const sheet = { slots1: 3, slotsUsed1: 1, slots2: 2, slotsUsed2: 2, slots3: 1 };
+
+  it('reports remaining slots per level, skipping levels with none', () => {
+    expect(spellSlots(sheet)).toEqual([
+      { level: 1, total: 3, remaining: 2 },
+      { level: 2, total: 2, remaining: 0 },
+      { level: 3, total: 1, remaining: 1 },
+    ]);
+  });
+
+  it('castable levels are those at/above min with a remaining slot', () => {
+    expect(castableLevels(sheet, 1)).toEqual([1, 3]); // L2 exhausted
+    expect(castableLevels(sheet, 3)).toEqual([3]);
+    expect(castableLevels(sheet, 2)).toEqual([3]);    // L2 has none left
+    expect(castableLevels({ slots1: 1, slotsUsed1: 1 }, 1)).toEqual([]);
   });
 });

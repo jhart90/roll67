@@ -57,6 +57,8 @@ export interface Rollable {
   group: string;
   /** True when the roll starts with 1d20 and supports advantage/disadvantage. */
   d20: boolean;
+  /** Spell level whose slot this roll spends (>=1). Absent = no slot cost. */
+  slotLevel?: number;
 }
 
 /**

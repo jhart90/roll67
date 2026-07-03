@@ -714,36 +714,40 @@ export const handouts = {
 
 interface MacroRow {
   id: string; name: string; command: string; sort_order: number;
-  color: string | null; character_id: string | null; rollable_id: string | null;
+  color: string | null; character_id: string | null; rollable_id: string | null; action_id: string | null;
+}
+
+function toMacro(r: MacroRow): Macro {
+  return {
+    id: r.id, name: r.name, command: r.command, sortOrder: r.sort_order,
+    color: r.color, characterId: r.character_id, rollableId: r.rollable_id, actionId: r.action_id,
+  };
 }
 
 export const macros = {
   forUser(userId: string, campaignId: string): Macro[] {
     const rows = db.prepare(
-      'SELECT id, name, command, sort_order, color, character_id, rollable_id FROM macros WHERE user_id = ? AND campaign_id = ? ORDER BY sort_order',
+      'SELECT id, name, command, sort_order, color, character_id, rollable_id, action_id FROM macros WHERE user_id = ? AND campaign_id = ? ORDER BY sort_order',
     ).all(userId, campaignId) as MacroRow[];
-    return rows.map((r) => ({
-      id: r.id, name: r.name, command: r.command, sortOrder: r.sort_order,
-      color: r.color, characterId: r.character_id, rollableId: r.rollable_id,
-    }));
+    return rows.map(toMacro);
   },
   byId(id: string): Macro | undefined {
-    const r = db.prepare('SELECT id, name, command, sort_order, color, character_id, rollable_id FROM macros WHERE id = ?')
+    const r = db.prepare('SELECT id, name, command, sort_order, color, character_id, rollable_id, action_id FROM macros WHERE id = ?')
       .get(id) as MacroRow | undefined;
-    return r ? { id: r.id, name: r.name, command: r.command, sortOrder: r.sort_order, color: r.color, characterId: r.character_id, rollableId: r.rollable_id } : undefined;
+    return r ? toMacro(r) : undefined;
   },
   save(userId: string, campaignId: string, macro: {
     id?: string; name: string; command: string;
-    color?: string | null; characterId?: string | null; rollableId?: string | null;
+    color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null;
   }): void {
     if (macro.id) {
-      db.prepare('UPDATE macros SET name = ?, command = ?, color = ?, character_id = ?, rollable_id = ? WHERE id = ? AND user_id = ?')
-        .run(macro.name, macro.command, macro.color ?? null, macro.characterId ?? null, macro.rollableId ?? null, macro.id, userId);
+      db.prepare('UPDATE macros SET name = ?, command = ?, color = ?, character_id = ?, rollable_id = ?, action_id = ? WHERE id = ? AND user_id = ?')
+        .run(macro.name, macro.command, macro.color ?? null, macro.characterId ?? null, macro.rollableId ?? null, macro.actionId ?? null, macro.id, userId);
     } else {
       const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM macros WHERE user_id = ? AND campaign_id = ?')
         .get(userId, campaignId) as { m: number | null }).m ?? -1;
-      db.prepare('INSERT INTO macros (id, user_id, campaign_id, name, command, sort_order, color, character_id, rollable_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(newId(), userId, campaignId, macro.name, macro.command, maxOrder + 1, macro.color ?? null, macro.characterId ?? null, macro.rollableId ?? null);
+      db.prepare('INSERT INTO macros (id, user_id, campaign_id, name, command, sort_order, color, character_id, rollable_id, action_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(newId(), userId, campaignId, macro.name, macro.command, maxOrder + 1, macro.color ?? null, macro.characterId ?? null, macro.rollableId ?? null, macro.actionId ?? null);
     }
   },
   reorder(userId: string, campaignId: string, macroIds: string[]): void {

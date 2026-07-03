@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  C2S, S2C,
+  C2S, S2C, castableLevels, combatActions, systemFor,
   type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload,
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
@@ -73,6 +73,11 @@ interface GameState {
   beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
   cancelTargeting(): void;
   resolveTarget(targetTokenId: string): void;
+  /** Pending spell cast awaiting a slot-level choice. */
+  castPrompt: { characterId: string; rollableId: string; label: string; levels: number[] } | null;
+  beginCast(characterId: string, rollableId: string, minLevel: number, label: string): void;
+  castSpell(characterId: string, rollableId: string, slotLevel: number): void;
+  cancelCast(): void;
 
   camera: Camera;
   tool: Tool;
@@ -159,6 +164,24 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
     set({ targeting: null });
   },
+  castPrompt: null,
+  beginCast(characterId, rollableId, minLevel, label) {
+    const c = get().characters.find((x) => x.id === characterId);
+    if (!c) return;
+    const levels = castableLevels(c.sheet, minLevel);
+    if (levels.length === 0) {
+      set({ errorToast: 'No spell slots available to cast this.' });
+      setTimeout(() => { if (get().errorToast) set({ errorToast: null }); }, 4000);
+      return;
+    }
+    if (levels.length === 1) { get().castSpell(characterId, rollableId, levels[0]); return; }
+    set({ castPrompt: { characterId, rollableId, label, levels } });
+  },
+  castSpell(characterId, rollableId, slotLevel) {
+    socket.emit(C2S.CAST_SPELL, { characterId, rollableId, slotLevel });
+    set({ castPrompt: null });
+  },
+  cancelCast() { set({ castPrompt: null }); },
 
   camera: { x: 0, y: 0, scale: 1 },
   tool: 'select',
@@ -188,7 +211,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, sheetCharacterId: null,
-      targeting: null, floats: [],
+      targeting: null, floats: [], castPrompt: null,
     });
   },
 
@@ -553,13 +576,31 @@ export const intents = {
     socket.emit(C2S.SHEET_ROLL, { characterId, rollableId, adv }),
 
   chat: (text: string) => socket.emit(C2S.CHAT, { text }),
-  saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null }) =>
+  saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),
   reorderMacros: (macroIds: string[]) => socket.emit(C2S.REORDER_MACROS, { macroIds }),
   deleteMacro: (macroId: string) => socket.emit(C2S.DELETE_MACRO, { macroId }),
+  castSpell: (characterId: string, rollableId: string, slotLevel: number) =>
+    socket.emit(C2S.CAST_SPELL, { characterId, rollableId, slotLevel }),
   runMacro: (macroId: string) => {
-    const m = useGameStore.getState().macroList.find((x) => x.id === macroId);
+    const s = useGameStore.getState();
+    const m = s.macroList.find((x) => x.id === macroId);
     if (!m) return;
+    const char = m.characterId ? s.characters.find((c) => c.id === m.characterId) : undefined;
+    // Combat-action pill (usable item / attack): begin targeting.
+    if (m.characterId && m.actionId && char) {
+      const action = combatActions(char).find((a) => a.id === m.actionId);
+      if (!action) { s.clearError(); useGameStore.setState({ errorToast: `${m.name} is not available right now.` }); return; }
+      const src = Object.values(s.tokens).find((t) => t.characterId === char.id && t.mapId === s.map?.id);
+      if (!src) { useGameStore.setState({ errorToast: `Place ${char.name}'s token on this map first.` }); return; }
+      s.beginTargeting(char.id, src.id, action, null);
+      return;
+    }
+    // Spell-roll pill that costs a slot: run the cast flow.
+    if (m.characterId && m.rollableId && char) {
+      const r = systemFor(char.system).rollables(char.sheet).find((x) => x.id === m.rollableId);
+      if (r?.slotLevel) { s.beginCast(char.id, m.rollableId, r.slotLevel, r.label); return; }
+    }
     if (m.characterId && m.rollableId) socket.emit(C2S.SHEET_ROLL, { characterId: m.characterId, rollableId: m.rollableId });
     else socket.emit(C2S.CHAT, { text: m.command });
   },

@@ -1,6 +1,26 @@
 import { useState } from 'react';
-import type { Macro } from 'shared';
+import type { Character, Macro } from 'shared';
+import { castableLevels, combatActions, systemFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
+
+/** Whether a pill can currently fire, and why not (out of item / spell slot). */
+function pillDisabled(m: Macro, characters: Character[]): { disabled: boolean; reason?: string } {
+  if (!m.characterId) return { disabled: false };
+  const char = characters.find((c) => c.id === m.characterId);
+  if (!char) return { disabled: false }; // sheet not loaded here — let the server decide
+  if (m.actionId) {
+    const action = combatActions(char).find((a) => a.id === m.actionId);
+    if (!action) return { disabled: true, reason: 'Out of stock / unavailable' };
+    return { disabled: false };
+  }
+  if (m.rollableId) {
+    const r = systemFor(char.system).rollables(char.sheet).find((x) => x.id === m.rollableId);
+    if (r?.slotLevel && castableLevels(char.sheet, r.slotLevel).length === 0) {
+      return { disabled: true, reason: `No level-${r.slotLevel}+ spell slot` };
+    }
+  }
+  return { disabled: false };
+}
 
 export const PILL_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#d2d26c', '#8a93a6'];
 
@@ -49,6 +69,7 @@ function EditPill({ macro, index, total, onClose }: { macro: Macro; index: numbe
 export function Toolbar() {
   const you = useGameStore((s) => s.you);
   const macros = useGameStore((s) => s.macroList);
+  const characters = useGameStore((s) => s.characters);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -67,22 +88,27 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      {macros.map((m, i) => (
-        <div key={m.id} className="pill-wrap">
-          <button
-            className="roll-pill"
-            style={{ background: m.color ?? 'var(--panel-2)' }}
-            onClick={() => intents.runMacro(m.id)}
-            onContextMenu={(e) => { e.preventDefault(); setEditingId((id) => (id === m.id ? null : m.id)); }}
-            title={m.characterId ? 'Sheet roll · right-click to edit' : `${m.command} · right-click to edit`}
-          >
-            {m.name}
-          </button>
-          {editingId === m.id && (
-            <EditPill macro={m} index={i} total={macros.length} onClose={() => setEditingId(null)} />
-          )}
-        </div>
-      ))}
+      {macros.map((m, i) => {
+        const { disabled, reason } = pillDisabled(m, characters);
+        const kind = m.actionId ? 'Action' : m.characterId ? 'Sheet roll' : m.command;
+        return (
+          <div key={m.id} className="pill-wrap">
+            <button
+              className={`roll-pill ${disabled ? 'pill-disabled' : ''}`}
+              style={{ background: m.color ?? 'var(--panel-2)' }}
+              disabled={disabled}
+              onClick={() => intents.runMacro(m.id)}
+              onContextMenu={(e) => { e.preventDefault(); setEditingId((id) => (id === m.id ? null : m.id)); }}
+              title={disabled ? `${reason} · right-click to edit` : `${kind} · right-click to edit`}
+            >
+              {m.name}
+            </button>
+            {editingId === m.id && (
+              <EditPill macro={m} index={i} total={macros.length} onClose={() => setEditingId(null)} />
+            )}
+          </div>
+        );
+      })}
 
       {adding ? (
         <form className="pill-add-form" onSubmit={addPill}>

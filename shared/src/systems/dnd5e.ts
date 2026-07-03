@@ -372,16 +372,21 @@ export const dnd5e: SystemSchema = {
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.push({ id: 'spellAttack', label: 'Spell attack', expr: `1d20${fmtMod(pb + spellMod)}`, group: 'Combat', d20: true });
     // Spells and cantrips with a damage/heal expression become click-to-roll.
-    const spellDamage = (rowsList: SheetData[], prefix: string) => {
+    // Leveled spells (not cantrips) carry a slotLevel so casting spends a slot.
+    const spellDamage = (rowsList: SheetData[], prefix: string, leveled: boolean) => {
       rowsList.forEach((sp, i) => {
         const dmg = str(sp, 'damage', '').trim();
         if (!dmg || !/\d*d\d/i.test(dmg)) return;
         const name = str(sp, 'name', `${prefix} ${i + 1}`);
-        out.push({ id: `${prefix}_${i}`, label: `${name}`, expr: dmg, group: 'Spells', d20: /^1d20/i.test(dmg) });
+        const lvl = Math.max(1, num(sp, 'level', 1));
+        out.push({
+          id: `${prefix}_${i}`, label: `${name}`, expr: dmg, group: 'Spells',
+          d20: /^1d20/i.test(dmg), ...(leveled ? { slotLevel: lvl } : {}),
+        });
       });
     };
-    spellDamage(rows(sheet, 'cantrips'), 'cantrip');
-    spellDamage(rows(sheet, 'spells'), 'spell');
+    spellDamage(rows(sheet, 'cantrips'), 'cantrip', false);
+    spellDamage(rows(sheet, 'spells'), 'spell', true);
     return out;
   },
 

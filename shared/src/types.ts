@@ -198,6 +198,8 @@ export interface Macro {
   /** Optional live binding to a character-sheet roll (stays current with the sheet). */
   characterId: string | null;
   rollableId: string | null;
+  /** Optional binding to a combat action (usable item / attack). */
+  actionId: string | null;
 }
 
 export interface RollableTableItem {

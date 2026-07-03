@@ -1,11 +1,11 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, DiceParseError, roll, systemFor,
-  type ChatMessage, type ChatPayload, type DeleteMacroPayload,
+  C2S, S2C, DiceParseError, castableLevels, num, roll, systemFor,
+  type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
   type ReorderMacrosPayload, type SaveMacroPayload, type SheetRollPayload,
 } from 'shared';
 import { campaigns, characters, chat, macros } from '../../db/repos.js';
-import { campaignRoom, emitError, safe, sdata, userRoom } from '../hub.js';
+import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -73,9 +73,9 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
 
   socket.on(C2S.SAVE_MACRO, safe(socket, ({ macro }: SaveMacroPayload) => {
     const d = requireCampaign(socket);
-    const bound = !!(macro?.characterId && macro?.rollableId);
+    const bound = !!(macro?.characterId && (macro?.rollableId || macro?.actionId));
     if (!macro?.name?.trim()) throw new Error('Give the pill a name.');
-    if (!bound && !macro?.command?.trim()) throw new Error('A pill needs a command or a sheet roll.');
+    if (!bound && !macro?.command?.trim()) throw new Error('A pill needs a command, a sheet roll, or an action.');
     macros.save(d.userId, d.campaignId, {
       id: macro.id,
       name: macro.name.trim(),
@@ -83,8 +83,41 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       color: macro.color ?? null,
       characterId: macro.characterId ?? null,
       rollableId: macro.rollableId ?? null,
+      actionId: macro.actionId ?? null,
     });
     socket.emit(S2C.MACROS, { macros: macros.forUser(d.userId, d.campaignId) });
+  }));
+
+  socket.on(C2S.CAST_SPELL, safe(socket, ({ characterId, rollableId, slotLevel }: CastSpellPayload) => {
+    const d = requireCampaign(socket);
+    const character = characters.byId(characterId);
+    if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    if (d.role !== 'dm' && character.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only cast from your own sheet.');
+      return;
+    }
+    const rollable = systemFor(character.system).rollables(character.sheet).find((r) => r.id === rollableId);
+    if (!rollable) throw new Error('That spell is no longer on the sheet.');
+    const minLevel = rollable.slotLevel ?? 1;
+    const level = Math.floor(slotLevel);
+    if (!castableLevels(character.sheet, minLevel).includes(level)) {
+      emitError(socket, `No level-${level} spell slot available.`);
+      return;
+    }
+    // Spend the slot, then roll.
+    const used = num(character.sheet, `slotsUsed${level}`, 0) + 1;
+    characters.update(characterId, undefined, { ...character.sheet, [`slotsUsed${level}`]: used });
+    const updated = characters.byId(characterId)!;
+    io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
+    if (updated.ownerUserId) io.to(userRoom(updated.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
+
+    const breakdown = roll(rollable.expr);
+    const atLabel = level > minLevel ? ` (cast at level ${level})` : '';
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'roll',
+      text: `${character.name}: ${rollable.label}${atLabel}`, roll: breakdown, recipients: null,
+    });
+    deliver(io, d.campaignId, msg);
   }));
 
   socket.on(C2S.REORDER_MACROS, safe(socket, ({ macroIds }: ReorderMacrosPayload) => {

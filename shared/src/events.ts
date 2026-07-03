@@ -45,6 +45,7 @@ export const C2S = {
   DELETE_CHARACTER: 'deleteCharacter',
   UPDATE_CHARACTER: 'updateCharacter',
   SHEET_ROLL: 'sheetRoll',
+  CAST_SPELL: 'castSpell',
   COMBAT_ACTION: 'combatAction',
   // shops
   CREATE_SHOP: 'createShop',
@@ -210,6 +211,12 @@ export interface SheetRollPayload {
   rollableId: string;
   adv?: 'adv' | 'dis' | null;
 }
+/** Cast a spell roll, spending a slot of the chosen level. */
+export interface CastSpellPayload {
+  characterId: string;
+  rollableId: string;
+  slotLevel: number;
+}
 /** Use a weapon/item against a target token; server rolls & applies HP. */
 export interface CombatActionPayload {
   characterId: string;
@@ -228,6 +235,7 @@ export interface SaveMacroPayload {
     color?: string | null;
     characterId?: string | null;
     rollableId?: string | null;
+    actionId?: string | null;
   };
 }
 export interface DeleteMacroPayload { macroId: string }

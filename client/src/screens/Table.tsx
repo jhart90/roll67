@@ -12,6 +12,7 @@ import { DirectoryPanel } from '../panels/DirectoryPanel';
 import { WorldPanel } from '../panels/WorldPanel';
 import { ShopStorefront } from '../panels/ShopStorefront';
 import { TargetPopup } from '../panels/TargetPopup';
+import { CastLevelPopup } from '../panels/CastLevelPopup';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { PresenceBar } from '../table/PresenceBar';
@@ -216,6 +217,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <AudioPlayer />
         <ShopStorefront />
         <TargetPopup />
+        <CastLevelPopup />
       </div>
 
       {targeting && targeting.action.source === 'attack' && (

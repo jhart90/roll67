@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, SheetData } from 'shared';
 import {
-  canEditCharacter, combatActions, systemFor,
+  canEditCharacter, castableLevels, combatActions, spellSlots, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -294,43 +294,25 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
         <div className="roll-group">
           <h5>Actions</h5>
           {actions.map((a) => (
-            <button
-              key={a.id}
-              className={`action-btn ${a.effect}`}
-              disabled={!canRoll || !myToken}
-              title={myToken ? `Range ${a.rangeFt} ft — pick a target` : "Place this character's token on the map first"}
-              onClick={() => myToken && useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null)}
-            >
-              <span>{a.effect === 'heal' ? '🧪' : '⚔️'} {a.label}</span>
-              <span className="action-meta">
-                {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
-              </span>
-            </button>
-          ))}
-          {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
-        </div>
-      )}
-      {[...groups.entries()].map(([group, rolls]) => (
-        <div key={group} className="roll-group">
-          <h5>{group}</h5>
-          {rolls.map((r) => (
-            <div key={r.id} className="roll-row">
+            <div key={a.id} className="roll-row">
               <button
-                className="roll-btn"
-                disabled={!canRoll}
-                title={r.expr}
-                onClick={() => intents.sheetRoll(character.id, r.id, r.d20 ? adv : null)}
+                className={`roll-btn action-btn ${a.effect}`}
+                disabled={!canRoll || !myToken}
+                title={myToken ? `Range ${a.rangeFt} ft — pick a target` : "Place this character's token on the map first"}
+                onClick={() => myToken && useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null)}
               >
-                <span>{r.label}</span>
-                <span className="roll-btn-expr">{r.expr}</span>
+                <span>{a.effect === 'heal' ? '🧪' : '⚔️'} {a.label}</span>
+                <span className="action-meta">
+                  {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
+                </span>
               </button>
               {canRoll && (
                 <button
                   className="roll-pin"
                   title="Pin to your toolbar"
                   onClick={() => intents.saveMacro({
-                    name: r.label, command: '', characterId: character.id, rollableId: r.id,
-                    color: PIN_COLORS[Math.abs(hashStr(r.id)) % PIN_COLORS.length],
+                    name: a.label, command: '', characterId: character.id, actionId: a.id,
+                    color: PIN_COLORS[Math.abs(hashStr(a.id)) % PIN_COLORS.length],
                   })}
                 >
                   📌
@@ -338,9 +320,93 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
               )}
             </div>
           ))}
+          {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
+        </div>
+      )}
+      {[...groups.entries()].map(([group, rolls]) => (
+        <div key={group} className="roll-group">
+          <h5>{group}</h5>
+          {rolls.map((r) => {
+            // Leveled spells spend a slot: disable when none is available.
+            const options = r.slotLevel ? castableLevels(character.sheet, r.slotLevel) : null;
+            const noSlots = options !== null && options.length === 0;
+            return (
+              <div key={r.id} className="roll-row">
+                <button
+                  className="roll-btn"
+                  disabled={!canRoll || noSlots}
+                  title={noSlots ? `No level-${r.slotLevel}+ spell slot available` : r.expr}
+                  onClick={() => r.slotLevel
+                    ? useGameStore.getState().beginCast(character.id, r.id, r.slotLevel, r.label)
+                    : intents.sheetRoll(character.id, r.id, r.d20 ? adv : null)}
+                >
+                  <span>{r.label}{r.slotLevel ? <span className="slot-tag">L{r.slotLevel}</span> : null}</span>
+                  <span className="roll-btn-expr">{r.expr}</span>
+                </button>
+                {canRoll && (
+                  <button
+                    className="roll-pin"
+                    title="Pin to your toolbar"
+                    onClick={() => intents.saveMacro({
+                      name: r.label, command: '', characterId: character.id, rollableId: r.id,
+                      color: PIN_COLORS[Math.abs(hashStr(r.id)) % PIN_COLORS.length],
+                    })}
+                  >
+                    📌
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
+  );
+}
+
+/** Spell-slot pips per level, with spend/regain and a long-rest reset. */
+function SpellSlotTracker({ character, editable }: { character: Character; editable: boolean }) {
+  const slots = spellSlots(character.sheet);
+  if (slots.length === 0) return null;
+
+  function setUsed(level: number, used: number) {
+    intents.updateCharacter(character.id, { [`slotsUsed${level}`]: Math.max(0, used) });
+  }
+  function longRest() {
+    const patch: SheetData = {};
+    for (const s of slots) patch[`slotsUsed${s.level}`] = 0;
+    intents.updateCharacter(character.id, patch);
+  }
+
+  return (
+    <section className="sheet-section slot-tracker">
+      <h4>
+        Spell Slots
+        {editable && <button className="link slot-rest" onClick={longRest}>Long rest ⟳</button>}
+      </h4>
+      <div className="slot-grid">
+        {slots.map((s) => {
+          const used = s.total - s.remaining;
+          return (
+            <div key={s.level} className="slot-cell">
+              <span className="slot-lvl">L{s.level}</span>
+              <span className="slot-pips">
+                {Array.from({ length: s.total }).map((_, i) => (
+                  <span key={i} className={`slot-pip ${i < s.remaining ? 'open' : 'used'}`} />
+                ))}
+              </span>
+              <span className="slot-count">{s.remaining}/{s.total}</span>
+              {editable && (
+                <span className="slot-btns">
+                  <button className="icon-btn" title="Spend a slot" disabled={s.remaining <= 0} onClick={() => setUsed(s.level, used + 1)}>−</button>
+                  <button className="icon-btn" title="Regain a slot" disabled={used <= 0} onClick={() => setUsed(s.level, used - 1)}>+</button>
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -414,6 +480,7 @@ export function CharacterSheet() {
 
         <div className="sheet-body">
           <div className="sheet-main">
+            {activeTab.id === 'spells' && <SpellSlotTracker character={character} editable={editable} />}
             {activeTab.sections.map((s) => (
               <Section
                 key={s.id}

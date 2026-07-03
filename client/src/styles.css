@@ -961,6 +961,32 @@ button.link:hover { text-decoration: underline; }
 .action-meta { color: var(--accent-2); font-family: monospace; font-size: 11px; flex: 0 0 auto; }
 .action-hint { display: block; font-size: 11px; margin-top: 4px; }
 
+/* spell slots */
+.slot-tag {
+  display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 6px;
+  background: var(--panel); border: 1px solid var(--border); color: var(--accent-2);
+  font-size: 10px; font-weight: 700;
+}
+.slot-tracker .slot-rest { float: right; padding: 2px 8px; font-size: 11px; }
+.slot-grid { display: flex; flex-direction: column; gap: 4px; }
+.slot-cell { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.slot-lvl { flex: 0 0 26px; font-weight: 700; color: var(--text-dim); }
+.slot-pips { display: flex; gap: 3px; flex-wrap: wrap; flex: 1; }
+.slot-pip { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); }
+.slot-pip.open { background: var(--accent); border-color: var(--accent); }
+.slot-pip.used { background: transparent; }
+.slot-count { flex: 0 0 auto; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.slot-btns { display: flex; gap: 3px; }
+.slot-btns .icon-btn { padding: 0 8px; }
+
+/* cast-level popup */
+.cast-popup { width: 300px; padding: 14px 16px; }
+.cast-levels { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.cast-levels .btn { min-width: 84px; }
+
+/* disabled toolbar pill (out of item / spell slot) */
+.roll-pill.pill-disabled { opacity: 0.4; filter: grayscale(0.6); cursor: not-allowed; }
+
 .target-ring { animation: targetPulse 1s ease-in-out infinite; }
 @keyframes targetPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 

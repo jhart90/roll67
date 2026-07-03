@@ -42,6 +42,7 @@ export function CharactersPanel() {
     const r = Math.floor(map.grid.rows / 2);
     // Offset -> axial for the map's center-ish hex.
     const axialQ = q - (r - (r & 1)) / 2;
+    const artAssetId = typeof c.sheet.tokenImageAssetId === 'string' ? c.sheet.tokenImageAssetId : undefined;
     intents.createToken({
       mapId: map.id,
       name: c.name,
@@ -50,6 +51,7 @@ export function CharactersPanel() {
       characterId: c.id,
       layer: c.ownerUserId ? 'token' : 'gm',
       color: TOKEN_COLORS[colorIdx++ % TOKEN_COLORS.length],
+      artAssetId,
     });
   }
 

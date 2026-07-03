@@ -208,6 +208,13 @@ const bioTab: SheetTab = {
   title: 'Bio & Info',
   sections: [
     {
+      kind: 'fields', id: 'portrait', title: 'Portrait & Token',
+      fields: [
+        { id: 'tokenImage', label: 'Token image', type: 'image', width: 'half' },
+        { id: 'detailImage', label: 'Detail / portrait', type: 'image', width: 'half' },
+      ],
+    },
+    {
       kind: 'fields', id: 'appearance', title: 'Appearance',
       fields: [
         { id: 'age', label: 'Age', type: 'text', width: 'sixth' },

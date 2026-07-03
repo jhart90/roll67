@@ -6,20 +6,37 @@ import {
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { Compendium } from './Compendium';
+import { AssetPicker } from './AssetPicker';
 
 type AdvMode = null | 'adv' | 'dis';
 
 function FieldInput({
-  field, sheet, derived, readOnly, onPatch,
+  field, sheet, derived, readOnly, onPatch, onEditImage,
 }: {
   field: FieldDef;
   sheet: SheetData;
   derived: Record<string, number | string>;
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
+  onEditImage?: (fieldId: string) => void;
 }) {
   const value = sheet[field.id];
   const derivedBadge = derived[field.id] !== undefined ? String(derived[field.id]) : null;
+
+  if (field.type === 'image') {
+    const url = typeof value === 'string' ? value : '';
+    return (
+      <div className={`sheet-field w-${field.width ?? 'half'} image-field`}>
+        <span>{field.label}</span>
+        <div className="image-slot">
+          {url ? <img src={url} alt={field.label} /> : <div className="image-empty">No image</div>}
+          {!readOnly && (
+            <button className="link" onClick={() => onEditImage?.(field.id)}>{url ? 'Change image' : 'Set image'}</button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (field.type === 'checkbox') {
     return (
@@ -211,13 +228,14 @@ function DerivedBlocks({
 }
 
 function Section({
-  section, sheet, derived, readOnly, onPatch,
+  section, sheet, derived, readOnly, onPatch, onEditImage,
 }: {
   section: SectionDef;
   sheet: SheetData;
   derived: Record<string, number | string>;
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
+  onEditImage?: (fieldId: string) => void;
 }) {
   return (
     <section className="sheet-section">
@@ -225,7 +243,7 @@ function Section({
       {section.kind === 'fields' && (
         <div className="sheet-grid">
           {section.fields.map((f) => (
-            <FieldInput key={f.id} field={f} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} />
+            <FieldInput key={f.id} field={f} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} onEditImage={onEditImage} />
           ))}
         </div>
       )}
@@ -339,6 +357,7 @@ export function CharacterSheet() {
     s.sheetCharacterId ? s.characters.find((c) => c.id === s.sheetCharacterId) : undefined);
   const [tabId, setTabId] = useState<string | null>(null);
   const [showCompendium, setShowCompendium] = useState(false);
+  const [pickingField, setPickingField] = useState<string | null>(null);
 
   if (!character || !you) return null;
   const schema = systemFor(character.system);
@@ -348,6 +367,16 @@ export function CharacterSheet() {
 
   function patch(p: SheetData) {
     if (character) intents.updateCharacter(character.id, p);
+  }
+
+  function applyImage(fieldId: string, url: string, assetId: string) {
+    if (!character) return;
+    // Setting the token image also carries the assetId so the server can
+    // repaint this character's tokens on every map.
+    const p: SheetData = { [fieldId]: url };
+    if (fieldId === 'tokenImage') p.tokenImageAssetId = assetId;
+    intents.updateCharacter(character.id, p);
+    setPickingField(null);
   }
 
   return (
@@ -393,12 +422,21 @@ export function CharacterSheet() {
                 derived={derived}
                 readOnly={!editable}
                 onPatch={patch}
+                onEditImage={setPickingField}
               />
             ))}
           </div>
           <RollsColumn character={character} canRoll={editable} />
         </div>
       </div>
+
+      {pickingField && (
+        <AssetPicker
+          title={pickingField === 'tokenImage' ? 'Choose a token image' : 'Choose a portrait image'}
+          onPick={(a) => applyImage(pickingField, a.url, a.id)}
+          onClose={() => setPickingField(null)}
+        />
+      )}
     </div>
   );
 }

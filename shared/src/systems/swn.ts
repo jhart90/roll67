@@ -159,6 +159,13 @@ const psionicsTab: SheetTab = {
   title: 'Psionics & Bio',
   sections: [
     {
+      kind: 'fields', id: 'portrait', title: 'Portrait & Token',
+      fields: [
+        { id: 'tokenImage', label: 'Token image', type: 'image', width: 'half' },
+        { id: 'detailImage', label: 'Detail / portrait', type: 'image', width: 'half' },
+      ],
+    },
+    {
       kind: 'fields', id: 'effort', title: 'Effort',
       fields: [
         { id: 'effortMax', label: 'Max effort', type: 'number', width: 'third', default: 0 },

@@ -4,7 +4,7 @@
 
 import type { SheetData, VisionStats } from '../types.js';
 
-export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select';
+export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'image';
 
 export interface FieldDef {
   id: string;

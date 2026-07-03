@@ -101,12 +101,16 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     emitCharacter(io, d.campaignId, updated);
 
     // Mirror HP onto this character's token bars on every map, and refresh
-    // vision on those maps (sheet vision may change).
+    // vision on those maps (sheet vision may change). Setting the sheet's
+    // token image also repaints every token for this character.
     const schema = systemFor(updated.system);
     const hp = schema.hp(updated.sheet);
+    const artId = typeof (patch as Record<string, unknown>).tokenImageAssetId === 'string'
+      ? (patch as Record<string, string>).tokenImageAssetId
+      : undefined;
     const touchedMaps = new Set<string>();
     for (const t of tokens.forCharacter(characterId)) {
-      tokens.update(t.id, { bar: hp });
+      tokens.update(t.id, artId !== undefined ? { bar: hp, artAssetId: artId } : { bar: hp });
       const refreshed = tokens.byId(t.id)!;
       io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: refreshed });
       touchedMaps.add(t.mapId);

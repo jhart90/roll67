@@ -1,0 +1,194 @@
+import { useMemo, useState } from 'react';
+import type { Character } from 'shared';
+import { applyLevelUp, CLASS_LIST_5E, getClass5e, planLevelUp, SKILLS_5E } from 'shared';
+import { intents } from '../store/game';
+
+const ABILITIES = [
+  { id: 'str', label: 'STR' }, { id: 'dex', label: 'DEX' }, { id: 'con', label: 'CON' },
+  { id: 'int', label: 'INT' }, { id: 'wis', label: 'WIS' }, { id: 'cha', label: 'CHA' },
+];
+const SKILL_LABEL: Record<string, string> = Object.fromEntries(SKILLS_5E.map((s) => [s.id, s.label]));
+
+/** Guided 5e level-up: picks class/subclass/HP/ASI/skills and applies the chassis. */
+export function LevelUpWizard({ character, onClose }: { character: Character; onClose: () => void }) {
+  const curLevel = Number(character.sheet.level) || 0;
+  const curClass = String(character.sheet.class ?? '').trim();
+  // With no class yet, this is the initial level-1 setup; otherwise +1.
+  const toLevel = curClass ? Math.min(20, curLevel + 1) : Math.max(1, curLevel);
+
+  const [classId, setClassId] = useState(curClass ? getClass5e(curClass)?.id ?? '' : '');
+  const [hpMode, setHpMode] = useState<'avg' | 'roll'>('avg');
+  const [rolled, setRolled] = useState<number | null>(null);
+  const [subclass, setSubclass] = useState('');
+  const [asiMode, setAsiMode] = useState<'asi' | 'feat'>('asi');
+  const [asiA, setAsiA] = useState('str');
+  const [asiB, setAsiB] = useState('con');
+  const [featName, setFeatName] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
+
+  const plan = useMemo(
+    () => (classId ? planLevelUp(character.sheet, classId, toLevel) : null),
+    [classId, character.sheet, toLevel],
+  );
+
+  const conMod = Math.floor((Number(character.sheet.con ?? 10) - 10) / 2);
+  // Level 1 always takes max hit die; later levels choose average or a roll.
+  const hpGained = plan
+    ? (plan.first ? plan.firstHp : hpMode === 'avg' ? plan.avgHp : Math.max(1, (rolled ?? 0) + conMod))
+    : 0;
+
+  function rollHp() {
+    if (!plan) return;
+    setRolled(1 + Math.floor(Math.random() * plan.hitDie));
+    setHpMode('roll');
+  }
+
+  function toggleSkill(id: string) {
+    setSkills((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
+  }
+
+  const valid = !!plan
+    && (hpMode === 'avg' || rolled !== null)
+    && (!plan.needsSubclass || !!subclass)
+    && (!plan.asi || (asiMode === 'asi' ? !!asiA && !!asiB : featName.trim().length > 0))
+    && (plan.needsSkills === 0 || skills.length === plan.needsSkills);
+
+  function apply() {
+    if (!plan) return;
+    const patch = applyLevelUp(character.sheet, plan.classId, toLevel, {
+      hpGained,
+      subclass: plan.needsSubclass ? subclass : undefined,
+      asi: plan.asi ? { mode: asiMode, a: asiA, b: asiB, featName } : undefined,
+      skills: plan.needsSkills > 0 ? skills : undefined,
+    });
+    intents.updateCharacter(character.id, patch);
+    onClose();
+  }
+
+  return (
+    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="panel levelup">
+        <div className="dock-header">
+          <h3>Level Up — {character.name}</h3>
+          <button className="link" onClick={onClose}>close</button>
+        </div>
+
+        {curLevel >= 20 ? (
+          <p className="dim">Already at level 20.</p>
+        ) : (
+          <>
+            <label className="lu-field">
+              Class
+              <select value={classId} onChange={(e) => setClassId(e.target.value)} disabled={!!curClass}>
+                <option value="">Choose a class…</option>
+                {CLASS_LIST_5E.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+
+            {plan && (
+              <>
+                <p className="lu-summary">
+                  {plan.first
+                    ? <>New level <strong>1 {plan.className}</strong></>
+                    : <>Level <strong>{plan.fromLevel}</strong> → <strong>{plan.toLevel}</strong></>}
+                  {' '}· d{plan.hitDie} hit die · proficiency +{plan.profBonus}
+                </p>
+
+                <div className="lu-field">
+                  <span>Hit points</span>
+                  {plan.first ? (
+                    <span className="dim">Level 1 takes the maximum: <strong>+{plan.firstHp} HP</strong> (d{plan.hitDie} + CON).</span>
+                  ) : (
+                    <div className="lu-hp">
+                      <label className="check-row" style={{ margin: 0 }}>
+                        <input type="radio" checked={hpMode === 'avg'} onChange={() => setHpMode('avg')} />
+                        Average (+{plan.avgHp})
+                      </label>
+                      <label className="check-row" style={{ margin: 0 }}>
+                        <input type="radio" checked={hpMode === 'roll'} onChange={rollHp} />
+                        Roll 1d{plan.hitDie}{rolled !== null ? ` → +${Math.max(1, rolled + conMod)}` : ''}
+                      </label>
+                      {hpMode === 'roll' && <button className="btn btn-sm" onClick={rollHp}>reroll</button>}
+                    </div>
+                  )}
+                </div>
+
+                {plan.needsSubclass && (
+                  <label className="lu-field">
+                    {plan.subclassLabel}
+                    <select value={subclass} onChange={(e) => setSubclass(e.target.value)}>
+                      <option value="">Choose…</option>
+                      {plan.subclasses.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </label>
+                )}
+
+                {plan.asi && (
+                  <div className="lu-field">
+                    <span>Ability Score Improvement</span>
+                    <div className="lu-asi">
+                      <label className="check-row" style={{ margin: 0 }}>
+                        <input type="radio" checked={asiMode === 'asi'} onChange={() => setAsiMode('asi')} /> Raise abilities
+                      </label>
+                      {asiMode === 'asi' && (
+                        <div className="row">
+                          <select value={asiA} onChange={(e) => setAsiA(e.target.value)}>{ABILITIES.map((a) => <option key={a.id} value={a.id}>+1 {a.label}</option>)}</select>
+                          <select value={asiB} onChange={(e) => setAsiB(e.target.value)}>{ABILITIES.map((a) => <option key={a.id} value={a.id}>+1 {a.label}</option>)}</select>
+                          <span className="dim" style={{ fontSize: 11 }}>(same twice = +2)</span>
+                        </div>
+                      )}
+                      <label className="check-row" style={{ margin: 0 }}>
+                        <input type="radio" checked={asiMode === 'feat'} onChange={() => setAsiMode('feat')} /> Take a feat
+                      </label>
+                      {asiMode === 'feat' && (
+                        <input placeholder="Feat name (e.g. Great Weapon Master)" value={featName} onChange={(e) => setFeatName(e.target.value)} />
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {plan.needsSkills > 0 && (
+                  <div className="lu-field">
+                    <span>Skill proficiencies — choose {plan.needsSkills} ({skills.length}/{plan.needsSkills})</span>
+                    <div className="lu-skills">
+                      {plan.skillList.map((s) => (
+                        <label key={s} className={`lu-skill ${skills.includes(s) ? 'on' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={skills.includes(s)}
+                            disabled={!skills.includes(s) && skills.length >= plan.needsSkills}
+                            onChange={() => toggleSkill(s)}
+                          />
+                          {SKILL_LABEL[s] ?? s}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {plan.featuresGained.length > 0 && (
+                  <div className="lu-field">
+                    <span>Features gained</span>
+                    <ul className="lu-features">
+                      {plan.featuresGained.map((f) => (
+                        <li key={f.name}><strong>{f.name}</strong> — <span className="dim">{f.desc}</span></li>
+                      ))}
+                      {plan.gainsSubclassFeature && <li className="dim">+ a {subclass || plan.subclassLabel} feature</li>}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="row" style={{ marginTop: 12 }}>
+                  <button className="primary" style={{ width: 'auto' }} disabled={!valid} onClick={apply}>
+                    Apply — become level {plan.toLevel}
+                  </button>
+                  <button onClick={onClose}>Cancel</button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -7,6 +7,7 @@ import {
 import { intents, useGameStore } from '../store/game';
 import { Compendium } from './Compendium';
 import { AssetPicker } from './AssetPicker';
+import { LevelUpWizard } from './LevelUpWizard';
 
 type AdvMode = null | 'adv' | 'dis';
 
@@ -423,6 +424,7 @@ export function CharacterSheet() {
     s.sheetCharacterId ? s.characters.find((c) => c.id === s.sheetCharacterId) : undefined);
   const [tabId, setTabId] = useState<string | null>(null);
   const [showCompendium, setShowCompendium] = useState(false);
+  const [showLevelUp, setShowLevelUp] = useState(false);
   const [pickingField, setPickingField] = useState<string | null>(null);
 
   if (!character || !you) return null;
@@ -464,11 +466,13 @@ export function CharacterSheet() {
           />
           <span className="dim">{schema.name}{character.ownerUserId ? '' : ' · NPC'}</span>
           <span className="spacer" />
+          {editable && character.system === 'dnd5e' && <button className="link" onClick={() => setShowLevelUp(true)}>⬆ Level Up</button>}
           {editable && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
           <button className="link" onClick={() => useGameStore.getState().openSheet(null)}>close</button>
         </div>
 
         {showCompendium && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
+        {showLevelUp && <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />}
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (

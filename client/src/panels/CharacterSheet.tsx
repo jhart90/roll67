@@ -268,21 +268,41 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
         <div key={group} className="roll-group">
           <h5>{group}</h5>
           {rolls.map((r) => (
-            <button
-              key={r.id}
-              className="roll-btn"
-              disabled={!canRoll}
-              title={r.expr}
-              onClick={() => intents.sheetRoll(character.id, r.id, r.d20 ? adv : null)}
-            >
-              <span>{r.label}</span>
-              <span className="roll-btn-expr">{r.expr}</span>
-            </button>
+            <div key={r.id} className="roll-row">
+              <button
+                className="roll-btn"
+                disabled={!canRoll}
+                title={r.expr}
+                onClick={() => intents.sheetRoll(character.id, r.id, r.d20 ? adv : null)}
+              >
+                <span>{r.label}</span>
+                <span className="roll-btn-expr">{r.expr}</span>
+              </button>
+              {canRoll && (
+                <button
+                  className="roll-pin"
+                  title="Pin to your toolbar"
+                  onClick={() => intents.saveMacro({
+                    name: r.label, command: '', characterId: character.id, rollableId: r.id,
+                    color: PIN_COLORS[Math.abs(hashStr(r.id)) % PIN_COLORS.length],
+                  })}
+                >
+                  📌
+                </button>
+              )}
+            </div>
           ))}
         </div>
       ))}
     </div>
   );
+}
+
+const PIN_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8'];
+function hashStr(s: string): number {
+  let h = 0;
+  for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return h;
 }
 
 export function CharacterSheet() {

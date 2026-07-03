@@ -183,6 +183,23 @@ export interface Macro {
   name: string;
   command: string;
   sortOrder: number;
+  /** Pill color on the toolbar. */
+  color: string | null;
+  /** Optional live binding to a character-sheet roll (stays current with the sheet). */
+  characterId: string | null;
+  rollableId: string | null;
+}
+
+export interface RollableTableItem {
+  text: string;
+  weight: number;
+}
+
+export interface RollableTable {
+  id: string;
+  name: string;
+  playersCanRoll: boolean;
+  items: RollableTableItem[];
 }
 
 // ---------- Initiative ----------

@@ -1,10 +1,10 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor,
-  type InitAddPayload, type InitRemovePayload, type InitUpdatePayload,
-  type InitiativeState,
+  type InitAddPayload, type InitRemovePayload, type InitRollMapPayload,
+  type InitUpdatePayload, type InitiativeState,
 } from 'shared';
-import { campaigns, characters, chat, initiative, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata } from '../hub.js';
 
@@ -141,6 +141,36 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
     broadcastInitiative(io, d.campaignId);
+  }));
+
+  socket.on(C2S.INIT_ROLL_MAP, safe(socket, ({ mapId, includeGm }: InitRollMapPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM rolls group initiative.'); return; }
+    const map = maps.byId(mapId);
+    if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
+    const state = initiative.get(d.campaignId);
+    const existing = new Set(state.entries.map((e) => e.tokenId));
+    let added = 0;
+    for (const t of tokens.forMap(mapId)) {
+      if (existing.has(t.id)) continue;
+      if (t.layer === 'gm' && !includeGm) continue;
+      const character = t.characterId ? characters.byId(t.characterId) : undefined;
+      const expr = character ? systemFor(character.system).initiativeExpr(character.sheet) : '1d20';
+      state.entries.push({
+        id: newId(), tokenId: t.id, name: t.name,
+        value: roll(expr).total, hidden: t.layer === 'gm',
+      });
+      added++;
+    }
+    state.entries.sort((a, b) => b.value - a.value);
+    state.turnIdx = 0;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `Rolled initiative for ${added} token${added === 1 ? '' : 's'}.`, roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }));
 
   socket.on(C2S.INIT_SET_ACTIVE, safe(socket, ({ active }: { active: boolean }) => {

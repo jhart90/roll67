@@ -138,6 +138,15 @@ CREATE TABLE IF NOT EXISTS initiative (
   state_json TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS rollable_tables (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  players_can_roll INTEGER NOT NULL DEFAULT 1,
+  items_json TEXT NOT NULL DEFAULT '[]',
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS drawings (
   id TEXT PRIMARY KEY,
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,

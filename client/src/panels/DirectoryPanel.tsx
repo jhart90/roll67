@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useGameStore, intents } from '../store/game';
 import { HandoutsSection } from './HandoutsPanel';
+import { RollableTables } from './RollableTables';
 
 const SYSTEM_LABEL: Record<string, string> = { dnd5e: 'D&D 5e', swn: 'SWN' };
 
@@ -29,8 +30,11 @@ export function DirectoryPanel() {
   // Refresh when the tab opens so the tree is current.
   useEffect(() => { intents.requestDirectory(); }, []);
 
+  const canOpen = (id: string) => useGameStore.getState().characters.some((c) => c.id === id);
+
   return (
     <div className="dock-panel">
+      <RollableTables />
       <HandoutsSection />
 
       <div className="dir-tree">
@@ -49,7 +53,9 @@ export function DirectoryPanel() {
             <Branch title="Characters" count={dir.characters.length}>
               {dir.characters.map((c) => (
                 <div key={c.id} className="dir-item">
-                  {c.name}
+                  {canOpen(c.id)
+                    ? <button className="dir-link" onClick={() => useGameStore.getState().openSheet(c.id)}>{c.name}</button>
+                    : <span>{c.name}</span>}
                   <span className="dir-tag">
                     {c.owner ? c.owner : 'NPC'} · {SYSTEM_LABEL[c.system] ?? c.system}
                   </span>

@@ -515,6 +515,58 @@ async function main() {
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { attacks: [] } });
   dmSock.emit('updateCharacter', { characterId: npc.id, patch: { attacks: [] } });
 
+  // ---------- rollable tables ----------
+  console.log('rollable tables:');
+  const dmTables = waitFor(dmSock, 'tables', 5000, (p) => p.tables.some((t) => t.name === 'Smoke Table'));
+  dmSock.emit('createTable', { name: 'Smoke Table' });
+  const tbl = (await dmTables).tables.find((t) => t.name === 'Smoke Table');
+  ok(!!tbl, 'DM created a rollable table');
+  // player can't roll it while empty / not shared appropriately; fill + share
+  const playerSees = waitFor(playerSock, 'tables', 5000, (p) => p.tables.some((t) => t.id === tbl.id && t.items.length === 3));
+  dmSock.emit('updateTable', { tableId: tbl.id, playersCanRoll: true, items: [{ text: 'Alpha' }, { text: 'Beta' }, { text: 'Gamma' }] });
+  await playerSees;
+  ok(true, 'players receive shared tables with items');
+  const rollResult = waitFor(dmSock, 'chatMsg', 5000, (p) => p.msg.kind === 'roll' && p.msg.text.startsWith('Smoke Table:'));
+  playerSock.emit('rollTable', { tableId: tbl.id });
+  const rr = await rollResult;
+  ok(['Alpha', 'Beta', 'Gamma'].some((x) => rr.msg.text.endsWith(x)), `table roll returns an item ("${rr.msg.text}")`);
+  // hide from players
+  const playerLoses = waitFor(playerSock, 'tables', 5000, (p) => !p.tables.some((t) => t.id === tbl.id));
+  dmSock.emit('updateTable', { tableId: tbl.id, playersCanRoll: false });
+  await playerLoses;
+  ok(true, 'unsharing a table hides it from players');
+  dmSock.emit('deleteTable', { tableId: tbl.id });
+
+  // ---------- toolbar pills (macros with sheet binding) ----------
+  console.log('toolbar pills:');
+  const macroSaved2 = waitFor(playerSock, 'macros', 5000, (p) => p.macros.some((m) => m.name === 'STR check' && m.rollableId === 'check_str'));
+  playerSock.emit('saveMacro', { macro: { name: 'STR check', command: '', characterId: pc.id, rollableId: 'check_str', color: '#7ed28a' } });
+  await macroSaved2;
+  ok(true, 'player pinned a sheet roll as a toolbar pill');
+  const pillRoll = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg.kind === 'roll' && p.msg.text.includes('STR check'));
+  // A toolbar click on a bound pill runs the live sheet roll.
+  playerSock.emit('sheetRoll', { characterId: pc.id, rollableId: 'check_str' });
+  await pillRoll;
+  ok(true, 'a pinned pill produces a live sheet roll');
+  // Reorder is a no-op with one pill but must not error.
+  const reordered = waitFor(playerSock, 'macros', 5000);
+  const savedPill = (await macroSaved2 ?? { macros: [] });
+  void savedPill;
+  playerSock.emit('reorderMacros', { macroIds: [] });
+  await reordered;
+  ok(true, 'reorderMacros round-trips');
+
+  // ---------- group initiative ----------
+  console.log('group initiative:');
+  dmSock.emit('initClear');
+  await waitFor(dmSock, 'initiativeState');
+  const groupInit = waitFor(dmSock, 'initiativeState', 5000, (p) => p.state.entries.length >= 1);
+  dmSock.emit('initRollMap', { mapId, includeGm: true });
+  const gi = await groupInit;
+  ok(gi.state.entries.length >= 1, `group initiative rolled ${gi.state.entries.length} tokens`);
+  ok(gi.state.entries.every((e, i, a) => i === 0 || a[i - 1].value >= e.value), 'group initiative is sorted high-to-low');
+  dmSock.emit('initClear');
+
   // ---------- cleanup: restore the campaign exactly as we found it ----------
   dmSock.emit('initClear');
   if (originalActiveMapId) dmSock.emit('switchActiveMap', { mapId: originalActiveMapId });

@@ -17,7 +17,10 @@ A hex-grid virtual tabletop (Roll20-style) for playing **D&D 5e** and **Stars Wi
 - **Character sheets** — full 5e and SWN templates with auto-calculated modifiers, saves, skills, spell slots / psionics, inventory and XP. Every stat is click-to-roll straight into chat, with advantage/disadvantage.
 - **Compendium** — an SRD-based content library (weapons, armor, gear, magic items, ~95 spells, SWN cyberware & psychic powers). Add any item to a character from the sheet and its rolls apply automatically: a weapon becomes a click-to-roll attack with the right ability + proficiency baked in, a damaging spell becomes a clickable damage roll.
 - **NPC library** — ~280 pre-built SRD monsters/NPCs (5e) and SWN NPCs, searchable and one-click to add as a DM-controlled NPC with full stats.
-- **Directory** — a shared campaign reference (below Handouts): a collapsible tree of every map, character, token, weapon, spell, and item introduced so far, visible to the whole party. NPC-only secrets stay hidden from players.
+- **Directory** — a shared campaign reference: rollable tables, handouts, and a collapsible tree of every map, character, token, weapon, spell, and item introduced so far, visible to the whole party (directory characters are clickable to open their sheet). NPC-only secrets stay hidden from players.
+- **Rollable tables** — the DM builds named random tables (one item per line, optional "players can roll"); a click posts a random result to chat.
+- **Player Toolbar** — each player keeps a bottom row of saved roll "pills": pin any roll from a character sheet, or add a custom `/r` pill. Pills are colored, renamable, reorderable, and pinned sheet-rolls stay live with the character's current stats.
+- **Group initiative** — the DM rolls initiative for every token on the map at once (optionally including hidden NPCs), auto-sorted.
 - **Chat & dice** — `/r 2d6+3` rolls (with `kh`/`kl`, `adv`, `dis`, parentheses), `/gr` GM-only rolls, `/w name` whispers, saved macros (`#stab`), roll cards with die breakdowns and crit highlighting.
 - **Initiative tracker** — roll from sheets, hidden entries for surprise monsters, turn/round advancement.
 - **Table tools** — freehand drawing, hex ruler (broadcasts a live measurement to everyone), pings, and handouts/journal shareable to all or specific players.

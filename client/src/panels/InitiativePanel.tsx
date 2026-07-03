@@ -5,6 +5,7 @@ export function InitiativePanel() {
   const state = useGameStore((s) => s.initiativeState);
   const selectedTokenId = useGameStore((s) => s.selectedTokenId);
   const tokens = useGameStore((s) => s.tokens);
+  const map = useGameStore((s) => s.map);
 
   if (!you) return null;
   const isDm = you.role === 'dm';
@@ -39,6 +40,13 @@ export function InitiativePanel() {
         ))}
         {state.entries.length === 0 && <p className="dim">Nobody in initiative yet.</p>}
       </ol>
+
+      {isDm && map && (
+        <div className="row" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
+          <button onClick={() => intents.initRollMap(map.id, false)}>Roll all tokens</button>
+          <button onClick={() => intents.initRollMap(map.id, true)}>+ hidden NPCs</button>
+        </div>
+      )}
 
       {isDm && state.entries.length > 0 && (
         <div className="row init-controls">

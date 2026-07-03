@@ -6,7 +6,7 @@ import {
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import {
-  campaigns, characters, chat, drawings, handouts, initiative, macros, maps,
+  campaigns, characters, chat, drawings, handouts, initiative, macros, maps, rollableTables,
 } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
@@ -106,6 +106,10 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     socket.emit(S2C.YOU_ARE, { userId: d.userId, username: d.username, role });
     socket.emit(S2C.CAMPAIGN_STATE, buildCampaignState(campaignId, d.userId, d.username, role === 'dm'));
     socket.emit(S2C.DIRECTORY, buildDirectory(campaignId, role === 'dm'));
+    {
+      const all = rollableTables.forCampaign(campaignId);
+      socket.emit(S2C.TABLES, { tables: role === 'dm' ? all : all.filter((t) => t.playersCanRoll) });
+    }
     sendMapState(socket);
     broadcastPresence(io, campaignId);
   }));

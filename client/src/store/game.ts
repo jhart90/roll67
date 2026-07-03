@@ -6,8 +6,8 @@ import {
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type MapStatePayload, type MapView, type MeasureShownPayload, type MemberInfo,
-  type PingShownPayload, type TokenView, type VisionStats, type VisionUpdatePayload,
-  type Wall, type YouArePayload,
+  type PingShownPayload, type RollableTable, type TokenView, type VisionStats,
+  type VisionUpdatePayload, type Wall, type YouArePayload,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 
@@ -34,6 +34,7 @@ interface GameState {
   mapsMeta: MapMeta[];
   handoutList: Handout[];
   macroList: Macro[];
+  tableList: RollableTable[];
   directory: DirectoryPayload | null;
   initiativeState: InitiativeState;
   chatLog: ChatMessage[];
@@ -91,6 +92,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   mapsMeta: [],
   handoutList: [],
   macroList: [],
+  tableList: [],
   directory: null,
   initiativeState: { entries: [], turnIdx: 0, round: 1, active: false },
   chatLog: [],
@@ -337,6 +339,10 @@ export function wireSocket(): void {
     useGameStore.setState({ macroList: macros });
   });
 
+  socket.on(S2C.TABLES, ({ tables }: { tables: RollableTable[] }) => {
+    useGameStore.setState({ tableList: tables });
+  });
+
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
     useGameStore.setState({ initiativeState: state });
   });
@@ -455,8 +461,21 @@ export const intents = {
     socket.emit(C2S.SHEET_ROLL, { characterId, rollableId, adv }),
 
   chat: (text: string) => socket.emit(C2S.CHAT, { text }),
-  saveMacro: (macro: { id?: string; name: string; command: string }) => socket.emit(C2S.SAVE_MACRO, { macro }),
+  saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null }) =>
+    socket.emit(C2S.SAVE_MACRO, { macro }),
+  reorderMacros: (macroIds: string[]) => socket.emit(C2S.REORDER_MACROS, { macroIds }),
   deleteMacro: (macroId: string) => socket.emit(C2S.DELETE_MACRO, { macroId }),
+  runMacro: (macroId: string) => {
+    const m = useGameStore.getState().macroList.find((x) => x.id === macroId);
+    if (!m) return;
+    if (m.characterId && m.rollableId) socket.emit(C2S.SHEET_ROLL, { characterId: m.characterId, rollableId: m.rollableId });
+    else socket.emit(C2S.CHAT, { text: m.command });
+  },
+  createTable: (name: string) => socket.emit(C2S.CREATE_TABLE, { name }),
+  updateTable: (tableId: string, fields: { name?: string; playersCanRoll?: boolean; items?: Array<{ text: string; weight?: number }> }) =>
+    socket.emit(C2S.UPDATE_TABLE, { tableId, ...fields }),
+  deleteTable: (tableId: string) => socket.emit(C2S.DELETE_TABLE, { tableId }),
+  rollTable: (tableId: string) => socket.emit(C2S.ROLL_TABLE, { tableId }),
 
   initAdd: (p: { tokenId?: string | null; name?: string; value?: number; roll?: boolean; hidden?: boolean }) =>
     socket.emit(C2S.INIT_ADD, p),
@@ -468,6 +487,7 @@ export const intents = {
   initSort: () => socket.emit(C2S.INIT_SORT),
   initClear: () => socket.emit(C2S.INIT_CLEAR),
   initSetActive: (active: boolean) => socket.emit(C2S.INIT_SET_ACTIVE, { active }),
+  initRollMap: (mapId: string, includeGm: boolean) => socket.emit(C2S.INIT_ROLL_MAP, { mapId, includeGm }),
 
   draw: (mapId: string, layer: DrawingLayerName, shape: Drawing['shape']) =>
     socket.emit(C2S.DRAW, { mapId, layer, shape }),

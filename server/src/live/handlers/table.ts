@@ -1,11 +1,12 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
-  type ClearDrawingsPayload, type CreateHandoutPayload, type DeleteHandoutPayload,
-  type DrawPayload, type EraseDrawingPayload, type MeasurePayload, type PingPayload,
-  type ShareHandoutPayload, type UpdateHandoutPayload,
+  type ClearDrawingsPayload, type CreateHandoutPayload, type CreateTablePayload,
+  type DeleteHandoutPayload, type DeleteTablePayload, type DrawPayload,
+  type EraseDrawingPayload, type MeasurePayload, type PingPayload, type RollTablePayload,
+  type ShareHandoutPayload, type UpdateHandoutPayload, type UpdateTablePayload,
 } from 'shared';
-import { campaigns, drawings, handouts, maps } from '../../db/repos.js';
+import { campaigns, chat, drawings, handouts, maps, rollableTables } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata } from '../hub.js';
 
 function requireCampaign(socket: Socket) {
@@ -20,6 +21,15 @@ function colorFor(userId: string): string {
   let hash = 0;
   for (const ch of userId) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   return PING_COLORS[hash % PING_COLORS.length];
+}
+
+/** Players only receive tables they're allowed to roll; the DM sees all. */
+export function broadcastTables(io: Server, campaignId: string): void {
+  const all = rollableTables.forCampaign(campaignId);
+  for (const socket of campaignSockets(io, campaignId)) {
+    const isDm = sdata(socket).role === 'dm';
+    socket.emit(S2C.TABLES, { tables: isDm ? all : all.filter((t) => t.playersCanRoll) });
+  }
 }
 
 /** Re-send each connected member their (role-filtered) handout list. */
@@ -122,5 +132,54 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     handouts.share(handoutId, to);
     broadcastHandouts(io, d.campaignId);
+  }));
+
+  // ----- rollable tables -----
+
+  socket.on(C2S.CREATE_TABLE, safe(socket, ({ name }: CreateTablePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM creates tables.'); return; }
+    rollableTables.create(d.campaignId, name?.trim() || 'New table');
+    broadcastTables(io, d.campaignId);
+  }));
+
+  socket.on(C2S.UPDATE_TABLE, safe(socket, ({ tableId, name, playersCanRoll, items }: UpdateTablePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const t = rollableTables.byId(tableId);
+    if (!t || t.campaignId !== d.campaignId) return;
+    rollableTables.update(tableId, {
+      name,
+      playersCanRoll,
+      items: items?.map((it) => ({ text: String(it.text ?? ''), weight: it.weight && it.weight > 0 ? it.weight : 1 })).filter((it) => it.text.trim()),
+    });
+    broadcastTables(io, d.campaignId);
+  }));
+
+  socket.on(C2S.DELETE_TABLE, safe(socket, ({ tableId }: DeleteTablePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const t = rollableTables.byId(tableId);
+    if (!t || t.campaignId !== d.campaignId) return;
+    rollableTables.delete(tableId);
+    broadcastTables(io, d.campaignId);
+  }));
+
+  socket.on(C2S.ROLL_TABLE, safe(socket, ({ tableId }: RollTablePayload) => {
+    const d = requireCampaign(socket);
+    const t = rollableTables.byId(tableId);
+    if (!t || t.campaignId !== d.campaignId) throw new Error('Unknown table.');
+    if (d.role !== 'dm' && !t.playersCanRoll) { emitError(socket, 'You cannot roll that table.'); return; }
+    if (t.items.length === 0) { emitError(socket, 'That table has no items.'); return; }
+    // Weighted random pick.
+    const total = t.items.reduce((s, it) => s + it.weight, 0);
+    let pick = Math.random() * total;
+    let chosen = t.items[t.items.length - 1];
+    for (const it of t.items) { if (pick < it.weight) { chosen = it; break; } pick -= it.weight; }
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'roll',
+      text: `${t.name}: ${chosen.text}`, roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }));
 }

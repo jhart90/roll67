@@ -1,7 +1,7 @@
 import type {
   CampaignInfo, Character, ChatKind, ChatMessage, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, Light, Macro, MapDef, MapMeta,
-  RollBreakdown, Role, Token, Wall,
+  RollableTable, RollBreakdown, Role, Token, Wall,
 } from 'shared';
 import { db, newId, now } from './db.js';
 
@@ -509,25 +509,96 @@ export const handouts = {
 
 // ---------- macros ----------
 
+interface MacroRow {
+  id: string; name: string; command: string; sort_order: number;
+  color: string | null; character_id: string | null; rollable_id: string | null;
+}
+
 export const macros = {
   forUser(userId: string, campaignId: string): Macro[] {
-    const rows = db.prepare('SELECT id, name, command, sort_order FROM macros WHERE user_id = ? AND campaign_id = ? ORDER BY sort_order')
-      .all(userId, campaignId) as Array<{ id: string; name: string; command: string; sort_order: number }>;
-    return rows.map((r) => ({ id: r.id, name: r.name, command: r.command, sortOrder: r.sort_order }));
+    const rows = db.prepare(
+      'SELECT id, name, command, sort_order, color, character_id, rollable_id FROM macros WHERE user_id = ? AND campaign_id = ? ORDER BY sort_order',
+    ).all(userId, campaignId) as MacroRow[];
+    return rows.map((r) => ({
+      id: r.id, name: r.name, command: r.command, sortOrder: r.sort_order,
+      color: r.color, characterId: r.character_id, rollableId: r.rollable_id,
+    }));
   },
-  save(userId: string, campaignId: string, macro: { id?: string; name: string; command: string }): void {
+  byId(id: string): Macro | undefined {
+    const r = db.prepare('SELECT id, name, command, sort_order, color, character_id, rollable_id FROM macros WHERE id = ?')
+      .get(id) as MacroRow | undefined;
+    return r ? { id: r.id, name: r.name, command: r.command, sortOrder: r.sort_order, color: r.color, characterId: r.character_id, rollableId: r.rollable_id } : undefined;
+  },
+  save(userId: string, campaignId: string, macro: {
+    id?: string; name: string; command: string;
+    color?: string | null; characterId?: string | null; rollableId?: string | null;
+  }): void {
     if (macro.id) {
-      db.prepare('UPDATE macros SET name = ?, command = ? WHERE id = ? AND user_id = ?')
-        .run(macro.name, macro.command, macro.id, userId);
+      db.prepare('UPDATE macros SET name = ?, command = ?, color = ?, character_id = ?, rollable_id = ? WHERE id = ? AND user_id = ?')
+        .run(macro.name, macro.command, macro.color ?? null, macro.characterId ?? null, macro.rollableId ?? null, macro.id, userId);
     } else {
       const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM macros WHERE user_id = ? AND campaign_id = ?')
         .get(userId, campaignId) as { m: number | null }).m ?? -1;
-      db.prepare('INSERT INTO macros (id, user_id, campaign_id, name, command, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(newId(), userId, campaignId, macro.name, macro.command, maxOrder + 1);
+      db.prepare('INSERT INTO macros (id, user_id, campaign_id, name, command, sort_order, color, character_id, rollable_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(newId(), userId, campaignId, macro.name, macro.command, maxOrder + 1, macro.color ?? null, macro.characterId ?? null, macro.rollableId ?? null);
     }
+  },
+  reorder(userId: string, campaignId: string, macroIds: string[]): void {
+    const stmt = db.prepare('UPDATE macros SET sort_order = ? WHERE id = ? AND user_id = ? AND campaign_id = ?');
+    const tx = db.transaction((ids: string[]) => {
+      ids.forEach((id, i) => stmt.run(i, id, userId, campaignId));
+    });
+    tx(macroIds);
   },
   delete(userId: string, macroId: string): void {
     db.prepare('DELETE FROM macros WHERE id = ? AND user_id = ?').run(macroId, userId);
+  },
+};
+
+// ---------- rollable tables ----------
+
+interface TableRow {
+  id: string; name: string; players_can_roll: number; items_json: string; sort_order: number;
+}
+
+function toTable(r: TableRow): RollableTable {
+  const raw = JSON.parse(r.items_json) as Array<{ text: string; weight?: number }>;
+  return {
+    id: r.id,
+    name: r.name,
+    playersCanRoll: !!r.players_can_roll,
+    items: raw.map((it) => ({ text: it.text, weight: typeof it.weight === 'number' && it.weight > 0 ? it.weight : 1 })),
+  };
+}
+
+export const rollableTables = {
+  forCampaign(campaignId: string): RollableTable[] {
+    const rows = db.prepare('SELECT * FROM rollable_tables WHERE campaign_id = ? ORDER BY sort_order, name').all(campaignId) as TableRow[];
+    return rows.map(toTable);
+  },
+  byId(id: string): (RollableTable & { campaignId: string }) | undefined {
+    const r = db.prepare('SELECT * FROM rollable_tables WHERE id = ?').get(id) as (TableRow & { campaign_id: string }) | undefined;
+    return r ? { ...toTable(r), campaignId: r.campaign_id } : undefined;
+  },
+  create(campaignId: string, name: string): RollableTable {
+    const id = newId();
+    const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM rollable_tables WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
+    db.prepare('INSERT INTO rollable_tables (id, campaign_id, name, players_can_roll, items_json, sort_order) VALUES (?, ?, ?, 1, ?, ?)')
+      .run(id, campaignId, name, '[]', maxOrder + 1);
+    return { id, name, playersCanRoll: true, items: [] };
+  },
+  update(id: string, fields: { name?: string; playersCanRoll?: boolean; items?: RollableTable['items'] }): void {
+    const cur = db.prepare('SELECT * FROM rollable_tables WHERE id = ?').get(id) as TableRow | undefined;
+    if (!cur) return;
+    db.prepare('UPDATE rollable_tables SET name = ?, players_can_roll = ?, items_json = ? WHERE id = ?').run(
+      fields.name ?? cur.name,
+      fields.playersCanRoll !== undefined ? (fields.playersCanRoll ? 1 : 0) : cur.players_can_roll,
+      fields.items !== undefined ? JSON.stringify(fields.items) : cur.items_json,
+      id,
+    );
+  },
+  delete(id: string): void {
+    db.prepare('DELETE FROM rollable_tables WHERE id = ?').run(id);
   },
 };
 

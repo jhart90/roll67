@@ -13,6 +13,7 @@ import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
+import { Toolbar } from '../table/Toolbar';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -168,6 +169,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <LightInspector />
         <CharacterSheet />
         <DiceOverlay />
+        <Toolbar />
         <PresenceBar />
       </div>
 

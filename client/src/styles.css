@@ -529,6 +529,68 @@ button.link:hover { text-decoration: underline; }
   padding: 5px 8px;
 }
 .roll-btn-expr { color: var(--accent-2); font-family: monospace; }
+.roll-row { display: flex; gap: 3px; margin-bottom: 3px; }
+.roll-row .roll-btn { flex: 1; margin-bottom: 0; }
+.roll-pin { padding: 0 6px; font-size: 12px; flex: 0 0 auto; }
+
+/* ---------- player toolbar ---------- */
+
+.toolbar {
+  position: absolute;
+  left: 60px;
+  right: 316px;
+  bottom: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  z-index: 16;
+  pointer-events: none;
+}
+.toolbar > * { pointer-events: auto; }
+.pill-wrap { position: relative; }
+.roll-pill {
+  padding: 5px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  color: #10131a;
+  font-weight: 700;
+  font-size: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.roll-pill:hover { filter: brightness(1.1); }
+.pill-add { font-size: 12px; padding: 5px 10px; border-radius: 14px; color: var(--text-dim); }
+.toolbar-edit { font-size: 12px; padding: 5px 10px; border-radius: 14px; }
+.toolbar-hint { font-size: 11px; align-self: center; }
+.pill-add-form { display: flex; gap: 4px; }
+.pill-add-form input { width: 90px; margin: 0; padding: 4px 6px; font-size: 12px; }
+.pill-add-form button { padding: 4px 8px; }
+
+.pill-editor {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 30;
+  width: 200px;
+}
+.pill-name-input { margin: 0 0 6px; padding: 4px 6px; font-size: 12px; }
+.pill-colors { display: flex; gap: 3px; margin-bottom: 6px; }
+.pill-swatch { width: 18px; height: 18px; border-radius: 50%; padding: 0; border: 2px solid transparent; }
+.pill-swatch.active { border-color: #fff; }
+.pill-edit-actions { display: flex; gap: 6px; align-items: center; }
+
+/* ---------- rollable tables ---------- */
+
+.tables-grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tables-grid td { padding: 4px 4px; border-bottom: 1px solid var(--panel-2); }
+.tables-name { font-weight: 600; }
+.dir-link { background: none; border: none; color: var(--accent); padding: 0; font-size: 12px; text-align: left; }
+.dir-link:hover { text-decoration: underline; }
 
 /* ---------- initiative ---------- */
 

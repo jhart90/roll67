@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, DiceParseError, roll, systemFor,
   type ChatMessage, type ChatPayload, type DeleteMacroPayload,
-  type SaveMacroPayload, type SheetRollPayload,
+  type ReorderMacrosPayload, type SaveMacroPayload, type SheetRollPayload,
 } from 'shared';
 import { campaigns, characters, chat, macros } from '../../db/repos.js';
 import { campaignRoom, emitError, safe, sdata, userRoom } from '../hub.js';
@@ -73,8 +73,23 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
 
   socket.on(C2S.SAVE_MACRO, safe(socket, ({ macro }: SaveMacroPayload) => {
     const d = requireCampaign(socket);
-    if (!macro?.name?.trim() || !macro?.command?.trim()) throw new Error('Macro needs a name and a command.');
-    macros.save(d.userId, d.campaignId, { id: macro.id, name: macro.name.trim(), command: macro.command.trim() });
+    const bound = !!(macro?.characterId && macro?.rollableId);
+    if (!macro?.name?.trim()) throw new Error('Give the pill a name.');
+    if (!bound && !macro?.command?.trim()) throw new Error('A pill needs a command or a sheet roll.');
+    macros.save(d.userId, d.campaignId, {
+      id: macro.id,
+      name: macro.name.trim(),
+      command: (macro.command ?? '').trim(),
+      color: macro.color ?? null,
+      characterId: macro.characterId ?? null,
+      rollableId: macro.rollableId ?? null,
+    });
+    socket.emit(S2C.MACROS, { macros: macros.forUser(d.userId, d.campaignId) });
+  }));
+
+  socket.on(C2S.REORDER_MACROS, safe(socket, ({ macroIds }: ReorderMacrosPayload) => {
+    const d = requireCampaign(socket);
+    if (Array.isArray(macroIds)) macros.reorder(d.userId, d.campaignId, macroIds);
     socket.emit(S2C.MACROS, { macros: macros.forUser(d.userId, d.campaignId) });
   }));
 
@@ -83,6 +98,27 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     macros.delete(d.userId, macroId);
     socket.emit(S2C.MACROS, { macros: macros.forUser(d.userId, d.campaignId) });
   }));
+}
+
+/** Roll a character-sheet rollable and post the result (shared by pills). */
+function runSheetRoll(
+  io: Server, socket: Socket, campaignId: string, userId: string, username: string,
+  role: 'dm' | 'player', characterId: string, rollableId: string,
+): void {
+  const character = characters.byId(characterId);
+  if (!character || character.campaignId !== campaignId) throw new Error('Unknown character.');
+  if (role !== 'dm' && character.ownerUserId !== userId) {
+    emitError(socket, 'You can only roll from your own sheet.');
+    return;
+  }
+  const rollable = systemFor(character.system).rollables(character.sheet).find((r) => r.id === rollableId);
+  if (!rollable) throw new Error('That roll is no longer on the sheet.');
+  const breakdown = roll(rollable.expr);
+  const msg = chat.add(campaignId, {
+    userId, fromName: username, kind: 'roll',
+    text: `${character.name}: ${rollable.label}`, roll: breakdown, recipients: null,
+  });
+  deliver(io, campaignId, msg);
 }
 
 function handleChatText(
@@ -111,6 +147,11 @@ function handleChatText(
     const macro = macros.forUser(userId, campaignId).find((m) => m.name.toLowerCase() === name.toLowerCase());
     if (!macro) {
       emitError(socket, `No macro named "${name}".`);
+      return;
+    }
+    // A pill bound to a sheet roll stays live with the character's stats.
+    if (macro.characterId && macro.rollableId) {
+      runSheetRoll(io, socket, campaignId, userId, username, role, macro.characterId, macro.rollableId);
       return;
     }
     handleChatText(io, socket, campaignId, userId, username, role, macro.command, depth + 1);

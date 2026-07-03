@@ -5,7 +5,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, InitiativeState, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  SheetData, Token, TokenLayer, TokenView, VisionStats,
+  RollableTable, SheetData, Token, TokenLayer, TokenView, VisionStats,
 } from './types.js';
 
 // ---------- Client -> server intents ----------
@@ -47,6 +47,12 @@ export const C2S = {
   CHAT: 'chat',
   SAVE_MACRO: 'saveMacro',
   DELETE_MACRO: 'deleteMacro',
+  REORDER_MACROS: 'reorderMacros',
+  // rollable tables
+  CREATE_TABLE: 'createTable',
+  UPDATE_TABLE: 'updateTable',
+  DELETE_TABLE: 'deleteTable',
+  ROLL_TABLE: 'rollTable',
   // initiative
   INIT_ADD: 'initAdd',
   INIT_REMOVE: 'initRemove',
@@ -56,6 +62,7 @@ export const C2S = {
   INIT_SORT: 'initSort',
   INIT_CLEAR: 'initClear',
   INIT_SET_ACTIVE: 'initSetActive',
+  INIT_ROLL_MAP: 'initRollMap',
   // table
   DRAW: 'draw',
   ERASE_DRAWING: 'eraseDrawing',
@@ -143,8 +150,28 @@ export interface SheetRollPayload {
 }
 
 export interface ChatPayload { text: string }
-export interface SaveMacroPayload { macro: { id?: string; name: string; command: string } }
+export interface SaveMacroPayload {
+  macro: {
+    id?: string;
+    name: string;
+    command: string;
+    color?: string | null;
+    characterId?: string | null;
+    rollableId?: string | null;
+  };
+}
 export interface DeleteMacroPayload { macroId: string }
+export interface ReorderMacrosPayload { macroIds: string[] }
+
+export interface CreateTablePayload { name: string }
+export interface UpdateTablePayload {
+  tableId: string;
+  name?: string;
+  playersCanRoll?: boolean;
+  items?: Array<{ text: string; weight?: number }>;
+}
+export interface DeleteTablePayload { tableId: string }
+export interface RollTablePayload { tableId: string }
 
 export interface InitAddPayload {
   tokenId?: string | null;
@@ -153,6 +180,8 @@ export interface InitAddPayload {
   roll?: boolean;      // roll from sheet/token
   hidden?: boolean;
 }
+/** Roll initiative for every token on a map at once (DM). */
+export interface InitRollMapPayload { mapId: string; includeGm?: boolean }
 export interface InitRemovePayload { entryId: string }
 export interface InitUpdatePayload { entryId: string; value?: number; hidden?: boolean; name?: string }
 
@@ -192,6 +221,7 @@ export const S2C = {
   PING_SHOWN: 'pingShown',
   MEASURE_SHOWN: 'measureShown',
   HANDOUTS: 'handouts',
+  TABLES: 'tables',
   DIRECTORY: 'directory',
   MEMBER_PRESENCE: 'memberPresence',
   ACTIVE_MAP: 'activeMap',
@@ -274,6 +304,7 @@ export interface CharacterRemovedPayload { characterId: string }
 
 export interface ChatBroadcastPayload { msg: ChatMessage }
 export interface MacrosPayload { macros: Macro[] }
+export interface TablesPayload { tables: RollableTable[] }
 export interface InitiativePayload { state: InitiativeState }
 
 export interface DrawingAddedPayload { drawing: Drawing }

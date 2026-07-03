@@ -98,6 +98,50 @@ button.link {
 }
 button.link:hover { text-decoration: underline; }
 
+/* Reusable button styles */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; width: auto;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, filter 0.12s;
+}
+.btn:hover { border-color: var(--accent); background: var(--panel); }
+.btn:disabled { opacity: 0.5; cursor: default; filter: none; }
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+.btn-accent { background: var(--accent); border-color: var(--accent); color: #10131a; }
+.btn-accent:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); filter: brightness(1.1); }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); filter: brightness(1.1); }
+
+/* In the side dock, clickable text-links read as small buttons */
+.dock button.link {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.dock button.link:hover { background: var(--accent); border-color: var(--accent); color: #10131a; text-decoration: none; }
+.dock button.link:disabled { background: var(--panel-2); border-color: var(--border); color: var(--text-dim); }
+.dock button.link.danger { color: var(--danger); }
+.dock button.link.danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/* Clickable names in the dock get an obvious tappable affordance */
+.dock .char-name, .dock .dir-link {
+  border-radius: 5px; padding: 2px 7px;
+  transition: background 0.12s, color 0.12s;
+}
+.dock .char-name:hover, .dock .dir-link:hover {
+  background: var(--panel-2); color: var(--accent); text-decoration: none;
+}
+
 .row { display: flex; gap: 8px; align-items: center; }
 .row button { width: auto; }
 .stack { display: flex; flex-direction: column; }
@@ -796,6 +840,34 @@ button.link:hover { text-decoration: underline; }
 
 .shop-list, .loc-list { list-style: none; padding: 0; margin: 0 0 10px; }
 .shop-list li, .loc-list li { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+
+/* shop panes (DM manages; players browse) */
+.shop-panes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.shop-pane {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.shop-pane.presenting { border-color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }
+.shop-pane-head {
+  background: none; border: none; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 4px 6px; margin: -4px -6px 0; border-radius: 6px;
+  transition: background 0.12s;
+}
+.shop-pane-head:hover { background: rgba(108, 155, 210, 0.16); }
+.shop-pane-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.shop-pane-head:hover .shop-pane-name, .shop-pane-card:hover .shop-pane-name { color: var(--accent); }
+.shop-pane-meta { font-size: 11px; color: var(--text-dim); }
+.shop-pane-status { min-height: 14px; line-height: 1; }
+.shop-pane-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* player card is itself the clickable button */
+.shop-pane-card { align-items: flex-start; cursor: pointer; }
+.shop-pane-card:hover { border-color: var(--accent); background: var(--panel-2); }
+.present-picker-inline { position: static; box-shadow: none; min-width: 0; }
+
 .shop-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
 .shop-table th { text-align: left; color: var(--text-dim); font-weight: 400; padding: 2px 4px; }
 .shop-table td { padding: 3px 4px; border-bottom: 1px solid var(--panel-2); }

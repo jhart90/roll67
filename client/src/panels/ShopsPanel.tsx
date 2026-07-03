@@ -43,7 +43,7 @@ function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void }) {
           <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
           <button onClick={onClose}>Cancel</button>
           <span className="spacer" />
-          <button className="link danger" onClick={() => { if (confirm(`Delete shop "${shop.name}"?`)) { intents.deleteShop(shop.id); onClose(); } }}>delete</button>
+          <button className="btn btn-sm btn-danger" onClick={() => { if (confirm(`Delete shop "${shop.name}"?`)) { intents.deleteShop(shop.id); onClose(); } }}>Delete</button>
         </div>
       </div>
     </div>
@@ -64,30 +64,45 @@ function BuyControls({ shop, itemIndex }: { shop: Shop; itemIndex: number }) {
           {mine.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       )}
-      <button className="link" disabled={!target} onClick={() => target && intents.buyItem(shop.id, itemIndex, target)}>buy</button>
+      <button className="btn btn-sm btn-accent" disabled={!target} onClick={() => target && intents.buyItem(shop.id, itemIndex, target)}>buy</button>
     </span>
   );
 }
 
-function PresentControls({ shop }: { shop: Shop }) {
+/** DM pane for one shop: click the name to edit; present controls inline. */
+function ShopPane({ shop, onEdit }: { shop: Shop; onEdit: () => void }) {
   const members = useGameStore((s) => s.members);
   const presentedShopId = useGameStore((s) => s.presentedShopId);
   const players = members.filter((m) => m.role === 'player');
   const [picking, setPicking] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const presenting = presentedShopId === shop.id;
+  const count = shop.items.length;
 
   return (
-    <div className="present-controls">
-      {presenting
-        ? <span className="present-badge">● showing to players</span>
-        : <span className="dim" style={{ fontSize: 11 }}>Not shown to players</span>}
-      <span className="spacer" />
-      <button className="link" onClick={() => intents.presentShop(shop.id, 'all')}>Show to all</button>
-      <button className="link" onClick={() => setPicking((v) => !v)}>Show to…</button>
-      {presenting && <button className="link danger" onClick={() => intents.dismissShop()}>Stop</button>}
+    <div className={`shop-pane ${presenting ? 'presenting' : ''}`}>
+      <button className="shop-pane-head" onClick={onEdit} title="Open the shop editor">
+        <span className="shop-pane-name">{shop.name}</span>
+        <span className="shop-pane-meta">
+          {count} item{count === 1 ? '' : 's'}{!shop.playersCanBuy ? ' · closed to players' : ''}
+        </span>
+      </button>
+
+      <div className="shop-pane-status">
+        {presenting
+          ? <span className="present-badge">● showing to players</span>
+          : <span className="dim" style={{ fontSize: 11 }}>Not shown to players</span>}
+      </div>
+
+      <div className="shop-pane-actions">
+        <button className="btn btn-sm" onClick={onEdit}>Edit</button>
+        <button className="btn btn-sm" onClick={() => { intents.presentShop(shop.id, 'all'); setPicking(false); }}>Show to all</button>
+        <button className="btn btn-sm" onClick={() => setPicking((v) => !v)}>Show to…</button>
+        {presenting && <button className="btn btn-sm btn-danger" onClick={() => intents.dismissShop()}>Stop</button>}
+      </div>
+
       {picking && (
-        <div className="present-picker" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="present-picker present-picker-inline" onPointerDown={(e) => e.stopPropagation()}>
           {players.length === 0 && <span className="dim">No players online.</span>}
           {players.map((p) => (
             <label key={p.userId} className="check-row" style={{ margin: 0 }}>
@@ -100,8 +115,7 @@ function PresentControls({ shop }: { shop: Shop }) {
             </label>
           ))}
           <button
-            className="primary"
-            style={{ width: 'auto' }}
+            className="btn btn-sm btn-accent"
             disabled={selected.length === 0}
             onClick={() => { intents.presentShop(shop.id, selected); setPicking(false); }}
           >
@@ -113,14 +127,53 @@ function PresentControls({ shop }: { shop: Shop }) {
   );
 }
 
-/** Shops for the World panel. DM manages; players buy. */
+/** Player-facing card: click to open the buy view. */
+function PlayerShopCard({ shop, onOpen }: { shop: Shop; onOpen: () => void }) {
+  const count = shop.items.length;
+  return (
+    <button className="shop-pane shop-pane-card" onClick={onOpen} title="Browse this shop">
+      <span className="shop-pane-name">{shop.name}</span>
+      <span className="shop-pane-meta">{count} item{count === 1 ? '' : 's'} · priced in {shop.currency}</span>
+    </button>
+  );
+}
+
+/** Buy view (players): the item table with purchase buttons. */
+function ShopBuyView({ shop, onBack }: { shop: Shop; onBack: () => void }) {
+  return (
+    <div className="shop-detail">
+      <div className="dock-header">
+        <h4 style={{ margin: 0 }}>{shop.name}</h4>
+        <span className="spacer" />
+        <button className="link" onClick={onBack}>back</button>
+      </div>
+      {shop.description && <p className="dim" style={{ fontSize: 12 }}>{shop.description}</p>}
+      <table className="shop-table">
+        <thead><tr><th>Item</th><th>{shop.currency}</th><th>stock</th><th /></tr></thead>
+        <tbody>
+          {shop.items.map((it, i) => (
+            <tr key={i} className={it.qty === 0 ? 'sold-out' : ''}>
+              <td>{it.name}{it.notes ? <span className="dim"> · {it.notes}</span> : null}</td>
+              <td>{it.price}</td>
+              <td>{it.qty < 0 ? '∞' : it.qty}</td>
+              <td>{it.qty !== 0 && <BuyControls shop={shop} itemIndex={i} />}</td>
+            </tr>
+          ))}
+          {shop.items.length === 0 && <tr><td colSpan={4} className="dim">Empty shelves.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Shops for the World panel. DM manages via panes; players browse & buy. */
 export function ShopsPanel() {
   const you = useGameStore((s) => s.you);
   const shops = useGameStore((s) => s.shopList);
-  const [open, setOpen] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
   const [editing, setEditing] = useState<Shop | null>(null);
   const isDm = you?.role === 'dm';
-  const openShop = shops.find((s) => s.id === open);
+  const detailShop = shops.find((s) => s.id === detail);
 
   return (
     <div className="dir-section">
@@ -129,42 +182,16 @@ export function ShopsPanel() {
         {isDm && <button className="link" onClick={() => intents.createShop('New shop')}>+ Add</button>}
       </div>
 
-      {!openShop && (
-        <ul className="shop-list">
+      {detailShop && !isDm ? (
+        <ShopBuyView shop={detailShop} onBack={() => setDetail(null)} />
+      ) : (
+        <div className="shop-panes">
           {shops.map((s) => (
-            <li key={s.id}>
-              <button className="char-name" onClick={() => setOpen(s.id)}>{s.name}</button>
-              <span className="dim" style={{ fontSize: 11 }}>{s.items.length} items{isDm && !s.playersCanBuy ? ' · closed' : ''}</span>
-            </li>
+            isDm
+              ? <ShopPane key={s.id} shop={s} onEdit={() => setEditing(s)} />
+              : <PlayerShopCard key={s.id} shop={s} onOpen={() => setDetail(s.id)} />
           ))}
-          {shops.length === 0 && <p className="dim">{isDm ? 'No shops yet.' : 'No shops open.'}</p>}
-        </ul>
-      )}
-
-      {openShop && (
-        <div className="shop-detail">
-          <div className="dock-header">
-            <h4 style={{ margin: 0 }}>{openShop.name}</h4>
-            <span className="spacer" />
-            {isDm && <button className="link" onClick={() => setEditing(openShop)}>edit</button>}
-            <button className="link" onClick={() => setOpen(null)}>back</button>
-          </div>
-          {openShop.description && <p className="dim" style={{ fontSize: 12 }}>{openShop.description}</p>}
-          {isDm && <PresentControls shop={openShop} />}
-          <table className="shop-table">
-            <thead><tr><th>Item</th><th>{openShop.currency}</th><th>stock</th><th /></tr></thead>
-            <tbody>
-              {openShop.items.map((it, i) => (
-                <tr key={i}>
-                  <td>{it.name}{it.notes ? <span className="dim"> · {it.notes}</span> : null}</td>
-                  <td>{it.price}</td>
-                  <td>{it.qty < 0 ? '∞' : it.qty}</td>
-                  <td>{it.qty !== 0 && <BuyControls shop={openShop} itemIndex={i} />}</td>
-                </tr>
-              ))}
-              {openShop.items.length === 0 && <tr><td colSpan={4} className="dim">Empty shelves.</td></tr>}
-            </tbody>
-          </table>
+          {shops.length === 0 && <p className="dim">{isDm ? 'No shops yet — click + Add to open one.' : 'No shops open.'}</p>}
         </div>
       )}
 

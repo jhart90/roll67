@@ -4,9 +4,9 @@
 import type {
   AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
-  GameSystem, GridConfig, Handout, Hex, InitiativeState, Light, Macro,
+  GameSystem, GridConfig, Handout, Hex, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  RollableTable, SheetData, Token, TokenLayer, TokenView, VisionStats,
+  RollableTable, SheetData, Shop, Token, TokenLayer, TokenView, VisionStats,
 } from './types.js';
 
 // ---------- Client -> server intents ----------
@@ -41,9 +41,19 @@ export const C2S = {
   // characters
   CREATE_CHARACTER: 'createCharacter',
   CREATE_NPC: 'createNpc',
+  CREATE_RANDOM_NPC: 'createRandomNpc',
   DELETE_CHARACTER: 'deleteCharacter',
   UPDATE_CHARACTER: 'updateCharacter',
   SHEET_ROLL: 'sheetRoll',
+  // shops
+  CREATE_SHOP: 'createShop',
+  UPDATE_SHOP: 'updateShop',
+  DELETE_SHOP: 'deleteShop',
+  BUY_ITEM: 'buyItem',
+  // locations
+  CREATE_LOCATION: 'createLocation',
+  UPDATE_LOCATION: 'updateLocation',
+  DELETE_LOCATION: 'deleteLocation',
   // chat & macros
   CHAT: 'chat',
   SAVE_MACRO: 'saveMacro',
@@ -158,7 +168,34 @@ export interface CreateNpcPayload {
   /** Optional custom display name (defaults to the library name). */
   name?: string;
 }
+export interface CreateRandomNpcPayload { count?: number }
 export interface DeleteCharacterPayload { characterId: string }
+
+export interface CreateShopPayload { name: string }
+export interface UpdateShopPayload {
+  shopId: string;
+  name?: string;
+  description?: string;
+  currency?: string;
+  playersCanBuy?: boolean;
+  items?: Array<{ name: string; price?: number; qty?: number; notes?: string }>;
+}
+export interface DeleteShopPayload { shopId: string }
+export interface BuyItemPayload { shopId: string; itemIndex: number; characterId: string }
+
+export interface CreateLocationPayload { name: string; parentId?: string | null }
+export interface UpdateLocationPayload {
+  locationId: string;
+  name?: string;
+  kind?: 'region' | 'settlement' | 'district' | 'building' | 'poi';
+  notes?: string;
+  parentId?: string | null;
+  visibleToPlayers?: boolean;
+  npcIds?: string[];
+  shopIds?: string[];
+  handoutIds?: string[];
+}
+export interface DeleteLocationPayload { locationId: string }
 export interface UpdateCharacterPayload { characterId: string; patch: SheetData; name?: string }
 export interface SheetRollPayload {
   characterId: string;
@@ -256,6 +293,8 @@ export const S2C = {
   MEASURE_SHOWN: 'measureShown',
   HANDOUTS: 'handouts',
   TABLES: 'tables',
+  SHOPS: 'shops',
+  LOCATIONS: 'locations',
   ASSETS: 'assets',
   AUDIO_TRACKS: 'audioTracks',
   AUDIO_STATE: 'audioState',
@@ -351,6 +390,8 @@ export interface PingShownPayload extends PingInfo {}
 export interface MeasureShownPayload extends MeasureInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
+export interface ShopsPayload { shops: Shop[] }
+export interface LocationsPayload { locations: LocationNode[] }
 export interface AssetsPayload { folders: AssetFolder[]; assets: AssetInfo[] }
 export interface AudioTracksPayload { tracks: AudioTrack[] }
 export interface AudioStatePayload { state: AudioState }

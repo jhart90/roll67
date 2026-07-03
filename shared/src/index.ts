@@ -13,3 +13,4 @@ export * from './dice/roller.js';
 export * from './systems/index.js';
 export * from './data/npcLibrary.js';
 export * from './data/compendium.js';
+export * from './data/npcGen.js';

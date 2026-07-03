@@ -1,8 +1,8 @@
 import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, Door, Drawing, GameSystem,
-  GridConfig, Handout, InitiativeState, Light, Macro, MapDef, MapMeta,
-  RollableTable, RollBreakdown, Role, Token, Wall,
+  GridConfig, Handout, InitiativeState, LocationNode, Light, Macro, MapDef, MapMeta,
+  RollableTable, RollBreakdown, Role, Shop, ShopItem, Token, Wall,
 } from 'shared';
 import { db, newId, now } from './db.js';
 
@@ -248,6 +248,111 @@ export const assetFolders = {
     db.prepare('UPDATE assets SET folder_id = NULL WHERE folder_id = ?').run(id);
     db.prepare('UPDATE handouts SET folder_id = NULL WHERE folder_id = ?').run(id);
     db.prepare('DELETE FROM asset_folders WHERE id = ?').run(id);
+  },
+};
+
+// ---------- shops ----------
+
+interface ShopRow {
+  id: string; name: string; description: string; currency: string;
+  players_can_buy: number; items_json: string;
+}
+function toShop(r: ShopRow): Shop {
+  const items = (JSON.parse(r.items_json) as Array<Partial<ShopItem>>).map((it) => ({
+    name: String(it.name ?? ''),
+    price: typeof it.price === 'number' ? it.price : 0,
+    qty: typeof it.qty === 'number' ? it.qty : -1,
+    notes: String(it.notes ?? ''),
+  }));
+  return { id: r.id, name: r.name, description: r.description, currency: r.currency, playersCanBuy: !!r.players_can_buy, items };
+}
+
+export const shops = {
+  forCampaign(campaignId: string): Shop[] {
+    const rows = db.prepare('SELECT * FROM shops WHERE campaign_id = ? ORDER BY sort_order, name').all(campaignId) as ShopRow[];
+    return rows.map(toShop);
+  },
+  byId(id: string): (Shop & { campaignId: string }) | undefined {
+    const r = db.prepare('SELECT * FROM shops WHERE id = ?').get(id) as (ShopRow & { campaign_id: string }) | undefined;
+    return r ? { ...toShop(r), campaignId: r.campaign_id } : undefined;
+  },
+  create(campaignId: string, name: string, currency: string): Shop {
+    const id = newId();
+    const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM shops WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
+    db.prepare('INSERT INTO shops (id, campaign_id, name, currency, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, currency, maxOrder + 1);
+    return { id, name, description: '', currency, playersCanBuy: true, items: [] };
+  },
+  update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[] }): void {
+    const cur = db.prepare('SELECT * FROM shops WHERE id = ?').get(id) as ShopRow | undefined;
+    if (!cur) return;
+    db.prepare('UPDATE shops SET name = ?, description = ?, currency = ?, players_can_buy = ?, items_json = ? WHERE id = ?').run(
+      fields.name ?? cur.name,
+      fields.description ?? cur.description,
+      fields.currency ?? cur.currency,
+      fields.playersCanBuy !== undefined ? (fields.playersCanBuy ? 1 : 0) : cur.players_can_buy,
+      fields.items !== undefined ? JSON.stringify(fields.items) : cur.items_json,
+      id,
+    );
+  },
+  delete(id: string): void {
+    db.prepare('DELETE FROM shops WHERE id = ?').run(id);
+  },
+};
+
+// ---------- locations ----------
+
+interface LocationRow {
+  id: string; name: string; kind: string; notes: string;
+  parent_id: string | null; visible_to_players: number; links_json: string;
+}
+function toLocation(r: LocationRow): LocationNode {
+  const links = JSON.parse(r.links_json) as { npcIds?: string[]; shopIds?: string[]; handoutIds?: string[] };
+  return {
+    id: r.id, name: r.name, kind: r.kind as LocationNode['kind'], notes: r.notes,
+    parentId: r.parent_id, visibleToPlayers: !!r.visible_to_players,
+    npcIds: links.npcIds ?? [], shopIds: links.shopIds ?? [], handoutIds: links.handoutIds ?? [],
+  };
+}
+
+export const locations = {
+  forCampaign(campaignId: string): LocationNode[] {
+    const rows = db.prepare('SELECT * FROM locations WHERE campaign_id = ? ORDER BY sort_order, name').all(campaignId) as LocationRow[];
+    return rows.map(toLocation);
+  },
+  byId(id: string): (LocationNode & { campaignId: string }) | undefined {
+    const r = db.prepare('SELECT * FROM locations WHERE id = ?').get(id) as (LocationRow & { campaign_id: string }) | undefined;
+    return r ? { ...toLocation(r), campaignId: r.campaign_id } : undefined;
+  },
+  create(campaignId: string, name: string, parentId: string | null): LocationNode {
+    const id = newId();
+    const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM locations WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
+    db.prepare('INSERT INTO locations (id, campaign_id, name, parent_id, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, parentId, maxOrder + 1);
+    return { id, name, kind: 'settlement', notes: '', parentId, visibleToPlayers: false, npcIds: [], shopIds: [], handoutIds: [] };
+  },
+  update(id: string, fields: Partial<Omit<LocationNode, 'id'>>): void {
+    const cur = db.prepare('SELECT * FROM locations WHERE id = ?').get(id) as LocationRow | undefined;
+    if (!cur) return;
+    const curLoc = toLocation(cur);
+    const links = {
+      npcIds: fields.npcIds ?? curLoc.npcIds,
+      shopIds: fields.shopIds ?? curLoc.shopIds,
+      handoutIds: fields.handoutIds ?? curLoc.handoutIds,
+    };
+    db.prepare('UPDATE locations SET name = ?, kind = ?, notes = ?, parent_id = ?, visible_to_players = ?, links_json = ? WHERE id = ?').run(
+      fields.name ?? cur.name,
+      fields.kind ?? cur.kind,
+      fields.notes ?? cur.notes,
+      fields.parentId !== undefined ? fields.parentId : cur.parent_id,
+      fields.visibleToPlayers !== undefined ? (fields.visibleToPlayers ? 1 : 0) : cur.visible_to_players,
+      JSON.stringify(links),
+      id,
+    );
+  },
+  delete(id: string): void {
+    // Re-parent children up to this node's parent.
+    const cur = db.prepare('SELECT parent_id FROM locations WHERE id = ?').get(id) as { parent_id: string | null } | undefined;
+    db.prepare('UPDATE locations SET parent_id = ? WHERE parent_id = ?').run(cur?.parent_id ?? null, id);
+    db.prepare('DELETE FROM locations WHERE id = ?').run(id);
   },
 };
 

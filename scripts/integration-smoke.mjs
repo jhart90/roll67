@@ -585,6 +585,59 @@ async function main() {
   playerSock.emit('audioControl', { action: 'stop' });
   ok(!!(await playerBlocked).message, 'players cannot control the jukebox');
 
+  // ---------- random NPC generator ----------
+  console.log('random NPC:');
+  const genNpc = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.ownerUserId === null && p.character.name.includes(' '));
+  dmSock.emit('createRandomNpc', { count: 1 });
+  const rnpc = (await genNpc).character;
+  ok(!!rnpc && rnpc.name.split(' ').length >= 2, `generated a random NPC named "${rnpc.name}"`);
+  ok(typeof rnpc.sheet.str === 'number', 'random NPC has rolled ability scores');
+  dmSock.emit('deleteCharacter', { characterId: rnpc.id });
+
+  // ---------- shops ----------
+  console.log('shops:');
+  const dmShops = waitFor(dmSock, 'shops', 5000, (p) => p.shops.some((s) => s.name === 'Smoke Store'));
+  dmSock.emit('createShop', { name: 'Smoke Store' });
+  const shop = (await dmShops).shops.find((s) => s.name === 'Smoke Store');
+  ok(!!shop, 'DM created a shop');
+  // stock it + open to players
+  const playerShops = waitFor(playerSock, 'shops', 5000, (p) => p.shops.some((s) => s.id === shop.id));
+  dmSock.emit('updateShop', { shopId: shop.id, playersCanBuy: true, items: [{ name: 'Torch', price: 1, qty: 5 }, { name: 'Potion', price: 50, qty: -1 }] });
+  const pShop = (await playerShops).shops.find((s) => s.id === shop.id);
+  ok(pShop && pShop.items.length === 2, 'player sees the open shop with items');
+  // give the PC gold, then buy
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 100 } });
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  const bought = waitFor(playerSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Torch'));
+  playerSock.emit('buyItem', { shopId: shop.id, itemIndex: 0, characterId: pc.id });
+  const afterBuy = (await bought).character;
+  ok(afterBuy.sheet.inventory.some((r) => r.name === 'Torch'), 'buying adds the item to inventory');
+  ok(Number(afterBuy.sheet.gp) === 99, `gold deducted (100 -> ${afterBuy.sheet.gp})`);
+  // insufficient funds is refused
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 0 } });
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  const buyDenied = waitFor(playerSock, 'errorMsg');
+  playerSock.emit('buyItem', { shopId: shop.id, itemIndex: 1, characterId: pc.id });
+  ok(!!(await buyDenied).message, 'buying without funds is refused');
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 0, inventory: [] } });
+  dmSock.emit('deleteShop', { shopId: shop.id });
+
+  // ---------- locations ----------
+  console.log('locations:');
+  const dmLocs = waitFor(dmSock, 'locations', 5000, (p) => p.locations.some((l) => l.name === 'Smoke Town'));
+  dmSock.emit('createLocation', { name: 'Smoke Town' });
+  const loc = (await dmLocs).locations.find((l) => l.name === 'Smoke Town');
+  ok(!!loc, 'DM created a location');
+  // hidden by default -> players don't see it
+  const playerNoLoc = await expectSilence(playerSock, 'locations', 1000, (p) => p.locations.some((l) => l.id === loc.id));
+  ok(playerNoLoc === null, 'hidden locations are invisible to players');
+  // reveal + link an NPC
+  const playerLoc = waitFor(playerSock, 'locations', 5000, (p) => p.locations.some((l) => l.id === loc.id));
+  dmSock.emit('updateLocation', { locationId: loc.id, visibleToPlayers: true, notes: 'A quiet town.', npcIds: [pc.id] });
+  const pl = (await playerLoc).locations.find((l) => l.id === loc.id);
+  ok(pl && pl.notes === 'A quiet town.' && pl.npcIds.includes(pc.id), 'revealed location reaches players with links');
+  dmSock.emit('deleteLocation', { locationId: loc.id });
+
   // ---------- group initiative ----------
   console.log('group initiative:');
   dmSock.emit('initClear');

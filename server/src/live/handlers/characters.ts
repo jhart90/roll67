@@ -3,8 +3,8 @@ import {
   C2S, S2C, canEditCharacter, systemFor,
   type CreateCharacterPayload, type DeleteCharacterPayload, type UpdateCharacterPayload,
 } from 'shared';
-import type { Character, CreateNpcPayload } from 'shared';
-import { npcById } from 'shared';
+import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared';
+import { generateNpc, npcById } from 'shared';
 import { campaigns, characters, tokens } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
@@ -59,6 +59,19 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       structuredClone(entry.sheet),
     );
     emitCharacter(io, d.campaignId, character);
+  }));
+
+  socket.on(C2S.CREATE_RANDOM_NPC, safe(socket, ({ count }: CreateRandomNpcPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM generates NPCs.'); return; }
+    const campaign = campaigns.byId(d.campaignId)!;
+    const n = Math.max(1, Math.min(10, count ?? 1));
+    for (let i = 0; i < n; i++) {
+      const gen = generateNpc(campaign.system);
+      const character = characters.create(d.campaignId, null, gen.name, campaign.system, gen.sheet);
+      emitCharacter(io, d.campaignId, character);
+    }
+    broadcastDirectory(io, d.campaignId);
   }));
 
   socket.on(C2S.DELETE_CHARACTER, safe(socket, ({ characterId }: DeleteCharacterPayload) => {

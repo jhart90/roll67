@@ -6,9 +6,9 @@ import {
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
-  type MapStatePayload, type MapView, type MeasureShownPayload, type MemberInfo,
-  type PingShownPayload, type RollableTable, type TokenView, type VisionStats,
-  type VisionUpdatePayload, type Wall, type YouArePayload,
+  type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
+  type MemberInfo, type PingShownPayload, type RollableTable, type Shop,
+  type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type YouArePayload,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 
@@ -40,6 +40,8 @@ interface GameState {
   assetList: AssetInfo[];
   audioTracks: AudioTrack[];
   audioState: AudioState;
+  shopList: Shop[];
+  locationList: LocationNode[];
   directory: DirectoryPayload | null;
   initiativeState: InitiativeState;
   chatLog: ChatMessage[];
@@ -109,6 +111,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   assetList: [],
   audioTracks: [],
   audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
+  shopList: [],
+  locationList: [],
   directory: null,
   initiativeState: { entries: [], turnIdx: 0, round: 1, active: false },
   chatLog: [],
@@ -377,6 +381,14 @@ export function wireSocket(): void {
     useGameStore.setState({ audioState: state });
   });
 
+  socket.on(S2C.SHOPS, ({ shops }: { shops: Shop[] }) => {
+    useGameStore.setState({ shopList: shops });
+  });
+
+  socket.on(S2C.LOCATIONS, ({ locations }: { locations: LocationNode[] }) => {
+    useGameStore.setState({ locationList: locations });
+  });
+
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
     useGameStore.setState({ initiativeState: state });
   });
@@ -488,6 +500,7 @@ export const intents = {
   createCharacter: (name: string, system: 'dnd5e' | 'swn', ownerUserId?: string | null) =>
     socket.emit(C2S.CREATE_CHARACTER, { name, system, ownerUserId }),
   createNpc: (libraryId: string, name?: string) => socket.emit(C2S.CREATE_NPC, { libraryId, name }),
+  createRandomNpc: (count?: number) => socket.emit(C2S.CREATE_RANDOM_NPC, { count }),
   deleteCharacter: (characterId: string) => socket.emit(C2S.DELETE_CHARACTER, { characterId }),
   updateCharacter: (characterId: string, patch: Record<string, unknown>, name?: string) =>
     socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch, name }),
@@ -552,4 +565,13 @@ export const intents = {
   removeAudio: (trackId: string) => socket.emit(C2S.REMOVE_AUDIO, { trackId }),
   audioControl: (p: { trackId?: string; action: 'play' | 'stop' | 'pause'; loop?: boolean; volume?: number }) =>
     socket.emit(C2S.AUDIO_CONTROL, p),
+
+  createShop: (name: string) => socket.emit(C2S.CREATE_SHOP, { name }),
+  updateShop: (shopId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_SHOP, { shopId, ...fields }),
+  deleteShop: (shopId: string) => socket.emit(C2S.DELETE_SHOP, { shopId }),
+  buyItem: (shopId: string, itemIndex: number, characterId: string) => socket.emit(C2S.BUY_ITEM, { shopId, itemIndex, characterId }),
+
+  createLocation: (name: string, parentId?: string | null) => socket.emit(C2S.CREATE_LOCATION, { name, parentId }),
+  updateLocation: (locationId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_LOCATION, { locationId, ...fields }),
+  deleteLocation: (locationId: string) => socket.emit(C2S.DELETE_LOCATION, { locationId }),
 };

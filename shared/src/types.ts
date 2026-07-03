@@ -313,3 +313,39 @@ export interface AudioState {
   /** Server epoch ms when the current track started (for rough sync). */
   startedAt: number;
 }
+
+// ---------- Merchant / shops ----------
+
+export interface ShopItem {
+  name: string;
+  price: number;
+  /** Stock; -1 = unlimited. */
+  qty: number;
+  notes: string;
+}
+
+export interface Shop {
+  id: string;
+  name: string;
+  description: string;
+  /** Display label for the price column (e.g. "gp", "credits"). */
+  currency: string;
+  playersCanBuy: boolean;
+  items: ShopItem[];
+}
+
+// ---------- Locations ----------
+
+export type LocationKind = 'region' | 'settlement' | 'district' | 'building' | 'poi';
+
+export interface LocationNode {
+  id: string;
+  name: string;
+  kind: LocationKind;
+  notes: string;
+  parentId: string | null;
+  visibleToPlayers: boolean;
+  npcIds: string[];
+  shopIds: string[];
+  handoutIds: string[];
+}

@@ -60,6 +60,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
           <h3 style={{ margin: 0 }}>NPC Library</h3>
           <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : 'Stars Without Number'}</span>
           <span className="spacer" />
+          <button className="link" title="Generate a random townsfolk NPC" onClick={() => intents.createRandomNpc(1)}>🎲 Random NPC</button>
           <button className="link" onClick={onClose}>close</button>
         </div>
 

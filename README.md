@@ -14,6 +14,10 @@ A hex-grid virtual tabletop (Roll20-style) for playing **D&D 5e** and **Stars Wi
 - **Wall types** — solid (blocks movement + sight), window (blocks movement, see-through), and one-way (see out, not in) walls, with a type picker in the wall tool.
 - **Asset library** — the DM uploads and organizes images into folders and reuses them as map backgrounds or tokens without re-uploading.
 - **Audio jukebox** — the DM uploads mp3/ogg/wav tracks and plays background music that syncs to every player (play/stop/loop/master volume); each player has a local mute.
+- **World tab** — a DM worldbuilding hub:
+  - **Locations** — nested places (region → settlement → building → point of interest) with notes, each linking NPCs, shops, and handouts; toggle visibility to reveal a location to players.
+  - **Shops** — merchant inventories with items, prices, and stock; players buy items straight into their character's inventory (currency auto-deducted, stock decremented).
+  - **Random NPC generator** — one click spins up a townsfolk NPC with a name, occupation, rolled stats, and personality/appearance tags.
 - **Fog of war** — unexplored areas are black; explored-but-not-visible areas are dimmed. Explored fog persists per player per map.
 - **Layers** — GM token layer for hidden monsters/notes; GM drawing layer for private sketches.
 - **DM tools** — wall polylines (trace your map art; Shift snaps to hex corners), doors (players can open/close when adjacent), light sources with bright/dim radii, **View as player** to see exactly what any player sees, and God mode.

@@ -792,6 +792,26 @@ button.link:hover { text-decoration: underline; }
 .compendium-sub { font-size: 11px; color: var(--text-dim); }
 .compendium-cat { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 
+/* ---------- shops & locations ---------- */
+
+.shop-list, .loc-list { list-style: none; padding: 0; margin: 0 0 10px; }
+.shop-list li, .loc-list li { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+.shop-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+.shop-table th { text-align: left; color: var(--text-dim); font-weight: 400; padding: 2px 4px; }
+.shop-table td { padding: 3px 4px; border-bottom: 1px solid var(--panel-2); }
+.buy-controls { display: inline-flex; gap: 4px; align-items: center; }
+.buy-controls select { margin: 0; padding: 1px 3px; font-size: 11px; width: auto; }
+.loc-links { font-size: 12px; margin: 6px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.link-picker { margin: 8px 0; }
+.link-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 2px; }
+.link-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1px 8px; font-size: 11px;
+}
+.link-chip button { background: none; border: none; color: var(--text-dim); padding: 0; font-size: 12px; }
+.link-picker select { margin: 0; padding: 1px 4px; font-size: 11px; width: auto; }
+
 /* ---------- asset library ---------- */
 
 .asset-body { display: flex; flex: 1; min-height: 0; }

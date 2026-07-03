@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { dnd5e } from '../src/systems/dnd5e.js';
 import {
-  attacksPerAction, classResources, fightingStyleBonus, martialArtsDie, rageDamage, sneakAttackDice,
+  attacksPerAction, classResources, critRange, fightingStyleBonus, martialArtsDie,
+  rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice,
 } from '../src/systems/features5e.js';
 
 describe('martial feature math', () => {
@@ -110,5 +111,36 @@ describe('fighting styles', () => {
     const dueling = dnd5e.rollables({ ...sheet, fightingStyle: 'Dueling' });
     expect(dueling.find((r) => r.id === 'damage_1')?.expr).toBe('1d8+3+2'); // melee dmg +2
     expect(dueling.find((r) => r.id === 'damage_0')?.expr).toBe('1d8+3');   // ranged unaffected
+  });
+});
+
+describe('subclass mechanics', () => {
+  it('Battle Master superiority dice scale in count and die size', () => {
+    const bm = (level: number) => superiorityDice({ class: 'Fighter', subclass: 'Battle Master', level });
+    expect(bm(2)).toBeNull();
+    expect(bm(3)).toEqual({ count: 4, die: 'd8' });
+    expect(bm(10)).toEqual({ count: 5, die: 'd10' });
+    expect(bm(18)).toEqual({ count: 6, die: 'd12' });
+    expect(superiorityDice({ class: 'Fighter', subclass: 'Champion', level: 3 })).toBeNull();
+  });
+
+  it('Battle Master gets a superiority-die roll + a tracked resource', () => {
+    const sheet = { ...dnd5e.defaultSheet(), class: 'Fighter', subclass: 'Battle Master', level: 10 };
+    expect(dnd5e.rollables(sheet).find((r) => r.id === 'superiority')?.expr).toBe('1d10');
+    expect(classResources(sheet).find((r) => r.id === 'superiority')?.max).toBe(5);
+  });
+
+  it('Champion Improved Critical lowers the crit range', () => {
+    expect(critRange({ class: 'Fighter', subclass: 'Champion', level: 3 })).toBe(19);
+    expect(critRange({ class: 'Fighter', subclass: 'Champion', level: 15 })).toBe(18);
+    expect(critRange({ class: 'Fighter', subclass: 'Battle Master', level: 15 })).toBe(20);
+  });
+
+  it('Champion Remarkable Athlete adds half-prof to STR/DEX/CON checks at 7+', () => {
+    expect(remarkableAthleteBonus({ class: 'Fighter', subclass: 'Champion', level: 6 })).toBe(0);
+    expect(remarkableAthleteBonus({ class: 'Fighter', subclass: 'Champion', level: 7 })).toBe(2); // prof 3 → ceil 3/2 = 2
+    const rolls = dnd5e.rollables({ ...dnd5e.defaultSheet(), class: 'Fighter', subclass: 'Champion', level: 7, str: 14 });
+    expect(rolls.find((r) => r.id === 'check_str')?.expr).toBe('1d20+4'); // +2 STR +2 remarkable
+    expect(rolls.find((r) => r.id === 'check_int')?.expr).toBe('1d20+0'); // INT not boosted
   });
 });

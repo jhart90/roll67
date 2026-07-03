@@ -3,7 +3,10 @@ import {
   bool, fmtMod, num, rows, str,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
-import { classId, fightingStyleBonus, isRaging, martialArtsDie, rageDamage, sneakAttackDice } from './features5e.js';
+import {
+  classId, fightingStyleBonus, isRaging, martialArtsDie, rageDamage,
+  remarkableAthleteBonus, sneakAttackDice, superiorityDice,
+} from './features5e.js';
 
 const ABILITIES = [
   { id: 'str', label: 'STR' },
@@ -356,9 +359,12 @@ export const dnd5e: SystemSchema = {
     const level = num(sheet, 'level', 1);
     const pb = profBonus(level);
     const out: Rollable[] = [];
+    // Champion Remarkable Athlete: half proficiency to STR/DEX/CON checks.
+    const ra = remarkableAthleteBonus(sheet);
     for (const a of ABILITIES) {
       const mod = abilityMod(num(sheet, a.id, 10));
-      out.push({ id: `check_${a.id}`, label: `${a.label} check`, expr: `1d20${fmtMod(mod)}`, group: 'Ability checks', d20: true });
+      const check = mod + (ra && (a.id === 'str' || a.id === 'dex' || a.id === 'con') ? ra : 0);
+      out.push({ id: `check_${a.id}`, label: `${a.label} check`, expr: `1d20${fmtMod(check)}`, group: 'Ability checks', d20: true });
       const save = mod + (bool(sheet, `save_${a.id}`) ? pb : 0);
       out.push({ id: `save_${a.id}`, label: `${a.label} save`, expr: `1d20${fmtMod(save)}`, group: 'Saving throws', d20: true });
     }
@@ -366,7 +372,7 @@ export const dnd5e: SystemSchema = {
       const mod = abilityMod(num(sheet, s.ability, 10)) + (bool(sheet, `skill_${s.id}`) ? pb : 0);
       out.push({ id: `skill_${s.id}`, label: s.label, expr: `1d20${fmtMod(mod)}`, group: 'Skills', d20: true });
     }
-    out.push({ id: 'initiative', label: 'Initiative', expr: `1d20${fmtMod(abilityMod(num(sheet, 'dex', 10)))}`, group: 'Combat', d20: true });
+    out.push({ id: 'initiative', label: 'Initiative', expr: `1d20${fmtMod(abilityMod(num(sheet, 'dex', 10)) + ra)}`, group: 'Combat', d20: true });
     const rageBonus = isRaging(sheet) ? rageDamage(level) : 0;
     const style = str(sheet, 'fightingStyle', '');
     rows(sheet, 'attacks').forEach((atk, i) => {
@@ -392,6 +398,9 @@ export const dnd5e: SystemSchema = {
       out.push({ id: 'unarmed_attack', label: 'Unarmed Strike (attack)', expr: `1d20${fmtMod(dexMod + pb)}`, group: 'Attacks', d20: true });
       out.push({ id: 'unarmed_damage', label: `Unarmed Strike (${ma})`, expr: `${ma}${fmtMod(dexMod)}`, group: 'Attacks', d20: false });
     }
+    // Battle Master: roll a superiority die (for maneuvers).
+    const sup = superiorityDice(sheet);
+    if (sup) out.push({ id: 'superiority', label: `Superiority Die (${sup.die})`, expr: `1${sup.die}`, group: 'Attacks', d20: false });
     const spellAbility = str(sheet, 'spellAbility', 'int');
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.push({ id: 'spellAttack', label: 'Spell attack', expr: `1d20${fmtMod(pb + spellMod)}`, group: 'Combat', d20: true });

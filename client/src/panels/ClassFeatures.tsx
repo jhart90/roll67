@@ -1,5 +1,8 @@
 import type { Character, SheetData } from 'shared';
-import { attacksPerAction, classId, classResources, isRaging, martialArtsDie, rageDamage, sneakAttackDice } from 'shared';
+import {
+  attacksPerAction, classId, classResources, critRange, isRaging, martialArtsDie,
+  rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice,
+} from 'shared';
 import { intents } from '../store/game';
 
 /** Class resource trackers (rage/ki/…), Extra Attack / Sneak Attack notes, and
@@ -17,8 +20,12 @@ export function ClassFeatures({ character, editable }: { character: Character; e
   const style = String(sheet.fightingStyle ?? '');
   const hasStyle = style && style !== '—';
   const ki = resources.find((r) => r.id === 'ki');
+  const crit = critRange(sheet);
+  const remarkable = remarkableAthleteBonus(sheet) > 0;
+  const battleMaster = !!superiorityDice(sheet);
+  const hasSub = crit < 20 || remarkable || battleMaster;
 
-  if (resources.length === 0 && attacks <= 1 && sneak === 0 && !isBarbarian && !isMonk && !hasStyle) return null;
+  if (resources.length === 0 && attacks <= 1 && sneak === 0 && !isBarbarian && !isMonk && !hasStyle && !hasSub) return null;
 
   function setUsed(id: string, used: number) {
     intents.updateCharacter(character.id, { [`res_${id}`]: Math.max(0, used) });
@@ -66,6 +73,9 @@ export function ClassFeatures({ character, editable }: { character: Character; e
           {sneak > 0 && <span className="cf-chip">Sneak Attack {sneak}d6</span>}
           {isMonk && <span className="cf-chip">Martial Arts {martialArtsDie(level)}</span>}
           {hasStyle && <span className="cf-chip">Fighting Style: {style}</span>}
+          {crit < 20 && <span className="cf-chip">Improved Critical {crit}–20</span>}
+          {remarkable && <span className="cf-chip">Remarkable Athlete</span>}
+          {battleMaster && <span className="cf-chip">Battle Master maneuvers</span>}
           {isBarbarian && (raging ? (
             <button className="cf-rage on" disabled={!editable} onClick={toggleRage}>
               ● RAGING +{rageDamage(level)} · end rage

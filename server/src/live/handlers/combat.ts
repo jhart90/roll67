@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, roll, systemFor, combatActions, hexDistance, num,
+  C2S, S2C, roll, systemFor, combatActions, critRange, hexDistance, num,
   type CombatActionPayload, type InitAddPayload, type InitRemovePayload, type InitRollMapPayload,
   type InitUpdatePayload, type InitiativeState, type SheetData,
 } from 'shared';
@@ -71,11 +71,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const expr = applyAdv(action.attackExpr, action.attackExpr.toLowerCase().startsWith('1d20') ? p.adv : null);
       attackBreakdown = roll(expr);
       const d20s = attackBreakdown.dice.filter((x) => x.sides === 20 && x.kept);
-      const nat20 = d20s.some((x) => x.value === 20);
+      // Champion Improved Critical lowers the crit threshold (19, or 18 at 15).
+      const critAt = critRange(actor.sheet);
+      const crit = d20s.some((x) => x.value >= critAt && x.value !== 1);
       const nat1 = d20s.some((x) => x.value === 1);
       const ac = targetChar ? num(targetChar.sheet, 'ac', 0) : 0;
-      hit = nat1 ? false : nat20 ? true : ac > 0 ? attackBreakdown.total >= ac : true;
-      hitLabel = ` — attack ${attackBreakdown.total}${nat20 ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
+      hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
+      hitLabel = ` — attack ${attackBreakdown.total}${crit ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
     }
 
     const amountRoll = roll(action.amountExpr);

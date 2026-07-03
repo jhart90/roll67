@@ -56,6 +56,46 @@ export function fightingStyleBonus(style: string, ranged: boolean): { attack: nu
   return { attack: 0, damage: 0 };
 }
 
+// ---------- subclass mechanics ----------
+
+function hasSubclass(sheet: SheetData, re: RegExp): boolean {
+  return re.test(str(sheet, 'subclass', ''));
+}
+
+/** Battle Master superiority dice pool (null if not a Battle Master ≥3). */
+export function superiorityDice(sheet: SheetData): { count: number; die: string } | null {
+  if (classId(sheet) !== 'fighter' || !hasSubclass(sheet, /battle\s*master/i)) return null;
+  const lvl = num(sheet, 'level', 1);
+  if (lvl < 3) return null;
+  return {
+    count: lvl >= 15 ? 6 : lvl >= 7 ? 5 : 4,
+    die: lvl >= 18 ? 'd12' : lvl >= 10 ? 'd10' : 'd8',
+  };
+}
+
+export const MANEUVERS = [
+  'Trip Attack', 'Disarming Attack', 'Menacing Attack', 'Riposte', 'Parry',
+  'Precision Attack', 'Goading Attack', 'Sweeping Attack', 'Feinting Attack',
+];
+
+/** Champion Improved Critical threshold (20 normally, 19 at 3, 18 at 15). */
+export function critRange(sheet: SheetData): number {
+  if (classId(sheet) === 'fighter' && hasSubclass(sheet, /champion/i)) {
+    const lvl = num(sheet, 'level', 1);
+    if (lvl >= 15) return 18;
+    if (lvl >= 3) return 19;
+  }
+  return 20;
+}
+
+/** Champion Remarkable Athlete: half proficiency to STR/DEX/CON checks (level 7+). */
+export function remarkableAthleteBonus(sheet: SheetData): number {
+  if (classId(sheet) === 'fighter' && hasSubclass(sheet, /champion/i) && num(sheet, 'level', 1) >= 7) {
+    return Math.ceil((2 + Math.floor((Math.max(1, num(sheet, 'level', 1)) - 1) / 4)) / 2);
+  }
+  return 0;
+}
+
 /** Rogue Sneak Attack dice count (0 if not a rogue). */
 export function sneakAttackDice(sheet: SheetData): number {
   const cls = getClass5e(str(sheet, 'class', ''));
@@ -87,11 +127,14 @@ export function classResources(sheet: SheetData): ClassResource[] {
     case 'monk':
       if (lvl >= 2) defs.push({ id: 'ki', name: 'Ki', max: lvl, reset: 'short' });
       break;
-    case 'fighter':
+    case 'fighter': {
       defs.push({ id: 'secondWind', name: 'Second Wind', max: 1, reset: 'short', note: `heal 1d10+${lvl}` });
       if (lvl >= 2) defs.push({ id: 'actionSurge', name: 'Action Surge', max: lvl >= 17 ? 2 : 1, reset: 'short' });
       if (lvl >= 9) defs.push({ id: 'indomitable', name: 'Indomitable', max: lvl >= 17 ? 3 : lvl >= 13 ? 2 : 1, reset: 'long' });
+      const sup = superiorityDice(sheet);
+      if (sup) defs.push({ id: 'superiority', name: `Superiority Dice (${sup.die})`, max: sup.count, reset: 'short', note: 'Battle Master maneuvers' });
       break;
+    }
     case 'paladin':
       defs.push({ id: 'layOnHands', name: 'Lay on Hands', max: 5 * lvl, reset: 'long', pool: true, note: 'healing pool' });
       if (lvl >= 3) defs.push({ id: 'channelDivinity', name: 'Channel Divinity', max: 1, reset: 'short' });

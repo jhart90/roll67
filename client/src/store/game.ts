@@ -579,6 +579,8 @@ export const intents = {
   deleteCharacter: (characterId: string) => socket.emit(C2S.DELETE_CHARACTER, { characterId }),
   updateCharacter: (characterId: string, patch: Record<string, unknown>, name?: string) =>
     socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch, name }),
+  levelUpRoll: (p: { characterId: string; patch: Record<string, unknown>; hitDie: number; conMod: number; avgHp: number; label: string }) =>
+    socket.emit(C2S.LEVEL_UP_ROLL, p),
   sheetRoll: (characterId: string, rollableId: string, adv?: 'adv' | 'dis' | null) =>
     socket.emit(C2S.SHEET_ROLL, { characterId, rollableId, adv }),
 

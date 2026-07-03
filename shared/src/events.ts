@@ -44,6 +44,7 @@ export const C2S = {
   CREATE_RANDOM_NPC: 'createRandomNpc',
   DELETE_CHARACTER: 'deleteCharacter',
   UPDATE_CHARACTER: 'updateCharacter',
+  LEVEL_UP_ROLL: 'levelUpRoll',
   SHEET_ROLL: 'sheetRoll',
   CAST_SPELL: 'castSpell',
   COMBAT_ACTION: 'combatAction',
@@ -206,6 +207,19 @@ export interface UpdateLocationPayload {
 }
 export interface DeleteLocationPayload { locationId: string }
 export interface UpdateCharacterPayload { characterId: string; patch: SheetData; name?: string }
+/**
+ * Apply a level-up whose HP is rolled: the server rolls the hit die (+CON),
+ * adjusts the patch's HP from the average baseline, applies it, and posts the
+ * roll to chat for everyone. Keeps the roll server-authoritative.
+ */
+export interface LevelUpRollPayload {
+  characterId: string;
+  patch: SheetData;   // computed with average HP as the baseline
+  hitDie: number;
+  conMod: number;
+  avgHp: number;      // the baseline HP already baked into `patch`
+  label: string;
+}
 export interface SheetRollPayload {
   characterId: string;
   rollableId: string;

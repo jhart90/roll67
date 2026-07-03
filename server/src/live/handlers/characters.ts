@@ -1,11 +1,12 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canEditCharacter, systemFor,
-  type CreateCharacterPayload, type DeleteCharacterPayload, type UpdateCharacterPayload,
+  C2S, S2C, canEditCharacter, num, roll, systemFor,
+  type CreateCharacterPayload, type DeleteCharacterPayload, type LevelUpRollPayload,
+  type SheetData, type UpdateCharacterPayload,
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared';
 import { generateNpc, npcById } from 'shared';
-import { campaigns, characters, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, tokens } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -95,27 +96,57 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'You cannot edit this character.');
       return;
     }
-    const sheet = { ...character.sheet, ...patch };
-    characters.update(characterId, name, sheet);
-    const updated = characters.byId(characterId)!;
-    emitCharacter(io, d.campaignId, updated);
-
-    // Mirror HP onto this character's token bars on every map, and refresh
-    // vision on those maps (sheet vision may change). Setting the sheet's
-    // token image also repaints every token for this character.
-    const schema = systemFor(updated.system);
-    const hp = schema.hp(updated.sheet);
-    const artId = typeof (patch as Record<string, unknown>).tokenImageAssetId === 'string'
-      ? (patch as Record<string, string>).tokenImageAssetId
-      : undefined;
-    const touchedMaps = new Set<string>();
-    for (const t of tokens.forCharacter(characterId)) {
-      tokens.update(t.id, artId !== undefined ? { bar: hp, artAssetId: artId } : { bar: hp });
-      const refreshed = tokens.byId(t.id)!;
-      io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: refreshed });
-      touchedMaps.add(t.mapId);
-    }
-    for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
-    broadcastDirectory(io, d.campaignId);
+    applyCharacterPatch(io, d.campaignId, character, patch, name);
   }));
+
+  socket.on(C2S.LEVEL_UP_ROLL, safe(socket, ({ characterId, patch, hitDie, conMod, avgHp, label }: LevelUpRollPayload) => {
+    const d = requireCampaign(socket);
+    const character = characters.byId(characterId);
+    if (!character || character.campaignId !== d.campaignId) return;
+    if (!canEditCharacter(d.role, d.userId, character)) {
+      emitError(socket, 'You cannot edit this character.');
+      return;
+    }
+    // Roll the hit die (+CON) server-side, then adjust the patch's HP from the
+    // average baseline it was built with.
+    const dice = Math.max(2, Math.floor(hitDie) || 8);
+    const cm = Math.floor(conMod) || 0;
+    const breakdown = roll(`1d${dice}${cm >= 0 ? `+${cm}` : cm}`);
+    const rolled = Math.max(1, breakdown.total);
+    const delta = rolled - Math.floor(avgHp);
+    const adjusted: SheetData = {
+      ...patch,
+      maxHp: num(patch as SheetData, 'maxHp', 0) + delta,
+      hp: num(patch as SheetData, 'hp', 0) + delta,
+    };
+    applyCharacterPatch(io, d.campaignId, character, adjusted);
+    // Show the roll to everyone.
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'roll',
+      text: String(label ?? '').slice(0, 120), roll: breakdown, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }));
+}
+
+/** Persist a sheet patch, mirror HP/art to tokens, resync vision + directory. */
+function applyCharacterPatch(io: Server, campaignId: string, character: Character, patch: SheetData, name?: string): void {
+  const sheet = { ...character.sheet, ...patch };
+  characters.update(character.id, name, sheet);
+  const updated = characters.byId(character.id)!;
+  emitCharacter(io, campaignId, updated);
+
+  const schema = systemFor(updated.system);
+  const hp = schema.hp(updated.sheet);
+  const artId = typeof (patch as Record<string, unknown>).tokenImageAssetId === 'string'
+    ? (patch as Record<string, string>).tokenImageAssetId
+    : undefined;
+  const touchedMaps = new Set<string>();
+  for (const t of tokens.forCharacter(character.id)) {
+    tokens.update(t.id, artId !== undefined ? { bar: hp, artAssetId: artId } : { bar: hp });
+    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(t.id)! });
+    touchedMaps.add(t.mapId);
+  }
+  for (const mapId of touchedMaps) syncMapVision(io, campaignId, mapId);
+  broadcastDirectory(io, campaignId);
 }

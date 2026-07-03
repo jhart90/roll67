@@ -20,7 +20,6 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
 
   const [classId, setClassId] = useState(curClass ? getClass5e(curClass)?.id ?? '' : '');
   const [hpMode, setHpMode] = useState<'avg' | 'roll'>('avg');
-  const [rolled, setRolled] = useState<number | null>(null);
   const [subclass, setSubclass] = useState('');
   const [asiMode, setAsiMode] = useState<'asi' | 'feat'>('asi');
   const [asiA, setAsiA] = useState('str');
@@ -37,36 +36,40 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
   );
 
   const conMod = Math.floor((Number(character.sheet.con ?? 10) - 10) / 2);
-  // Level 1 always takes max hit die; later levels choose average or a roll.
-  const hpGained = plan
-    ? (plan.first ? plan.firstHp : hpMode === 'avg' ? plan.avgHp : Math.max(1, (rolled ?? 0) + conMod))
-    : 0;
-
-  function rollHp() {
-    if (!plan) return;
-    setRolled(1 + Math.floor(Math.random() * plan.hitDie));
-    setHpMode('roll');
-  }
+  // Level 1 always takes max hit die. A "roll" is deferred to Apply and rolled
+  // server-side, so nothing is shown until the player commits.
+  const rolling = !!plan && !plan.first && hpMode === 'roll';
 
   function toggleSkill(id: string) {
     setSkills((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
   }
 
   const valid = !!plan
-    && (hpMode === 'avg' || rolled !== null)
     && (!plan.needsSubclass || !!subclass)
     && (!plan.asi || (asiMode === 'asi' ? !!asiA && !!asiB : !!featId && (!featChoice || !!featAbility)))
     && (plan.needsSkills === 0 || skills.length === plan.needsSkills);
 
   function apply() {
     if (!plan) return;
-    const patch = applyLevelUp(character.sheet, plan.classId, toLevel, {
-      hpGained,
+    const choices = {
       subclass: plan.needsSubclass ? subclass : undefined,
       asi: plan.asi ? { mode: asiMode, a: asiA, b: asiB, featId, featAbility } : undefined,
       skills: plan.needsSkills > 0 ? skills : undefined,
-    });
-    intents.updateCharacter(character.id, patch);
+    };
+    if (rolling) {
+      // Build the patch on the average baseline; the server rolls the hit die,
+      // adjusts the HP, applies it, and posts the roll to chat for everyone.
+      const patch = applyLevelUp(character.sheet, plan.classId, toLevel, { hpGained: plan.avgHp, ...choices });
+      intents.levelUpRoll({
+        characterId: character.id, patch, hitDie: plan.hitDie, conMod, avgHp: plan.avgHp,
+        label: `${character.name}: level ${plan.toLevel} hit points`,
+      });
+    } else {
+      const patch = applyLevelUp(character.sheet, plan.classId, toLevel, {
+        hpGained: plan.first ? plan.firstHp : plan.avgHp, ...choices,
+      });
+      intents.updateCharacter(character.id, patch);
+    }
     onClose();
   }
 
@@ -110,10 +113,10 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
                         Average (+{plan.avgHp})
                       </label>
                       <label className="check-row" style={{ margin: 0 }}>
-                        <input type="radio" checked={hpMode === 'roll'} onChange={rollHp} />
-                        Roll 1d{plan.hitDie}{rolled !== null ? ` → +${Math.max(1, rolled + conMod)}` : ''}
+                        <input type="radio" checked={hpMode === 'roll'} onChange={() => setHpMode('roll')} />
+                        Roll 1d{plan.hitDie}{conMod !== 0 ? ` ${conMod > 0 ? '+' : ''}${conMod}` : ''}
                       </label>
-                      {hpMode === 'roll' && <button className="btn btn-sm" onClick={rollHp}>reroll</button>}
+                      {hpMode === 'roll' && <span className="dim" style={{ fontSize: 11 }}>rolled on apply, shown in chat</span>}
                     </div>
                   )}
                 </div>

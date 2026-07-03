@@ -3,6 +3,7 @@ import {
   bool, fmtMod, num, rows, str,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
+import { isRaging, rageDamage, sneakAttackDice } from './features5e.js';
 
 const ABILITIES = [
   { id: 'str', label: 'STR' },
@@ -362,12 +363,20 @@ export const dnd5e: SystemSchema = {
       out.push({ id: `skill_${s.id}`, label: s.label, expr: `1d20${fmtMod(mod)}`, group: 'Skills', d20: true });
     }
     out.push({ id: 'initiative', label: 'Initiative', expr: `1d20${fmtMod(abilityMod(num(sheet, 'dex', 10)))}`, group: 'Combat', d20: true });
+    const rageBonus = isRaging(sheet) ? rageDamage(level) : 0;
     rows(sheet, 'attacks').forEach((atk, i) => {
       const name = str(atk, 'name', `Attack ${i + 1}`);
       out.push({ id: `attack_${i}`, label: `${name} (attack)`, expr: `1d20${fmtMod(num(atk, 'bonus', 0))}`, group: 'Attacks', d20: true });
-      const dmg = str(atk, 'damage', '').trim();
-      if (dmg) out.push({ id: `damage_${i}`, label: `${name} (damage)`, expr: dmg, group: 'Attacks', d20: false });
+      let dmg = str(atk, 'damage', '').trim();
+      if (dmg) {
+        // Rage adds bonus damage to melee (reach ≤ 5 ft) weapon attacks.
+        if (rageBonus > 0 && num(atk, 'range', 5) <= 5) dmg = `${dmg}+${rageBonus}`;
+        out.push({ id: `damage_${i}`, label: `${name} (damage)`, expr: dmg, group: 'Attacks', d20: false });
+      }
     });
+    // Rogue Sneak Attack: extra dice you add to a qualifying attack.
+    const sneak = sneakAttackDice(sheet);
+    if (sneak > 0) out.push({ id: 'sneak', label: `Sneak Attack (${sneak}d6)`, expr: `${sneak}d6`, group: 'Attacks', d20: false });
     const spellAbility = str(sheet, 'spellAbility', 'int');
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.push({ id: 'spellAttack', label: 'Spell attack', expr: `1d20${fmtMod(pb + spellMod)}`, group: 'Combat', d20: true });

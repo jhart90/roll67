@@ -8,6 +8,7 @@ import { intents, useGameStore } from '../store/game';
 import { Compendium } from './Compendium';
 import { AssetPicker } from './AssetPicker';
 import { LevelUpWizard } from './LevelUpWizard';
+import { ClassFeatures } from './ClassFeatures';
 
 type AdvMode = null | 'adv' | 'dis';
 
@@ -485,6 +486,7 @@ export function CharacterSheet() {
         <div className="sheet-body">
           <div className="sheet-main">
             {activeTab.id === 'spells' && <SpellSlotTracker character={character} editable={editable} />}
+            {activeTab.id === 'core' && character.system === 'dnd5e' && <ClassFeatures character={character} editable={editable} />}
             {activeTab.sections.map((s) => (
               <Section
                 key={s.id}

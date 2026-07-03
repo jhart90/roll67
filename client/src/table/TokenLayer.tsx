@@ -36,8 +36,10 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
       return;
     }
     if (tool !== 'select') return;
+    if (e.button === 2) return; // right-click handled by onContextMenu
     e.stopPropagation();
     useGameStore.getState().selectToken(token.id);
+    useGameStore.getState().openInspector(null); // left-click closes the inspector
     if (!movable || e.button !== 0) return;
     try {
       (e.currentTarget as SVGGElement).setPointerCapture(e.pointerId);
@@ -78,6 +80,15 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
     if (character) useGameStore.getState().openSheet(character.id);
   }
 
+  function onContextMenu(e: React.MouseEvent<SVGGElement>) {
+    if (targetState !== 'off' || tool !== 'select') { e.preventDefault(); return; }
+    // Right-click opens the token inspector (DM-only panel; a no-op for players).
+    e.preventDefault();
+    e.stopPropagation();
+    useGameStore.getState().selectToken(token.id);
+    useGameStore.getState().openInspector(token.id);
+  }
+
   const bar = token.bar;
   const hpFrac = bar && bar.maxHp > 0 ? Math.max(0, Math.min(1, bar.hp / bar.maxHp)) : null;
 
@@ -88,6 +99,7 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
       style={{
         cursor: targetState === 'valid' ? 'crosshair' : movable ? 'grab' : 'default',
         opacity: (token.layer === 'gm' ? 0.55 : 1) * (targetState === 'invalid' ? 0.4 : 1),

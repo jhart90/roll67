@@ -2,11 +2,11 @@ import { useRef, useState } from 'react';
 import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
 
-/** DM-only floating panel for the selected token. */
+/** DM-only floating panel for a token — opened by right-clicking it. */
 export function TokenInspector() {
   const you = useGameStore((s) => s.you);
   const campaign = useGameStore((s) => s.campaign);
-  const token = useGameStore((s) => (s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined));
+  const token = useGameStore((s) => (s.inspectorTokenId ? s.tokens[s.inspectorTokenId] : undefined));
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -33,6 +33,7 @@ export function TokenInspector() {
     <div className="token-inspector">
       <div className="dock-header">
         <h3>{token.name}</h3>
+        <span className="spacer" />
         <button
           className="link danger"
           onClick={() => {
@@ -41,6 +42,7 @@ export function TokenInspector() {
         >
           remove
         </button>
+        <button className="link" onClick={() => useGameStore.getState().openInspector(null)}>close</button>
       </div>
       <div className="inspector-grid">
         <label>

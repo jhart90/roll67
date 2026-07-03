@@ -260,10 +260,12 @@ async function main() {
   const dmMap2 = await waitFor(dmSock, 'mapState');
   const door = dmMap2.dmGeometry.doors.at(-1);
 
-  // Movement blocking: the player cannot walk through the closed door/wall.
-  const moveBlocked = waitFor(playerSock, 'errorMsg');
+  // Movement blocking: the player is held up before the wall/closed door —
+  // the token stops on the near side (q<10) instead of passing through.
+  const heldMove = waitFor(playerSock, 'tokenMoved', 2500, (p) => p.tokenId === pcToken.id).catch(() => null);
   playerSock.emit('moveToken', { tokenId: pcToken.id, q: 10, r: 5 });
-  ok(!!(await moveBlocked).message, `player cannot move through wall/closed door ("${(await moveBlocked).message}")`);
+  const held = await heldMove;
+  ok(!held || held.q < 10, `player is stopped before the wall (did not pass through; landed at q${held ? held.q : '=held in place'})`);
 
   // DM opens the door -> monster appears to the player.
   const revealed = waitFor(playerSock, 'visionUpdate', 5000, (p) => p.tokens.some((t) => t.id === beast.id));

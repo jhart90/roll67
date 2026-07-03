@@ -82,6 +82,9 @@ interface GameState {
   camera: Camera;
   tool: Tool;
   selectedTokenId: string | null;
+  /** Token whose inspector panel is open (right-click), separate from selection. */
+  inspectorTokenId: string | null;
+  openInspector(id: string | null): void;
   selectedLightId: string | null;
   sheetCharacterId: string | null;
   /** Local-only: mute audio on this device without affecting others. */
@@ -186,6 +189,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   camera: { x: 0, y: 0, scale: 1 },
   tool: 'select',
   selectedTokenId: null,
+  inspectorTokenId: null,
+  openInspector(inspectorTokenId) { set({ inspectorTokenId }); },
   selectedLightId: null,
   sheetCharacterId: null,
   clientMuted: false,
@@ -210,7 +215,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       you: null, campaign: null, members: [], characters: [], mapsMeta: [],
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, explored: null, knownDoors: [],
-      viewingAs: null, dragGhosts: {}, selectedTokenId: null, sheetCharacterId: null,
+      viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null, sheetCharacterId: null,
       targeting: null, floats: [], castPrompt: null,
     });
   },
@@ -219,6 +224,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setTool(tool) {
     set({
       tool,
+      inspectorTokenId: null,
       selectedTokenId: tool === 'select' ? get().selectedTokenId : null,
       selectedLightId: tool === 'light' ? get().selectedLightId : null,
     });
@@ -350,6 +356,7 @@ export function wireSocket(): void {
     useGameStore.setState({
       tokens,
       selectedTokenId: s.selectedTokenId === tokenId ? null : s.selectedTokenId,
+      inspectorTokenId: s.inspectorTokenId === tokenId ? null : s.inspectorTokenId,
     });
   });
 

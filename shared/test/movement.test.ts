@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Door, GridConfig, Hex, Wall } from '../src/types.js';
-import { canReachHex } from '../src/vision/movement.js';
+import { canReachHex, reachableAlong } from '../src/vision/movement.js';
 
 const GRID: GridConfig = {
   hexSize: 10, originX: 0, originY: 0, cols: 40, rows: 40,
@@ -52,6 +52,27 @@ describe('movement blocking', () => {
     const oneway: Wall = { id: 'w', points: [{ x: 190, y: -100 }, { x: 190, y: 700 }], type: 'oneway' };
     expect(reach({ q: 8, r: 10 }, [window])).toBe(false);
     expect(reach({ q: 8, r: 10 }, [oneway])).toBe(false);
+  });
+
+  it('reachableAlong stops on the last free hex before a wall (no pass-through)', () => {
+    const geo = { grid: GRID, walls: [FULL_WALL], doors: [] };
+    // Moving straight across the full wall: held on the near side, not through.
+    const stop = reachableAlong(FROM, { q: 12, r: 10 }, geo);
+    expect(stop).toEqual({ q: 5, r: 10 }); // one hex forward, still left of x=190
+    // A one-hex step directly into the wall is refused (held up in place).
+    expect(reachableAlong({ q: 5, r: 10 }, { q: 6, r: 10 }, geo)).toEqual({ q: 5, r: 10 });
+  });
+
+  it('reachableAlong does not detour around a pillar (straight-line only)', () => {
+    const pillar: Wall = { id: 'p', points: [{ x: 180, y: 145 }, { x: 180, y: 155 }] };
+    // canReachHex finds a detour; reachableAlong stops before the pillar.
+    expect(canReachHex(FROM, { q: 8, r: 10 }, { grid: GRID, walls: [pillar], doors: [] })).toBe(true);
+    const stop = reachableAlong(FROM, { q: 8, r: 10 }, { grid: GRID, walls: [pillar], doors: [] });
+    expect(stop.q).toBeLessThan(8); // did not reach the far hex in a straight line
+  });
+
+  it('reachableAlong reaches the target across open ground', () => {
+    expect(reachableAlong(FROM, { q: 8, r: 10 }, { grid: GRID, walls: [], doors: [] })).toEqual({ q: 8, r: 10 });
   });
 
   it('cannot escape a sealed box', () => {

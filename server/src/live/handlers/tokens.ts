@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canMoveToken, canReachHex, inBounds,
+  C2S, S2C, canMoveToken, inBounds, reachableAlong,
   type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type MoveTokenPayload, type UpdateTokenPayload,
 } from 'shared';
@@ -94,22 +94,25 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'That is off the map.');
       return;
     }
-    // Players cannot walk through walls or closed doors; the DM may
-    // reposition tokens freely.
-    if (d.role !== 'dm' && !canReachHex(
-      { q: token.q, r: token.r },
-      { q, r },
-      { grid: map.grid, walls: map.walls, doors: map.doors },
-    )) {
-      emitError(socket, 'Something blocks the way.');
-      return;
+    // Players can't cross walls or closed doors: the token stops on the last
+    // free hex in that direction (held up against the blocker). The DM moves
+    // freely. Movement is straight-line collision, not auto-pathing.
+    let dest = { q, r };
+    if (d.role !== 'dm') {
+      const stop = reachableAlong(
+        { q: token.q, r: token.r },
+        { q, r },
+        { grid: map.grid, walls: map.walls, doors: map.doors },
+      );
+      if (stop.q === token.q && stop.r === token.r) return; // held up — no move
+      dest = stop;
     }
-    tokens.move(tokenId, q, r);
+    tokens.move(tokenId, dest.q, dest.r);
     const moved = tokens.byId(tokenId)!;
     // Tell everyone who could already see it where it went; vision sync
     // handles reveals/hides for everyone else (and fog for the mover).
     for (const s of socketsSeeingToken(io, d.campaignId, moved)) {
-      s.emit(S2C.TOKEN_MOVED, { tokenId, q, r });
+      s.emit(S2C.TOKEN_MOVED, { tokenId, q: dest.q, r: dest.r });
     }
     syncMapVision(io, d.campaignId, token.mapId);
   }));

@@ -6,6 +6,7 @@
 import type { Door, GridConfig, Hex, Wall } from '../types.js';
 import { hexDistance, hexNeighbors } from '../hex/coords.js';
 import { hexToPixel } from '../hex/pixel.js';
+import { hexLine } from '../hex/line.js';
 import { packHex } from '../hex/pack.js';
 import { blockingSegments, rayBlocked, type Segment } from './raycast.js';
 import { inBounds } from './fov.js';
@@ -19,6 +20,27 @@ export interface MoveInput {
 /** Is the single step between two (adjacent) hexes blocked by geometry? */
 export function stepBlocked(a: Hex, b: Hex, grid: GridConfig, segments: Segment[]): boolean {
   return rayBlocked(hexToPixel(a, grid), hexToPixel(b, grid), segments);
+}
+
+/**
+ * Furthest hex a token reaches moving in a straight line from `from` toward
+ * `to`: it walks the hex-line and stops on the last hex before a wall/closed
+ * door (or the map edge). Returns `from` when the very first step is blocked
+ * ("held up" against the wall). This is directional collision, not pathing —
+ * to round a corner the player makes a second move.
+ */
+export function reachableAlong(from: Hex, to: Hex, input: MoveInput): Hex {
+  if (from.q === to.q && from.r === to.r) return { ...from };
+  const segments = blockingSegments(input.walls, input.doors);
+  const line = hexLine(from, to);
+  let last: Hex = { ...from };
+  for (let i = 1; i < line.length; i++) {
+    const step = line[i];
+    if (!inBounds(step, input.grid)) break;
+    if (segments.length > 0 && stepBlocked(line[i - 1], step, input.grid, segments)) break;
+    last = step;
+  }
+  return last;
 }
 
 /**

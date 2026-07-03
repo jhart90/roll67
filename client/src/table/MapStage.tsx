@@ -154,7 +154,10 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
     const cam = useGameStore.getState().camera;
     panState.current = { startX: e.clientX, startY: e.clientY, camX: cam.x, camY: cam.y };
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-    if (e.button === 0) useGameStore.getState().selectToken(null);
+    if (e.button === 0) {
+      useGameStore.getState().selectToken(null);
+      useGameStore.getState().openInspector(null);
+    }
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {

@@ -10,6 +10,7 @@ import { CharacterSheet } from '../panels/CharacterSheet';
 import { InitiativePanel } from '../panels/InitiativePanel';
 import { DirectoryPanel } from '../panels/DirectoryPanel';
 import { WorldPanel } from '../panels/WorldPanel';
+import { ShopStorefront } from '../panels/ShopStorefront';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { PresenceBar } from '../table/PresenceBar';
@@ -211,6 +212,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <Toolbar />
         <PresenceBar />
         <AudioPlayer />
+        <ShopStorefront />
       </div>
 
       {viewingAs && (

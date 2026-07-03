@@ -2,8 +2,8 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
   type BuyItemPayload, type CreateLocationPayload, type CreateShopPayload,
-  type DeleteLocationPayload, type DeleteShopPayload, type ShopItem,
-  type UpdateLocationPayload, type UpdateShopPayload,
+  type DeleteLocationPayload, type DeleteShopPayload, type PresentShopPayload,
+  type Shop, type ShopItem, type UpdateLocationPayload, type UpdateShopPayload,
 } from 'shared';
 import { campaigns, characters, chat, locations, shops } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
@@ -19,12 +19,50 @@ function requireCampaign(socket: Socket) {
   return d as typeof d & { campaignId: string; role: 'dm' | 'player' };
 }
 
-export function broadcastShops(io: Server, campaignId: string): void {
+// ---------- shop presentation (in-memory per campaign) ----------
+
+interface Presentation { shopId: string; userIds: string[] | 'all'; }
+const presentations = new Map<string, Presentation>();
+
+function isPresentedTo(campaignId: string, shopId: string, userId: string): boolean {
+  const p = presentations.get(campaignId);
+  if (!p || p.shopId !== shopId) return false;
+  return p.userIds === 'all' || p.userIds.includes(userId);
+}
+
+function presentedShopIdForUser(campaignId: string, userId: string, isDm: boolean): string | null {
+  const p = presentations.get(campaignId);
+  if (!p) return null;
+  if (isDm) return p.shopId;
+  return p.userIds === 'all' || p.userIds.includes(userId) ? p.shopId : null;
+}
+
+/** Shops a viewer receives: DM all; players see open shops + any presented to them. */
+export function shopsForUser(campaignId: string, userId: string, isDm: boolean): Shop[] {
   const all = shops.forCampaign(campaignId);
+  if (isDm) return all;
+  return all.filter((s) => s.playersCanBuy || isPresentedTo(campaignId, s.id, userId));
+}
+
+export function broadcastShops(io: Server, campaignId: string): void {
   for (const socket of campaignSockets(io, campaignId)) {
-    const isDm = sdata(socket).role === 'dm';
-    socket.emit(S2C.SHOPS, { shops: isDm ? all : all.filter((s) => s.playersCanBuy) });
+    const d = sdata(socket);
+    socket.emit(S2C.SHOPS, { shops: shopsForUser(campaignId, d.userId, d.role === 'dm') });
   }
+}
+
+export function broadcastShopPresentation(io: Server, campaignId: string): void {
+  for (const socket of campaignSockets(io, campaignId)) {
+    const d = sdata(socket);
+    socket.emit(S2C.SHOP_PRESENTATION, { shopId: presentedShopIdForUser(campaignId, d.userId, d.role === 'dm') });
+  }
+}
+
+/** Sent on join so a (re)connecting player re-opens an active storefront. */
+export function sendShopPresentationTo(socket: Socket): void {
+  const d = sdata(socket);
+  if (!d.campaignId || !d.role) return;
+  socket.emit(S2C.SHOP_PRESENTATION, { shopId: presentedShopIdForUser(d.campaignId, d.userId, d.role === 'dm') });
 }
 
 export function broadcastLocations(io: Server, campaignId: string): void {
@@ -67,14 +105,42 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const s = shops.byId(shopId);
     if (!s || s.campaignId !== d.campaignId) return;
     shops.delete(shopId);
+    // Stop presenting a deleted shop.
+    if (presentations.get(d.campaignId)?.shopId === shopId) {
+      presentations.delete(d.campaignId);
+      broadcastShopPresentation(io, d.campaignId);
+    }
     broadcastShops(io, d.campaignId);
+  }));
+
+  socket.on(C2S.PRESENT_SHOP, safe(socket, ({ shopId, userIds }: PresentShopPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can show shops.'); return; }
+    const s = shops.byId(shopId);
+    if (!s || s.campaignId !== d.campaignId) throw new Error('Unknown shop.');
+    presentations.set(d.campaignId, { shopId, userIds: userIds === 'all' ? 'all' : [...userIds] });
+    // Targeted players now receive the shop data, then the storefront pops.
+    broadcastShops(io, d.campaignId);
+    broadcastShopPresentation(io, d.campaignId);
+  }));
+
+  socket.on(C2S.DISMISS_SHOP, safe(socket, () => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    presentations.delete(d.campaignId);
+    broadcastShops(io, d.campaignId);
+    broadcastShopPresentation(io, d.campaignId);
   }));
 
   socket.on(C2S.BUY_ITEM, safe(socket, ({ shopId, itemIndex, characterId }: BuyItemPayload) => {
     const d = requireCampaign(socket);
     const shop = shops.byId(shopId);
     if (!shop || shop.campaignId !== d.campaignId) throw new Error('Unknown shop.');
-    if (d.role !== 'dm' && !shop.playersCanBuy) { emitError(socket, 'This shop is not open to players.'); return; }
+    // Players may buy from open shops OR any shop currently presented to them.
+    if (d.role !== 'dm' && !shop.playersCanBuy && !isPresentedTo(d.campaignId, shopId, d.userId)) {
+      emitError(socket, 'This shop is not open to you.');
+      return;
+    }
     const item = shop.items[itemIndex];
     if (!item) throw new Error('Unknown item.');
     if (item.qty === 0) { emitError(socket, `${item.name} is sold out.`); return; }

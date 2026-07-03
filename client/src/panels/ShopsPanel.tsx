@@ -69,6 +69,50 @@ function BuyControls({ shop, itemIndex }: { shop: Shop; itemIndex: number }) {
   );
 }
 
+function PresentControls({ shop }: { shop: Shop }) {
+  const members = useGameStore((s) => s.members);
+  const presentedShopId = useGameStore((s) => s.presentedShopId);
+  const players = members.filter((m) => m.role === 'player');
+  const [picking, setPicking] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const presenting = presentedShopId === shop.id;
+
+  return (
+    <div className="present-controls">
+      {presenting
+        ? <span className="present-badge">● showing to players</span>
+        : <span className="dim" style={{ fontSize: 11 }}>Not shown to players</span>}
+      <span className="spacer" />
+      <button className="link" onClick={() => intents.presentShop(shop.id, 'all')}>Show to all</button>
+      <button className="link" onClick={() => setPicking((v) => !v)}>Show to…</button>
+      {presenting && <button className="link danger" onClick={() => intents.dismissShop()}>Stop</button>}
+      {picking && (
+        <div className="present-picker" onPointerDown={(e) => e.stopPropagation()}>
+          {players.length === 0 && <span className="dim">No players online.</span>}
+          {players.map((p) => (
+            <label key={p.userId} className="check-row" style={{ margin: 0 }}>
+              <input
+                type="checkbox"
+                checked={selected.includes(p.userId)}
+                onChange={(e) => setSelected((s) => e.target.checked ? [...s, p.userId] : s.filter((x) => x !== p.userId))}
+              />
+              {p.username}{!p.online && <span className="dim"> (offline)</span>}
+            </label>
+          ))}
+          <button
+            className="primary"
+            style={{ width: 'auto' }}
+            disabled={selected.length === 0}
+            onClick={() => { intents.presentShop(shop.id, selected); setPicking(false); }}
+          >
+            Show to {selected.length || 0}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Shops for the World panel. DM manages; players buy. */
 export function ShopsPanel() {
   const you = useGameStore((s) => s.you);
@@ -106,6 +150,7 @@ export function ShopsPanel() {
             <button className="link" onClick={() => setOpen(null)}>back</button>
           </div>
           {openShop.description && <p className="dim" style={{ fontSize: 12 }}>{openShop.description}</p>}
+          {isDm && <PresentControls shop={openShop} />}
           <table className="shop-table">
             <thead><tr><th>Item</th><th>{openShop.currency}</th><th>stock</th><th /></tr></thead>
             <tbody>

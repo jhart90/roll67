@@ -42,6 +42,9 @@ interface GameState {
   audioState: AudioState;
   shopList: Shop[];
   locationList: LocationNode[];
+  /** Shop the DM is presenting to this viewer (players pop a storefront). */
+  presentedShopId: string | null;
+  closePresentedShop(): void;
   directory: DirectoryPayload | null;
   initiativeState: InitiativeState;
   chatLog: ChatMessage[];
@@ -113,6 +116,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
   shopList: [],
   locationList: [],
+  presentedShopId: null,
+  closePresentedShop() { set({ presentedShopId: null }); },
   directory: null,
   initiativeState: { entries: [], turnIdx: 0, round: 1, active: false },
   chatLog: [],
@@ -385,6 +390,10 @@ export function wireSocket(): void {
     useGameStore.setState({ shopList: shops });
   });
 
+  socket.on(S2C.SHOP_PRESENTATION, ({ shopId }: { shopId: string | null }) => {
+    useGameStore.setState({ presentedShopId: shopId });
+  });
+
   socket.on(S2C.LOCATIONS, ({ locations }: { locations: LocationNode[] }) => {
     useGameStore.setState({ locationList: locations });
   });
@@ -570,6 +579,8 @@ export const intents = {
   updateShop: (shopId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_SHOP, { shopId, ...fields }),
   deleteShop: (shopId: string) => socket.emit(C2S.DELETE_SHOP, { shopId }),
   buyItem: (shopId: string, itemIndex: number, characterId: string) => socket.emit(C2S.BUY_ITEM, { shopId, itemIndex, characterId }),
+  presentShop: (shopId: string, userIds: string[] | 'all') => socket.emit(C2S.PRESENT_SHOP, { shopId, userIds }),
+  dismissShop: () => socket.emit(C2S.DISMISS_SHOP),
 
   createLocation: (name: string, parentId?: string | null) => socket.emit(C2S.CREATE_LOCATION, { name, parentId }),
   updateLocation: (locationId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_LOCATION, { locationId, ...fields }),

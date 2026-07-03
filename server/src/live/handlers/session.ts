@@ -14,6 +14,7 @@ import { buildMapState, dropVisionCache } from '../visionService.js';
 import { initiativeViewFor } from './combat.js';
 import { buildDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
+import { shopsForUser, sendShopPresentationTo } from './world.js';
 
 function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   const all = handouts.forCampaign(campaignId);
@@ -115,8 +116,8 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     socket.emit(S2C.AUDIO_TRACKS, { tracks: audioTracks.forCampaign(campaignId) });
     socket.emit(S2C.AUDIO_STATE, { state: getAudioState(campaignId) });
     {
-      const allShops = shops.forCampaign(campaignId);
-      socket.emit(S2C.SHOPS, { shops: role === 'dm' ? allShops : allShops.filter((s) => s.playersCanBuy) });
+      socket.emit(S2C.SHOPS, { shops: shopsForUser(campaignId, d.userId, role === 'dm') });
+      sendShopPresentationTo(socket);
       const allLoc = locations.forCampaign(campaignId);
       socket.emit(S2C.LOCATIONS, { locations: role === 'dm' ? allLoc : allLoc.filter((l) => l.visibleToPlayers) });
     }

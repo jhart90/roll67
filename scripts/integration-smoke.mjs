@@ -620,6 +620,39 @@ async function main() {
   playerSock.emit('buyItem', { shopId: shop.id, itemIndex: 1, characterId: pc.id });
   ok(!!(await buyDenied).message, 'buying without funds is refused');
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 0, inventory: [] } });
+
+  // ---------- present shop to players ----------
+  console.log('present shop:');
+  // Make a closed shop, then present it to the player -> they receive it + a pop signal.
+  const closedShops = waitFor(dmSock, 'shops', 5000, (p) => p.shops.some((s) => s.name === 'Hidden Stall'));
+  dmSock.emit('createShop', { name: 'Hidden Stall' });
+  const stall = (await closedShops).shops.find((s) => s.name === 'Hidden Stall');
+  dmSock.emit('updateShop', { shopId: stall.id, playersCanBuy: false, items: [{ name: 'Charm', price: 5, qty: 2 }] });
+  await new Promise((r) => setTimeout(r, 200));
+  // Player does NOT have the closed shop.
+  const noStall = await new Promise((res) => { playerSock.once('shops', res); playerSock.emit('requestDirectory'); });
+  void noStall;
+  const getsShop = waitFor(playerSock, 'shops', 5000, (p) => p.shops.some((s) => s.id === stall.id));
+  const getsPop = waitFor(playerSock, 'shopPresentation', 5000, (p) => p.shopId === stall.id);
+  dmSock.emit('presentShop', { shopId: stall.id, userIds: 'all' });
+  await getsShop;
+  ok(true, 'presented shop data reaches targeted players');
+  await getsPop;
+  ok(true, 'players receive the storefront pop signal');
+  // Player can buy from the presented (otherwise closed) shop.
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 20 } });
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  const boughtPresented = waitFor(playerSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Charm'));
+  playerSock.emit('buyItem', { shopId: stall.id, itemIndex: 0, characterId: pc.id });
+  await boughtPresented;
+  ok(true, 'players can buy from a presented (otherwise closed) shop');
+  // Dismiss -> player loses the shop + pop.
+  const dismissed = waitFor(playerSock, 'shopPresentation', 5000, (p) => p.shopId === null);
+  dmSock.emit('dismissShop');
+  await dismissed;
+  ok(true, 'dismissing the shop closes it for players');
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 0, inventory: [] } });
+  dmSock.emit('deleteShop', { shopId: stall.id });
   dmSock.emit('deleteShop', { shopId: shop.id });
 
   // ---------- locations ----------

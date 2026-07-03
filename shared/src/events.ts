@@ -50,6 +50,8 @@ export const C2S = {
   UPDATE_SHOP: 'updateShop',
   DELETE_SHOP: 'deleteShop',
   BUY_ITEM: 'buyItem',
+  PRESENT_SHOP: 'presentShop',
+  DISMISS_SHOP: 'dismissShop',
   // locations
   CREATE_LOCATION: 'createLocation',
   UPDATE_LOCATION: 'updateLocation',
@@ -182,6 +184,8 @@ export interface UpdateShopPayload {
 }
 export interface DeleteShopPayload { shopId: string }
 export interface BuyItemPayload { shopId: string; itemIndex: number; characterId: string }
+/** DM: pop this shop's storefront on targeted players' screens. */
+export interface PresentShopPayload { shopId: string; userIds: string[] | 'all' }
 
 export interface CreateLocationPayload { name: string; parentId?: string | null }
 export interface UpdateLocationPayload {
@@ -294,6 +298,7 @@ export const S2C = {
   HANDOUTS: 'handouts',
   TABLES: 'tables',
   SHOPS: 'shops',
+  SHOP_PRESENTATION: 'shopPresentation',
   LOCATIONS: 'locations',
   ASSETS: 'assets',
   AUDIO_TRACKS: 'audioTracks',
@@ -391,6 +396,8 @@ export interface MeasureShownPayload extends MeasureInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
 export interface ShopsPayload { shops: Shop[] }
+/** Which shop (if any) to pop for this viewer; DM receives the presented id for a badge. */
+export interface ShopPresentationPayload { shopId: string | null }
 export interface LocationsPayload { locations: LocationNode[] }
 export interface AssetsPayload { folders: AssetFolder[]; assets: AssetInfo[] }
 export interface AudioTracksPayload { tracks: AudioTrack[] }

@@ -36,43 +36,6 @@ function Message({ msg }: { msg: ChatMessage }) {
   );
 }
 
-function MacroBar() {
-  const macroList = useGameStore((s) => s.macroList);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState('');
-  const [command, setCommand] = useState('');
-
-  function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !command.trim()) return;
-    intents.saveMacro({ name: name.trim(), command: command.trim() });
-    setName('');
-    setCommand('');
-    setEditing(false);
-  }
-
-  return (
-    <div className="macro-bar">
-      {macroList.map((m) => (
-        <span key={m.id} className="macro-chip">
-          <button title={m.command} onClick={() => intents.chat(`#${m.name}`)}>{m.name}</button>
-          <button className="macro-x" title="Delete macro" onClick={() => intents.deleteMacro(m.id)}>×</button>
-        </span>
-      ))}
-      {editing ? (
-        <form onSubmit={save} className="macro-form">
-          <input placeholder="name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-          <input placeholder="/r 1d20+5" value={command} onChange={(e) => setCommand(e.target.value)} />
-          <button type="submit">✓</button>
-          <button type="button" onClick={() => setEditing(false)}>×</button>
-        </form>
-      ) : (
-        <button className="macro-add" title="New macro" onClick={() => setEditing(true)}>+ macro</button>
-      )}
-    </div>
-  );
-}
-
 export function ChatPanel() {
   const chatLog = useGameStore((s) => s.chatLog);
   const [text, setText] = useState('');
@@ -96,7 +59,6 @@ export function ChatPanel() {
         {chatLog.map((m) => <Message key={m.id} msg={m} />)}
         {chatLog.length === 0 && <p className="dim">Say hi, or roll with /r 1d20+5</p>}
       </div>
-      <MacroBar />
       <form className="chat-input" onSubmit={send}>
         <input
           value={text}

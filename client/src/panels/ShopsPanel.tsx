@@ -1,50 +1,144 @@
 import { useState } from 'react';
-import type { Shop } from 'shared';
+import type { GameSystem, Shop, ShopItem } from 'shared';
+import { currenciesFor, shopItemFromEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { Compendium } from './Compendium';
+
+const EMPTY_DRAFT = { name: '', price: '', qty: '', notes: '' };
+
+/** One row of the shop's stock: read-only with edit/delete, or inline-editing. */
+function StockRow({ item, editing, onEdit, onSave, onDelete, onCancel }: {
+  item: ShopItem; editing: boolean;
+  onEdit: () => void; onSave: (it: ShopItem) => void; onDelete: () => void; onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState({
+    name: item.name, price: String(item.price), qty: item.qty < 0 ? '' : String(item.qty), notes: item.notes,
+  });
+
+  if (editing) {
+    return (
+      <div className="stock-row editing">
+        <input className="stk-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name" />
+        <input className="stk-price" type="number" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} placeholder="Price" />
+        <input className="stk-qty" type="number" value={draft.qty} onChange={(e) => setDraft({ ...draft, qty: e.target.value })} placeholder="∞" />
+        <input className="stk-notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Description" />
+        <button className="icon-btn" title="Save" onClick={() => onSave({
+          ...item, name: draft.name.trim() || item.name, price: Number(draft.price) || 0,
+          qty: draft.qty === '' ? -1 : Math.floor(Number(draft.qty)), notes: draft.notes,
+        })}>✓</button>
+        <button className="icon-btn" title="Cancel" onClick={onCancel}>✕</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="stock-row">
+      <span className="stk-name">
+        {item.name}
+        {item.contentId && <span className="stk-tag" title="Predefined — buying transfers its effects">◆</span>}
+        {item.effect && <span className="stk-tag heal" title={`Usable: ${item.effect} ${item.amount ?? ''}`}>✦</span>}
+      </span>
+      <span className="stk-price">{item.price}</span>
+      <span className="stk-qty">{item.qty < 0 ? '∞' : item.qty}</span>
+      <span className="stk-notes dim">{item.notes}</span>
+      <button className="icon-btn" title="Edit" onClick={onEdit}>✎</button>
+      <button className="icon-btn danger" title="Delete" onClick={onDelete}>🗑</button>
+    </div>
+  );
+}
 
 function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void }) {
+  const system = (useGameStore((s) => s.campaign?.system) ?? 'dnd5e') as GameSystem;
+  const currencies = currenciesFor(system);
   const [name, setName] = useState(shop.name);
   const [description, setDescription] = useState(shop.description);
-  const [currency, setCurrency] = useState(shop.currency);
+  const [currency, setCurrency] = useState(currencies.some((c) => c.id === shop.currency) ? shop.currency : currencies[currencies.length - 1].id);
   const [playersCanBuy, setPlayers] = useState(shop.playersCanBuy);
-  // Items as text: "Name | price | qty" per line (qty blank = unlimited).
-  const [items, setItems] = useState(
-    shop.items.map((i) => `${i.name} | ${i.price} | ${i.qty < 0 ? '' : i.qty}`).join('\n'),
-  );
+  const [items, setItems] = useState<ShopItem[]>(shop.items);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [showCompendium, setShowCompendium] = useState(false);
+
+  function addDraft() {
+    if (!draft.name.trim()) return;
+    setItems([...items, {
+      name: draft.name.trim(), price: Number(draft.price) || 0,
+      qty: draft.qty === '' ? -1 : Math.floor(Number(draft.qty)), notes: draft.notes.trim(),
+    }]);
+    setDraft(EMPTY_DRAFT);
+  }
 
   function save() {
-    const parsed = items.split('\n').map((line) => {
-      const [n, p, q] = line.split('|').map((s) => s.trim());
-      if (!n) return null;
-      return { name: n, price: Number(p) || 0, qty: q === '' || q === undefined ? -1 : Number(q) };
-    }).filter(Boolean) as Array<{ name: string; price: number; qty: number }>;
-    intents.updateShop(shop.id, { name: name.trim() || 'Shop', description, currency: currency.trim() || 'gp', playersCanBuy, items: parsed });
+    intents.updateShop(shop.id, {
+      name: name.trim() || 'Shop', description, currency, playersCanBuy, items,
+    });
     onClose();
   }
 
   return (
     <div className="sheet-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="panel" style={{ width: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="panel shop-editor">
         <div className="dock-header"><h3>Edit shop</h3><button className="link" onClick={onClose}>close</button></div>
         <div className="row">
           <label style={{ flex: 1 }}>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
-          <label style={{ width: 80 }}>Currency<input value={currency} onChange={(e) => setCurrency(e.target.value)} /></label>
+          <label style={{ width: 130 }}>Currency
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {currencies.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
         </div>
         <label>Description<textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
         <label className="check-row">
           <input type="checkbox" checked={playersCanBuy} onChange={(e) => setPlayers(e.target.checked)} />
           Players can buy from this shop
         </label>
-        <label>
-          Stock — one per line: <code>Name | price | qty</code> (blank qty = unlimited)
-          <textarea rows={8} value={items} onChange={(e) => setItems(e.target.value)} placeholder={'Longsword | 15 | 3\nHealing Potion | 50 |\nRope (50 ft) | 1 | 10'} />
-        </label>
-        <div className="row">
+
+        <div className="stock-head">
+          <h4>Stock</h4>
+          <span className="spacer" />
+          <button className="btn btn-sm" onClick={() => setShowCompendium(true)}>+ From compendium</button>
+        </div>
+
+        <div className="stock-cols dim"><span className="stk-name">Item</span><span className="stk-price">Price</span><span className="stk-qty">Qty</span><span className="stk-notes">Description</span><span style={{ width: 56 }} /></div>
+        <div className="stock-list">
+          {items.map((it, i) => (
+            <StockRow
+              key={i}
+              item={it}
+              editing={editingIdx === i}
+              onEdit={() => setEditingIdx(i)}
+              onCancel={() => setEditingIdx(null)}
+              onDelete={() => { setItems(items.filter((_, j) => j !== i)); setEditingIdx(null); }}
+              onSave={(next) => { setItems(items.map((x, j) => (j === i ? next : x))); setEditingIdx(null); }}
+            />
+          ))}
+          {items.length === 0 && <p className="dim" style={{ margin: '4px 0' }}>No stock yet — add items below or from the compendium.</p>}
+        </div>
+
+        <div className="stock-row add">
+          <input className="stk-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name"
+            onKeyDown={(e) => { if (e.key === 'Enter') addDraft(); }} />
+          <input className="stk-price" type="number" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} placeholder="Price" />
+          <input className="stk-qty" type="number" value={draft.qty} onChange={(e) => setDraft({ ...draft, qty: e.target.value })} placeholder="∞" />
+          <input className="stk-notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Description"
+            onKeyDown={(e) => { if (e.key === 'Enter') addDraft(); }} />
+          <button className="btn btn-sm btn-accent" title="Add item" onClick={addDraft} disabled={!draft.name.trim()}>+</button>
+        </div>
+
+        <div className="row" style={{ marginTop: 12 }}>
           <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
           <button onClick={onClose}>Cancel</button>
           <span className="spacer" />
           <button className="btn btn-sm btn-danger" onClick={() => { if (confirm(`Delete shop "${shop.name}"?`)) { intents.deleteShop(shop.id); onClose(); } }}>Delete</button>
         </div>
+
+        {showCompendium && (
+          <Compendium
+            system={system}
+            onClose={() => setShowCompendium(false)}
+            onPick={(entry) => setItems((prev) => [...prev, shopItemFromEntry(entry) as ShopItem])}
+          />
+        )}
       </div>
     </div>
   );

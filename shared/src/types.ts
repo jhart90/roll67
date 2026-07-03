@@ -322,6 +322,12 @@ export interface ShopItem {
   /** Stock; -1 = unlimited. */
   qty: number;
   notes: string;
+  /** Compendium entry id: buying applies its full logic (attack/spell/usable). */
+  contentId?: string;
+  /** Custom usable items (no contentId): applied to the buyer's inventory. */
+  effect?: 'heal' | 'damage';
+  amount?: string;
+  range?: number;
 }
 
 export interface Shop {

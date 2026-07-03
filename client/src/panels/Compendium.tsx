@@ -1,19 +1,29 @@
 import { useMemo, useState } from 'react';
-import type { Character, ContentEntry, ContentKind, SheetData } from 'shared';
+import type { Character, ContentEntry, ContentKind, GameSystem, SheetData } from 'shared';
 import { applyEntry, contentForSystem, contentKinds, KIND_LABEL } from 'shared';
 import { intents, useGameStore } from '../store/game';
 
-/** Browse the SRD compendium and add items/spells/weapons to a character. */
-export function Compendium({ character, onClose }: { character: Character; onClose: () => void }) {
+/**
+ * Browse the SRD compendium. In the default mode it adds entries to a
+ * character; when `onPick` is given it instead hands the entry back to the
+ * caller (used to stock a shop from the compendium).
+ */
+export function Compendium({ character, system, onClose, onPick }: {
+  character?: Character;
+  system?: GameSystem;
+  onClose: () => void;
+  onPick?: (entry: ContentEntry) => void;
+}) {
   const you = useGameStore((s) => s.you);
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState<ContentKind | 'all'>('all');
   const [added, setAdded] = useState<Record<string, number>>({});
 
-  const kinds = useMemo(() => contentKinds(character.system), [character.system]);
+  const sys = (character?.system ?? system ?? 'dnd5e') as GameSystem;
+  const kinds = useMemo(() => contentKinds(sys), [sys]);
 
   const entries = useMemo(() => {
-    let list = contentForSystem(character.system);
+    let list = contentForSystem(sys);
     if (kind !== 'all') list = list.filter((c) => c.kind === kind);
     const q = search.trim().toLowerCase();
     if (q) list = list.filter((c) => c.name.toLowerCase().includes(q) || c.category.toLowerCase().includes(q));
@@ -21,11 +31,13 @@ export function Compendium({ character, onClose }: { character: Character; onClo
       a.kind === b.kind
         ? (a.order - b.order || a.name.localeCompare(b.name))
         : kinds.indexOf(a.kind) - kinds.indexOf(b.kind));
-  }, [character.system, kind, search, kinds]);
+  }, [sys, kind, search, kinds]);
 
-  const canEdit = !!you && (you.role === 'dm' || character.ownerUserId === you.userId);
+  const canEdit = !!onPick || (!!you && !!character && (you.role === 'dm' || character.ownerUserId === you.userId));
 
   function add(entry: ContentEntry) {
+    if (onPick) { onPick(entry); setAdded((p) => ({ ...p, [entry.id]: (p[entry.id] ?? 0) + 1 })); return; }
+    if (!character) return;
     const result = applyEntry(entry, character.sheet as SheetData);
     if (!result) return;
     const existing = Array.isArray(character.sheet[result.listId])
@@ -42,7 +54,7 @@ export function Compendium({ character, onClose }: { character: Character; onClo
       <div className="sheet-window npc-library">
         <div className="sheet-header">
           <h3 style={{ margin: 0 }}>Compendium</h3>
-          <span className="dim">add to {character.name}</span>
+          <span className="dim">add to {character ? character.name : 'shop'}</span>
           <span className="spacer" />
           <button className="link" onClick={onClose}>close</button>
         </div>

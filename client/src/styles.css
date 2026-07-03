@@ -868,6 +868,30 @@ button.link:hover { text-decoration: underline; }
 .shop-pane-card:hover { border-color: var(--accent); background: var(--panel-2); }
 .present-picker-inline { position: static; box-shadow: none; min-width: 0; }
 
+/* shop editor: structured stock rows */
+.shop-editor { width: 520px; max-width: 94vw; max-height: 90vh; overflow-y: auto; }
+.stock-head { display: flex; align-items: center; margin: 12px 0 4px; }
+.stock-head h4 { margin: 0; font-size: 13px; }
+.stock-cols { display: flex; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 0 2px 2px; }
+.stock-list { display: flex; flex-direction: column; gap: 3px; }
+.stock-row { display: flex; align-items: center; gap: 6px; }
+.stock-row .stk-name { flex: 1 1 40%; min-width: 0; display: flex; align-items: center; gap: 4px; }
+.stock-row .stk-price { flex: 0 0 52px; }
+.stock-row .stk-qty { flex: 0 0 40px; }
+.stock-row .stk-notes { flex: 1 1 40%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-cols .stk-name { flex: 1 1 40%; } .stock-cols .stk-price { flex: 0 0 52px; } .stock-cols .stk-qty { flex: 0 0 40px; } .stock-cols .stk-notes { flex: 1 1 40%; }
+.stock-row span.stk-name, .stock-row span.stk-notes { font-size: 12px; }
+.stock-row input { margin: 0; padding: 4px 6px; font-size: 12px; }
+.stock-row.add { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.stk-tag { color: var(--accent-2); font-size: 11px; cursor: help; }
+.stk-tag.heal { color: var(--ok); }
+.icon-btn {
+  flex: 0 0 auto; background: none; border: 1px solid transparent; color: var(--text-dim);
+  padding: 2px 6px; border-radius: 5px; font-size: 12px; line-height: 1;
+}
+.icon-btn:hover { border-color: var(--border); color: var(--text); background: var(--panel-2); }
+.icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+
 .shop-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
 .shop-table th { text-align: left; color: var(--text-dim); font-weight: 400; padding: 2px 4px; }
 .shop-table td { padding: 3px 4px; border-bottom: 1px solid var(--panel-2); }

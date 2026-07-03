@@ -94,6 +94,28 @@ function healAmountFrom(text: string): string | null {
   return m ? m[1].replace(/\s+/g, '') : null;
 }
 
+/** Rough default shop prices by kind; the DM can adjust after adding. */
+const KIND_PRICE: Record<ContentKind, number> = {
+  weapon: 25, armor: 75, gear: 10, magicitem: 150, spell: 25, power: 0,
+};
+
+/**
+ * Build a shop-stock item from a compendium entry. The item keeps a contentId
+ * so that buying it applies the entry's full logic (a weapon becomes the
+ * buyer's attack, a healing potion becomes a usable item) to the character.
+ */
+export function shopItemFromEntry(entry: ContentEntry): {
+  name: string; price: number; qty: number; notes: string; contentId: string;
+} {
+  return {
+    name: entry.name,
+    price: KIND_PRICE[entry.kind] ?? 10,
+    qty: -1,
+    notes: entry.subtitle,
+    contentId: entry.id,
+  };
+}
+
 /** Which sheet list a content entry appends to, and the row to add. */
 export interface ApplyResult {
   listId: string;

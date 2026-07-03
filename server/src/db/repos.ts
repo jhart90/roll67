@@ -263,6 +263,11 @@ function toShop(r: ShopRow): Shop {
     price: typeof it.price === 'number' ? it.price : 0,
     qty: typeof it.qty === 'number' ? it.qty : -1,
     notes: String(it.notes ?? ''),
+    // Carried "logic" for buy-transfer (optional).
+    ...(it.contentId ? { contentId: String(it.contentId) } : {}),
+    ...(it.effect === 'heal' || it.effect === 'damage' ? { effect: it.effect } : {}),
+    ...(it.amount ? { amount: String(it.amount) } : {}),
+    ...(typeof it.range === 'number' ? { range: it.range } : {}),
   }));
   return { id: r.id, name: r.name, description: r.description, currency: r.currency, playersCanBuy: !!r.players_can_buy, items };
 }

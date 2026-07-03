@@ -181,7 +181,10 @@ export interface UpdateShopPayload {
   description?: string;
   currency?: string;
   playersCanBuy?: boolean;
-  items?: Array<{ name: string; price?: number; qty?: number; notes?: string }>;
+  items?: Array<{
+    name: string; price?: number; qty?: number; notes?: string;
+    contentId?: string; effect?: 'heal' | 'damage'; amount?: string; range?: number;
+  }>;
 }
 export interface DeleteShopPayload { shopId: string }
 export interface BuyItemPayload { shopId: string; itemIndex: number; characterId: string }

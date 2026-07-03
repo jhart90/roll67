@@ -1,9 +1,9 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C,
+  C2S, S2C, applyEntry, contentById, normalizeCurrency,
   type BuyItemPayload, type CreateLocationPayload, type CreateShopPayload,
-  type DeleteLocationPayload, type DeleteShopPayload, type PresentShopPayload,
-  type Shop, type ShopItem, type UpdateLocationPayload, type UpdateShopPayload,
+  type DeleteLocationPayload, type DeleteShopPayload, type GameSystem, type PresentShopPayload,
+  type SheetData, type Shop, type ShopItem, type UpdateLocationPayload, type UpdateShopPayload,
 } from 'shared';
 import { campaigns, characters, chat, locations, shops } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
@@ -80,7 +80,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM creates shops.'); return; }
     const campaign = campaignSystem(d.campaignId);
-    shops.create(d.campaignId, name?.trim() || 'New shop', campaign === 'swn' ? 'cr' : 'gp');
+    shops.create(d.campaignId, name?.trim() || 'New shop', campaign === 'swn' ? 'credits' : 'gp');
     broadcastShops(io, d.campaignId);
   }));
 
@@ -94,6 +94,10 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
       price: Math.max(0, Math.floor(it.price ?? 0)),
       qty: it.qty === undefined ? -1 : Math.floor(it.qty),
       notes: String(it.notes ?? ''),
+      ...(it.contentId ? { contentId: String(it.contentId) } : {}),
+      ...(it.effect === 'heal' || it.effect === 'damage' ? { effect: it.effect } : {}),
+      ...(it.amount ? { amount: String(it.amount) } : {}),
+      ...(it.range !== undefined ? { range: Math.max(0, Math.floor(it.range)) } : {}),
     })).filter((it) => it.name);
     shops.update(shopId, { ...fields, items });
     broadcastShops(io, d.campaignId);
@@ -149,16 +153,28 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
     if (d.role !== 'dm' && character.ownerUserId !== d.userId) { emitError(socket, 'You can only buy for your own character.'); return; }
 
-    const currencyField = character.system === 'swn' ? 'credits' : 'gp';
+    const system = character.system as GameSystem;
+    const currencyField = normalizeCurrency(system, shop.currency);
     const purse = Number((character.sheet as Record<string, unknown>)[currencyField]) || 0;
     if (purse < item.price) { emitError(socket, `Not enough ${currencyField}: needs ${item.price}, has ${purse}.`); return; }
 
-    // Deduct currency + add to inventory.
-    const inv = Array.isArray(character.sheet.inventory) ? [...(character.sheet.inventory as Array<Record<string, unknown>>)] : [];
-    inv.push(character.system === 'swn'
-      ? { name: item.name, qty: 1, enc: 1, notes: 'purchased' }
-      : { name: item.name, qty: 1, weight: 0, notes: 'purchased' });
-    characters.update(characterId, undefined, { ...character.sheet, [currencyField]: purse - item.price, inventory: inv });
+    // Deduct currency + transfer the item's logic to the buyer's sheet. A
+    // compendium-backed item (contentId) applies its full entry — a weapon
+    // becomes the buyer's attack, a potion becomes a usable item — while a
+    // plain/custom item just lands in inventory (carrying any usable effect).
+    const sheet = character.sheet as SheetData;
+    const entry = item.contentId ? contentById(item.contentId) : undefined;
+    const applied = entry ? applyEntry(entry, sheet) : null;
+    const listId = applied?.listId ?? 'inventory';
+    const row = applied?.row ?? {
+      name: item.name,
+      ...(system === 'swn' ? { qty: 1, enc: 1 } : { qty: 1, weight: 0 }),
+      ...(item.effect ? { effect: item.effect, amount: item.amount ?? '', range: item.range ?? 5 } : {}),
+      notes: item.notes || 'purchased',
+    };
+    const list = Array.isArray(sheet[listId]) ? [...(sheet[listId] as SheetData[])] : [];
+    list.push(row as SheetData);
+    characters.update(characterId, undefined, { ...sheet, [currencyField]: purse - item.price, [listId]: list });
     const updated = characters.byId(characterId)!;
     io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
     if (updated.ownerUserId) io.to(userRoom(updated.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });

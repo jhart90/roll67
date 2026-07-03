@@ -5,7 +5,7 @@
 
 import type { SheetData } from '../types.js';
 import { num, str } from './types.js';
-import { getClass5e } from './classes5e.js';
+import { getClass5e, spellSlotsForClass } from './classes5e.js';
 
 export interface ClassResource {
   id: string;
@@ -96,6 +96,37 @@ export function remarkableAthleteBonus(sheet: SheetData): number {
   return 0;
 }
 
+// ---- third-caster subclasses (Eldritch Knight / Arcane Trickster) ----
+
+/** True for the INT-based third-caster fighter/rogue subclasses. */
+export function isThirdCaster(sheet: SheetData): boolean {
+  const cls = classId(sheet);
+  return (cls === 'fighter' && hasSubclass(sheet, /eldritch\s*knight/i))
+    || (cls === 'rogue' && hasSubclass(sheet, /arcane\s*trickster/i));
+}
+
+/** Third-caster spell slots [L1..L9] (null until level 3). */
+export function thirdCasterSlots(sheet: SheetData): number[] | null {
+  if (!isThirdCaster(sheet)) return null;
+  const lvl = num(sheet, 'level', 1);
+  if (lvl < 3) return null;
+  return spellSlotsForClass('full', Math.ceil(lvl / 3));
+}
+
+// ---- Paladin Divine Smite / Barbarian Zealot Divine Fury ----
+
+/** Paladin Divine Smite base damage (null if not a paladin ≥2). */
+export function divineSmite(sheet: SheetData): { base: string; improved: boolean } | null {
+  if (classId(sheet) !== 'paladin' || num(sheet, 'level', 1) < 2) return null;
+  return { base: '2d8', improved: num(sheet, 'level', 1) >= 11 };
+}
+
+/** Zealot Barbarian Divine Fury bonus damage (null unless Zealot ≥3). */
+export function divineFury(sheet: SheetData): string | null {
+  if (classId(sheet) !== 'barbarian' || !hasSubclass(sheet, /zealot/i) || num(sheet, 'level', 1) < 3) return null;
+  return `1d6+${Math.floor(num(sheet, 'level', 1) / 2)}`;
+}
+
 /** Rogue Sneak Attack dice count (0 if not a rogue). */
 export function sneakAttackDice(sheet: SheetData): number {
   const cls = getClass5e(str(sheet, 'class', ''));
@@ -156,6 +187,13 @@ export function classResources(sheet: SheetData): ClassResource[] {
       break;
     case 'wizard':
       defs.push({ id: 'arcaneRecovery', name: 'Arcane Recovery', max: 1, reset: 'long' });
+      break;
+    case 'warlock':
+      // Mystic Arcanum: one free casting each of 6th–9th at 11/13/15/17.
+      if (lvl >= 11) defs.push({ id: 'arcanum6', name: 'Mystic Arcanum (6th)', max: 1, reset: 'long' });
+      if (lvl >= 13) defs.push({ id: 'arcanum7', name: 'Mystic Arcanum (7th)', max: 1, reset: 'long' });
+      if (lvl >= 15) defs.push({ id: 'arcanum8', name: 'Mystic Arcanum (8th)', max: 1, reset: 'long' });
+      if (lvl >= 17) defs.push({ id: 'arcanum9', name: 'Mystic Arcanum (9th)', max: 1, reset: 'long' });
       break;
     default:
       break;

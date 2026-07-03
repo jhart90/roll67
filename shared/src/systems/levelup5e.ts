@@ -4,6 +4,7 @@ import {
   getClass5e, profBonusForLevel, spellSlotsForClass, type ClassFeature,
 } from './classes5e.js';
 import { featEffects, takenFeatIds } from './feats5e.js';
+import { subclassFeatureAt } from './subclassFeatures5e.js';
 
 export interface LevelUpPlan {
   classId: string;
@@ -121,6 +122,16 @@ export function applyLevelUp(sheet: SheetData, classId: string, toLevel: number,
   if (cls.caster !== 'none') {
     const slots = spellSlotsForClass(cls.caster, toLevel, cls.id === 'artificer');
     for (let i = 0; i < 9; i++) patch[`slots${i + 1}`] = slots[i];
+  } else {
+    // Eldritch Knight / Arcane Trickster: INT-based third-caster from level 3.
+    const subclass = String(choices.subclass ?? str(sheet, 'subclass', ''));
+    const isThird = /eldritch\s*knight|arcane\s*trickster/i.test(subclass);
+    if (isThird && toLevel >= 3) {
+      const slots = spellSlotsForClass('full', Math.ceil(toLevel / 3));
+      for (let i = 0; i < 9; i++) patch[`slots${i + 1}`] = slots[i];
+      patch.spellAbility = 'int'; // EK/AT always cast with Intelligence
+      patch.spellClass = cls.name;
+    }
   }
 
   // Record features (class chassis, a subclass-feature marker, and any feat).
@@ -129,8 +140,14 @@ export function applyLevelUp(sheet: SheetData, classId: string, toLevel: number,
     featureRows.push({ name: feat.name, source: `${cls.name} ${toLevel}`, description: feat.desc });
   }
   if (cls.subclassFeatureLevels.includes(toLevel)) {
-    const sc = choices.subclass || str({ ...sheet, ...patch }, 'subclass', cls.subclassLabel);
-    featureRows.push({ name: `${sc} feature`, source: `${sc} ${toLevel}`, description: 'See your subclass for this level’s feature.' });
+    const sc = choices.subclass || str({ ...sheet, ...patch }, 'subclass', '');
+    const real = sc ? subclassFeatureAt(sc, toLevel) : undefined;
+    if (real) {
+      featureRows.push({ name: real.name, source: `${sc} ${toLevel}`, description: real.desc });
+    } else {
+      const label = sc || cls.subclassLabel;
+      featureRows.push({ name: `${label} feature`, source: `${label} ${toLevel}`, description: 'See your subclass for this level’s feature.' });
+    }
   }
   if (choices.asi?.mode === 'feat' && choices.asi.featId) {
     // Apply the feat's stat effects against the already-patched sheet (so Tough

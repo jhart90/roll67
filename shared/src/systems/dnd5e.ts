@@ -4,7 +4,7 @@ import {
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
 import {
-  classId, fightingStyleBonus, isRaging, martialArtsDie, rageDamage,
+  classId, divineFury, divineSmite, fightingStyleBonus, isRaging, martialArtsDie, rageDamage,
   remarkableAthleteBonus, sneakAttackDice, superiorityDice,
 } from './features5e.js';
 import { featBonuses } from './feats5e.js';
@@ -403,6 +403,11 @@ export const dnd5e: SystemSchema = {
     // Battle Master: roll a superiority die (for maneuvers).
     const sup = superiorityDice(sheet);
     if (sup) out.push({ id: 'superiority', label: `Superiority Die (${sup.die})`, expr: `1${sup.die}`, group: 'Attacks', d20: false });
+    // Paladin Divine Smite (spend a slot); Zealot Barbarian Divine Fury.
+    const smite = divineSmite(sheet);
+    if (smite) out.push({ id: 'divineSmite', label: 'Divine Smite (2d8)', expr: smite.base, group: 'Attacks', d20: false });
+    const fury = divineFury(sheet);
+    if (fury) out.push({ id: 'divineFury', label: `Divine Fury (${fury})`, expr: fury, group: 'Attacks', d20: false });
     const spellAbility = str(sheet, 'spellAbility', 'int');
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.push({ id: 'spellAttack', label: 'Spell attack', expr: `1d20${fmtMod(pb + spellMod)}`, group: 'Combat', d20: true });

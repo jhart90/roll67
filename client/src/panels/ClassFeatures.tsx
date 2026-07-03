@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { Character, SheetData } from 'shared';
 import {
-  attacksPerAction, classId, classResources, critRange, isRaging, martialArtsDie,
-  rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice, takenFeats,
+  attacksPerAction, classId, classResources, critRange, divineSmite, isRaging, isThirdCaster,
+  martialArtsDie, rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice, takenFeats,
 } from 'shared';
 import { intents } from '../store/game';
 import { FeatPicker } from './FeatPicker';
@@ -27,7 +27,9 @@ export function ClassFeatures({ character, editable }: { character: Character; e
   const crit = critRange(sheet);
   const remarkable = remarkableAthleteBonus(sheet) > 0;
   const battleMaster = !!superiorityDice(sheet);
-  const hasSub = crit < 20 || remarkable || battleMaster;
+  const thirdCaster = isThirdCaster(sheet) && (Number(sheet.level) || 1) >= 3;
+  const smite = divineSmite(sheet);
+  const hasSub = crit < 20 || remarkable || battleMaster || thirdCaster || !!smite;
   const hasContent = resources.length > 0 || attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle || hasSub || feats.length > 0;
 
   // Editable 5e sheets always show the panel so "+ Feat" is available.
@@ -82,6 +84,8 @@ export function ClassFeatures({ character, editable }: { character: Character; e
           {crit < 20 && <span className="cf-chip">Improved Critical {crit}–20</span>}
           {remarkable && <span className="cf-chip">Remarkable Athlete</span>}
           {battleMaster && <span className="cf-chip">Battle Master maneuvers</span>}
+          {thirdCaster && <span className="cf-chip">{String(sheet.subclass)} casting (INT)</span>}
+          {smite?.improved && <span className="cf-chip">Improved Divine Smite +1d8 melee</span>}
           {isBarbarian && (raging ? (
             <button className="cf-rage on" disabled={!editable} onClick={toggleRage}>
               ● RAGING +{rageDamage(level)} · end rage

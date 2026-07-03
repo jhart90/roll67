@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { dnd5e } from '../src/systems/dnd5e.js';
+import { applyLevelUp } from '../src/systems/levelup5e.js';
+import { subclassFeatureAt } from '../src/systems/subclassFeatures5e.js';
 import {
-  attacksPerAction, classResources, critRange, fightingStyleBonus, martialArtsDie,
-  rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice,
+  attacksPerAction, classResources, critRange, divineFury, divineSmite, fightingStyleBonus,
+  martialArtsDie, rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice,
+  thirdCasterSlots,
 } from '../src/systems/features5e.js';
 
 describe('martial feature math', () => {
@@ -142,5 +145,55 @@ describe('subclass mechanics', () => {
     const rolls = dnd5e.rollables({ ...dnd5e.defaultSheet(), class: 'Fighter', subclass: 'Champion', level: 7, str: 14 });
     expect(rolls.find((r) => r.id === 'check_str')?.expr).toBe('1d20+4'); // +2 STR +2 remarkable
     expect(rolls.find((r) => r.id === 'check_int')?.expr).toBe('1d20+0'); // INT not boosted
+  });
+
+  it('Eldritch Knight / Arcane Trickster get third-caster slots from level 3', () => {
+    expect(thirdCasterSlots({ class: 'Fighter', subclass: 'Eldritch Knight', level: 2 })).toBeNull();
+    expect(thirdCasterSlots({ class: 'Fighter', subclass: 'Eldritch Knight', level: 3 })).toEqual([2, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(thirdCasterSlots({ class: 'Rogue', subclass: 'Arcane Trickster', level: 7 })).toEqual([4, 2, 0, 0, 0, 0, 0, 0, 0]);
+    expect(thirdCasterSlots({ class: 'Fighter', subclass: 'Champion', level: 10 })).toBeNull();
+  });
+
+  it('levelling an Eldritch Knight to 3 sets third-caster slots + INT casting', () => {
+    const sheet = { ...dnd5e.defaultSheet(), class: 'Fighter', level: 2, maxHp: 20, hp: 20 };
+    const patch = applyLevelUp(sheet, 'fighter', 3, { hpGained: 6, subclass: 'Eldritch Knight' });
+    expect(patch.slots1).toBe(2);
+    expect(patch.spellAbility).toBe('int');
+  });
+
+  it('Paladin Divine Smite + Barbarian Zealot Divine Fury become rollables', () => {
+    expect(divineSmite({ class: 'Paladin', level: 5 })).toEqual({ base: '2d8', improved: false });
+    expect(divineSmite({ class: 'Paladin', level: 11 })?.improved).toBe(true);
+    expect(divineSmite({ class: 'Wizard', level: 11 })).toBeNull();
+    expect(divineFury({ class: 'Barbarian', subclass: 'Path of the Zealot', level: 6 })).toBe('1d6+3');
+
+    const pal = dnd5e.rollables({ ...dnd5e.defaultSheet(), class: 'Paladin', level: 5 });
+    expect(pal.find((r) => r.id === 'divineSmite')?.expr).toBe('2d8');
+    const zealot = dnd5e.rollables({ ...dnd5e.defaultSheet(), class: 'Barbarian', subclass: 'Path of the Zealot', level: 3 });
+    expect(zealot.find((r) => r.id === 'divineFury')?.expr).toBe('1d6+1');
+  });
+
+  it('Warlock Mystic Arcanum resources unlock at 11/13/15/17', () => {
+    const ids = (lvl: number) => classResources({ class: 'Warlock', level: lvl }).map((r) => r.id);
+    expect(ids(10)).not.toContain('arcanum6');
+    expect(ids(11)).toContain('arcanum6');
+    expect(ids(17)).toEqual(expect.arrayContaining(['arcanum6', 'arcanum7', 'arcanum8', 'arcanum9']));
+  });
+});
+
+describe('subclass feature descriptions', () => {
+  it('covers many popular subclasses with per-level features', () => {
+    expect(subclassFeatureAt('Champion', 3)?.name).toBe('Improved Critical');
+    expect(subclassFeatureAt('Battle Master', 3)?.name).toBe('Combat Superiority');
+    expect(subclassFeatureAt('Life Domain', 2)?.name).toContain('Preserve Life');
+    expect(subclassFeatureAt('Assassin', 3)?.name).toBe('Assassinate');
+    expect(subclassFeatureAt('Unknown Subclass', 3)).toBeUndefined();
+  });
+
+  it('level-up records the real subclass feature (not a placeholder)', () => {
+    const sheet = { ...dnd5e.defaultSheet(), class: 'Fighter', level: 2, maxHp: 20, hp: 20 };
+    const patch = applyLevelUp(sheet, 'fighter', 3, { hpGained: 6, subclass: 'Champion' });
+    const feats = patch.features as Array<{ name: string; description: string }>;
+    expect(feats.some((f) => f.name === 'Improved Critical')).toBe(true);
   });
 });

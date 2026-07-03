@@ -7,6 +7,7 @@ import {
   classId, fightingStyleBonus, isRaging, martialArtsDie, rageDamage,
   remarkableAthleteBonus, sneakAttackDice, superiorityDice,
 } from './features5e.js';
+import { featBonuses } from './feats5e.js';
 
 const ABILITIES = [
   { id: 'str', label: 'STR' },
@@ -346,8 +347,9 @@ export const dnd5e: SystemSchema = {
     }
     const dexMod = abilityMod(num(sheet, 'dex', 10));
     const wisMod = abilityMod(num(sheet, 'wis', 10));
-    out.initiative = fmtMod(dexMod);
-    out.passivePerception = 10 + wisMod + (bool(sheet, 'skill_perception') ? pb : 0);
+    const fb = featBonuses(sheet);
+    out.initiative = fmtMod(dexMod + fb.initiative);
+    out.passivePerception = 10 + wisMod + (bool(sheet, 'skill_perception') ? pb : 0) + fb.passivePerception;
     const spellAbility = str(sheet, 'spellAbility', 'int');
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.spellDc = 8 + pb + spellMod;
@@ -372,7 +374,7 @@ export const dnd5e: SystemSchema = {
       const mod = abilityMod(num(sheet, s.ability, 10)) + (bool(sheet, `skill_${s.id}`) ? pb : 0);
       out.push({ id: `skill_${s.id}`, label: s.label, expr: `1d20${fmtMod(mod)}`, group: 'Skills', d20: true });
     }
-    out.push({ id: 'initiative', label: 'Initiative', expr: `1d20${fmtMod(abilityMod(num(sheet, 'dex', 10)) + ra)}`, group: 'Combat', d20: true });
+    out.push({ id: 'initiative', label: 'Initiative', expr: `1d20${fmtMod(abilityMod(num(sheet, 'dex', 10)) + ra + featBonuses(sheet).initiative)}`, group: 'Combat', d20: true });
     const rageBonus = isRaging(sheet) ? rageDamage(level) : 0;
     const style = str(sheet, 'fightingStyle', '');
     rows(sheet, 'attacks').forEach((atk, i) => {

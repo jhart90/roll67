@@ -3,6 +3,7 @@ import { num, rows, str } from './types.js';
 import {
   getClass5e, profBonusForLevel, spellSlotsForClass, type ClassFeature,
 } from './classes5e.js';
+import { featEffects, takenFeatIds } from './feats5e.js';
 
 export interface LevelUpPlan {
   classId: string;
@@ -69,8 +70,9 @@ export interface LevelUpChoices {
   /** HP gained this level (rolled or average). */
   hpGained: number;
   subclass?: string;
-  /** ASI: +1 to a and b (same ability twice = +2), or a named feat. */
-  asi?: { mode: 'asi' | 'feat'; a?: string; b?: string; featName?: string; featText?: string };
+  /** ASI: +1 to a and b (same ability twice = +2), or a feat by id (with an
+   *  ability choice for half-feats). */
+  asi?: { mode: 'asi' | 'feat'; a?: string; b?: string; featId?: string; featAbility?: string };
   /** First-level skill proficiency ids. */
   skills?: string[];
 }
@@ -130,8 +132,15 @@ export function applyLevelUp(sheet: SheetData, classId: string, toLevel: number,
     const sc = choices.subclass || str({ ...sheet, ...patch }, 'subclass', cls.subclassLabel);
     featureRows.push({ name: `${sc} feature`, source: `${sc} ${toLevel}`, description: 'See your subclass for this level’s feature.' });
   }
-  if (choices.asi?.mode === 'feat' && choices.asi.featName?.trim()) {
-    featureRows.push({ name: choices.asi.featName.trim(), source: `Feat ${toLevel}`, description: choices.asi.featText ?? '' });
+  if (choices.asi?.mode === 'feat' && choices.asi.featId) {
+    // Apply the feat's stat effects against the already-patched sheet (so Tough
+    // uses the new level's HP) and record it, appending to the feats list.
+    const eff = featEffects({ ...sheet, ...patch }, choices.asi.featId, choices.asi.featAbility);
+    if (eff) {
+      Object.assign(patch, eff.stats);
+      featureRows.push(eff.feature);
+      patch.feats = [...takenFeatIds(sheet), choices.asi.featId];
+    }
   }
   patch.features = featureRows;
 

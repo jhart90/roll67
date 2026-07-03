@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import type { Character, SheetData } from 'shared';
 import {
   attacksPerAction, classId, classResources, critRange, isRaging, martialArtsDie,
-  rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice,
+  rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice, takenFeats,
 } from 'shared';
 import { intents } from '../store/game';
+import { FeatPicker } from './FeatPicker';
 
 /** Class resource trackers (rage/ki/…), Extra Attack / Sneak Attack notes, and
  *  the Rage toggle. Rendered on the Core tab for 5e characters. */
 export function ClassFeatures({ character, editable }: { character: Character; editable: boolean }) {
+  const [showFeats, setShowFeats] = useState(false);
   const sheet = character.sheet;
+  const feats = takenFeats(sheet);
   const resources = classResources(sheet);
   const attacks = attacksPerAction(sheet);
   const sneak = sneakAttackDice(sheet);
@@ -24,8 +28,10 @@ export function ClassFeatures({ character, editable }: { character: Character; e
   const remarkable = remarkableAthleteBonus(sheet) > 0;
   const battleMaster = !!superiorityDice(sheet);
   const hasSub = crit < 20 || remarkable || battleMaster;
+  const hasContent = resources.length > 0 || attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle || hasSub || feats.length > 0;
 
-  if (resources.length === 0 && attacks <= 1 && sneak === 0 && !isBarbarian && !isMonk && !hasStyle && !hasSub) return null;
+  // Editable 5e sheets always show the panel so "+ Feat" is available.
+  if (!hasContent && !editable) return null;
 
   function setUsed(id: string, used: number) {
     intents.updateCharacter(character.id, { [`res_${id}`]: Math.max(0, used) });
@@ -138,6 +144,15 @@ export function ClassFeatures({ character, editable }: { character: Character; e
           })}
         </div>
       )}
+
+      <div className="cf-feats">
+        <span className="cf-feats-label">Feats</span>
+        {feats.map((ft) => <span key={ft.id} className="cf-chip" title={ft.desc}>{ft.name}</span>)}
+        {feats.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
+        {editable && <button className="link cf-add-feat" onClick={() => setShowFeats(true)}>+ Feat</button>}
+      </div>
+
+      {showFeats && <FeatPicker character={character} onClose={() => setShowFeats(false)} />}
     </section>
   );
 }

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { Character } from 'shared';
-import { applyLevelUp, CLASS_LIST_5E, getClass5e, planLevelUp, SKILLS_5E } from 'shared';
+import { applyLevelUp, CLASS_LIST_5E, FEATS_5E, getClass5e, getFeat, planLevelUp, SKILLS_5E } from 'shared';
 import { intents } from '../store/game';
+
+const FEATS_SORTED = [...FEATS_5E].sort((a, b) => a.name.localeCompare(b.name));
 
 const ABILITIES = [
   { id: 'str', label: 'STR' }, { id: 'dex', label: 'DEX' }, { id: 'con', label: 'CON' },
@@ -23,8 +25,11 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
   const [asiMode, setAsiMode] = useState<'asi' | 'feat'>('asi');
   const [asiA, setAsiA] = useState('str');
   const [asiB, setAsiB] = useState('con');
-  const [featName, setFeatName] = useState('');
+  const [featId, setFeatId] = useState('');
+  const [featAbility, setFeatAbility] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
+
+  const featChoice = featId ? getFeat(featId)?.abilityChoice : undefined;
 
   const plan = useMemo(
     () => (classId ? planLevelUp(character.sheet, classId, toLevel) : null),
@@ -50,7 +55,7 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
   const valid = !!plan
     && (hpMode === 'avg' || rolled !== null)
     && (!plan.needsSubclass || !!subclass)
-    && (!plan.asi || (asiMode === 'asi' ? !!asiA && !!asiB : featName.trim().length > 0))
+    && (!plan.asi || (asiMode === 'asi' ? !!asiA && !!asiB : !!featId && (!featChoice || !!featAbility)))
     && (plan.needsSkills === 0 || skills.length === plan.needsSkills);
 
   function apply() {
@@ -58,7 +63,7 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
     const patch = applyLevelUp(character.sheet, plan.classId, toLevel, {
       hpGained,
       subclass: plan.needsSubclass ? subclass : undefined,
-      asi: plan.asi ? { mode: asiMode, a: asiA, b: asiB, featName } : undefined,
+      asi: plan.asi ? { mode: asiMode, a: asiA, b: asiB, featId, featAbility } : undefined,
       skills: plan.needsSkills > 0 ? skills : undefined,
     });
     intents.updateCharacter(character.id, patch);
@@ -141,7 +146,21 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
                         <input type="radio" checked={asiMode === 'feat'} onChange={() => setAsiMode('feat')} /> Take a feat
                       </label>
                       {asiMode === 'feat' && (
-                        <input placeholder="Feat name (e.g. Great Weapon Master)" value={featName} onChange={(e) => setFeatName(e.target.value)} />
+                        <div className="row" style={{ flexWrap: 'wrap' }}>
+                          <select value={featId} onChange={(e) => { setFeatId(e.target.value); setFeatAbility(''); }}>
+                            <option value="">Choose a feat…</option>
+                            {FEATS_SORTED.map((ft) => (
+                              <option key={ft.id} value={ft.id}>{ft.name}{ft.prereq ? ` (${ft.prereq})` : ''}</option>
+                            ))}
+                          </select>
+                          {featChoice && (
+                            <select value={featAbility} onChange={(e) => setFeatAbility(e.target.value)}>
+                              <option value="">+1 to…</option>
+                              {featChoice.map((ab) => <option key={ab} value={ab}>+1 {ab.toUpperCase()}</option>)}
+                            </select>
+                          )}
+                          {featId && <span className="dim" style={{ fontSize: 11, flexBasis: '100%' }}>{getFeat(featId)?.desc}</span>}
+                        </div>
                       )}
                     </div>
                   </div>

@@ -1,10 +1,11 @@
-// Randomized NPC generator: assembles a name, occupation, personality tags,
-// and variable stats from predefined pools. Pure (injectable RNG).
+// Randomized NPC generator: assembles a complete character — name, look,
+// personality, background, stats, skills, and starting gear — from
+// predefined pools. Pure (injectable RNG) so it stays deterministic in tests.
 
 import type { GameSystem, SheetData } from '../types.js';
 import { systemFor } from '../systems/index.js';
-import { RACES_5E } from '../systems/dnd5e.js';
-import { BACKGROUNDS_SWN, SPECIES_SWN } from '../systems/swn.js';
+import { ALIGNMENTS, BACKGROUNDS_5E, RACES_5E, SKILLS_5E } from '../systems/dnd5e.js';
+import { BACKGROUNDS_SWN, SKILLS_SWN, SPECIES_SWN } from '../systems/swn.js';
 import type { RNG } from '../dice/roller.js';
 
 const FIRST_NAMES = [
@@ -45,27 +46,70 @@ const QUIRKS = [
   'always haggling', 'terrified of the dark', 'owes money to dangerous people', 'secretly literate',
   'talks to their pet', 'writes everything down', 'fidgets constantly', 'name-drops constantly',
 ];
-const SECRETS = [
-  'is an informant', 'hides a magical heirloom', 'is not who they claim', 'knows a hidden passage',
-  'is deep in debt', 'witnessed a crime', 'is searching for a lost sibling', 'fled a former life',
+const EYES = ['brown', 'blue', 'green', 'hazel', 'grey', 'amber', 'dark', 'pale blue', 'one milky white'];
+const HAIR = ['short black', 'long auburn', 'greying brown', 'curly red', 'straight blond', 'bald', 'silver braided', 'wild grey', 'close-cropped', 'raven-dark'];
+const SKIN = ['fair', 'olive', 'tan', 'dark', 'ruddy', 'pale', 'weathered', 'freckled', 'bronzed'];
+const IDEALS = [
+  'Freedom. Everyone should be able to chart their own course.',
+  'Community. We must look out for one another.',
+  'Greed. There is nothing money cannot buy.',
+  'Faith. My god guides my every step.',
+  'Honor. My word is my bond.',
+  'Knowledge. Understanding is the truest power.',
+  'Redemption. There is good in everyone, even me.',
+  'Power. I will rise no matter the cost.',
+];
+const BONDS = [
+  'I would die to protect my family.',
+  'I owe everything to the person who took me in.',
+  'A sacred relic was stolen and I mean to reclaim it.',
+  'My hometown is all that matters to me.',
+  'I seek the one who ruined my life.',
+  'An old debt still hangs over my head.',
+  'I am sworn to a mentor I have never met in person.',
+  'My work is the only thing that gives me meaning.',
+];
+const FLAWS = [
+  'I cannot resist a pretty face or a full purse.',
+  'I speak before I think, always.',
+  'I trust too easily and pay for it.',
+  'I will do anything to avoid a fight.',
+  'Secretly, I believe I deserve better than everyone around me.',
+  'I drink to forget things I would rather not remember.',
+  'I hold grudges longer than I should.',
+  'I am hopeless with money.',
+];
+const LANGUAGES = ['Dwarvish', 'Elvish', 'Halfling', 'Orc', 'Draconic', 'Gnomish', 'Goblin', 'Celestial', 'Infernal', 'Sylvan'];
+const FEATURES_5E: Array<[string, string, string]> = [
+  ['Local Knowledge', 'Background', 'Knows the streets, rumours, and safe houses of their home.'],
+  ['Trade Skill', 'Occupation', 'Expert at their craft; can appraise related goods.'],
+  ['Contacts', 'Background', 'Knows someone useful in most settlements.'],
+  ['Hard to Rattle', 'Trait', 'Advantage on saves against fear.'],
+  ['Quick Fingers', 'Trait', 'Deft with tools and locks.'],
+  ['Silver Tongue', 'Trait', 'Persuasive in a pinch.'],
+];
+const GEAR_5E = ['a worn dagger', 'a set of common clothes', 'a belt pouch', 'a tinderbox', 'a length of rope', 'a lucky charm', 'a half-eaten meal', 'a folded letter'];
+const GEAR_SWN = ['a compad', 'a multitool', 'a ration pack', 'a data cube', 'a stim injector', 'a worn jacket', 'an ID chit', 'a keepsake photo'];
+const HOOKS = [
+  'is looking for honest work', 'has a secret to keep', 'knows something they should not',
+  'is in over their head', 'wants revenge on a rival', 'is fleeing an old life',
+  'guards a hidden treasure', 'is not what they seem',
 ];
 
 function pick<T>(arr: readonly T[], rng: RNG): T {
   return arr[Math.floor(rng() * arr.length)];
 }
-
 function pickSome<T>(arr: readonly T[], n: number, rng: RNG): T[] {
   const pool = [...arr];
   const out: T[] = [];
-  for (let i = 0; i < n && pool.length; i++) {
-    out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
-  }
+  for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
   return out;
 }
-
-/** 3d6-style score for variety (SWN attributes / 5e abilities). */
+function between(lo: number, hi: number, rng: RNG): number {
+  return lo + Math.floor(rng() * (hi - lo + 1));
+}
 function roll3d6(rng: RNG): number {
-  return 1 + Math.floor(rng() * 6) + 1 + Math.floor(rng() * 6) + 1 + Math.floor(rng() * 6);
+  return 3 + Math.floor(rng() * 6) + Math.floor(rng() * 6) + Math.floor(rng() * 6);
 }
 
 export interface GeneratedNpc {
@@ -75,42 +119,78 @@ export interface GeneratedNpc {
   sheet: SheetData;
 }
 
-/** Build a fully-random NPC for the given system. */
+/** Build a fully-populated random NPC for the given system. */
 export function generateNpc(system: GameSystem, rng: RNG = Math.random): GeneratedNpc {
   const name = `${pick(FIRST_NAMES, rng)} ${pick(SURNAMES, rng)}`;
   const personality = pickSome(PERSONALITY, 2, rng);
   const appearance = pick(APPEARANCE, rng);
   const quirk = pick(QUIRKS, rng);
-  const secret = pick(SECRETS, rng);
+  const hook = pick(HOOKS, rng);
+  const age = between(17, 68, rng);
+  const heightFt = between(4, 6, rng);
+  const heightIn = between(0, 11, rng);
+  const height = `${heightFt}'${heightIn}"`;
+  const weight = `${between(110, 250, rng)} lb`;
+  const eyes = pick(EYES, rng);
+  const hair = pick(HAIR, rng);
+  const skin = pick(SKIN, rng);
   const sheet = systemFor(system).defaultSheet();
+  const tags = [...personality, appearance, quirk];
 
   if (system === 'dnd5e') {
     const occupation = pick(OCCUPATIONS_5E, rng);
     const scores = Array.from({ length: 6 }, () => 8 + Math.floor(rng() * 7)); // 8..14
+    const conMod = Math.floor((scores[2] - 10) / 2);
+    const hp = Math.max(3, 6 + conMod + between(0, 4, rng));
+    // A couple of skill + save proficiencies, thematically flavored.
+    for (const s of pickSome(SKILLS_5E, 3, rng)) sheet[`skill_${s.id}`] = true;
+    for (const ab of pickSome(['str', 'dex', 'con', 'int', 'wis', 'cha'] as const, 1, rng)) sheet[`save_${ab}`] = true;
+    const [feat1, feat2] = pickSome(FEATURES_5E, 2, rng);
+
     Object.assign(sheet, {
-      class: occupation, race: pick(RACES_5E, rng), level: 1,
+      class: occupation, subclass: '', race: pick(RACES_5E, rng),
+      background: pick(BACKGROUNDS_5E, rng), alignment: pick(ALIGNMENTS, rng),
+      level: 1, xp: 0,
       str: scores[0], dex: scores[1], con: scores[2], int: scores[3], wis: scores[4], cha: scores[5],
-      hp: 4 + Math.floor((scores[2] - 10) / 2), maxHp: 4 + Math.floor((scores[2] - 10) / 2),
-      ac: 10, speed: 30,
-      personalityTraits: `${personality.join(', ')}; has ${appearance}`,
-      flaws: `Quirk: ${quirk}`,
-      backstory: `Occupation: ${occupation}. Secret: ${secret}.`,
-      notes: `Random NPC. Tags: ${personality.join(', ')}, ${quirk}.`,
+      ac: 10 + Math.floor((scores[1] - 10) / 2), speed: 30, hp, maxHp: hp, hitDice: '1d8',
+      age, height, weight, eyes, skin, hair,
+      personalityTraits: `${personality[0]} and ${personality[1]}; has ${appearance}.`,
+      ideals: pick(IDEALS, rng),
+      bonds: pick(BONDS, rng),
+      flaws: pick(FLAWS, rng),
+      proficienciesLanguages: `Common, ${pickSome(LANGUAGES, 1, rng)[0]}`,
+      backstory: `A ${occupation.toLowerCase()} who ${quirk} and ${hook}.`,
+      features: [
+        { name: feat1[0], source: feat1[1], description: feat1[2] },
+        { name: feat2[0], source: feat2[1], description: feat2[2] },
+      ],
+      cp: between(0, 60, rng), sp: between(0, 20, rng), gp: between(0, 15, rng),
+      inventory: pickSome(GEAR_5E, 2, rng).map((g) => ({ name: g, qty: 1, weight: 0, notes: '' })),
+      attacks: [{ name: 'Dagger', bonus: 2 + Math.floor((scores[1] - 10) / 2), damage: `1d4+${Math.floor((scores[1] - 10) / 2)}`, notes: 'piercing; finesse' }],
+      notes: `Random NPC — occupation: ${occupation}. Hook: ${hook}. Tags: ${tags.join(', ')}.`,
     });
-    const tags = [...personality, appearance, quirk];
     return { name, occupation, tags, sheet };
   }
 
   // SWN
   const occupation = pick(OCCUPATIONS_SWN, rng);
+  const attrs = { str: roll3d6(rng), dex: roll3d6(rng), con: roll3d6(rng), int: roll3d6(rng), wis: roll3d6(rng), cha: roll3d6(rng) };
+  const hp = between(4, 10, rng);
+  const skillPool = pickSome(SKILLS_SWN, 3, rng);
   Object.assign(sheet, {
-    class: 'Expert', background: pick(BACKGROUNDS_SWN, rng), homeworld: 'Local',
-    str: roll3d6(rng), dex: roll3d6(rng), con: roll3d6(rng), int: roll3d6(rng), wis: roll3d6(rng), cha: roll3d6(rng),
-    level: 1, hp: 4, maxHp: 4, ac: 10, attackBonus: 0,
+    class: pick(['Warrior', 'Expert', 'Adventurer'] as const, rng),
+    background: pick(BACKGROUNDS_SWN, rng), homeworld: pick(['Kua', 'Halcyon', 'Redmark', 'Ixion Deep', 'Farhaven', 'The Drift'], rng),
+    level: 1, xp: 0,
+    ...attrs,
+    hp, maxHp: hp, ac: 12, attackBonus: 0, speed: 10, systemStrain: 0,
+    age, height, weight, eyes, skin, hair,
     species: pick(SPECIES_SWN, rng),
-    goal: secret,
-    notes: `Occupation: ${occupation}. ${personality.join(', ')}; has ${appearance}; ${quirk}.`,
+    goal: `${hook[0].toUpperCase()}${hook.slice(1)}.`,
+    credits: between(0, 200, rng),
+    skills: skillPool.map((s) => ({ name: s, level: between(0, 1, rng), attr: pick(['str', 'dex', 'int', 'wis', 'cha'], rng), notes: '' })),
+    attacks: [{ name: 'Knife', bonus: 0, damage: '1d4', notes: 'kinetic' }],
+    inventory: pickSome(GEAR_SWN, 2, rng).map((g) => ({ name: g, qty: 1, enc: 1, notes: '' })),
+    notes: `Occupation: ${occupation}. ${personality[0]}, ${personality[1]}; has ${appearance}; ${quirk}.`,
   });
-  const tags = [...personality, appearance, quirk];
   return { name, occupation, tags, sheet };
 }

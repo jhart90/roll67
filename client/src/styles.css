@@ -142,6 +142,28 @@ button.link:hover { text-decoration: underline; }
   background: var(--panel-2); color: var(--accent); text-decoration: none;
 }
 
+/* Character-sheet / modal links read as buttons too (+Compendium, close,
+   + add attacks/equipment/features/cantrips/spells, row delete, etc.) */
+.sheet-window button.link, .sheet-backdrop .panel button.link {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 4px 11px;
+  border-radius: 6px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.sheet-window button.link:hover, .sheet-backdrop .panel button.link:hover {
+  background: var(--accent); border-color: var(--accent); color: #10131a; text-decoration: none;
+}
+.sheet-window button.link:disabled { background: var(--panel-2); border-color: var(--border); color: var(--text-dim); }
+.sheet-window button.link.danger, .sheet-backdrop .panel button.link.danger { color: var(--danger); }
+.sheet-window button.link.danger:hover, .sheet-backdrop .panel button.link.danger:hover {
+  background: var(--danger); border-color: var(--danger); color: #fff;
+}
+/* Keep the per-row delete "×" compact so list tables stay tidy. */
+.sheet-list button.link.danger { padding: 2px 8px; }
+
 .row { display: flex; gap: 8px; align-items: center; }
 .row button { width: auto; }
 .stack { display: flex; flex-direction: column; }

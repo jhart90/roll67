@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { intents, useGameStore } from '../store/game';
+import { SavePrompt } from './SavePrompt';
 
 export function InitiativePanel() {
   const you = useGameStore((s) => s.you);
@@ -6,6 +8,7 @@ export function InitiativePanel() {
   const selectedTokenId = useGameStore((s) => s.selectedTokenId);
   const tokens = useGameStore((s) => s.tokens);
   const map = useGameStore((s) => s.map);
+  const [saving, setSaving] = useState(false);
 
   if (!you) return null;
   const isDm = you.role === 'dm';
@@ -45,8 +48,10 @@ export function InitiativePanel() {
         <div className="row" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
           <button onClick={() => intents.initRollMap(map.id, false)}>Roll all tokens</button>
           <button onClick={() => intents.initRollMap(map.id, true)}>+ hidden NPCs</button>
+          <button onClick={() => setSaving(true)}>⚑ Call for save</button>
         </div>
       )}
+      {saving && <SavePrompt onClose={() => setSaving(false)} />}
 
       {isDm && state.entries.length > 0 && (
         <div className="row init-controls">

@@ -18,6 +18,11 @@ const ABILITIES = [
   { id: 'cha', label: 'CHA' },
 ] as const;
 
+const DAMAGE_TYPES_5E = [
+  'acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic',
+  'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder',
+];
+
 export const SKILLS_5E = [
   { id: 'acrobatics', label: 'Acrobatics', ability: 'dex' },
   { id: 'animalHandling', label: 'Animal Handling', ability: 'wis' },
@@ -148,6 +153,9 @@ const combatFields: FieldDef[] = [
     id: 'fightingStyle', label: 'Fighting Style', type: 'select', width: 'third', default: '—',
     options: ['—', 'Archery', 'Defense', 'Dueling', 'Great Weapon Fighting', 'Protection', 'Two-Weapon Fighting'],
   },
+  { id: 'resist', label: 'Resistances', type: 'text', width: 'third', default: '' },
+  { id: 'vulnerable', label: 'Vulnerabilities', type: 'text', width: 'third', default: '' },
+  { id: 'immune', label: 'Immunities', type: 'text', width: 'third', default: '' },
 ];
 
 const saveFields: FieldDef[] = ABILITIES.map((a) => ({
@@ -191,8 +199,9 @@ const coreTab: SheetTab = {
         { id: 'name', label: 'Name', type: 'text', width: 'third' },
         { id: 'bonus', label: 'Atk bonus', type: 'number', width: 'sixth', default: 0 },
         { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6' },
+        { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES_5E] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
-        { id: 'notes', label: 'Type / notes', type: 'text', width: 'sixth' },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
     { kind: 'fields', id: 'currency', title: 'Currency', fields: currencyFields },
@@ -443,5 +452,16 @@ export const dnd5e: SystemSchema = {
 
   hp(sheet: SheetData): { hp: number; maxHp: number } {
     return { hp: num(sheet, 'hp', 0), maxHp: num(sheet, 'maxHp', 0) };
+  },
+
+  saveIds(): { id: string; label: string }[] {
+    return ABILITIES.map((a) => ({ id: a.id, label: `${a.label} save` }));
+  },
+
+  saveCheck(sheet: SheetData, saveId: string, dc: number): { expr: string; threshold: number; label: string } {
+    const ability = ABILITIES.find((a) => a.id === saveId) ?? ABILITIES[0];
+    const pb = profBonus(num(sheet, 'level', 1));
+    const mod = abilityMod(num(sheet, ability.id, 10)) + (bool(sheet, `save_${ability.id}`) ? pb : 0);
+    return { expr: `1d20${fmtMod(mod)}`, threshold: dc, label: `${ability.label} save` };
   },
 };

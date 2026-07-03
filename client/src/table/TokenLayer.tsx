@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
-import { canMoveToken, hexDistance, hexToPixel, pixelToHex } from 'shared';
+import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
@@ -121,6 +121,10 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
 
   const bar = token.bar;
   const hpFrac = bar && bar.maxHp > 0 ? Math.max(0, Math.min(1, bar.hp / bar.maxHp)) : null;
+  // Condition badges (from the linked character we're allowed to see).
+  const conditionIcons = character
+    ? conditionsOf(character.sheet).map((id) => getCondition(id)?.icon).filter(Boolean) as string[]
+    : [];
 
   return (
     <g
@@ -182,6 +186,16 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
             fill={hpFrac > 0.5 ? '#7ed28a' : hpFrac > 0.25 ? '#e8d27b' : '#d26c6c'}
           />
         </g>
+      )}
+      {conditionIcons.length > 0 && (
+        <text
+          y={-radius - 5}
+          textAnchor="middle"
+          fontSize={13}
+          style={{ userSelect: 'none', pointerEvents: 'none' }}
+        >
+          {conditionIcons.join(' ')}
+        </text>
       )}
       <text
         y={radius + (hpFrac !== null ? 20 : 14)}

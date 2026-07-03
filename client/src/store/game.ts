@@ -605,6 +605,9 @@ export const intents = {
   deleteMacro: (macroId: string) => socket.emit(C2S.DELETE_MACRO, { macroId }),
   castSpell: (characterId: string, rollableId: string, slotLevel: number) =>
     socket.emit(C2S.CAST_SPELL, { characterId, rollableId, slotLevel }),
+  deathSave: (characterId: string) => socket.emit(C2S.DEATH_SAVE, { characterId }),
+  requestSave: (p: { tokenIds: string[]; saveId: string; dc: number; damageExpr?: string; onSave: 'half' | 'negate'; damageType?: string; label?: string }) =>
+    socket.emit(C2S.REQUEST_SAVE, p),
   runMacro: (macroId: string) => {
     const s = useGameStore.getState();
     const m = s.macroList.find((x) => x.id === macroId);

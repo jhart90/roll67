@@ -407,6 +407,31 @@ button.link:hover { text-decoration: underline; }
 }
 .error-toast { background: var(--danger); color: #10131a; font-weight: 600; }
 
+/* ---------- combat status (conditions, death saves, reaction/reroll) ---------- */
+.combat-status .cs-conditions { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.cs-cond {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer;
+}
+.cs-cond:hover:not(:disabled) { border-color: var(--accent); }
+.cs-cond.on { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
+.cs-cond:disabled { cursor: default; opacity: 0.7; }
+.cs-downed {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 8px; border-radius: 8px;
+  background: rgba(210, 108, 108, 0.15); border: 1px solid rgba(210, 108, 108, 0.5);
+}
+.cs-downed.dead { background: rgba(90, 90, 100, 0.2); border-color: #555; }
+.cs-death-pips { display: flex; gap: 8px; letter-spacing: 2px; }
+.cs-death.succ { color: #7ed28a; }
+.cs-death.fail { color: #d26c6c; }
+.cs-resources { margin-top: 6px; }
+.cs-res-head { display: flex; justify-content: flex-end; }
+.save-targets {
+  display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px;
+}
+
 /* Rollable-table result pills: flash centered near the top, then fade out. */
 .table-toasts {
   position: fixed;

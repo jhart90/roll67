@@ -11,6 +11,7 @@ import { LevelUpWizard } from './LevelUpWizard';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnLevelUpWizard } from './SwnLevelUpWizard';
 import { SwnFeatures } from './SwnFeatures';
+import { CombatStatus } from './CombatStatus';
 
 type AdvMode = null | 'adv' | 'dis';
 
@@ -492,6 +493,7 @@ export function CharacterSheet() {
             {activeTab.id === 'spells' && <SpellSlotTracker character={character} editable={editable} />}
             {activeTab.id === 'core' && character.system === 'dnd5e' && <ClassFeatures character={character} editable={editable} />}
             {activeTab.id === 'core' && character.system === 'swn' && <SwnFeatures character={character} editable={editable} />}
+            {activeTab.id === 'core' && <CombatStatus character={character} editable={editable} />}
             {activeTab.sections.map((s) => (
               <Section
                 key={s.id}

@@ -1,13 +1,16 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, combatActions, critRange, hexDistance, num,
-  type CombatActionPayload, type InitAddPayload, type InitRemovePayload, type InitRollMapPayload,
-  type InitUpdatePayload, type InitiativeState, type SheetData,
+  applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr,
+  damageMultiplier, multiplierLabel,
+  type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
+  type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
+  type SheetData,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { setCharacterHp, floatHp } from '../hp.js';
+import { applyHpDelta, floatHp, persistSheet } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 
@@ -62,26 +65,51 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
 
     const targetChar = tgt.characterId ? characters.byId(tgt.characterId) : undefined;
 
+    // Conditions gate the action and shift advantage.
+    const attackerC = conditionCombat(conditionsOf(actor.sheet));
+    if (attackerC.incapacitated) {
+      emitError(socket, `${actor.name} is incapacitated and can't act.`);
+      return;
+    }
+    const targetC = targetChar ? conditionCombat(conditionsOf(targetChar.sheet)) : conditionCombat([]);
+
     // To-hit (weapons). Nat 20 always hits, nat 1 always misses; otherwise
     // compare to the target's AC when known, else auto-resolve as a hit.
     let hit = true;
+    let crit = false;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
     let hitLabel = '';
     if (action.attackExpr) {
-      const expr = applyAdv(action.attackExpr, action.attackExpr.toLowerCase().startsWith('1d20') ? p.adv : null);
+      // Net advantage folds the roller's choice with attacker/target conditions.
+      const netAdv = action.attackExpr.toLowerCase().startsWith('1d20')
+        ? attackAdvantage(p.adv ?? null, attackerC, targetC, action.ranged)
+        : null;
+      const expr = applyAdv(action.attackExpr, netAdv);
       attackBreakdown = roll(expr);
       const d20s = attackBreakdown.dice.filter((x) => x.sides === 20 && x.kept);
       // Champion Improved Critical lowers the crit threshold (19, or 18 at 15).
       const critAt = critRange(actor.sheet);
-      const crit = d20s.some((x) => x.value >= critAt && x.value !== 1);
+      crit = d20s.some((x) => x.value >= critAt && x.value !== 1);
       const nat1 = d20s.some((x) => x.value === 1);
       const ac = targetChar ? num(targetChar.sheet, 'ac', 0) : 0;
       hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
-      hitLabel = ` — attack ${attackBreakdown.total}${crit ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
+      const advTag = netAdv === 'adv' ? ' [adv]' : netAdv === 'dis' ? ' [dis]' : '';
+      hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
     }
 
-    const amountRoll = roll(action.amountExpr);
-    const magnitude = Math.max(0, amountRoll.total);
+    // Damage: a crit doubles the dice. Resistance/vulnerability/immunity from the
+    // target's sheet then scales the total.
+    const dmgExpr = crit ? critDamageExpr(action.amountExpr) : action.amountExpr;
+    const amountRoll = roll(dmgExpr);
+    let magnitude = Math.max(0, amountRoll.total);
+    let resistTag = '';
+    if (action.effect === 'damage' && hit && targetChar) {
+      const mult = damageMultiplier(targetChar.sheet, action.damageType);
+      if (mult !== 1) {
+        magnitude = applyDamageMultiplier(magnitude, mult);
+        resistTag = ` (${multiplierLabel(mult)})`;
+      }
+    }
     const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
     const delta = action.effect === 'heal' ? applied : -applied;
 
@@ -89,10 +117,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let hpNote = '';
     if (applied !== 0) {
       if (targetChar) {
-        const cur = systemFor(targetChar.system).hp(targetChar.sheet).hp;
-        const updated = setCharacterHp(io, d.campaignId, targetChar, cur + delta);
+        const { character: updated, note } = applyHpDelta(io, d.campaignId, targetChar, delta);
         const nh = systemFor(updated.system).hp(updated.sheet);
-        hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})`;
+        hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
       } else if (tgt.bar) {
         const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
         const nh = Math.max(0, Math.min(cap, tgt.bar.hp + delta));
@@ -103,6 +130,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }
       floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
     }
+    if (resistTag) hitLabel += resistTag;
 
     // Consume a used item (decrement the actor's inventory row). Re-read the
     // character first: a self-heal above may have just changed its sheet, and
@@ -132,6 +160,106 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }));
+
+  // A 5e death saving throw for a character at 0 HP. Server-authoritative:
+  // rolls, tallies successes/failures, and resolves stabilize/wake/death.
+  socket.on(C2S.DEATH_SAVE, safe(socket, ({ characterId }: DeathSavePayload) => {
+    const d = requireCampaign(socket);
+    const character = characters.byId(characterId);
+    if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    if (d.role !== 'dm' && character.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only roll for your own character.');
+      return;
+    }
+    if (systemFor(character.system).hp(character.sheet).hp > 0) {
+      emitError(socket, `${character.name} is not down.`);
+      return;
+    }
+    const br = roll('1d20');
+    const v = br.total;
+    let succ = num(character.sheet, 'deathSuccesses', 0);
+    let fail = num(character.sheet, 'deathFailures', 0);
+    let outcome: string;
+    if (v === 20) {
+      // Nat 20: regain 1 HP and wake up (applyHpDelta clears unconscious).
+      applyHpDelta(io, d.campaignId, characters.byId(characterId)!, 1);
+      outcome = 'NAT 20 — back up with 1 HP!';
+      succ = 0; fail = 0;
+      persistSheet(io, d.campaignId, characters.byId(characterId)!, { deathSuccesses: 0, deathFailures: 0 });
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'roll',
+        text: `${character.name} death save: ${outcome}`, roll: br, recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      return;
+    }
+    if (v === 1) fail += 2;
+    else if (v >= 10) succ += 1;
+    else fail += 1;
+
+    const patch: SheetData = { deathSuccesses: Math.min(3, succ), deathFailures: Math.min(3, fail) };
+    if (fail >= 3) { patch.conditions = [...conditionsOf(character.sheet).filter((c) => c !== 'unconscious'), 'dead']; outcome = 'THIRD FAILURE — dead'; }
+    else if (succ >= 3) { patch.deathSuccesses = 0; patch.deathFailures = 0; outcome = 'stabilized'; }
+    else outcome = v >= 10 ? `success (${Math.min(3, succ)}/3)` : `failure (${Math.min(3, fail)}/3)`;
+    persistSheet(io, d.campaignId, characters.byId(characterId)!, patch);
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'roll',
+      text: `${character.name} death save: ${v} — ${outcome}`, roll: br, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }));
+
+  // DM "call for save": every listed token rolls its own save vs the DC; the
+  // shared damage roll (if any) is applied fully on a fail, halved/negated on a
+  // save. One chat card summarizes the group.
+  socket.on(C2S.REQUEST_SAVE, safe(socket, (p: RequestSavePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM calls for saves.'); return; }
+    const dmg = p.damageExpr && /\d*d\d/i.test(p.damageExpr) ? roll(p.damageExpr) : null;
+    const base = dmg ? Math.max(0, dmg.total) : 0;
+    let saveLabel = p.saveId;
+    let touchedMap: string | null = null;
+    const lines: string[] = [];
+    for (const tid of p.tokenIds) {
+      const tok = tokens.byId(tid);
+      if (!tok) continue;
+      touchedMap = tok.mapId;
+      const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
+      let passed: boolean; let total: number; let threshold: number;
+      if (ch) {
+        const sc = systemFor(ch.system).saveCheck(ch.sheet, p.saveId, p.dc);
+        const br = roll(sc.expr);
+        total = br.total; threshold = sc.threshold; passed = total >= threshold; saveLabel = sc.label;
+      } else {
+        const br = roll('1d20'); total = br.total; threshold = p.dc; passed = total >= p.dc;
+      }
+      let dealt = 0;
+      if (base > 0) {
+        let amt = passed ? (p.onSave === 'half' ? Math.floor(base / 2) : 0) : base;
+        if (ch && p.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, p.damageType));
+        if (amt > 0) {
+          if (ch) applyHpDelta(io, d.campaignId, ch, -amt);
+          else if (tok.bar) {
+            const nh = Math.max(0, tok.bar.hp - amt);
+            tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
+            io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+          }
+          floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
+          dealt = amt;
+        }
+      }
+      lines.push(`${tok.name} ${total} vs ${threshold} — ${passed ? 'save' : 'fail'}${dealt ? ` (−${dealt})` : ''}`);
+    }
+    if (touchedMap) syncMapVision(io, d.campaignId, touchedMap);
+    if (lines.length === 0) { emitError(socket, 'No valid targets for the save.'); return; }
+    const header = `${p.label?.trim() || 'Saving throw'} — ${saveLabel}${p.damageExpr ? ` DC ${p.dc}` : ''}`;
+    const text = `${header}: ${lines.join('; ')}`;
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'roll', text, roll: dmg, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.TABLE_RESULT, { text: header, color: '#c98a3c' });
   }));
 
   socket.on(C2S.INIT_ADD, safe(socket, (payload: InitAddPayload) => {

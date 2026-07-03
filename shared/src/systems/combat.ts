@@ -24,13 +24,16 @@ export function combatActions(character: Character): CombatAction[] {
     const attack = rollables.find((r) => r.id === `attack_${i}`);
     const damage = rollables.find((r) => r.id === `damage_${i}`);
     if (!attack && !damage) return;
+    const rangeFt = Math.max(0, num(atk, 'range', 5));
     out.push({
       id: `attack:${i}`,
       label: name,
       effect: 'damage',
       attackExpr: attack?.expr ?? null,
       amountExpr: damage?.expr ?? '0',
-      rangeFt: Math.max(0, num(atk, 'range', 5)),
+      rangeFt,
+      damageType: str(atk, 'dtype', ''),
+      ranged: rangeFt > 5,
       consumesItem: false,
       source: 'attack',
       index: i,
@@ -45,13 +48,16 @@ export function combatActions(character: Character): CombatAction[] {
     const qty = num(it, 'qty', 1);
     if (qty <= 0) return;
     const name = str(it, 'name', '').trim() || `Item ${i + 1}`;
+    const rangeFt = Math.max(0, num(it, 'range', 5));
     out.push({
       id: `item:${i}`,
       label: qty > 1 ? `${name} (×${qty})` : name,
       effect,
       attackExpr: null,
       amountExpr: amount,
-      rangeFt: Math.max(0, num(it, 'range', 5)),
+      rangeFt,
+      damageType: str(it, 'dtype', ''),
+      ranged: rangeFt > 5,
       consumesItem: true,
       source: 'item',
       index: i,

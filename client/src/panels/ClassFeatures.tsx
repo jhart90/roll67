@@ -39,12 +39,13 @@ export function ClassFeatures({ character, editable }: { character: Character; e
     intents.updateCharacter(character.id, { [`res_${id}`]: Math.max(0, used) });
   }
   function shortRest() {
-    const patch: SheetData = {};
+    const patch: SheetData = { res_reaction: 0 };
     for (const r of resources) if (r.reset === 'short') patch[`res_${r.id}`] = 0;
     intents.updateCharacter(character.id, patch);
   }
   function longRest() {
-    const patch: SheetData = { rageActive: false };
+    // A long rest also refreshes the universal reaction + Luck pools.
+    const patch: SheetData = { rageActive: false, res_reaction: 0, res_luck: 0 };
     for (const r of resources) patch[`res_${r.id}`] = 0;
     for (let n = 1; n <= 9; n++) patch[`slotsUsed${n}`] = 0;
     intents.updateCharacter(character.id, patch);

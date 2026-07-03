@@ -72,6 +72,9 @@ const combatFields: FieldDef[] = [
   { id: 'attackBonus', label: 'Attack bonus', type: 'number', width: 'sixth', default: 0 },
   { id: 'speed', label: 'Speed (m)', type: 'number', width: 'sixth', default: 10 },
   { id: 'systemStrain', label: 'System strain', type: 'number', width: 'sixth', default: 0 },
+  { id: 'resist', label: 'Resistances', type: 'text', width: 'third', default: '' },
+  { id: 'vulnerable', label: 'Vulnerabilities', type: 'text', width: 'third', default: '' },
+  { id: 'immune', label: 'Immunities', type: 'text', width: 'third', default: '' },
 ];
 
 const sensesFields: FieldDef[] = [
@@ -130,6 +133,7 @@ const gearTab: SheetTab = {
         { id: 'name', label: 'Weapon', type: 'text', width: 'third' },
         { id: 'bonus', label: 'Hit bonus', type: 'number', width: 'sixth', default: 0 },
         { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6' },
+        { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', 'kinetic', 'energy'] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
@@ -284,5 +288,18 @@ export const swn: SystemSchema = {
 
   hp(sheet: SheetData): { hp: number; maxHp: number } {
     return { hp: num(sheet, 'hp', 0), maxHp: num(sheet, 'maxHp', 0) };
+  },
+
+  saveIds(): { id: string; label: string }[] {
+    return SAVES.map((s) => ({ id: s.id, label: `${s.label} save` }));
+  },
+
+  // SWN saves are target-number based: roll d20, meet or beat 15 − level − best
+  // attribute mod. The DC argument is ignored (each target uses its own target).
+  saveCheck(sheet: SheetData, saveId: string): { expr: string; threshold: number; label: string } {
+    const save = SAVES.find((s) => s.id === saveId) ?? SAVES[0];
+    const level = num(sheet, 'level', 1);
+    const best = Math.max(...save.attrs.map((a) => swnMod(num(sheet, a, 10))));
+    return { expr: '1d20', threshold: 15 - level - best, label: `${save.label} save` };
   },
 };

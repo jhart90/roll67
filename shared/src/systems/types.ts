@@ -78,6 +78,10 @@ export interface CombatAction {
   amountExpr: string;
   /** Reach/range in feet (0 = self only). */
   rangeFt: number;
+  /** Damage type for resistance/vulnerability/immunity ('' = untyped). */
+  damageType: string;
+  /** True for a ranged weapon (affects prone advantage, etc.). */
+  ranged: boolean;
   /** Decrement the inventory row's quantity when used (consumables). */
   consumesItem: boolean;
   source: 'attack' | 'item';
@@ -98,6 +102,14 @@ export interface SystemSchema {
   initiativeExpr(sheet: SheetData): string;
   /** Current/max HP as stored on the sheet (mirrored onto token bars). */
   hp(sheet: SheetData): { hp: number; maxHp: number };
+  /** Saving throws offered by the "call for save" tool. */
+  saveIds(): { id: string; label: string }[];
+  /**
+   * Resolve a saving throw for the call-for-save tool: the dice expression to
+   * roll and the number to meet-or-beat. `dc` is used by DC-based systems (5e);
+   * target-number systems (SWN) derive their own threshold and ignore it.
+   */
+  saveCheck(sheet: SheetData, saveId: string, dc: number): { expr: string; threshold: number; label: string };
 }
 
 export function num(sheet: SheetData, id: string, fallback = 0): number {

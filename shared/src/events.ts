@@ -48,6 +48,8 @@ export const C2S = {
   SHEET_ROLL: 'sheetRoll',
   CAST_SPELL: 'castSpell',
   COMBAT_ACTION: 'combatAction',
+  DEATH_SAVE: 'deathSave',
+  REQUEST_SAVE: 'requestSave',
   // shops
   CREATE_SHOP: 'createShop',
   UPDATE_SHOP: 'updateShop',
@@ -239,6 +241,21 @@ export interface CombatActionPayload {
   sourceTokenId: string;
   targetTokenId: string;
   adv?: 'adv' | 'dis' | null;
+}
+
+/** Roll a 5e death saving throw for a downed character (server-authoritative). */
+export interface DeathSavePayload { characterId: string }
+
+/** DM "call for save": each listed token rolls its save; on fail (or on save,
+ *  optionally halved) the shared damage roll is applied. */
+export interface RequestSavePayload {
+  tokenIds: string[];
+  saveId: string;
+  dc: number;
+  damageExpr?: string;
+  onSave: 'half' | 'negate';
+  damageType?: string;
+  label?: string;
 }
 
 export interface ChatPayload { text: string }

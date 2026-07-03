@@ -107,6 +107,14 @@ const coreTab: SheetTab = {
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },
+    {
+      kind: 'list', id: 'foci', title: 'Foci & Class Abilities',
+      columns: [
+        { id: 'name', label: 'Focus', type: 'text', width: 'third' },
+        { id: 'level', label: 'Level', type: 'number', width: 'sixth', default: 1 },
+        { id: 'notes', label: 'Effect', type: 'text', width: 'half' },
+      ],
+    },
   ],
 };
 

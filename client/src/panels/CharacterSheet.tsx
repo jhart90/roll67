@@ -9,6 +9,8 @@ import { Compendium } from './Compendium';
 import { AssetPicker } from './AssetPicker';
 import { LevelUpWizard } from './LevelUpWizard';
 import { ClassFeatures } from './ClassFeatures';
+import { SwnLevelUpWizard } from './SwnLevelUpWizard';
+import { SwnFeatures } from './SwnFeatures';
 
 type AdvMode = null | 'adv' | 'dis';
 
@@ -467,13 +469,15 @@ export function CharacterSheet() {
           />
           <span className="dim">{schema.name}{character.ownerUserId ? '' : ' · NPC'}</span>
           <span className="spacer" />
-          {editable && character.system === 'dnd5e' && <button className="link" onClick={() => setShowLevelUp(true)}>⬆ Level Up</button>}
+          {editable && <button className="link" onClick={() => setShowLevelUp(true)}>⬆ Level Up</button>}
           {editable && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
           <button className="link" onClick={() => useGameStore.getState().openSheet(null)}>close</button>
         </div>
 
         {showCompendium && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
-        {showLevelUp && <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />}
+        {showLevelUp && (character.system === 'swn'
+          ? <SwnLevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />
+          : <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />)}
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (
@@ -487,6 +491,7 @@ export function CharacterSheet() {
           <div className="sheet-main">
             {activeTab.id === 'spells' && <SpellSlotTracker character={character} editable={editable} />}
             {activeTab.id === 'core' && character.system === 'dnd5e' && <ClassFeatures character={character} editable={editable} />}
+            {activeTab.id === 'core' && character.system === 'swn' && <SwnFeatures character={character} editable={editable} />}
             {activeTab.sections.map((s) => (
               <Section
                 key={s.id}

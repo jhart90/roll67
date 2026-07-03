@@ -35,6 +35,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       r: payload.r,
       layer: payload.layer ?? 'token',
       size: payload.size ?? 1,
+      shape: payload.shape ?? 'circle',
       color: payload.color ?? '#6c9bd2',
       vision: payload.vision ?? null,
       bar: payload.bar ?? null,

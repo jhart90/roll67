@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import type { TokenView } from 'shared';
+import type { SVGProps } from 'react';
+import type { TokenShape, TokenView } from 'shared';
 import { canMoveToken, hexDistance, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
@@ -7,6 +8,34 @@ import { mapPixelSize, useStage } from '../util/stage';
 const DRAG_THROTTLE_MS = 100;
 
 type TargetState = 'off' | 'valid' | 'invalid';
+
+function trianglePoints(r: number): string {
+  return [[0, -r], [r * 0.87, r * 0.55], [-r * 0.87, r * 0.55]]
+    .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+}
+function starPoints(r: number): string {
+  const inner = r * 0.42;
+  const pts: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : inner;
+    const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+    pts.push(`${(Math.cos(ang) * rad).toFixed(1)},${(Math.sin(ang) * rad).toFixed(1)}`);
+  }
+  return pts.join(' ');
+}
+
+/** SVG element for a token's outline, centered on the origin. */
+function shapeNode(shape: TokenShape, r: number, extra: SVGProps<SVGElement>) {
+  switch (shape) {
+    case 'square': return <rect x={-r} y={-r} width={2 * r} height={2 * r} {...(extra as SVGProps<SVGRectElement>)} />;
+    case 'rect-v': return <rect x={-r * 0.62} y={-r} width={r * 1.24} height={2 * r} {...(extra as SVGProps<SVGRectElement>)} />;
+    case 'rect-h': return <rect x={-r} y={-r * 0.62} width={2 * r} height={r * 1.24} {...(extra as SVGProps<SVGRectElement>)} />;
+    case 'triangle': return <polygon points={trianglePoints(r)} {...(extra as SVGProps<SVGPolygonElement>)} />;
+    case 'star': return <polygon points={starPoints(r)} {...(extra as SVGProps<SVGPolygonElement>)} />;
+    case 'circle':
+    default: return <circle r={r} {...(extra as SVGProps<SVGCircleElement>)} />;
+  }
+}
 
 function TokenPiece({ token, targetState }: { token: TokenView; targetState: TargetState }) {
   const stage = useStage();
@@ -26,6 +55,7 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
   const home = hexToPixel({ q: token.q, r: token.r }, map.grid);
   const pos = dragPos ?? home;
   const radius = map.grid.hexSize * 0.72 * token.size;
+  const shape = token.shape ?? 'circle';
   const ringColor = targetEffect === 'heal' ? '#7ed28a' : '#d26c6c';
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
@@ -114,11 +144,11 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
       {selected && (
         <circle r={radius + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" />
       )}
-      <circle r={radius} fill={token.color} stroke="#10131a" strokeWidth={2} />
+      {shapeNode(shape, radius, { fill: token.color, stroke: '#10131a', strokeWidth: 2 })}
       {token.artUrl ? (
         <>
           <clipPath id={`clip-${token.id}`}>
-            <circle r={radius - 2} />
+            {shapeNode(shape, radius - 2, {})}
           </clipPath>
           <image
             href={token.artUrl}

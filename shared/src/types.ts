@@ -125,6 +125,9 @@ export interface VisionStats {
   darkvision: number;
 }
 
+/** Rendered outline of a token piece. */
+export type TokenShape = 'circle' | 'square' | 'triangle' | 'star' | 'rect-v' | 'rect-h';
+
 export interface Token {
   id: string;
   mapId: string;
@@ -135,6 +138,7 @@ export interface Token {
   r: number;
   layer: TokenLayer;
   size: number; // hex footprint radius multiplier, 1 = single hex
+  shape: TokenShape;
   color: string;
   /** Explicit stats for NPC tokens; PC tokens derive from their character sheet. */
   vision: VisionStats | null;

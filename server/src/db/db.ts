@@ -31,6 +31,7 @@ ensureColumn('macros', 'action_id', 'action_id TEXT');
 ensureColumn('assets', 'folder_id', 'folder_id TEXT');
 ensureColumn('assets', 'title', 'title TEXT');
 ensureColumn('handouts', 'folder_id', 'folder_id TEXT');
+ensureColumn('tokens', 'shape', "shape TEXT NOT NULL DEFAULT 'circle'");
 
 export function newId(): string {
   return crypto.randomBytes(9).toString('hex');

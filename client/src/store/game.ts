@@ -8,6 +8,7 @@ import {
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
   type MemberInfo, type PingShownPayload, type RollableTable, type Shop,
+  type TableResultPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type YouArePayload,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -70,6 +71,8 @@ interface GameState {
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
   /** Floating +/-HP combat text over tokens. */
   floats: Array<{ id: number; tokenId: string; delta: number }>;
+  /** On-screen rollable-table result pills (fade out after ~3s). */
+  tableToasts: Array<{ id: number; text: string; color: string }>;
   beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
   cancelTargeting(): void;
   resolveTarget(targetTokenId: string): void;
@@ -153,6 +156,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceAnim: null,
   targeting: null,
   floats: [],
+  tableToasts: [],
   beginTargeting(characterId, sourceTokenId, action, adv) {
     // Clear the sheet so the map is usable; the banner/popup drives selection.
     set({ targeting: { characterId, sourceTokenId, action, adv }, sheetCharacterId: null, tool: 'select', selectedTokenId: null });
@@ -438,6 +442,16 @@ export function wireSocket(): void {
 
   socket.on(S2C.TABLES, ({ tables }: { tables: RollableTable[] }) => {
     useGameStore.setState({ tableList: tables });
+  });
+
+  socket.on(S2C.TABLE_RESULT, (p: TableResultPayload) => {
+    const id = ++pingCounter;
+    const s = useGameStore.getState();
+    useGameStore.setState({ tableToasts: [...s.tableToasts, { id, text: p.text, color: p.color }] });
+    setTimeout(() => {
+      const cur = useGameStore.getState();
+      useGameStore.setState({ tableToasts: cur.tableToasts.filter((t) => t.id !== id) });
+    }, 3000);
   });
 
   socket.on(S2C.ASSETS, ({ folders, assets }: { folders: AssetFolder[]; assets: AssetInfo[] }) => {

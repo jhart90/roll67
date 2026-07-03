@@ -407,6 +407,37 @@ button.link:hover { text-decoration: underline; }
 }
 .error-toast { background: var(--danger); color: #10131a; font-weight: 600; }
 
+/* Rollable-table result pills: flash centered near the top, then fade out. */
+.table-toasts {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+}
+.table-toast {
+  padding: 10px 20px;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  max-width: 60vw;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  animation: table-toast-life 3s ease forwards;
+}
+@keyframes table-toast-life {
+  0% { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  10% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-6px) scale(0.98); }
+}
+
 /* ---------- chat ---------- */
 
 .chat-panel {

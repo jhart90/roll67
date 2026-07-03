@@ -176,10 +176,13 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     let pick = Math.random() * total;
     let chosen = t.items[t.items.length - 1];
     for (const it of t.items) { if (pick < it.weight) { chosen = it; break; } pick -= it.weight; }
+    const text = `${t.name}: ${chosen.text}`;
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll',
-      text: `${t.name}: ${chosen.text}`, roll: null, recipients: null,
+      text, roll: null, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    // Flash the same result on-screen for everyone as a colored pill.
+    io.to(campaignRoom(d.campaignId)).emit(S2C.TABLE_RESULT, { text, color: '#8a6cd2' });
   }));
 }

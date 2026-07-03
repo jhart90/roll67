@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS tokens (
   r INTEGER NOT NULL,
   layer TEXT NOT NULL CHECK (layer IN ('token', 'gm')),
   size INTEGER NOT NULL DEFAULT 1,
+  shape TEXT NOT NULL DEFAULT 'circle',
   color TEXT NOT NULL DEFAULT '#6c9bd2',
   vision_json TEXT,
   bar_json TEXT

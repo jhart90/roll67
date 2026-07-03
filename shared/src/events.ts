@@ -6,7 +6,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  RollableTable, SheetData, Shop, Token, TokenLayer, TokenView, VisionStats,
+  RollableTable, SheetData, Shop, Token, TokenLayer, TokenShape, TokenView, VisionStats,
 } from './types.js';
 
 // ---------- Client -> server intents ----------
@@ -147,6 +147,7 @@ export interface CreateTokenPayload {
   artAssetId?: string | null;
   layer?: TokenLayer;
   size?: number;
+  shape?: TokenShape;
   color?: string;
   vision?: VisionStats | null;
   bar?: { hp: number; maxHp: number } | null;
@@ -154,7 +155,7 @@ export interface CreateTokenPayload {
 export interface DeleteTokenPayload { tokenId: string }
 export interface UpdateTokenPayload {
   tokenId: string;
-  patch: Partial<Pick<Token, 'name' | 'layer' | 'size' | 'color' | 'vision' | 'bar' | 'characterId'>> & {
+  patch: Partial<Pick<Token, 'name' | 'layer' | 'size' | 'shape' | 'color' | 'vision' | 'bar' | 'characterId'>> & {
     artAssetId?: string | null;
   };
 }
@@ -332,6 +333,7 @@ export const S2C = {
   MEASURE_SHOWN: 'measureShown',
   HANDOUTS: 'handouts',
   TABLES: 'tables',
+  TABLE_RESULT: 'tableResult',
   SHOPS: 'shops',
   SHOP_PRESENTATION: 'shopPresentation',
   LOCATIONS: 'locations',
@@ -419,6 +421,8 @@ export interface CharacterUpsertedPayload { character: Character }
 export interface CharacterRemovedPayload { characterId: string }
 /** Floating combat text over a token: negative = damage, positive = heal. */
 export interface HpFloatPayload { mapId: string; tokenId: string; delta: number }
+/** A rollable-table result to flash on-screen (same text as the chat card). */
+export interface TableResultPayload { text: string; color: string }
 
 export interface ChatBroadcastPayload { msg: ChatMessage }
 export interface MacrosPayload { macros: Macro[] }

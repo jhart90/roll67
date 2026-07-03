@@ -1,18 +1,33 @@
 import { useRef, useState } from 'react';
+import type { TokenShape } from 'shared';
+import { systemFor } from 'shared';
 import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
+
+const SHAPES: Array<{ id: TokenShape; label: string }> = [
+  { id: 'circle', label: 'Circle' },
+  { id: 'square', label: 'Square' },
+  { id: 'triangle', label: 'Triangle' },
+  { id: 'star', label: 'Star' },
+  { id: 'rect-v', label: 'Rectangle (vertical)' },
+  { id: 'rect-h', label: 'Rectangle (horizontal)' },
+];
 
 /** DM-only floating panel for a token — opened by right-clicking it. */
 export function TokenInspector() {
   const you = useGameStore((s) => s.you);
   const campaign = useGameStore((s) => s.campaign);
   const token = useGameStore((s) => (s.inspectorTokenId ? s.tokens[s.inspectorTokenId] : undefined));
+  const character = useGameStore((s) => s.characters.find((c) => c.id === token?.characterId));
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   if (!token || you?.role !== 'dm' || !campaign) return null;
 
   const vision = token.vision;
+  // A token linked to a character reads/writes its vision straight from the
+  // sheet; unlinked NPC tokens keep a per-token override instead.
+  const sheetVision = character ? systemFor(character.system).vision(character.sheet) : null;
 
   async function onArt(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -86,6 +101,15 @@ export function TokenInspector() {
           />
         </label>
         <label>
+          Shape
+          <select
+            value={token.shape ?? 'circle'}
+            onChange={(e) => intents.updateToken(token.id, { shape: e.target.value as TokenShape })}
+          >
+            {SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </label>
+        <label>
           Art
           <input ref={fileRef} type="file" accept="image/*" onChange={onArt} disabled={uploading} />
         </label>
@@ -119,48 +143,77 @@ export function TokenInspector() {
         </label>
       </div>
 
-      <h4>Vision {token.characterId && !vision ? '(from character sheet)' : '(override)'}</h4>
-      <div className="inspector-grid">
-        <label>
-          Range (hexes)
-          <input
-            type="number"
-            min={0}
-            value={vision?.visionRange ?? ''}
-            placeholder="sheet"
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (!Number.isNaN(v)) {
-                intents.updateToken(token.id, {
-                  vision: { visionRange: v, darkvision: vision?.darkvision ?? 0 },
-                });
-              }
-            }}
-          />
-        </label>
-        <label>
-          Darkvision
-          <input
-            type="number"
-            min={0}
-            value={vision?.darkvision ?? ''}
-            placeholder="sheet"
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (!Number.isNaN(v)) {
-                intents.updateToken(token.id, {
-                  vision: { visionRange: vision?.visionRange ?? 24, darkvision: v },
-                });
-              }
-            }}
-          />
-        </label>
-        {vision && (
-          <button className="link" onClick={() => intents.updateToken(token.id, { vision: null })}>
-            clear override
-          </button>
-        )}
-      </div>
+      <h4>Vision {sheetVision ? '(from character sheet)' : '(override)'}</h4>
+      {sheetVision ? (
+        // Linked to a character: edit the sheet's own vision fields so the two
+        // stay in sync (the sheet is authoritative for a PC/NPC token).
+        <div className="inspector-grid">
+          <label>
+            Range (hexes)
+            <input
+              type="number"
+              min={0}
+              value={sheetVision.visionRange}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (character && !Number.isNaN(v)) intents.updateCharacter(character.id, { visionRange: v });
+              }}
+            />
+          </label>
+          <label>
+            Darkvision
+            <input
+              type="number"
+              min={0}
+              value={sheetVision.darkvision}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (character && !Number.isNaN(v)) intents.updateCharacter(character.id, { darkvision: v });
+              }}
+            />
+          </label>
+          <span className="dim" style={{ fontSize: 11, gridColumn: '1 / -1' }}>
+            Editing {character?.name}&rsquo;s sheet.
+          </span>
+        </div>
+      ) : (
+        <div className="inspector-grid">
+          <label>
+            Range (hexes)
+            <input
+              type="number"
+              min={0}
+              value={vision?.visionRange ?? ''}
+              placeholder="24"
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (!Number.isNaN(v)) {
+                  intents.updateToken(token.id, {
+                    vision: { visionRange: v, darkvision: vision?.darkvision ?? 0 },
+                  });
+                }
+              }}
+            />
+          </label>
+          <label>
+            Darkvision
+            <input
+              type="number"
+              min={0}
+              value={vision?.darkvision ?? ''}
+              placeholder="0"
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (!Number.isNaN(v)) {
+                  intents.updateToken(token.id, {
+                    vision: { visionRange: vision?.visionRange ?? 24, darkvision: v },
+                  });
+                }
+              }}
+            />
+          </label>
+        </div>
+      )}
     </div>
   );
 }

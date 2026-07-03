@@ -532,6 +532,7 @@ interface TokenRow {
   r: number;
   layer: 'token' | 'gm';
   size: number;
+  shape: string | null;
   color: string;
   vision_json: string | null;
   bar_json: string | null;
@@ -548,6 +549,7 @@ function toToken(row: TokenRow): Token {
     r: row.r,
     layer: row.layer,
     size: row.size,
+    shape: (row.shape as Token['shape']) ?? 'circle',
     color: row.color,
     vision: row.vision_json ? JSON.parse(row.vision_json) : null,
     bar: row.bar_json ? JSON.parse(row.bar_json) : null,
@@ -557,15 +559,15 @@ function toToken(row: TokenRow): Token {
 export const tokens = {
   create(t: {
     mapId: string; characterId: string | null; name: string; artAssetId: string | null;
-    q: number; r: number; layer: 'token' | 'gm'; size: number; color: string;
+    q: number; r: number; layer: 'token' | 'gm'; size: number; shape: string; color: string;
     vision: object | null; bar: object | null;
   }): Token {
     const id = newId();
     db.prepare(
-      `INSERT INTO tokens (id, map_id, character_id, name, art_asset_id, q, r, layer, size, color, vision_json, bar_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tokens (id, map_id, character_id, name, art_asset_id, q, r, layer, size, shape, color, vision_json, bar_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      id, t.mapId, t.characterId, t.name, t.artAssetId, t.q, t.r, t.layer, t.size, t.color,
+      id, t.mapId, t.characterId, t.name, t.artAssetId, t.q, t.r, t.layer, t.size, t.shape, t.color,
       t.vision ? JSON.stringify(t.vision) : null, t.bar ? JSON.stringify(t.bar) : null,
     );
     return tokens.byId(id)!;
@@ -586,19 +588,20 @@ export const tokens = {
     db.prepare('UPDATE tokens SET q = ?, r = ? WHERE id = ?').run(q, r, id);
   },
   update(id: string, patch: {
-    name?: string; layer?: 'token' | 'gm'; size?: number; color?: string;
+    name?: string; layer?: 'token' | 'gm'; size?: number; shape?: string; color?: string;
     characterId?: string | null; artAssetId?: string | null;
     vision?: object | null; bar?: object | null;
   }): void {
     const cur = db.prepare('SELECT * FROM tokens WHERE id = ?').get(id) as TokenRow | undefined;
     if (!cur) return;
     db.prepare(
-      `UPDATE tokens SET name = ?, layer = ?, size = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?
+      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?
        WHERE id = ?`,
     ).run(
       patch.name ?? cur.name,
       patch.layer ?? cur.layer,
       patch.size ?? cur.size,
+      patch.shape ?? cur.shape ?? 'circle',
       patch.color ?? cur.color,
       patch.characterId !== undefined ? patch.characterId : cur.character_id,
       patch.artAssetId !== undefined ? patch.artAssetId : cur.art_asset_id,

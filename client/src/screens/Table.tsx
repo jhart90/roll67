@@ -239,6 +239,23 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           {errorToast}
         </div>
       )}
+
+      <TableToasts />
+    </div>
+  );
+}
+
+/** Colored pills that flash a rollable-table result, then fade after ~3s. */
+function TableToasts() {
+  const toasts = useGameStore((s) => s.tableToasts);
+  if (toasts.length === 0) return null;
+  return (
+    <div className="table-toasts">
+      {toasts.map((t) => (
+        <div key={t.id} className="table-toast" style={{ background: t.color }}>
+          🎲 {t.text}
+        </div>
+      ))}
     </div>
   );
 }

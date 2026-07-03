@@ -5,6 +5,7 @@ import {
   type DieRoll, type DirectoryPayload,
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
+  type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type MapStatePayload, type MapView, type MeasureShownPayload, type MemberInfo,
   type PingShownPayload, type RollableTable, type TokenView, type VisionStats,
   type VisionUpdatePayload, type Wall, type YouArePayload,
@@ -35,6 +36,10 @@ interface GameState {
   handoutList: Handout[];
   macroList: Macro[];
   tableList: RollableTable[];
+  assetFolders: AssetFolder[];
+  assetList: AssetInfo[];
+  audioTracks: AudioTrack[];
+  audioState: AudioState;
   directory: DirectoryPayload | null;
   initiativeState: InitiativeState;
   chatLog: ChatMessage[];
@@ -62,10 +67,17 @@ interface GameState {
   selectedTokenId: string | null;
   selectedLightId: string | null;
   sheetCharacterId: string | null;
+  /** Local-only: mute audio on this device without affecting others. */
+  clientMuted: boolean;
+  setClientMuted(m: boolean): void;
   drawColor: string;
   drawLayer: DrawingLayerName;
   setDrawColor(c: string): void;
   setDrawLayer(l: DrawingLayerName): void;
+  wallType: 'solid' | 'window' | 'oneway';
+  wallFlip: boolean;
+  setWallType(t: 'solid' | 'window' | 'oneway'): void;
+  toggleWallFlip(): void;
 
   // actions
   join(campaignId: string): void;
@@ -93,6 +105,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   handoutList: [],
   macroList: [],
   tableList: [],
+  assetFolders: [],
+  assetList: [],
+  audioTracks: [],
+  audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
   directory: null,
   initiativeState: { entries: [], turnIdx: 0, round: 1, active: false },
   chatLog: [],
@@ -117,10 +133,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   selectedTokenId: null,
   selectedLightId: null,
   sheetCharacterId: null,
+  clientMuted: false,
+  setClientMuted(clientMuted) { set({ clientMuted }); },
   drawColor: '#e8d27b',
   drawLayer: 'map',
   setDrawColor(drawColor) { set({ drawColor }); },
   setDrawLayer(drawLayer) { set({ drawLayer }); },
+  wallType: 'solid',
+  wallFlip: false,
+  setWallType(wallType) { set({ wallType }); },
+  toggleWallFlip() { set({ wallFlip: !get().wallFlip }); },
 
   join(campaignId) {
     connectSocket();
@@ -343,6 +365,18 @@ export function wireSocket(): void {
     useGameStore.setState({ tableList: tables });
   });
 
+  socket.on(S2C.ASSETS, ({ folders, assets }: { folders: AssetFolder[]; assets: AssetInfo[] }) => {
+    useGameStore.setState({ assetFolders: folders, assetList: assets });
+  });
+
+  socket.on(S2C.AUDIO_TRACKS, ({ tracks }: { tracks: AudioTrack[] }) => {
+    useGameStore.setState({ audioTracks: tracks });
+  });
+
+  socket.on(S2C.AUDIO_STATE, ({ state }: { state: AudioState }) => {
+    useGameStore.setState({ audioState: state });
+  });
+
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
     useGameStore.setState({ initiativeState: state });
   });
@@ -429,7 +463,7 @@ export const intents = {
     socket.emit(C2S.UPDATE_MAP, { mapId, ...fields }),
   setGrid: (mapId: string, grid: Partial<GridConfig>) => socket.emit(C2S.SET_GRID_CONFIG, { mapId, grid }),
 
-  upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }> }) =>
+  upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway'; flip?: boolean }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),
   deleteWall: (mapId: string, wallId: string) => socket.emit(C2S.DELETE_WALL, { mapId, wallId }),
   upsertDoor: (mapId: string, door: { id?: string; a: { x: number; y: number }; b: { x: number; y: number }; open?: boolean }) =>
@@ -504,4 +538,18 @@ export const intents = {
   shareHandout: (handoutId: string, to: string[] | 'all' | 'none') =>
     socket.emit(C2S.SHARE_HANDOUT, { handoutId, to }),
   requestDirectory: () => socket.emit(C2S.REQUEST_DIRECTORY),
+
+  requestAssets: () => socket.emit(C2S.REQUEST_ASSETS),
+  createFolder: (name: string, kind: 'art' | 'handout') => socket.emit(C2S.CREATE_FOLDER, { name, kind }),
+  renameFolder: (folderId: string, name: string) => socket.emit(C2S.RENAME_FOLDER, { folderId, name }),
+  deleteFolder: (folderId: string) => socket.emit(C2S.DELETE_FOLDER, { folderId }),
+  moveAsset: (assetId: string, folderId: string | null) => socket.emit(C2S.MOVE_ASSET, { assetId, folderId }),
+  renameAsset: (assetId: string, title: string) => socket.emit(C2S.RENAME_ASSET, { assetId, title }),
+  deleteAsset: (assetId: string) => socket.emit(C2S.DELETE_ASSET, { assetId }),
+  moveHandout: (handoutId: string, folderId: string | null) => socket.emit(C2S.MOVE_HANDOUT, { handoutId, folderId }),
+
+  addAudio: (assetId: string, title: string) => socket.emit(C2S.ADD_AUDIO, { assetId, title }),
+  removeAudio: (trackId: string) => socket.emit(C2S.REMOVE_AUDIO, { trackId }),
+  audioControl: (p: { trackId?: string; action: 'play' | 'stop' | 'pause'; loop?: boolean; volume?: number }) =>
+    socket.emit(C2S.AUDIO_CONTROL, p),
 };

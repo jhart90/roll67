@@ -6,12 +6,14 @@ import {
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import {
-  campaigns, characters, chat, drawings, handouts, initiative, macros, maps, rollableTables,
+  assetFolders, assets, audioTracks, campaigns, characters, chat, drawings,
+  handouts, initiative, macros, maps, rollableTables,
 } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
 import { initiativeViewFor } from './combat.js';
 import { buildDirectory } from '../directory.js';
+import { getAudioState } from './library.js';
 
 function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   const all = handouts.forCampaign(campaignId);
@@ -109,6 +111,11 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     {
       const all = rollableTables.forCampaign(campaignId);
       socket.emit(S2C.TABLES, { tables: role === 'dm' ? all : all.filter((t) => t.playersCanRoll) });
+    }
+    socket.emit(S2C.AUDIO_TRACKS, { tracks: audioTracks.forCampaign(campaignId) });
+    socket.emit(S2C.AUDIO_STATE, { state: getAudioState(campaignId) });
+    if (role === 'dm') {
+      socket.emit(S2C.ASSETS, { folders: assetFolders.forCampaign(campaignId), assets: assets.forCampaign(campaignId) });
     }
     sendMapState(socket);
     broadcastPresence(io, campaignId);

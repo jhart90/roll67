@@ -40,6 +40,10 @@ export function GeometryLayer() {
   const walls = isDm ? dmGeometry?.walls ?? [] : [];
   const doors = isDm ? dmGeometry?.doors ?? [] : knownDoors;
   const lights = isDm ? dmGeometry?.lights ?? [] : [];
+  const wallType = useGameStore((s) => s.wallType);
+  const wallFlip = useGameStore((s) => s.wallFlip);
+
+  const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b' };
 
   // Cancel drafts when the tool changes.
   useEffect(() => {
@@ -51,7 +55,7 @@ export function GeometryLayer() {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setDraft([]);
       if (e.key === 'Enter' && tool === 'wall' && draft.length >= 2) {
-        intents.upsertWall(map.id, { points: draft });
+        intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip });
         setDraft([]);
       }
     }
@@ -81,6 +85,7 @@ export function GeometryLayer() {
     const p = snap(raw, e.shiftKey);
 
     if (tool === 'wall') {
+      // Single-click one-way walls are 2-point; keep polyline for solid/window.
       setDraft((d) => [...d, p]);
     } else if (tool === 'door') {
       if (draft.length === 0) setDraft([p]);
@@ -128,7 +133,7 @@ export function GeometryLayer() {
   function onOverlayDoubleClick(e: React.MouseEvent<SVGRectElement>) {
     if (tool === 'wall' && draft.length >= 2) {
       e.stopPropagation();
-      intents.upsertWall(map.id, { points: draft });
+      intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip });
       setDraft([]);
     }
   }
@@ -188,19 +193,23 @@ export function GeometryLayer() {
         );
       })}
 
-      {/* walls (DM only) */}
-      {walls.map((w) => (
-        <polyline
-          key={w.id}
-          points={w.points.map((p) => `${p.x},${p.y}`).join(' ')}
-          fill="none"
-          stroke="#d26c6c"
-          strokeWidth={4}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity={0.9}
-        />
-      ))}
+      {/* walls (DM only) — colored + dashed by type */}
+      {walls.map((w) => {
+        const type = w.type ?? 'solid';
+        return (
+          <polyline
+            key={w.id}
+            points={w.points.map((p) => `${p.x},${p.y}`).join(' ')}
+            fill="none"
+            stroke={WALL_STROKE[type]}
+            strokeWidth={4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray={type === 'window' ? '2 8' : type === 'oneway' ? '12 6' : undefined}
+            opacity={0.9}
+          />
+        );
+      })}
 
       {/* doors (DM: all; players: known) */}
       {doors.map((d) => {

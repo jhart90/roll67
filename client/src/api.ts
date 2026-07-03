@@ -28,13 +28,18 @@ export const api = {
   post: <T>(url: string, body?: unknown) => request<T>('POST', url, body),
 };
 
-export async function uploadFile(file: File, campaignId: string, kind: 'map' | 'token' | 'handout'): Promise<{
-  assetId: string; url: string; width: number; height: number;
-}> {
+export async function uploadFile(
+  file: File,
+  campaignId: string,
+  kind: 'map' | 'token' | 'handout' | 'audio',
+  opts?: { title?: string; folderId?: string | null },
+): Promise<{ assetId: string; url: string; width: number; height: number }> {
   const form = new FormData();
   form.append('file', file);
   form.append('campaignId', campaignId);
   form.append('kind', kind);
+  if (opts?.title) form.append('title', opts.title);
+  if (opts?.folderId) form.append('folderId', opts.folderId);
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;

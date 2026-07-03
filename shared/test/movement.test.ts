@@ -47,6 +47,13 @@ describe('movement blocking', () => {
     expect(reach({ q: 8, r: 10 }, stubs, [{ ...door, open: true }])).toBe(true);
   });
 
+  it('all wall types block movement (window/one-way are still physical walls)', () => {
+    const window: Wall = { id: 'w', points: [{ x: 190, y: -100 }, { x: 190, y: 700 }], type: 'window' };
+    const oneway: Wall = { id: 'w', points: [{ x: 190, y: -100 }, { x: 190, y: 700 }], type: 'oneway' };
+    expect(reach({ q: 8, r: 10 }, [window])).toBe(false);
+    expect(reach({ q: 8, r: 10 }, [oneway])).toBe(false);
+  });
+
   it('cannot escape a sealed box', () => {
     // A box of walls around the start hex (px center ~155.9, 150).
     const box: Wall = {

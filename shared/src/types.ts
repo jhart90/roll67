@@ -56,10 +56,20 @@ export interface GridConfig {
   feetPerHex: number;
 }
 
+export type WallType = 'solid' | 'window' | 'oneway';
+
 export interface Wall {
   id: string;
   /** Polyline; each consecutive pair of points is a blocking segment. */
   points: Point[];
+  /**
+   * solid  = blocks movement + sight (default).
+   * window = blocks movement, transparent to sight.
+   * oneway = blocks movement; blocks sight only from the "blocked" side.
+   */
+  type?: WallType;
+  /** One-way walls: which side sight is blocked from. */
+  flip?: boolean;
 }
 
 export interface Door {
@@ -263,4 +273,43 @@ export interface Handout {
   sharedAll: boolean;
   /** userIds; only meaningful for the DM's view. */
   sharedWith: string[];
+  folderId: string | null;
+}
+
+// ---------- Asset library ----------
+
+export type FolderKind = 'art' | 'handout';
+
+export interface AssetFolder {
+  id: string;
+  name: string;
+  kind: FolderKind;
+}
+
+export interface AssetInfo {
+  id: string;
+  kind: 'map' | 'token' | 'handout' | 'audio';
+  url: string;
+  title: string;
+  folderId: string | null;
+  width: number;
+  height: number;
+  mime: string;
+}
+
+// ---------- Audio jukebox ----------
+
+export interface AudioTrack {
+  id: string;
+  title: string;
+  url: string;
+}
+
+export interface AudioState {
+  trackId: string | null;
+  playing: boolean;
+  loop: boolean;
+  volume: number;      // 0..1
+  /** Server epoch ms when the current track started (for rough sync). */
+  startedAt: number;
 }

@@ -15,6 +15,7 @@ import { registerCharacterHandlers } from './live/handlers/characters.js';
 import { registerChatHandlers } from './live/handlers/chat.js';
 import { registerCombatHandlers } from './live/handlers/combat.js';
 import { registerTableHandlers } from './live/handlers/table.js';
+import { registerLibraryHandlers } from './live/handlers/library.js';
 import { flushAllFog } from './live/visionService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +63,7 @@ io.on('connection', (socket) => {
   registerChatHandlers(io, socket);
   registerCombatHandlers(io, socket);
   registerTableHandlers(io, socket);
+  registerLibraryHandlers(io, socket);
 });
 
 httpServer.listen(PORT, () => {

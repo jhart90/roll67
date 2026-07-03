@@ -95,7 +95,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     const walls = [...map.walls];
     const id = wall.id ?? newId();
     const idx = walls.findIndex((w) => w.id === id);
-    const next = { id, points: wall.points };
+    const next = { id, points: wall.points, type: wall.type ?? 'solid', flip: !!wall.flip };
     if (idx >= 0) walls[idx] = next;
     else walls.push(next);
     maps.setWalls(mapId, walls);

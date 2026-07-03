@@ -70,6 +70,28 @@ describe('walls', () => {
   });
 });
 
+describe('wall types', () => {
+  const behind = packHex({ q: 8, r: 10 }); // right of the x=190 wall
+  const wallLine = [{ x: 190, y: 100 }, { x: 190, y: 200 }];
+
+  it('a window wall is transparent to sight', () => {
+    const solid: Wall = { id: 'w', points: wallLine, type: 'solid' };
+    const window: Wall = { id: 'w', points: wallLine, type: 'window' };
+    expect(fov({ walls: [solid] }).has(behind)).toBe(false);
+    expect(fov({ walls: [window] }).has(behind)).toBe(true);
+  });
+
+  it('a one-way wall blocks sight from only one side', () => {
+    // Viewer at (4,10) is on the LEFT of the segment.
+    const oneway: Wall = { id: 'w', points: wallLine, type: 'oneway', flip: false };
+    const onewayFlipped: Wall = { id: 'w', points: wallLine, type: 'oneway', flip: true };
+    // Default: left side sees through, right side is blocked.
+    expect(fov({ walls: [oneway] }).has(behind)).toBe(true);
+    // Flipped: left side is now the blocked side.
+    expect(fov({ walls: [onewayFlipped] }).has(behind)).toBe(false);
+  });
+});
+
 describe('doors', () => {
   const doorClosed: Door = { id: 'd1', a: { x: 190, y: 100 }, b: { x: 190, y: 200 }, open: false };
 

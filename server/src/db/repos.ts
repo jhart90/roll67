@@ -1,4 +1,5 @@
 import type {
+  AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, Light, Macro, MapDef, MapMeta,
   RollableTable, RollBreakdown, Role, Token, Wall,
@@ -168,24 +169,111 @@ export interface AssetRow {
   bytes: number;
   width: number;
   height: number;
+  folder_id?: string | null;
+  title?: string | null;
+}
+
+function assetToInfo(r: AssetRow): AssetInfo {
+  return {
+    id: r.id,
+    kind: r.kind as AssetInfo['kind'],
+    url: `/uploads/${r.id}.${r.ext}`,
+    title: r.title || r.filename,
+    folderId: r.folder_id ?? null,
+    width: r.width,
+    height: r.height,
+    mime: r.mime,
+  };
 }
 
 export const assets = {
-  create(a: Omit<AssetRow, 'id'> & { uploaderId: string }): AssetRow {
+  create(a: Omit<AssetRow, 'id'> & { uploaderId: string; title?: string | null; folderId?: string | null }): AssetRow {
     const id = newId();
     db.prepare(
-      `INSERT INTO assets (id, campaign_id, uploader_id, kind, filename, ext, mime, bytes, width, height, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, a.campaign_id, a.uploaderId, a.kind, a.filename, a.ext, a.mime, a.bytes, a.width, a.height, now());
+      `INSERT INTO assets (id, campaign_id, uploader_id, kind, filename, ext, mime, bytes, width, height, folder_id, title, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, a.campaign_id, a.uploaderId, a.kind, a.filename, a.ext, a.mime, a.bytes, a.width, a.height, a.folderId ?? null, a.title ?? null, now());
     return { id, ...a };
   },
   byId(id: string): AssetRow | undefined {
     return db.prepare('SELECT * FROM assets WHERE id = ?').get(id) as AssetRow | undefined;
   },
+  /** Browsable art assets (images) for a campaign. */
+  forCampaign(campaignId: string): AssetInfo[] {
+    const rows = db.prepare(
+      `SELECT * FROM assets WHERE campaign_id = ? AND kind != 'audio' ORDER BY created_at DESC`,
+    ).all(campaignId) as AssetRow[];
+    return rows.map(assetToInfo);
+  },
+  move(id: string, folderId: string | null): void {
+    db.prepare('UPDATE assets SET folder_id = ? WHERE id = ?').run(folderId, id);
+  },
+  rename(id: string, title: string): void {
+    db.prepare('UPDATE assets SET title = ? WHERE id = ?').run(title, id);
+  },
+  delete(id: string): void {
+    db.prepare('DELETE FROM assets WHERE id = ?').run(id);
+  },
   urlFor(id: string | null): string | null {
     if (!id) return null;
     const row = assets.byId(id);
     return row ? `/uploads/${row.id}.${row.ext}` : null;
+  },
+};
+
+// ---------- asset folders ----------
+
+export const assetFolders = {
+  forCampaign(campaignId: string, kind?: 'art' | 'handout'): AssetFolder[] {
+    const rows = kind
+      ? db.prepare('SELECT id, name, kind FROM asset_folders WHERE campaign_id = ? AND kind = ? ORDER BY sort_order, name').all(campaignId, kind)
+      : db.prepare('SELECT id, name, kind FROM asset_folders WHERE campaign_id = ? ORDER BY sort_order, name').all(campaignId);
+    return rows as AssetFolder[];
+  },
+  byId(id: string): (AssetFolder & { campaignId: string }) | undefined {
+    const r = db.prepare('SELECT id, name, kind, campaign_id FROM asset_folders WHERE id = ?').get(id) as (AssetFolder & { campaign_id: string }) | undefined;
+    return r ? { id: r.id, name: r.name, kind: r.kind, campaignId: r.campaign_id } : undefined;
+  },
+  create(campaignId: string, name: string, kind: 'art' | 'handout'): AssetFolder {
+    const id = newId();
+    const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM asset_folders WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
+    db.prepare('INSERT INTO asset_folders (id, campaign_id, name, kind, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, kind, maxOrder + 1);
+    return { id, name, kind };
+  },
+  rename(id: string, name: string): void {
+    db.prepare('UPDATE asset_folders SET name = ? WHERE id = ?').run(name, id);
+  },
+  delete(id: string): void {
+    // Loose assets/handouts fall back to "unfiled" (folder_id null).
+    db.prepare('UPDATE assets SET folder_id = NULL WHERE folder_id = ?').run(id);
+    db.prepare('UPDATE handouts SET folder_id = NULL WHERE folder_id = ?').run(id);
+    db.prepare('DELETE FROM asset_folders WHERE id = ?').run(id);
+  },
+};
+
+// ---------- audio tracks ----------
+
+export const audioTracks = {
+  forCampaign(campaignId: string): AudioTrack[] {
+    const rows = db.prepare(
+      `SELECT t.id, t.title, a.ext, a.id as assetId FROM audio_tracks t
+       JOIN assets a ON a.id = t.asset_id WHERE t.campaign_id = ? ORDER BY t.sort_order, t.title`,
+    ).all(campaignId) as Array<{ id: string; title: string; ext: string; assetId: string }>;
+    return rows.map((r) => ({ id: r.id, title: r.title, url: `/uploads/${r.assetId}.${r.ext}` }));
+  },
+  byId(id: string): { id: string; url: string; campaignId: string } | undefined {
+    const r = db.prepare(
+      `SELECT t.id, t.campaign_id, a.ext, a.id as assetId FROM audio_tracks t
+       JOIN assets a ON a.id = t.asset_id WHERE t.id = ?`,
+    ).get(id) as { id: string; campaign_id: string; ext: string; assetId: string } | undefined;
+    return r ? { id: r.id, url: `/uploads/${r.assetId}.${r.ext}`, campaignId: r.campaign_id } : undefined;
+  },
+  add(campaignId: string, assetId: string, title: string): void {
+    const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM audio_tracks WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
+    db.prepare('INSERT INTO audio_tracks (id, campaign_id, asset_id, title, sort_order) VALUES (?, ?, ?, ?, ?)').run(newId(), campaignId, assetId, title, maxOrder + 1);
+  },
+  remove(id: string): void {
+    db.prepare('DELETE FROM audio_tracks WHERE id = ?').run(id);
   },
 };
 
@@ -451,6 +539,7 @@ interface HandoutRow {
   body_md: string;
   asset_id: string | null;
   shared_all: number;
+  folder_id?: string | null;
 }
 
 function toHandout(row: HandoutRow): Handout {
@@ -462,6 +551,7 @@ function toHandout(row: HandoutRow): Handout {
     imageUrl: assets.urlFor(row.asset_id),
     sharedAll: !!row.shared_all,
     sharedWith: shares.map((s) => s.user_id),
+    folderId: row.folder_id ?? null,
   };
 }
 
@@ -501,6 +591,9 @@ export const handouts = {
       const ins = db.prepare('INSERT OR IGNORE INTO handout_shares (handout_id, user_id) VALUES (?, ?)');
       for (const userId of to) ins.run(id, userId);
     }
+  },
+  move(id: string, folderId: string | null): void {
+    db.prepare('UPDATE handouts SET folder_id = ? WHERE id = ?').run(folderId, id);
   },
   delete(id: string): void {
     db.prepare('DELETE FROM handouts WHERE id = ?').run(id);

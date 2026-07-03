@@ -14,6 +14,9 @@ import { DiceOverlay } from '../table/DiceOverlay';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
+import { AudioPlayer } from '../table/AudioPlayer';
+import { AssetLibrary } from '../panels/AssetLibrary';
+import { Jukebox } from '../panels/Jukebox';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -41,8 +44,12 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const errorToast = useGameStore((s) => s.errorToast);
   const drawColor = useGameStore((s) => s.drawColor);
   const drawLayer = useGameStore((s) => s.drawLayer);
+  const wallType = useGameStore((s) => s.wallType);
+  const wallFlip = useGameStore((s) => s.wallFlip);
   const [showMaps, setShowMaps] = useState(false);
   const [showDice, setShowDice] = useState(false);
+  const [showAssets, setShowAssets] = useState(false);
+  const [showAudio, setShowAudio] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab>('characters');
 
   useEffect(() => {
@@ -85,8 +92,10 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               </select>
             </label>
             <button onClick={() => setShowMaps((v) => !v)}>Maps</button>
+            <button onClick={() => setShowAssets((v) => !v)}>Assets</button>
           </>
         )}
+        <button onClick={() => setShowAudio((v) => !v)} title="Jukebox">🎵</button>
         <span className="user-chip">{you.username} ({you.role})</span>
       </header>
 
@@ -138,6 +147,29 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           </div>
         )}
 
+        {tool === 'wall' && map && isDm && (
+          <div className="draw-options">
+            <span className="dim" style={{ fontSize: 12 }}>Wall:</span>
+            {(['solid', 'window', 'oneway'] as const).map((t) => (
+              <button
+                key={t}
+                className={wallType === t ? 'active' : ''}
+                style={{ fontSize: 12 }}
+                title={t === 'solid' ? 'Blocks movement & sight' : t === 'window' ? 'Blocks movement, see-through' : 'One-way: see out, not in'}
+                onClick={() => useGameStore.getState().setWallType(t)}
+              >
+                {t === 'solid' ? 'Solid' : t === 'window' ? 'Window' : 'One-way'}
+              </button>
+            ))}
+            {wallType === 'oneway' && (
+              <button className={wallFlip ? 'active' : ''} style={{ fontSize: 12 }} onClick={() => useGameStore.getState().toggleWallFlip()}>
+                flip side
+              </button>
+            )}
+            <span className="dim" style={{ fontSize: 11 }}>click points · double-click/Enter to finish</span>
+          </div>
+        )}
+
         {(tool === 'draw' || tool === 'erase') && map && (
           <div className="draw-options">
             {tool === 'draw' && DRAW_COLORS.map((c) => (
@@ -165,12 +197,18 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         {showDice && <DiceRoller onClose={() => setShowDice(false)} />}
 
+        {showAssets && isDm && <AssetLibrary onClose={() => setShowAssets(false)} />}
+        {showAudio && (
+          <div className="overlay-panel"><Jukebox onClose={() => setShowAudio(false)} /></div>
+        )}
+
         <TokenInspector />
         <LightInspector />
         <CharacterSheet />
         <DiceOverlay />
         <Toolbar />
         <PresenceBar />
+        <AudioPlayer />
       </div>
 
       {viewingAs && (

@@ -556,6 +556,35 @@ async function main() {
   await reordered;
   ok(true, 'reorderMacros round-trips');
 
+  // ---------- asset folders ----------
+  console.log('asset folders:');
+  const dmAssets1 = waitFor(dmSock, 'assets', 5000, (p) => p.folders.some((f) => f.name === 'Smoke Folder'));
+  dmSock.emit('createFolder', { name: 'Smoke Folder', kind: 'art' });
+  const af = (await dmAssets1).folders.find((f) => f.name === 'Smoke Folder');
+  ok(!!af, 'DM created an art folder');
+  // players never receive the DM-only asset library
+  const playerNoAssets = await expectSilence(playerSock, 'assets', 1000);
+  ok(playerNoAssets === null, 'asset library is DM-only');
+  const dmAssets2 = waitFor(dmSock, 'assets', 5000, (p) => !p.folders.some((f) => f.id === af.id));
+  dmSock.emit('deleteFolder', { folderId: af.id });
+  await dmAssets2;
+  ok(true, 'folder delete round-trips');
+
+  // ---------- audio jukebox ----------
+  console.log('audio jukebox:');
+  // Register a fake audio asset directly-ish: audio requires an uploaded file,
+  // which the socket smoke can't do, so just exercise the control-state sync.
+  const bothAudio = Promise.all([
+    waitFor(dmSock, 'audioState', 5000, (p) => p.state.volume === 0.3),
+    waitFor(playerSock, 'audioState', 5000, (p) => p.state.volume === 0.3),
+  ]);
+  dmSock.emit('audioControl', { action: 'pause', volume: 0.3 });
+  await bothAudio;
+  ok(true, 'audio control state syncs to all clients (DM volume change)');
+  const playerBlocked = waitFor(playerSock, 'errorMsg');
+  playerSock.emit('audioControl', { action: 'stop' });
+  ok(!!(await playerBlocked).message, 'players cannot control the jukebox');
+
   // ---------- group initiative ----------
   console.log('group initiative:');
   dmSock.emit('initClear');

@@ -2,6 +2,7 @@
 // server handlers and client store both import from this file only.
 
 import type {
+  AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, InitiativeState, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
@@ -76,6 +77,19 @@ export const C2S = {
   SHARE_HANDOUT: 'shareHandout',
   // directory
   REQUEST_DIRECTORY: 'requestDirectory',
+  // asset library
+  REQUEST_ASSETS: 'requestAssets',
+  CREATE_FOLDER: 'createFolder',
+  RENAME_FOLDER: 'renameFolder',
+  DELETE_FOLDER: 'deleteFolder',
+  MOVE_ASSET: 'moveAsset',
+  RENAME_ASSET: 'renameAsset',
+  DELETE_ASSET: 'deleteAsset',
+  MOVE_HANDOUT: 'moveHandout',
+  // audio jukebox
+  ADD_AUDIO: 'addAudio',
+  REMOVE_AUDIO: 'removeAudio',
+  AUDIO_CONTROL: 'audioControl',
 } as const;
 
 export interface JoinCampaignPayload { campaignId: string }
@@ -95,7 +109,10 @@ export interface UpdateMapPayload {
 }
 export interface SetGridConfigPayload { mapId: string; grid: Partial<GridConfig> }
 
-export interface UpsertWallPayload { mapId: string; wall: { id?: string; points: Point[] } }
+export interface UpsertWallPayload {
+  mapId: string;
+  wall: { id?: string; points: Point[]; type?: 'solid' | 'window' | 'oneway'; flip?: boolean };
+}
 export interface DeleteWallPayload { mapId: string; wallId: string }
 export interface UpsertDoorPayload { mapId: string; door: { id?: string; a: Point; b: Point; open?: boolean } }
 export interface DeleteDoorPayload { mapId: string; doorId: string }
@@ -191,6 +208,23 @@ export interface ClearDrawingsPayload { mapId: string; layer: DrawingLayerName }
 export interface PingPayload { x: number; y: number }
 export interface MeasurePayload { from: Hex; to: Hex; active: boolean }
 
+export interface CreateFolderPayload { name: string; kind: 'art' | 'handout' }
+export interface RenameFolderPayload { folderId: string; name: string }
+export interface DeleteFolderPayload { folderId: string }
+export interface MoveAssetPayload { assetId: string; folderId: string | null }
+export interface RenameAssetPayload { assetId: string; title: string }
+export interface DeleteAssetPayload { assetId: string }
+export interface MoveHandoutPayload { handoutId: string; folderId: string | null }
+
+export interface AddAudioPayload { assetId: string; title: string }
+export interface RemoveAudioPayload { trackId: string }
+export interface AudioControlPayload {
+  trackId?: string;
+  action: 'play' | 'stop' | 'pause';
+  loop?: boolean;
+  volume?: number;
+}
+
 export interface CreateHandoutPayload { title: string; bodyMd?: string; assetId?: string | null }
 export interface UpdateHandoutPayload { handoutId: string; title?: string; bodyMd?: string; assetId?: string | null }
 export interface DeleteHandoutPayload { handoutId: string }
@@ -222,6 +256,9 @@ export const S2C = {
   MEASURE_SHOWN: 'measureShown',
   HANDOUTS: 'handouts',
   TABLES: 'tables',
+  ASSETS: 'assets',
+  AUDIO_TRACKS: 'audioTracks',
+  AUDIO_STATE: 'audioState',
   DIRECTORY: 'directory',
   MEMBER_PRESENCE: 'memberPresence',
   ACTIVE_MAP: 'activeMap',
@@ -314,6 +351,9 @@ export interface PingShownPayload extends PingInfo {}
 export interface MeasureShownPayload extends MeasureInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
+export interface AssetsPayload { folders: AssetFolder[]; assets: AssetInfo[] }
+export interface AudioTracksPayload { tracks: AudioTrack[] }
+export interface AudioStatePayload { state: AudioState }
 
 /** Campaign-wide shared reference of everything introduced so far. */
 export interface DirectoryPayload {

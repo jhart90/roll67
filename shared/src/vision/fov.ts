@@ -6,7 +6,7 @@ import type { Door, GridConfig, Hex, Light, VisionStats, Wall } from '../types.j
 import { hexDistance, hexRange } from '../hex/coords.js';
 import { hexToPixel, pixelToHex } from '../hex/pixel.js';
 import { packHex } from '../hex/pack.js';
-import { blockingSegments, rayBlocked, type Segment } from './raycast.js';
+import { rayBlocked, sightSegments, type Segment } from './raycast.js';
 
 /** Hard cap on vision radius, to bound raycasting cost. */
 export const MAX_VISION_RADIUS = 40;
@@ -29,11 +29,12 @@ export interface FovInput {
  * The set of hexes illuminated by light sources (ignores viewers).
  * With globalIllumination the whole map is lit — callers skip this.
  */
-export function litHexes(input: FovInput, segments?: Segment[]): Set<number> {
-  const segs = segments ?? blockingSegments(input.walls, input.doors);
+export function litHexes(input: FovInput): Set<number> {
   const lit = new Set<number>();
   for (const light of input.lights) {
     const lightPos = { x: light.x, y: light.y };
+    // Light "sees" (illuminates) through the same rules as an eye at its spot.
+    const segs = sightSegments(input.walls, input.doors, lightPos);
     const lightHex = pixelToHex(lightPos, input.grid);
     const radius = Math.min(Math.max(light.dimRadius, light.brightRadius), MAX_VISION_RADIUS);
     for (const h of hexRange(lightHex, radius)) {
@@ -58,9 +59,8 @@ export function computeFov(
   viewer: Hex,
   stats: VisionStats,
   input: FovInput,
-  precomputed?: { segments?: Segment[]; lit?: Set<number> },
+  precomputed?: { lit?: Set<number> },
 ): Set<number> {
-  const segs = precomputed?.segments ?? blockingSegments(input.walls, input.doors);
   const radius = Math.min(Math.max(stats.visionRange, stats.darkvision, 0), MAX_VISION_RADIUS);
   const visible = new Set<number>();
   if (radius <= 0) {
@@ -68,8 +68,10 @@ export function computeFov(
     return visible;
   }
   const needLightCheck = !input.grid.globalIllumination;
-  const lit = needLightCheck ? (precomputed?.lit ?? litHexes(input, segs)) : undefined;
+  const lit = needLightCheck ? (precomputed?.lit ?? litHexes(input)) : undefined;
   const viewerPx = hexToPixel(viewer, input.grid);
+  // Sight blockers depend on the viewer's position (one-way walls).
+  const segs = sightSegments(input.walls, input.doors, viewerPx);
 
   for (const h of hexRange(viewer, radius)) {
     if (!inBounds(h, input.grid)) continue;
@@ -97,11 +99,10 @@ export function computeUnionFov(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
 ): Set<number> {
-  const segments = blockingSegments(input.walls, input.doors);
-  const lit = input.grid.globalIllumination ? undefined : litHexes(input, segments);
+  const lit = input.grid.globalIllumination ? undefined : litHexes(input);
   const union = new Set<number>();
   for (const v of viewers) {
-    for (const key of computeFov(v.hex, v.stats, input, { segments, lit })) {
+    for (const key of computeFov(v.hex, v.stats, input, { lit })) {
       union.add(key);
     }
   }
@@ -132,13 +133,12 @@ export function computeUnionFovBands(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
 ): FovBands {
-  const segments = blockingSegments(input.walls, input.doors);
-  const lit = input.grid.globalIllumination ? undefined : litHexes(input, segments);
+  const lit = input.grid.globalIllumination ? undefined : litHexes(input);
   const full = new Set<number>();
   const expanded = new Set<number>();
   for (const v of viewers) {
-    for (const key of computeFov(v.hex, v.stats, input, { segments, lit })) full.add(key);
-    for (const key of computeFov(v.hex, fadeStats(v.stats), input, { segments, lit })) expanded.add(key);
+    for (const key of computeFov(v.hex, v.stats, input, { lit })) full.add(key);
+    for (const key of computeFov(v.hex, fadeStats(v.stats), input, { lit })) expanded.add(key);
   }
   const fade = new Set<number>();
   for (const key of expanded) {

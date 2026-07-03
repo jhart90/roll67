@@ -11,6 +11,9 @@ A hex-grid virtual tabletop (Roll20-style) for playing **D&D 5e** and **Stars Wi
 - **Tokens** — drag-and-drop with hex snap, token art uploads, HP bars, name plates. Players can only move their own characters; NPCs are DM-only.
 - **True line-of-sight vision** — the server computes each player's field of view from their token(s): walls block sight, closed doors block until opened, lights create visible pockets in darkness, and darkvision works in the dark. Players are **never sent** what they can't see — hidden tokens and DM geometry never leave the server.
 - **Walls block movement too** — player tokens can't be moved through walls or closed doors (keyboard or drag); pathing allows going around corners but never through. The DM can reposition tokens freely.
+- **Wall types** — solid (blocks movement + sight), window (blocks movement, see-through), and one-way (see out, not in) walls, with a type picker in the wall tool.
+- **Asset library** — the DM uploads and organizes images into folders and reuses them as map backgrounds or tokens without re-uploading.
+- **Audio jukebox** — the DM uploads mp3/ogg/wav tracks and plays background music that syncs to every player (play/stop/loop/master volume); each player has a local mute.
 - **Fog of war** — unexplored areas are black; explored-but-not-visible areas are dimmed. Explored fog persists per player per map.
 - **Layers** — GM token layer for hidden monsters/notes; GM drawing layer for private sketches.
 - **DM tools** — wall polylines (trace your map art; Shift snaps to hex corners), doors (players can open/close when adjacent), light sources with bright/dim radii, **View as player** to see exactly what any player sees, and God mode.

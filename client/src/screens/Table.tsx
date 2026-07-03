@@ -11,6 +11,7 @@ import { InitiativePanel } from '../panels/InitiativePanel';
 import { DirectoryPanel } from '../panels/DirectoryPanel';
 import { WorldPanel } from '../panels/WorldPanel';
 import { ShopStorefront } from '../panels/ShopStorefront';
+import { TargetPopup } from '../panels/TargetPopup';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { PresenceBar } from '../table/PresenceBar';
@@ -43,6 +44,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const members = useGameStore((s) => s.members);
   const tool = useGameStore((s) => s.tool);
   const viewingAs = useGameStore((s) => s.viewingAs);
+  const targeting = useGameStore((s) => s.targeting);
   const errorToast = useGameStore((s) => s.errorToast);
   const drawColor = useGameStore((s) => s.drawColor);
   const drawLayer = useGameStore((s) => s.drawLayer);
@@ -213,7 +215,15 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />
+        <TargetPopup />
       </div>
+
+      {targeting && targeting.action.source === 'attack' && (
+        <div className="target-banner">
+          Choose a target for <strong>{targeting.action.label}</strong> — click a highlighted token
+          <button className="link" onClick={() => useGameStore.getState().cancelTargeting()}>cancel (Esc)</button>
+        </div>
+      )}
 
       {viewingAs && (
         <div className="viewas-banner">

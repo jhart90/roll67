@@ -88,6 +88,12 @@ function fmt(n: number): string {
   return n >= 0 ? `+${n}` : String(n);
 }
 
+/** Pull a healing dice expression out of item text ("Regain 2d4+2 hit points"). */
+function healAmountFrom(text: string): string | null {
+  const m = text.match(/regain\s+(\d*d\d+(?:\s*\+\s*\d+)?)\s+hit\s+points/i);
+  return m ? m[1].replace(/\s+/g, '') : null;
+}
+
 /** Which sheet list a content entry appends to, and the row to add. */
 export interface ApplyResult {
   listId: string;
@@ -171,13 +177,15 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
     };
   }
 
-  // gear + magic items -> inventory
+  // gear + magic items -> inventory. Healing consumables become usable.
   if (entry.kind === 'gear' || entry.kind === 'magicitem') {
+    const heal = healAmountFrom(`${entry.subtitle} ${entry.detail ?? ''}`);
+    const usable = heal ? { effect: 'heal', amount: heal, range: 5 } : {};
     return {
       listId: 'inventory',
       row: is5e
-        ? { name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, notes: entry.subtitle }
-        : { name: entry.name, qty: 1, enc: 1, notes: entry.subtitle },
+        ? { name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, ...usable, notes: entry.subtitle }
+        : { name: entry.name, qty: 1, enc: 1, ...usable, notes: entry.subtitle },
       label: `${entry.name} added to inventory`,
     };
   }

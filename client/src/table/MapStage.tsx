@@ -3,6 +3,7 @@ import { canMoveToken } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
 import { BackgroundCanvas } from './BackgroundCanvas';
+import { CombatTextLayer } from './CombatTextLayer';
 import { DrawingLayer } from './DrawingLayer';
 import { FogCanvas } from './FogCanvas';
 import { GeometryLayer } from './GeometryLayer';
@@ -80,6 +81,13 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
       // Never steal keys from chat, sheet fields, or other inputs.
       const t = e.target as HTMLElement;
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable) return;
+
+      // Escape cancels an in-progress combat target selection.
+      if (e.key === 'Escape' && useGameStore.getState().targeting) {
+        e.preventDefault();
+        useGameStore.getState().cancelTargeting();
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       if (e.key === '=' || e.key === '+') {
@@ -199,6 +207,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <FogCanvas map={map} visible={visible} fade={fade} explored={explored} />
           <GeometryLayer />
           <PingMeasureLayer />
+          <CombatTextLayer />
           {children}
         </div>
       </div>

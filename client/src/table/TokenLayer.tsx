@@ -1,30 +1,40 @@
 import { useRef, useState } from 'react';
 import type { TokenView } from 'shared';
-import { canMoveToken, hexToPixel, pixelToHex } from 'shared';
+import { canMoveToken, hexDistance, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
 const DRAG_THROTTLE_MS = 100;
 
-function TokenPiece({ token }: { token: TokenView }) {
+type TargetState = 'off' | 'valid' | 'invalid';
+
+function TokenPiece({ token, targetState }: { token: TokenView; targetState: TargetState }) {
   const stage = useStage();
   const map = useGameStore((s) => s.map)!;
   const you = useGameStore((s) => s.you);
   const characters = useGameStore((s) => s.characters);
   const selected = useGameStore((s) => s.selectedTokenId === token.id);
   const tool = useGameStore((s) => s.tool);
+  const targetEffect = useGameStore((s) => s.targeting?.action.effect ?? null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const lastSent = useRef(0);
 
   const character = characters.find((c) => c.id === token.characterId);
-  const movable = !!you && tool === 'select' &&
+  const movable = !!you && tool === 'select' && targetState === 'off' &&
     canMoveToken(you.role, you.userId, token, character);
 
   const home = hexToPixel({ q: token.q, r: token.r }, map.grid);
   const pos = dragPos ?? home;
   const radius = map.grid.hexSize * 0.72 * token.size;
+  const ringColor = targetEffect === 'heal' ? '#7ed28a' : '#d26c6c';
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
+    // Targeting mode: a click picks the target (if in range) instead of moving.
+    if (targetState !== 'off') {
+      e.stopPropagation();
+      if (targetState === 'valid' && e.button === 0) useGameStore.getState().resolveTarget(token.id);
+      return;
+    }
     if (tool !== 'select') return;
     e.stopPropagation();
     useGameStore.getState().selectToken(token.id);
@@ -79,13 +89,16 @@ function TokenPiece({ token }: { token: TokenView }) {
       onPointerUp={onPointerUp}
       onDoubleClick={onDoubleClick}
       style={{
-        cursor: movable ? 'grab' : 'default',
-        opacity: token.layer === 'gm' ? 0.55 : 1,
+        cursor: targetState === 'valid' ? 'crosshair' : movable ? 'grab' : 'default',
+        opacity: (token.layer === 'gm' ? 0.55 : 1) * (targetState === 'invalid' ? 0.4 : 1),
         // The layer's svg root is pointer-events:none so draw/measure tools
         // beneath still work; tokens themselves stay interactive.
         pointerEvents: 'auto',
       }}
     >
+      {targetState === 'valid' && (
+        <circle className="target-ring" r={radius + 6} fill="none" stroke={ringColor} strokeWidth={3} />
+      )}
       {selected && (
         <circle r={radius + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" />
       )}
@@ -158,7 +171,22 @@ export function TokenLayer() {
   const map = useGameStore((s) => s.map)!;
   const tokens = useGameStore((s) => s.tokens);
   const dragGhosts = useGameStore((s) => s.dragGhosts);
+  const targeting = useGameStore((s) => s.targeting);
   const { width, height } = mapPixelSize(map);
+
+  // In targeting mode, resolve which tokens are valid targets (in range, and
+  // not the attacker itself for a damaging action).
+  const src = targeting ? tokens[targeting.sourceTokenId] : undefined;
+  const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
+  const rangeHexes = targeting
+    ? (targeting.action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(targeting.action.rangeFt / feetPerHex)))
+    : 0;
+  function stateFor(t: TokenView): TargetState {
+    if (!targeting || !src) return 'off';
+    const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes;
+    const selfBlocked = targeting.action.effect === 'damage' && t.id === src.id;
+    return inRange && !selfBlocked ? 'valid' : 'invalid';
+  }
 
   return (
     <svg
@@ -168,7 +196,7 @@ export function TokenLayer() {
       style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}
     >
       {Object.values(tokens).map((t) => (
-        <TokenPiece key={t.id} token={t} />
+        <TokenPiece key={t.id} token={t} targetState={stateFor(t)} />
       ))}
       {Object.entries(dragGhosts).map(([id, p]) => (
         <DragGhost key={id} tokenId={id} x={p.x} y={p.y} />

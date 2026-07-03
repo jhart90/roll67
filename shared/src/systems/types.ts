@@ -59,6 +59,29 @@ export interface Rollable {
   d20: boolean;
 }
 
+/**
+ * A targeted combat action: an attack (roll to hit, deal damage) or a usable
+ * item (heal/damage that auto-applies). Derived from the sheet so it stays in
+ * sync with the character's current stats and inventory.
+ */
+export interface CombatAction {
+  /** Stable id encoding its source + row, e.g. "attack:0" or "item:3". */
+  id: string;
+  label: string;
+  /** How it changes the target's HP. */
+  effect: 'damage' | 'heal';
+  /** To-hit roll for weapons (compared to target AC); null = auto-applies. */
+  attackExpr: string | null;
+  /** Damage/heal dice expression, e.g. "1d8+3" or "2d4+2". */
+  amountExpr: string;
+  /** Reach/range in feet (0 = self only). */
+  rangeFt: number;
+  /** Decrement the inventory row's quantity when used (consumables). */
+  consumesItem: boolean;
+  source: 'attack' | 'item';
+  index: number;
+}
+
 export interface SystemSchema {
   id: 'dnd5e' | 'swn';
   name: string;

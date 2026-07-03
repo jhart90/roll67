@@ -628,10 +628,8 @@ async function main() {
   dmSock.emit('createShop', { name: 'Hidden Stall' });
   const stall = (await closedShops).shops.find((s) => s.name === 'Hidden Stall');
   dmSock.emit('updateShop', { shopId: stall.id, playersCanBuy: false, items: [{ name: 'Charm', price: 5, qty: 2 }] });
-  await new Promise((r) => setTimeout(r, 200));
-  // Player does NOT have the closed shop.
-  const noStall = await new Promise((res) => { playerSock.once('shops', res); playerSock.emit('requestDirectory'); });
-  void noStall;
+  // Let the close propagate before presenting (was a phantom 'shops' await that could hang).
+  await new Promise((r) => setTimeout(r, 300));
   const getsShop = waitFor(playerSock, 'shops', 5000, (p) => p.shops.some((s) => s.id === stall.id));
   const getsPop = waitFor(playerSock, 'shopPresentation', 5000, (p) => p.shopId === stall.id);
   dmSock.emit('presentShop', { shopId: stall.id, userIds: 'all' });

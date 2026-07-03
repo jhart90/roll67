@@ -45,6 +45,7 @@ export const C2S = {
   DELETE_CHARACTER: 'deleteCharacter',
   UPDATE_CHARACTER: 'updateCharacter',
   SHEET_ROLL: 'sheetRoll',
+  COMBAT_ACTION: 'combatAction',
   // shops
   CREATE_SHOP: 'createShop',
   UPDATE_SHOP: 'updateShop',
@@ -206,6 +207,14 @@ export interface SheetRollPayload {
   rollableId: string;
   adv?: 'adv' | 'dis' | null;
 }
+/** Use a weapon/item against a target token; server rolls & applies HP. */
+export interface CombatActionPayload {
+  characterId: string;
+  actionId: string;
+  sourceTokenId: string;
+  targetTokenId: string;
+  adv?: 'adv' | 'dis' | null;
+}
 
 export interface ChatPayload { text: string }
 export interface SaveMacroPayload {
@@ -287,6 +296,7 @@ export const S2C = {
   DOOR_STATE: 'doorState',
   CHARACTER_UPSERTED: 'characterUpserted',
   CHARACTER_REMOVED: 'characterRemoved',
+  HP_FLOAT: 'hpFloat',
   CHAT: 'chatMsg',
   MACROS: 'macros',
   INITIATIVE: 'initiativeState',
@@ -382,6 +392,8 @@ export interface DoorStatePayload { mapId: string; doorId: string; open: boolean
 
 export interface CharacterUpsertedPayload { character: Character }
 export interface CharacterRemovedPayload { characterId: string }
+/** Floating combat text over a token: negative = damage, positive = heal. */
+export interface HpFloatPayload { mapId: string; tokenId: string; delta: number }
 
 export interface ChatBroadcastPayload { msg: ChatMessage }
 export interface MacrosPayload { macros: Macro[] }

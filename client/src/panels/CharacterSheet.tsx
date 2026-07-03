@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, SheetData } from 'shared';
 import {
-  canEditCharacter, systemFor,
+  canEditCharacter, combatActions, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -241,6 +241,13 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
   const [adv, setAdv] = useState<AdvMode>(null);
   const schema = systemFor(character.system);
   const rollables = useMemo(() => schema.rollables(character.sheet), [schema, character.sheet]);
+  const actions = useMemo(() => combatActions(character), [character]);
+  const tokens = useGameStore((s) => s.tokens);
+  const mapId = useGameStore((s) => s.map?.id ?? null);
+  const myToken = useMemo(
+    () => Object.values(tokens).find((t) => t.characterId === character.id && t.mapId === mapId),
+    [tokens, character.id, mapId],
+  );
 
   const groups = useMemo(() => {
     const out = new Map<string, Rollable[]>();
@@ -264,6 +271,27 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
           </button>
         ))}
       </div>
+
+      {actions.length > 0 && (
+        <div className="roll-group">
+          <h5>Actions</h5>
+          {actions.map((a) => (
+            <button
+              key={a.id}
+              className={`action-btn ${a.effect}`}
+              disabled={!canRoll || !myToken}
+              title={myToken ? `Range ${a.rangeFt} ft — pick a target` : "Place this character's token on the map first"}
+              onClick={() => myToken && useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null)}
+            >
+              <span>{a.effect === 'heal' ? '🧪' : '⚔️'} {a.label}</span>
+              <span className="action-meta">
+                {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
+              </span>
+            </button>
+          ))}
+          {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
+        </div>
+      )}
       {[...groups.entries()].map(([group, rolls]) => (
         <div key={group} className="roll-group">
           <h5>{group}</h5>

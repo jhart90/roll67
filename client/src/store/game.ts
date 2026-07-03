@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import {
   C2S, S2C,
   type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
-  type DieRoll, type DirectoryPayload,
+  type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload,
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
@@ -66,6 +66,13 @@ interface GameState {
   errorToast: string | null;
   /** Live 3D dice animation for the latest roll. */
   diceAnim: { id: number; dice: DieRoll[]; byName: string } | null;
+  /** In-progress combat action awaiting a target selection. */
+  targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
+  /** Floating +/-HP combat text over tokens. */
+  floats: Array<{ id: number; tokenId: string; delta: number }>;
+  beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
+  cancelTargeting(): void;
+  resolveTarget(targetTokenId: string): void;
 
   camera: Camera;
   tool: Tool;
@@ -136,6 +143,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   measures: {},
   errorToast: null,
   diceAnim: null,
+  targeting: null,
+  floats: [],
+  beginTargeting(characterId, sourceTokenId, action, adv) {
+    // Clear the sheet so the map is usable; the banner/popup drives selection.
+    set({ targeting: { characterId, sourceTokenId, action, adv }, sheetCharacterId: null, tool: 'select', selectedTokenId: null });
+  },
+  cancelTargeting() { set({ targeting: null }); },
+  resolveTarget(targetTokenId) {
+    const t = get().targeting;
+    if (!t) return;
+    socket.emit(C2S.COMBAT_ACTION, {
+      characterId: t.characterId, actionId: t.action.id,
+      sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv,
+    });
+    set({ targeting: null });
+  },
 
   camera: { x: 0, y: 0, scale: 1 },
   tool: 'select',
@@ -165,6 +188,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, sheetCharacterId: null,
+      targeting: null, floats: [],
     });
   },
 
@@ -341,6 +365,18 @@ export function wireSocket(): void {
       ? s.characters.map((c) => (c.id === character.id ? character : c))
       : [...s.characters, character];
     useGameStore.setState({ characters });
+  });
+
+  socket.on(S2C.HP_FLOAT, (p: HpFloatPayload) => {
+    const s = useGameStore.getState();
+    // Only float over tokens we can actually see (secrecy preserved).
+    if (s.map?.id !== p.mapId || !s.tokens[p.tokenId]) return;
+    const id = ++pingCounter;
+    useGameStore.setState({ floats: [...s.floats, { id, tokenId: p.tokenId, delta: p.delta }] });
+    setTimeout(() => {
+      const cur = useGameStore.getState();
+      useGameStore.setState({ floats: cur.floats.filter((f) => f.id !== id) });
+    }, 1600);
   });
 
   socket.on(S2C.CHARACTER_REMOVED, ({ characterId }: { characterId: string }) => {

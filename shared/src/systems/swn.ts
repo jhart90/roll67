@@ -121,8 +121,9 @@ const gearTab: SheetTab = {
       columns: [
         { id: 'name', label: 'Weapon', type: 'text', width: 'third' },
         { id: 'bonus', label: 'Hit bonus', type: 'number', width: 'sixth', default: 0 },
-        { id: 'damage', label: 'Damage', type: 'text', width: 'third', default: '1d6' },
-        { id: 'notes', label: 'Range / notes', type: 'text', width: 'sixth' },
+        { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6' },
+        { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
     {
@@ -143,6 +144,8 @@ const gearTab: SheetTab = {
         { id: 'name', label: 'Item', type: 'text', width: 'third' },
         { id: 'qty', label: 'Qty', type: 'number', width: 'sixth', default: 1 },
         { id: 'enc', label: 'Enc', type: 'number', width: 'sixth', default: 1 },
+        { id: 'effect', label: 'Use', type: 'select', width: 'sixth', options: ['none', 'heal', 'damage'], default: 'none' },
+        { id: 'amount', label: 'Amount', type: 'text', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },

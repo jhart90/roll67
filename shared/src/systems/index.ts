@@ -4,6 +4,7 @@ import { dnd5e } from './dnd5e.js';
 import { swn } from './swn.js';
 
 export * from './types.js';
+export * from './combat.js';
 export { dnd5e, SKILLS_5E } from './dnd5e.js';
 export { swn, swnMod } from './swn.js';
 

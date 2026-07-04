@@ -1307,55 +1307,36 @@ button.link:hover { text-decoration: underline; }
 
 .dice-overlay {
   position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  animation: dice-overlay-in 0.2s ease-out, dice-overlay-out 0.5s ease-in 4.4s forwards;
+}
+@keyframes dice-overlay-in { from { opacity: 0; } }
+@keyframes dice-overlay-out { to { opacity: 0; } }
+
+.dice3d-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.dice-roller-name {
+  position: absolute;
   left: 50%;
   bottom: 90px;
   transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  z-index: 80;
-  pointer-events: none;
-  animation: dice-overlay-in 0.25s ease-out, dice-overlay-out 0.4s ease-in 2.5s forwards;
-}
-@keyframes dice-overlay-in { from { opacity: 0; transform: translate(-50%, 20px); } }
-@keyframes dice-overlay-out { to { opacity: 0; } }
-
-.dice-roller-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--accent-2);
   text-shadow: 0 2px 6px #000;
+  white-space: nowrap;
 }
 
-.dice-row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
-
-.die3d {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  perspective: 400px;
-}
-.die3d.dropped { opacity: 0.45; }
-
-.die-solid {
-  position: relative;
-  transform-style: preserve-3d;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
-}
-.die-value {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-top: 8px;
-  font-size: 22px;
-  font-weight: 800;
-  color: #10131a;
-  opacity: 0;
-  animation: die-value-pop 0.25s ease-out forwards;
+.dice-total {
+  color: #fff;
+  font-size: 17px;
+  display: inline-block;
+  animation: die-value-pop 0.3s ease-out;
 }
 
 @keyframes die-value-pop {
@@ -1363,19 +1344,33 @@ button.link:hover { text-decoration: underline; }
   100% { opacity: 1; transform: scale(1); }
 }
 
-@keyframes die-tumble-a {
-  0% { transform: rotateX(720deg) rotateY(540deg) rotateZ(180deg) scale(0.3); }
-  100% { transform: rotateX(0) rotateY(0) rotateZ(0) scale(1); }
+.dice-color-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 8px;
 }
-@keyframes die-tumble-b {
-  0% { transform: rotateX(-540deg) rotateY(720deg) rotateZ(-270deg) scale(0.3); }
-  100% { transform: rotateX(0) rotateY(0) rotateZ(0) scale(1); }
+.dice-color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
 }
-
-.die-tag {
-  font-size: 10px;
-  color: var(--text-dim);
-  text-shadow: 0 1px 3px #000;
+.dice-color-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.dice-color-custom {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
 }
 
 @keyframes ping-pulse {

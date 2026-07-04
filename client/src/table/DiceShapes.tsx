@@ -1,16 +1,10 @@
 // SVG silhouettes for each die type, with facet lines so a d20 reads as a
-// d20 and not a cube. Used by the quick-roll panel and the 3D roll overlay.
+// d20 and not a cube. Used by the quick-roll panel; the roll overlay itself
+// renders true 3D models (see dice3d.ts), sharing the same default palette.
 
-export const DIE_COLORS: Record<number, string> = {
-  2: '#c9cfdd',
-  4: '#d26c6c',
-  6: '#6c9bd2',
-  8: '#7ed28a',
-  10: '#6cd2c8',
-  12: '#b06cd2',
-  20: '#d2a56c',
-  100: '#d2d26c',
-};
+import { DEFAULT_DIE_COLORS } from './dice3d';
+
+export const DIE_COLORS = DEFAULT_DIE_COLORS;
 
 const EDGE = 'rgba(0, 0, 0, 0.45)';
 

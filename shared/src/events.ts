@@ -69,6 +69,7 @@ export const C2S = {
   SAVE_MACRO: 'saveMacro',
   DELETE_MACRO: 'deleteMacro',
   REORDER_MACROS: 'reorderMacros',
+  SET_DICE_COLOR: 'setDiceColor',
   // rollable tables
   CREATE_TABLE: 'createTable',
   UPDATE_TABLE: 'updateTable',
@@ -507,7 +508,9 @@ export interface DirectoryPayload {
   spells: string[];
   items: string[];
 }
-export interface MemberPresencePayload { userId: string; online: boolean; mapId: string | null }
+export interface MemberPresencePayload { userId: string; online: boolean; mapId: string | null; diceColor: string | null }
+/** Set your own 3D-dice color ("#rrggbb", or null for the defaults). */
+export interface SetDiceColorPayload { color: string | null }
 /** The campaign's party (default) map changed. */
 export interface ActiveMapPayload { mapId: string | null }
 export interface ErrorMsgPayload { message: string }

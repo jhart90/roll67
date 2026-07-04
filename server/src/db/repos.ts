@@ -27,6 +27,9 @@ export const users = {
   byId(id: string): UserRow | undefined {
     return db.prepare('SELECT id, username, password_hash FROM users WHERE id = ?').get(id) as UserRow | undefined;
   },
+  setDiceColor(userId: string, color: string | null): void {
+    db.prepare('UPDATE users SET dice_color = ? WHERE id = ?').run(color, userId);
+  },
 };
 
 export const sessions = {
@@ -120,11 +123,11 @@ export const campaigns = {
       .get(campaignId, userId) as { role: Role } | undefined;
     return row?.role;
   },
-  members(campaignId: string): Array<{ userId: string; username: string; role: Role; mapId: string | null }> {
+  members(campaignId: string): Array<{ userId: string; username: string; role: Role; mapId: string | null; diceColor: string | null }> {
     return (db.prepare(
-      `SELECT m.user_id as userId, u.username, m.role, m.map_id as mapId FROM campaign_members m
+      `SELECT m.user_id as userId, u.username, m.role, m.map_id as mapId, u.dice_color as diceColor FROM campaign_members m
        JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ?`,
-    ).all(campaignId) as Array<{ userId: string; username: string; role: Role; mapId: string | null }>);
+    ).all(campaignId) as Array<{ userId: string; username: string; role: Role; mapId: string | null; diceColor: string | null }>);
   },
   setActiveMap(campaignId: string, mapId: string | null): void {
     db.prepare('UPDATE campaigns SET active_map_id = ? WHERE id = ?').run(mapId, campaignId);

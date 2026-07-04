@@ -67,7 +67,7 @@ interface GameState {
   measures: Record<string, MeasureShownPayload>;
   errorToast: string | null;
   /** Live 3D dice animation for the latest roll. */
-  diceAnim: { id: number; dice: DieRoll[]; byName: string } | null;
+  diceAnim: { id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string } | null;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
   /** Floating +/-HP combat text over tokens. */
@@ -431,11 +431,17 @@ export function wireSocket(): void {
     // doesn't fill the screen).
     if (msg.roll && msg.roll.dice.length > 0) {
       const id = ++pingCounter;
-      useGameStore.setState({ diceAnim: { id, dice: msg.roll.dice.slice(0, 12), byName: msg.fromName } });
+      useGameStore.setState({
+        diceAnim: {
+          id, dice: msg.roll.dice.slice(0, 12), byName: msg.fromName,
+          byUserId: msg.fromUserId, total: msg.roll.total, expression: msg.roll.expression,
+        },
+      });
+      // Long enough for the roll-in (~2s) plus time to read the result.
       setTimeout(() => {
         const cur = useGameStore.getState();
         if (cur.diceAnim?.id === id) useGameStore.setState({ diceAnim: null });
-      }, 3000);
+      }, 5000);
     }
   });
 
@@ -533,10 +539,10 @@ export function wireSocket(): void {
     useGameStore.setState({ measures });
   });
 
-  socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId }: { userId: string; online: boolean; mapId: string | null }) => {
+  socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId, diceColor }: { userId: string; online: boolean; mapId: string | null; diceColor: string | null }) => {
     const s = useGameStore.getState();
     useGameStore.setState({
-      members: s.members.map((m) => (m.userId === userId ? { ...m, online, mapId } : m)),
+      members: s.members.map((m) => (m.userId === userId ? { ...m, online, mapId, diceColor } : m)),
     });
   });
 
@@ -608,6 +614,7 @@ export const intents = {
     socket.emit(C2S.SHEET_ROLL, { characterId, rollableId, adv }),
 
   chat: (text: string) => socket.emit(C2S.CHAT, { text }),
+  setDiceColor: (color: string | null) => socket.emit(C2S.SET_DICE_COLOR, { color }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),
   reorderMacros: (macroIds: string[]) => socket.emit(C2S.REORDER_MACROS, { macroIds }),

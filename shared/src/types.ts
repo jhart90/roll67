@@ -26,6 +26,8 @@ export interface MemberInfo {
   online: boolean;
   /** The map this member is currently viewing (override or party map). */
   mapId: string | null;
+  /** Custom 3D-dice color ("#rrggbb"); null = the per-die-type defaults. */
+  diceColor: string | null;
 }
 
 // ---------- Map geometry ----------

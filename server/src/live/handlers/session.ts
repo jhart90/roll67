@@ -2,12 +2,12 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
-  type JoinCampaignPayload, type SwitchActiveMapPayload, type ViewMapPayload,
+  type JoinCampaignPayload, type SetDiceColorPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, drawings,
-  handouts, initiative, locations, macros, maps, rollableTables, shops,
+  handouts, initiative, locations, macros, maps, rollableTables, shops, users,
 } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
@@ -83,6 +83,7 @@ export function broadcastPresence(io: Server, campaignId: string): void {
       userId: m.userId,
       online: online.has(m.userId),
       mapId: campaigns.viewMapIdFor(campaignId, m.userId),
+      diceColor: m.diceColor,
     });
   }
 }
@@ -132,6 +133,15 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     const d = sdata(socket);
     if (!d.campaignId || !d.role) return;
     socket.emit(S2C.DIRECTORY, buildDirectory(d.campaignId, d.role === 'dm'));
+  }));
+
+  // Set your own 3D-dice color (a global user preference, shown to everyone).
+  socket.on(C2S.SET_DICE_COLOR, safe(socket, ({ color }: SetDiceColorPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
+    users.setDiceColor(d.userId, clean);
+    broadcastPresence(io, d.campaignId);
   }));
 
   socket.on(C2S.LEAVE_CAMPAIGN, safe(socket, () => {

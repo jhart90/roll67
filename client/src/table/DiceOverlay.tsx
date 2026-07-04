@@ -1,22 +1,52 @@
+import { useEffect, useRef, useState } from 'react';
 import type { DieRoll } from 'shared';
 import { useGameStore } from '../store/game';
-import { DieShape } from './DiceShapes';
+import { buildSims, drawFrame, simsSettleTime } from './dice3d';
 
-function Die3D({ die, index }: { die: DieRoll; index: number }) {
-  const dur = 0.9 + (index % 4) * 0.15;
-  const spin = index % 2 === 0 ? 'die-tumble-a' : 'die-tumble-b';
+function DiceCanvas({ dice, byName, total, expression, color }: {
+  dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const sims = buildSims(dice, w, h, color);
+    const settleAt = simsSettleTime(sims);
+    const t0 = performance.now();
+    let raf = 0;
+    let done = false;
+    const tick = (now: number) => {
+      const t = now - t0;
+      const moving = drawFrame(ctx, sims, t, w, h);
+      if (t >= settleAt && !done) { done = true; setSettled(true); }
+      if (moving) raf = requestAnimationFrame(tick);
+      else drawFrame(ctx, sims, settleAt + 401, w, h); // final resting frame
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // A new roll remounts this component (key on anim id), so run-once is right.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <div className={`die3d ${die.kept ? '' : 'dropped'}`}>
-      <div
-        className="die-solid"
-        style={{ animation: `${spin} ${dur}s cubic-bezier(0.2, 0.8, 0.3, 1)` }}
-      >
-        <DieShape sides={die.sides} size={52} />
-        <span className="die-value" style={{ animationDelay: `${dur * 0.55}s` }}>
-          {die.value}
-        </span>
+    <div className="dice-overlay">
+      <canvas ref={canvasRef} className="dice3d-canvas" />
+      <div className="dice-roller-name">
+        {byName} rolls {expression}{settled ? <span className="dice-total"> = {total}</span> : '…'}
       </div>
-      <span className="die-tag">d{die.sides}</span>
     </div>
   );
 }
@@ -24,15 +54,19 @@ function Die3D({ die, index }: { die: DieRoll; index: number }) {
 /** Full-screen (non-interactive) 3D dice for the latest roll in chat. */
 export function DiceOverlay() {
   const anim = useGameStore((s) => s.diceAnim);
+  const members = useGameStore((s) => s.members);
   if (!anim) return null;
+  const color = anim.byUserId
+    ? members.find((m) => m.userId === anim.byUserId)?.diceColor ?? null
+    : null;
   return (
-    <div className="dice-overlay" key={anim.id}>
-      <div className="dice-roller-name">{anim.byName} rolls…</div>
-      <div className="dice-row">
-        {anim.dice.map((d, i) => (
-          <Die3D key={i} die={d} index={i} />
-        ))}
-      </div>
-    </div>
+    <DiceCanvas
+      key={anim.id}
+      dice={anim.dice}
+      byName={anim.byName}
+      total={anim.total}
+      expression={anim.expression}
+      color={color}
+    />
   );
 }

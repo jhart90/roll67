@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { generateNpcFromModel, npcKindForEntry } from '../src/data/npcGen.js';
-import { npcById } from '../src/data/npcLibrary.js';
+import { ALL_NPCS, npcById } from '../src/data/npcLibrary.js';
 import { seededRng } from '../src/dice/roller.js';
 import { systemFor } from '../src/systems/index.js';
+
+const BIO_FIELDS = [
+  'race', 'background', 'alignment', 'age', 'height', 'weight', 'eyes', 'hair', 'skin',
+  'personalityTraits', 'ideals', 'bonds', 'flaws', 'proficienciesLanguages',
+];
 
 function entry(id: string) {
   const e = npcById(id);
@@ -94,5 +99,39 @@ describe('generateNpcFromModel', () => {
     expect(a).toEqual(b);
     const names = new Set(Array.from({ length: 15 }, (_, i) => generateNpcFromModel(model, seededRng(i)).name));
     expect(names.size).toBeGreaterThan(3);
+  });
+
+  it('fills every Bio & Info / Character field for every 5e library entry, not just People & NPCs', () => {
+    for (const model of ALL_NPCS.filter((e) => e.system === 'dnd5e')) {
+      const npc = generateNpcFromModel(model, seededRng(11));
+      for (const field of BIO_FIELDS) {
+        const value = npc.sheet[field];
+        expect(value, `${model.id}.${field}`).toBeTruthy();
+        expect(String(value).trim().length, `${model.id}.${field}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('gives non-humanoid categories an honest substitute instead of a fabricated human trait', () => {
+    const dragon = generateNpcFromModel(entry('dnd5e-ancient-red-dragon'), seededRng(5));
+    expect(String(dragon.sheet.hair)).toMatch(/none/i);
+    const skeleton = generateNpcFromModel(entry('dnd5e-skeleton'), seededRng(5));
+    expect(skeleton.sheet.race).toBe('Undead');
+    expect(String(skeleton.sheet.languages ?? skeleton.sheet.proficienciesLanguages)).not.toContain('Common,');
+  });
+
+  it('gives a monster a real type as its Race, not the broad library category grouping', () => {
+    const dragon = generateNpcFromModel(entry('dnd5e-ancient-red-dragon'), seededRng(1));
+    expect(dragon.sheet.race).toBe('Dragon');
+    const goblin = generateNpcFromModel(entry('dnd5e-goblin'), seededRng(1));
+    expect(goblin.sheet.race).toBe('Humanoid (goblinoid)');
+  });
+
+  it('gives a person library entry a PC-style race/background/alignment, not blank', () => {
+    const model = entry('dnd5e-commoner');
+    const npc = generateNpcFromModel(model, seededRng(9));
+    for (const field of ['race', 'background', 'alignment']) {
+      expect(String(npc.sheet[field]).trim().length).toBeGreaterThan(0);
+    }
   });
 });

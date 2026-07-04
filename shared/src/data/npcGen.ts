@@ -127,6 +127,19 @@ export interface GeneratedNpc {
   sheet: SheetData;
 }
 
+/** A human-scale age/height/weight/eyes/hair/skin bundle, shared by every
+ *  "this is a person" path — the from-scratch generator and, for the library
+ *  randomizer, its People & NPCs branch. */
+function personBioBits(rng: RNG) {
+  const age = between(17, 68, rng);
+  const heightFt = between(4, 6, rng);
+  const heightIn = between(0, 11, rng);
+  return {
+    age, height: `${heightFt}'${heightIn}"`, weight: `${between(110, 250, rng)} lb`,
+    eyes: pick(EYES, rng), hair: pick(HAIR, rng), skin: pick(SKIN, rng),
+  };
+}
+
 /** Build a fully-populated random NPC for the given system. */
 export function generateNpc(system: GameSystem, rng: RNG = Math.random): GeneratedNpc {
   const name = `${pick(FIRST_NAMES, rng)} ${pick(SURNAMES, rng)}`;
@@ -134,14 +147,7 @@ export function generateNpc(system: GameSystem, rng: RNG = Math.random): Generat
   const appearance = pick(APPEARANCE, rng);
   const quirk = pick(QUIRKS, rng);
   const hook = pick(HOOKS, rng);
-  const age = between(17, 68, rng);
-  const heightFt = between(4, 6, rng);
-  const heightIn = between(0, 11, rng);
-  const height = `${heightFt}'${heightIn}"`;
-  const weight = `${between(110, 250, rng)} lb`;
-  const eyes = pick(EYES, rng);
-  const hair = pick(HAIR, rng);
-  const skin = pick(SKIN, rng);
+  const { age, height, weight, eyes, hair, skin } = personBioBits(rng);
   const sheet = systemFor(system).defaultSheet();
   const tags = [...personality, appearance, quirk];
 
@@ -551,42 +557,273 @@ const FEY_FLAVOR = [
   'Remembers every slight and every kindness, forever.',
 ];
 
+/**
+ * Bio & Info / Character-tab flavor for a non-person monster bucket — the
+ * same buckets used for naming above, so a dragon's age/height/alignment
+ * reads as dragon-appropriate rather than the blank fields the library ships
+ * with. Numbers are illustrative (the DM can always edit); non-humanoid
+ * fields (hair on an ooze, eyes on a construct) get an honest substitute
+ * ("none") rather than a fabricated human trait.
+ */
+interface MonsterBio {
+  race: string;
+  background: string;
+  alignments: readonly string[];
+  ages: readonly string[];
+  heights: readonly string[];
+  weights: readonly string[];
+  eyes: readonly string[];
+  hair: readonly string[];
+  skin: readonly string[];
+  ideals: readonly string[];
+  bonds: readonly string[];
+  flaws: readonly string[];
+  languages: string;
+}
+
+const MONSTER_BIO: Record<string, MonsterBio> = {
+  goblinoid: {
+    race: 'Humanoid (goblinoid)', background: 'Clan warrior',
+    alignments: ['Neutral Evil', 'Lawful Evil'],
+    ages: ['Young adult', 'Battle-worn veteran', 'Grizzled elder'],
+    heights: ['4\'0"', '4\'8"', '5\'6"', '6\'4"'], weights: ['35 lb', '95 lb', '180 lb', '280 lb'],
+    eyes: ['beady yellow', 'bloodshot red', 'sickly green'],
+    hair: ['patchy black', 'greasy and unkempt', 'none — scarred scalp'],
+    skin: ['mottled green', 'sallow grey-green', 'scarred and leathery'],
+    ideals: ['Strength decides everything worth deciding.', 'The tribe survives; nothing else matters.'],
+    bonds: ['Answers to a chief it would not dare betray.', 'Owes its life to the warband that took it in.'],
+    flaws: ['Picks fights it cannot win to prove a point.', 'Cannot resist looting even when it should flee.'],
+    languages: 'Goblin, Common',
+  },
+  savageHumanoid: {
+    race: 'Humanoid', background: 'Tribal hunter',
+    alignments: ['Chaotic Evil', 'Neutral Evil'],
+    ages: ['Young', 'Seasoned', 'Elder of the tribe'],
+    heights: ['5\'0"', '5\'8"', '6\'2"'], weights: ['120 lb', '170 lb', '220 lb'],
+    eyes: ['reptilian yellow', 'flat black', 'hungry amber'],
+    hair: ['coarse and matted', 'ritually shaved', 'none'],
+    skin: ['scaled green-grey', 'rough, hide-like', 'mottled brown'],
+    ideals: ['Only the strong eat first.', 'The old ways are the only true ways.'],
+    bonds: ['Would die defending its brood.', 'Serves a totem spirit it fears more than any foe.'],
+    flaws: ['Frenzies at the smell of blood, allies or not.', 'Distrusts anything it cannot eat or fight.'],
+    languages: 'A guttural tongue of its own kind',
+  },
+  undead: {
+    race: 'Undead', background: 'Bound to unlife',
+    alignments: ['Lawful Evil', 'Neutral Evil', 'Chaotic Evil'],
+    ages: ['Centuries dead', 'Recently risen', 'Unknown — long since forgotten'],
+    heights: ['5\'4"', '5\'10"', '6\'0"'], weights: ['Withered, lighter than in life', '130 lb', '160 lb'],
+    eyes: ['hollow sockets', 'a faint cold light', 'milky white'],
+    hair: ['brittle and grey', 'long since fallen out', 'matted with grave-dirt'],
+    skin: ['grey, taut over bone', 'rotted and peeling', 'pale as bleached bone'],
+    ideals: ['What was taken from me, I will reclaim.', 'The living owe the dead a debt they refuse to pay.'],
+    bonds: ['Guards a grave it can no longer remember the meaning of.', 'Is bound by a curse someone else has long forgotten.'],
+    flaws: ['Cannot leave the place it died.', 'Mistakes the living for people long gone.'],
+    languages: 'None, or whatever it knew in life, if anything remains',
+  },
+  beast: {
+    race: 'Beast', background: 'Wild predator',
+    alignments: ['Unaligned'],
+    ages: ['Young', 'Prime of its life', 'Old and scarred'],
+    heights: ['Small for its kind', 'Typical size', 'Larger than most of its kind'],
+    weights: ['Light', 'Average for its species', 'Heavier than typical'],
+    eyes: ['alert amber', 'dark and watchful', 'sharp yellow'],
+    hair: ['thick natural coat', 'short bristly fur', 'coarse and shaggy'],
+    skin: ['fur-covered', 'hide-covered', 'scaled hide'],
+    ideals: ['Survival, plain and simple.', 'Protect the pack/den above all.'],
+    bonds: ['Fiercely protective of its young or pack.', 'Has claimed this territory and will not yield it.'],
+    flaws: ['Attacks when cornered, no matter the odds.', 'Driven by hunger more than sense.'],
+    languages: "None — beasts don't speak",
+  },
+  monstrosity: {
+    race: 'Monstrosity', background: 'Twisted creation',
+    alignments: ['Unaligned', 'Chaotic Evil'],
+    ages: ['Unknown origin', 'Fully grown', 'Ancient specimen'],
+    heights: ['Larger than a person', 'Hulking', 'Unnaturally proportioned'],
+    weights: ['Several hundred pounds', 'Immense', 'Surprisingly light for its size'],
+    eyes: ['multiple, unblinking', 'a single baleful eye', 'clouded and strange'],
+    hair: ['coarse quills', 'matted fur in patches', 'none — chitinous plating'],
+    skin: ['chitinous plating', 'scarred hide', 'mottled and warty'],
+    ideals: ['Hunt, or be forgotten.', 'It was made for a purpose it no longer remembers.'],
+    bonds: ['Lairs somewhere it will defend to the death.', 'Was bred or summoned for a task now abandoned.'],
+    flaws: ['Reacts to threats with mindless violence.', 'Cannot resist a very specific kind of prey.'],
+    languages: 'None, or an unintelligible tongue of its own',
+  },
+  giant: {
+    race: 'Giant', background: 'Clan-raised',
+    alignments: ['Chaotic Evil', 'Neutral Evil', 'Lawful Evil'],
+    ages: ['Young by giant standards', 'Middle-aged', 'Ancient'],
+    heights: ['9\'2"', '10\'6"', '11\'8"'], weights: ['1,800 lb', '2,200 lb', '2,600 lb'],
+    eyes: ['deep-set and glowering', 'small for its size, dark', 'pale and cold'],
+    hair: ['braided and filthy', 'wild and unkempt', 'none — bald scalp'],
+    skin: ['weathered and ruddy', 'thick, callused hide', 'grey and stone-like'],
+    ideals: ['Might makes right, always has.', 'The biggest thing in the room rules it.'],
+    bonds: ['Answers to a chief it secretly means to challenge.', 'Guards a hoard buried somewhere only it remembers.'],
+    flaws: ['A temper that levels whatever is nearby.', 'Underestimates anything smaller than itself.'],
+    languages: 'Giant, Common',
+  },
+  dragon: {
+    race: 'Dragon', background: 'Ancient hoarder',
+    alignments: ['Chaotic Evil', 'Lawful Evil', 'Neutral Evil'],
+    ages: ['Wyrmling', 'Young', 'Adult', 'Ancient'],
+    heights: ['20 ft long', "40 ft long, wingtip to tail", '60 ft, a true terror of the skies'],
+    weights: ['Several tons', 'Massive beyond reckoning', 'Heavier than a loaded warship'],
+    eyes: ['slitted and gleaming', 'burning like embers', 'ancient and calculating'],
+    hair: ['none — crowned in horns', 'none — a ridge of spines', 'none'],
+    skin: ['gleaming scales', 'scarred, battle-worn scales', 'ancient, dulled scales'],
+    ideals: ['Everything within sight belongs to me.', 'Only power and treasure are worth pursuing.'],
+    bonds: ['Will burn a kingdom to reclaim a single stolen coin.', 'Was bound by an ancient pact it no longer honors.'],
+    flaws: ['Vanity: cannot resist a challenge to its supremacy.', 'Obsessed with one very specific kind of treasure.'],
+    languages: 'Draconic, Common',
+  },
+  fiend: {
+    race: 'Fiend', background: 'Infernal servant',
+    alignments: ['Lawful Evil', 'Chaotic Evil', 'Neutral Evil'],
+    ages: ['Countless centuries old', 'Newly summoned', 'Ageless'],
+    heights: ['6\'0", cloaked in dread', 'Towering and horned', 'Man-sized but clearly inhuman'],
+    weights: ['Unnervingly light', 'Solid muscle and horn', 'About 200 lb'],
+    eyes: ['burning red', 'pits of black', 'glowing coals'],
+    hair: ['none — curling horns instead', 'singed and smoking', 'none'],
+    skin: ['charred and cracked', 'deep crimson hide', 'ashen grey'],
+    ideals: ['Every soul has a price; find it.', 'Suffering is simply how the universe works.'],
+    bonds: ['Serves a master it would betray without hesitation.', 'Is bound here by a bargain someone foolish signed.'],
+    flaws: ['Cannot resist twisting the letter of any deal.', 'Pride: will not admit when outmatched.'],
+    languages: 'Infernal, Abyssal',
+  },
+  elemental: {
+    race: 'Elemental', background: 'Elemental spirit',
+    alignments: ['Unaligned'],
+    ages: ['Ageless', 'Newly formed', 'Bound for centuries'],
+    heights: ['Formless — shifts with its element', 'No fixed form'],
+    weights: ['Formless — shifts with its element', 'No fixed form'],
+    eyes: ['none — a churning core of its element', 'flickers where eyes might be'],
+    hair: ['none', 'wisps of its element instead'],
+    skin: ['living flame', 'churning water', 'shifting stone', 'swirling air'],
+    ideals: ['Its native element must be free to rage.', 'Answers to nothing but the force that spawned it.'],
+    bonds: ['Was torn from its home plane and rages to return.', 'Was summoned to guard something it has forgotten.'],
+    flaws: ['Cannot be reasoned with, only outlasted.', 'Grows more violent the longer it is contained.'],
+    languages: 'Primordial',
+  },
+  construct: {
+    race: 'Construct', background: 'Constructed guardian',
+    alignments: ['Unaligned'],
+    ages: ['Unknown — does not age', 'Decades old', 'Freshly animated'],
+    heights: ['6\'0", plated head to foot', 'Squat and reinforced', 'Towering, built for war'],
+    weights: ['Several hundred pounds of metal and stone', 'Heavier than it looks', 'Surprisingly light despite its bulk'],
+    eyes: ['none — glowing sensor slits', 'dark, dead lenses', 'a single rotating lens'],
+    hair: ['none'], skin: ['pitted metal plating', 'stone, chipped with age', 'rune-etched plating'],
+    ideals: ['Fulfill the last order given, forever if need be.', 'Purpose is the only thing that matters.'],
+    bonds: ['Was built to guard a place its makers abandoned.', "Bears its maker's mark, though the maker is long gone."],
+    flaws: ['Follows orders literally, even to disastrous ends.', 'Cannot recognize a situation its orders never covered.'],
+    languages: "Understands its creator's language but cannot speak",
+  },
+  ooze: {
+    race: 'Ooze', background: 'Mindless devourer',
+    alignments: ['Unaligned'],
+    ages: ['Ageless', 'Unknown'],
+    heights: ['No fixed shape', 'Roughly man-height when reared up'],
+    weights: ['Dense, wet mass', 'Heavier than its size suggests'],
+    eyes: ['none'], hair: ['none'], skin: ['translucent, quivering mass', 'slick and corrosive', 'a churning acidic surface'],
+    ideals: ['Consume.'],
+    bonds: ['Fills a space nothing has cleared out in ages.'],
+    flaws: ['Cannot be reasoned with, bargained with, or deterred.'],
+    languages: "None — oozes don't speak",
+  },
+  aberration: {
+    race: 'Aberration', background: 'Alien intruder',
+    alignments: ['Chaotic Evil', 'Chaotic Neutral', 'Lawful Evil'],
+    ages: ['Unfathomably old', 'Unknown', 'Recently arrived from elsewhere'],
+    heights: ['Disturbingly asymmetrical', 'Larger than expected', 'Unsettlingly compact'],
+    weights: ['Unknown — its mass seems to shift', 'Heavier than it should be'],
+    eyes: ['too many to count', 'one vast, unblinking eye', 'clustered and alien'],
+    hair: ['none — writhing tendrils instead', 'slick, hairless hide'],
+    skin: ['rubbery and alien', 'pulsating and moist', 'covered in fine cilia'],
+    ideals: ['Mortal concepts of morality do not apply to it.', 'Its unknowable purpose comes before anything else.'],
+    bonds: ['Was here long before whatever now lives above it.', 'Answers to something even stranger than itself.'],
+    flaws: ['Its presence alone unravels lesser minds — including allies.', 'Cannot comprehend why mortals fear it.'],
+    languages: 'An alien tongue, if any at all',
+  },
+  celestial: {
+    race: 'Celestial', background: 'Divine servant',
+    alignments: ['Lawful Good', 'Neutral Good'],
+    ages: ['Ageless', 'As old as its purpose'],
+    heights: ['Tall and radiant', 'Towers with an unearthly presence'],
+    weights: ['Seems to weigh nothing at all', 'Solid despite its glow'],
+    eyes: ['glowing with soft light', 'ancient and kind', 'radiant gold'],
+    hair: ['luminous and flowing', 'none — a halo of light instead'],
+    skin: ['radiant, faintly glowing', 'unblemished and pale'],
+    ideals: ['Serve the cause, whatever the cost.', 'Every soul deserves a chance at redemption.'],
+    bonds: ['Carries a message it awaits the right moment to deliver.', 'Was sent to answer a prayer someone has nearly given up on.'],
+    flaws: ['Will not act until its conditions for intervention are met.', 'Struggles to understand mortal weakness.'],
+    languages: 'Celestial, Common',
+  },
+  plant: {
+    race: 'Plant', background: 'Ancient growth',
+    alignments: ['Unaligned', 'True Neutral'],
+    ages: ['Older than the surrounding forest', 'Recently awakened', 'Ancient'],
+    heights: ['Rooted and towering', 'Gnarled and ancient-looking'],
+    weights: ['Heavy as old timber', 'Immense'],
+    eyes: ['none — bark where eyes might be', 'deep knotholes that seem to watch'],
+    hair: ['trailing moss and vines', 'none — bare branches instead'],
+    skin: ['rough bark', 'mossy and damp', 'gnarled wood'],
+    ideals: ['Protect the grove; nothing else matters.', 'Grow, endure, and outlast every intruder.'],
+    bonds: ['Has stood watch over this ground since before living memory.', "Answers to the forest's will more than any single voice."],
+    flaws: ['Moves and reacts far too slowly to negotiate with.', 'Cannot leave the ground it is rooted to.'],
+    languages: 'None, or Sylvan if it once dwelt among the fey',
+  },
+  fey: {
+    race: 'Fey', background: 'Fey trickster',
+    alignments: ['Chaotic Neutral', 'Chaotic Good', 'True Neutral'],
+    ages: ['Ageless', 'Older than it appears', 'Young by fey reckoning'],
+    heights: ['Slight and quick', 'Taller than they first appear', 'Small enough to vanish in undergrowth'],
+    weights: ['Lighter than they look', 'Impossible to guess'],
+    eyes: ['unnervingly bright', 'shifting colors', 'catlike and gleaming'],
+    hair: ['woven with leaves and blossoms', 'wild and colorful', 'braided with vines'],
+    skin: ['dappled like sunlight through leaves', 'faintly luminous', 'smooth and unnervingly perfect'],
+    ideals: ['A bargain is a bargain, however it was struck.', 'Mortal rules were never meant for fey folk.'],
+    bonds: ['Has lived in these woods since before they had a name.', 'Owes (or is owed) a debt it will collect eventually.'],
+    flaws: ['Cannot resist a clever wager.', 'Finds mortal suffering endlessly, cruelly amusing.'],
+    languages: 'Sylvan, Common',
+  },
+};
+
 interface CreatureProfile {
   nameFn: (rng: RNG) => string;
   flavor: readonly string[];
+  bio: MonsterBio;
 }
-function poolProfile(pool: NamePool, flavor: readonly string[]): CreatureProfile {
-  return { nameFn: (rng) => buildCreatureName(pool, rng), flavor };
+function poolProfile(pool: NamePool, flavor: readonly string[], bio: MonsterBio): CreatureProfile {
+  return { nameFn: (rng) => buildCreatureName(pool, rng), flavor, bio };
 }
 
-/** Resolve the name pool + flavor lines for a non-person 5e library entry,
- *  branching by sub-type for the categories that mix several creature
- *  flavors together (elementals vs constructs, oozes vs aberrations,
- *  fey vs celestials vs plants). */
+/** Resolve the name pool + flavor lines + Bio&Info fields for a non-person 5e
+ *  library entry, branching by sub-type for the categories that mix several
+ *  creature flavors together (elementals vs constructs, oozes vs
+ *  aberrations, fey vs celestials vs plants). */
 function resolveCreatureProfile(entry: NpcEntry): CreatureProfile {
   switch (entry.category) {
-    case 'Goblinoids & Orcs': return poolProfile(GOBLINOID_NAMES, GOBLINOID_FLAVOR);
-    case 'Savage Humanoids': return poolProfile(SAVAGE_HUMANOID_NAMES, SAVAGE_HUMANOID_FLAVOR);
-    case 'Undead': return poolProfile(UNDEAD_NAMES, UNDEAD_FLAVOR);
-    case 'Beasts': return poolProfile(BEAST_NAMES, BEAST_FLAVOR);
-    case 'Monstrosities': return poolProfile(MONSTROSITY_NAMES, MONSTROSITY_FLAVOR);
-    case 'Giants & Ogres': return poolProfile(GIANT_NAMES, GIANT_FLAVOR);
-    case 'Dragons': return poolProfile(DRAGON_NAMES, DRAGON_FLAVOR);
-    case 'Fiends': return poolProfile(FIEND_NAMES, FIEND_FLAVOR);
+    case 'Goblinoids & Orcs': return poolProfile(GOBLINOID_NAMES, GOBLINOID_FLAVOR, MONSTER_BIO.goblinoid);
+    case 'Savage Humanoids': return poolProfile(SAVAGE_HUMANOID_NAMES, SAVAGE_HUMANOID_FLAVOR, MONSTER_BIO.savageHumanoid);
+    case 'Undead': return poolProfile(UNDEAD_NAMES, UNDEAD_FLAVOR, MONSTER_BIO.undead);
+    case 'Beasts': return poolProfile(BEAST_NAMES, BEAST_FLAVOR, MONSTER_BIO.beast);
+    case 'Monstrosities': return poolProfile(MONSTROSITY_NAMES, MONSTROSITY_FLAVOR, MONSTER_BIO.monstrosity);
+    case 'Giants & Ogres': return poolProfile(GIANT_NAMES, GIANT_FLAVOR, MONSTER_BIO.giant);
+    case 'Dragons': return poolProfile(DRAGON_NAMES, DRAGON_FLAVOR, MONSTER_BIO.dragon);
+    case 'Fiends': return poolProfile(FIEND_NAMES, FIEND_FLAVOR, MONSTER_BIO.fiend);
     case 'Elementals & Constructs':
       return entry.name.includes('Elemental')
-        ? poolProfile(ELEMENTAL_NAMES, ELEMENTAL_FLAVOR)
-        : { nameFn: constructName, flavor: CONSTRUCT_FLAVOR };
+        ? poolProfile(ELEMENTAL_NAMES, ELEMENTAL_FLAVOR, MONSTER_BIO.elemental)
+        : { nameFn: constructName, flavor: CONSTRUCT_FLAVOR, bio: MONSTER_BIO.construct };
     case 'Aberrations & Oozes':
       return OOZE_NAMES.has(entry.name)
-        ? { nameFn: (rng) => pick(OOZE_LABELS, rng), flavor: OOZE_FLAVOR }
-        : poolProfile(ABERRATION_NAMES, ABERRATION_FLAVOR);
+        ? { nameFn: (rng) => pick(OOZE_LABELS, rng), flavor: OOZE_FLAVOR, bio: MONSTER_BIO.ooze }
+        : poolProfile(ABERRATION_NAMES, ABERRATION_FLAVOR, MONSTER_BIO.aberration);
     case 'Fey, Celestials & Plants':
-      if (CELESTIAL_NAMES.has(entry.name)) return poolProfile(CELESTIAL_NAME_POOL, CELESTIAL_FLAVOR);
-      if (PLANT_NAMES.has(entry.name)) return poolProfile(PLANT_NAME_POOL, PLANT_FLAVOR);
-      return poolProfile(FEY_NAME_POOL, FEY_FLAVOR);
+      if (CELESTIAL_NAMES.has(entry.name)) return poolProfile(CELESTIAL_NAME_POOL, CELESTIAL_FLAVOR, MONSTER_BIO.celestial);
+      if (PLANT_NAMES.has(entry.name)) return poolProfile(PLANT_NAME_POOL, PLANT_FLAVOR, MONSTER_BIO.plant);
+      return poolProfile(FEY_NAME_POOL, FEY_FLAVOR, MONSTER_BIO.fey);
     default:
-      return poolProfile(MONSTROSITY_NAMES, MONSTROSITY_FLAVOR);
+      return poolProfile(MONSTROSITY_NAMES, MONSTROSITY_FLAVOR, MONSTER_BIO.monstrosity);
   }
 }
 
@@ -621,10 +858,27 @@ export function generateNpcFromModel(entry: NpcEntry, rng: RNG = Math.random): G
   let notes: string;
   if (entry.system === 'dnd5e' && entry.category === 'People & NPCs') {
     ({ name, notes } = personFlavor(entry, rng));
+    Object.assign(sheet, {
+      race: pick(RACES_5E, rng), background: pick(BACKGROUNDS_5E, rng), alignment: pick(ALIGNMENTS, rng),
+      ...personBioBits(rng),
+      personalityTraits: notes,
+      ideals: pick(IDEALS, rng), bonds: pick(BONDS, rng), flaws: pick(FLAWS, rng),
+      proficienciesLanguages: `Common, ${pick(LANGUAGES, rng)}`,
+    });
   } else if (entry.system === 'dnd5e') {
     const profile = resolveCreatureProfile(entry);
     name = profile.nameFn(rng);
-    notes = `A ${entry.name.toLowerCase()} known as ${name}. ${pick(profile.flavor, rng)}`;
+    const flavorLine = pick(profile.flavor, rng);
+    notes = `A ${entry.name.toLowerCase()} known as ${name}. ${flavorLine}`;
+    const bio = profile.bio;
+    Object.assign(sheet, {
+      race: bio.race, background: bio.background, alignment: pick(bio.alignments, rng),
+      age: pick(bio.ages, rng), height: pick(bio.heights, rng), weight: pick(bio.weights, rng),
+      eyes: pick(bio.eyes, rng), hair: pick(bio.hair, rng), skin: pick(bio.skin, rng),
+      personalityTraits: flavorLine,
+      ideals: pick(bio.ideals, rng), bonds: pick(bio.bonds, rng), flaws: pick(bio.flaws, rng),
+      proficienciesLanguages: bio.languages,
+    });
   } else if (kind === 'robot') {
     const designation = `${pick(ROBOT_PREFIXES, rng)}-${between(100, 999, rng)}`;
     name = `Unit ${designation}`;

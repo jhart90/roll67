@@ -174,6 +174,8 @@ export interface CreateCharacterPayload {
   system: GameSystem;
   /** DM may create NPC characters (ownerUserId null) or assign an owner. */
   ownerUserId?: string | null;
+  /** Seed the new sheet's class field (e.g. "New player character" rows). */
+  initialClass?: string;
 }
 export interface CreateNpcPayload {
   /** Id from the shared pre-built NPC library. */
@@ -181,7 +183,11 @@ export interface CreateNpcPayload {
   /** Optional custom display name (defaults to the library name). */
   name?: string;
 }
-export interface CreateRandomNpcPayload { count?: number }
+export interface CreateRandomNpcPayload {
+  count?: number;
+  /** Library NPC id to model the random NPC's stats/name/description after. */
+  modelId?: string;
+}
 export interface DeleteCharacterPayload { characterId: string }
 
 export interface CreateShopPayload { name: string }

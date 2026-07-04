@@ -593,10 +593,10 @@ export const intents = {
   dragToken: (tokenId: string, x: number, y: number, done = false) =>
     socket.emit(C2S.DRAG_TOKEN, { tokenId, x, y, done }),
 
-  createCharacter: (name: string, system: 'dnd5e' | 'swn', ownerUserId?: string | null) =>
-    socket.emit(C2S.CREATE_CHARACTER, { name, system, ownerUserId }),
+  createCharacter: (name: string, system: 'dnd5e' | 'swn', ownerUserId?: string | null, initialClass?: string) =>
+    socket.emit(C2S.CREATE_CHARACTER, { name, system, ownerUserId, initialClass }),
   createNpc: (libraryId: string, name?: string) => socket.emit(C2S.CREATE_NPC, { libraryId, name }),
-  createRandomNpc: (count?: number) => socket.emit(C2S.CREATE_RANDOM_NPC, { count }),
+  createRandomNpc: (count?: number, modelId?: string) => socket.emit(C2S.CREATE_RANDOM_NPC, { count, modelId }),
   deleteCharacter: (characterId: string) => socket.emit(C2S.DELETE_CHARACTER, { characterId }),
   updateCharacter: (characterId: string, patch: Record<string, unknown>, name?: string) =>
     socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch, name }),

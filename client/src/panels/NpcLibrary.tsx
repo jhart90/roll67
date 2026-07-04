@@ -1,52 +1,33 @@
-import { useMemo, useState } from 'react';
-import { npcCategories, npcsForSystem, type NpcEntry } from 'shared';
+import { useState } from 'react';
+import { CLASS_LIST_5E, npcsForSystem, SWN_CLASS_LIST, type NpcEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
-
-type SortKey = 'category' | 'name' | 'challenge' | 'hp';
+import { useNpcPicker } from './useNpcPicker';
+import { RandomizeNpcModal } from './RandomizeNpcModal';
 
 export function NpcLibrary({ onClose }: { onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign);
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('all');
-  const [sort, setSort] = useState<SortKey>('category');
   const [added, setAdded] = useState<Record<string, boolean>>({});
+  const [showRandomize, setShowRandomize] = useState(false);
 
   const system = campaign?.system ?? 'dnd5e';
-  const categories = useMemo(() => npcCategories(system), [system]);
-
-  const entries = useMemo(() => {
-    let list = npcsForSystem(system);
-    if (category !== 'all') list = list.filter((n) => n.category === category);
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter((n) =>
-        n.name.toLowerCase().includes(q) || n.category.toLowerCase().includes(q));
-    }
-    const sorted = [...list];
-    switch (sort) {
-      case 'name':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'challenge':
-        sorted.sort((a, b) => a.challenge - b.challenge || a.name.localeCompare(b.name));
-        break;
-      case 'hp':
-        sorted.sort((a, b) => a.hp - b.hp || a.name.localeCompare(b.name));
-        break;
-      default:
-        // category order as authored (logical grouping), by challenge within
-        sorted.sort((a, b) => {
-          const ca = categories.indexOf(a.category);
-          const cb = categories.indexOf(b.category);
-          return ca - cb || a.challenge - b.challenge || a.name.localeCompare(b.name);
-        });
-    }
-    return sorted;
-  }, [system, category, search, sort, categories]);
+  const { search, setSearch, category, setCategory, categories, sort, setSort, entries } = useNpcPicker(system);
+  const classRows = system === 'dnd5e'
+    ? CLASS_LIST_5E.map((c) => ({ id: c.id, name: c.name }))
+    : SWN_CLASS_LIST.map((c) => ({ id: c.id, name: c.name }));
 
   function add(entry: NpcEntry) {
     intents.createNpc(entry.id);
     setAdded((prev) => ({ ...prev, [entry.id]: true }));
+  }
+
+  function createBlank() {
+    intents.createCharacter('New Character', system);
+    setAdded((prev) => ({ ...prev, __blank: true }));
+  }
+
+  function createClass(className: string, classId: string) {
+    intents.createCharacter(`New ${className}`, system, undefined, className);
+    setAdded((prev) => ({ ...prev, [`class:${classId}`]: true }));
   }
 
   let lastCategory = '';
@@ -60,8 +41,37 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
           <h3 style={{ margin: 0 }}>NPC Library</h3>
           <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : 'Stars Without Number'}</span>
           <span className="spacer" />
-          <button className="link" title="Generate a random townsfolk NPC" onClick={() => intents.createRandomNpc(1)}>🎲 Random NPC</button>
+          <button className="link" title="Randomize an NPC based on a compendium model" onClick={() => setShowRandomize(true)}>🎲 Random NPC</button>
           <button className="link" onClick={onClose}>close</button>
+        </div>
+
+        <div className="npc-quickadd">
+          <div className="npc-quickadd-hint">New character</div>
+          <table>
+            <tbody>
+              <tr>
+                <td className="npc-name">Blank character sheet</td>
+                <td className="dim" colSpan={3}>Start from a fresh, empty sheet</td>
+                <td><button className="link" disabled={!!added.__blank} onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="npc-quickadd-hint">New player character</div>
+          <table>
+            <tbody>
+              {classRows.map((c) => (
+                <tr key={c.id}>
+                  <td className="npc-name">{c.name}</td>
+                  <td className="dim" colSpan={3}>A blank sheet with class pre-filled</td>
+                  <td>
+                    <button className="link" disabled={!!added[`class:${c.id}`]} onClick={() => createClass(c.name, c.id)}>
+                      {added[`class:${c.id}`] ? 'created ✓' : '+ create'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <div className="npc-controls">
@@ -69,13 +79,12 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
             placeholder="Search by name or type…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            autoFocus
           />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             <option value="all">All categories</option>
             {categories.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
             <option value="category">Sort: category</option>
             <option value="name">Sort: name</option>
             <option value="challenge">Sort: challenge</option>
@@ -110,6 +119,8 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
           </table>
         </div>
       </div>
+
+      {showRandomize && <RandomizeNpcModal onClose={() => setShowRandomize(false)} />}
     </div>
   );
 }

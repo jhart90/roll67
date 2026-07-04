@@ -947,6 +947,10 @@ button.link:hover { text-decoration: underline; }
 /* ---------- NPC library ---------- */
 
 .npc-library { width: min(760px, 94vw); }
+.npc-quickadd { padding: 8px 16px 0; border-bottom: 1px solid var(--border); }
+.npc-quickadd table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px; }
+.npc-quickadd td { padding: 3px 6px; }
+.npc-quickadd-hint { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-2); padding: 4px 6px 2px; }
 .npc-controls {
   display: flex;
   gap: 8px;

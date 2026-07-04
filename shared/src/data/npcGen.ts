@@ -7,6 +7,7 @@ import { systemFor } from '../systems/index.js';
 import { ALIGNMENTS, BACKGROUNDS_5E, RACES_5E, SKILLS_5E } from '../systems/dnd5e.js';
 import { BACKGROUNDS_SWN, SKILLS_SWN, SPECIES_SWN } from '../systems/swn.js';
 import type { RNG } from '../dice/roller.js';
+import type { NpcEntry } from './npcTypes.js';
 
 const FIRST_NAMES = [
   'Aldous', 'Bram', 'Cassia', 'Doran', 'Elowen', 'Fenwick', 'Greta', 'Harlan', 'Isolde', 'Joss',
@@ -193,4 +194,109 @@ export function generateNpc(system: GameSystem, rng: RNG = Math.random): Generat
     notes: `Occupation: ${occupation}. ${personality[0]}, ${personality[1]}; has ${appearance}; ${quirk}.`,
   });
   return { name, occupation, tags, sheet };
+}
+
+// ---------- randomize-from-model (compendium NPC as a template) ----------
+
+// Which library categories read as "a person" (get a human name + townsfolk
+// flavor) rather than a monster/robot (so a dragon never gets a name like a
+// blacksmith's). Anything not listed here falls back to the 'creature' kind.
+const PERSON_CATEGORIES_5E = new Set(['People & NPCs', 'Savage Humanoids']);
+const PERSON_CATEGORIES_SWN = new Set(['Civilians', 'Criminals', 'Military', 'Psychics', 'Spacers & Adventurers']);
+const ROBOT_CATEGORIES_SWN = new Set(['Robots & VIs']);
+
+export type NpcKind = 'person' | 'creature' | 'robot';
+
+/** Classify a library entry so its generated name/flavor fits its type. */
+export function npcKindForEntry(entry: Pick<NpcEntry, 'system' | 'category'>): NpcKind {
+  if (entry.system === 'dnd5e') {
+    return PERSON_CATEGORIES_5E.has(entry.category) ? 'person' : 'creature';
+  }
+  if (ROBOT_CATEGORIES_SWN.has(entry.category)) return 'robot';
+  return PERSON_CATEGORIES_SWN.has(entry.category) ? 'person' : 'creature';
+}
+
+const CREATURE_GIVEN = [
+  'Grakthar', 'Vraknos', 'Skarn', 'Mordath', 'Uldrak', 'Threx', 'Vyrga', 'Naxil', 'Orrik', 'Zephyra',
+  'Karrgoth', 'Ssythra', 'Drommel', 'Ixthar', 'Baelnok', 'Charn', 'Rhaskor', 'Nyxara', 'Grumveth', 'Aszra',
+];
+const CREATURE_EPITHET = [
+  'the Bonecrusher', 'the Emberclaw', 'the Doomwing', 'the Nightfang', 'the Ironhide', 'the Frostmaw',
+  'the Bloodtusk', 'the Shadowmere', 'the Grimtooth', 'the Stormrend', 'the Hollow-Eyed', 'the Ashen',
+  'the Void-Touched', 'the Many-Scarred', 'the Ravenous', 'the Unyielding', 'the Cinder-Wing', 'the Gravewalker',
+];
+const CREATURE_FLAVOR = [
+  'Rumored to lair nearby and guard a hoard of stolen valuables.',
+  'Has terrorized travelers on this road for years.',
+  'Bears countless scars from battles it always wins.',
+  'Its territory is marked with the remains of past challengers.',
+  'Said to be smarter and crueler than others of its kind.',
+  'Answers to no one and fears even less.',
+  'Recently driven from its old haunt, and hungrier for it.',
+  'Known to hoard trophies taken from its kills.',
+];
+const PERSON_FLAVOR_PREFIX = [
+  'Once known simply as a', 'Formerly a', 'Still remembered as a', 'Rose from being a',
+];
+const ROBOT_PREFIXES = ['KX', 'VN', 'RZ', 'TN', 'QB', 'MX', 'DL', 'HX', 'WR', 'PL'];
+const ROBOT_FLAVOR = [
+  "Runs on an outdated firmware build prone to odd glitches.",
+  'Recently reactivated after years in storage.',
+  'Its chassis bears scorch marks from a past skirmish.',
+  'Follows its last-given orders with unsettling precision.',
+  "Occasionally repeats fragments of a long-dead operator's voice.",
+  'Missing several non-essential panels; sparks when it walks.',
+];
+
+function jitter(n: number, pct: number, rng: RNG, min: number): number {
+  const delta = Math.max(1, Math.round(Math.abs(n) * pct));
+  return Math.max(min, n + between(-delta, delta, rng));
+}
+
+/**
+ * Build a randomized NPC modeled after an existing compendium entry: stats
+ * are jittered a little (HP, AC, ability scores/attack bonus), while a fresh
+ * name and flavor text are generated appropriate to what the model actually
+ * is — a townsfolk NPC reads like a person, a dragon reads like a monster,
+ * a security bot reads like a machine.
+ */
+export function generateNpcFromModel(entry: NpcEntry, rng: RNG = Math.random): GeneratedNpc {
+  const kind = npcKindForEntry(entry);
+  const sheet: SheetData = structuredClone(entry.sheet);
+  const priorNotes = typeof sheet.notes === 'string' ? sheet.notes : '';
+
+  // HP/AC always exist on library sheets; ability scores only on 5e ones.
+  const hp = jitter(Number(sheet.maxHp ?? sheet.hp ?? entry.hp), 0.15, rng, 1);
+  sheet.hp = hp;
+  sheet.maxHp = hp;
+  sheet.ac = jitter(Number(sheet.ac ?? entry.ac), 0.08, rng, 5);
+  if (entry.system === 'dnd5e') {
+    for (const ab of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const) {
+      sheet[ab] = jitter(Number(sheet[ab] ?? 10), 0.1, rng, 1);
+    }
+  } else {
+    sheet.attackBonus = jitter(Number(sheet.attackBonus ?? 0), 0.2, rng, 0);
+  }
+
+  let name: string;
+  let notes: string;
+  if (kind === 'person') {
+    const personality = pickSome(PERSONALITY, 2, rng);
+    const quirk = pick(QUIRKS, rng);
+    const hook = pick(HOOKS, rng);
+    name = `${pick(FIRST_NAMES, rng)} ${pick(SURNAMES, rng)}`;
+    notes = `${pick(PERSON_FLAVOR_PREFIX, rng)} ${entry.name.toLowerCase()}, ${personality[0]} and ${personality[1]}; ${quirk}. ${hook[0].toUpperCase()}${hook.slice(1)}.`;
+  } else if (kind === 'robot') {
+    const designation = `${pick(ROBOT_PREFIXES, rng)}-${between(100, 999, rng)}`;
+    name = `Unit ${designation}`;
+    notes = `A ${entry.name} chassis. ${pick(ROBOT_FLAVOR, rng)}`;
+  } else {
+    name = `${pick(CREATURE_GIVEN, rng)} ${pick(CREATURE_EPITHET, rng)}`;
+    notes = `A ${entry.name.toLowerCase()} known as ${name}. ${pick(CREATURE_FLAVOR, rng)}`;
+  }
+  sheet.notes = priorNotes ? `${notes} ${priorNotes}` : notes;
+  if (entry.system === 'dnd5e') sheet.backstory = notes;
+  else sheet.goal = notes;
+
+  return { name, occupation: entry.category, tags: [kind, entry.category], sheet };
 }

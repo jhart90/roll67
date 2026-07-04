@@ -6,6 +6,7 @@ import { ShopEditor } from './ShopsPanel';
 import { TableEditor } from './RollableTables';
 import { HandoutWindow } from './HandoutsPanel';
 import { NpcLibrary } from './NpcLibrary';
+import { RandomizeNpcModal } from './RandomizeNpcModal';
 import { MapEditorWindow } from '../table/dm/MapManager';
 
 type Kind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map';
@@ -36,7 +37,6 @@ function buildNodes(
 
 export function WorldTreePanel() {
   const you = useGameStore((s) => s.you);
-  const campaign = useGameStore((s) => s.campaign);
   const characters = useGameStore((s) => s.characters);
   const locations = useGameStore((s) => s.locationList);
   const shops = useGameStore((s) => s.shopList);
@@ -50,6 +50,7 @@ export function WorldTreePanel() {
   const [editingMap, setEditingMap] = useState<string | null>(null);
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showRandomize, setShowRandomize] = useState(false);
   // The dragged item lives in a ref so `drop` reads it synchronously (React
   // batches state, so it wouldn't be set yet when a fast drop fires).
   const dragRef = useRef<{ kind: Kind; id: string } | null>(null);
@@ -167,12 +168,11 @@ export function WorldTreePanel() {
         <div className="wt-toolbar">
           <button className="btn btn-sm" onClick={() => setEditingMap('new')}>+ Map</button>
           <button className="btn btn-sm" onClick={() => intents.createLocation('New location', null)}>+ Location</button>
-          <button className="btn btn-sm" onClick={() => campaign && intents.createCharacter('New NPC', campaign.system)}>+ NPC</button>
+          <button className="btn btn-sm" onClick={() => setShowLibrary(true)}>+ Character</button>
           <button className="btn btn-sm" onClick={() => intents.createShop('New shop')}>+ Shop</button>
           <button className="btn btn-sm" onClick={() => intents.createTable('New table')}>+ Table</button>
           <button className="btn btn-sm" onClick={() => setEditing({ kind: 'handout', id: 'new' })}>+ Handout</button>
-          <button className="btn btn-sm" onClick={() => setShowLibrary(true)}>NPC library</button>
-          <button className="btn btn-sm" onClick={() => intents.createRandomNpc(1)}>🎲 Random NPC</button>
+          <button className="btn btn-sm" onClick={() => setShowRandomize(true)}>🎲 Random NPC</button>
         </div>
       )}
 
@@ -206,6 +206,7 @@ export function WorldTreePanel() {
       )}
       {editingMap && <MapEditorWindow mapId={editingMap} onClose={() => setEditingMap(null)} />}
       {showLibrary && <NpcLibrary onClose={() => setShowLibrary(false)} />}
+      {showRandomize && <RandomizeNpcModal onClose={() => setShowRandomize(false)} />}
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}
     </div>
   );

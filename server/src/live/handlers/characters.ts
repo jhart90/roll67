@@ -5,7 +5,7 @@ import {
   type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared';
-import { generateNpc, npcById } from 'shared';
+import { generateNpc, generateNpcFromModel, npcById } from 'shared';
 import { campaigns, characters, chat, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
@@ -38,6 +38,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     else owner = d.userId;
     const name = payload.name?.trim() || 'Unnamed';
     const sheet = systemFor(payload.system).defaultSheet();
+    if (payload.initialClass) sheet.class = payload.initialClass;
     const character = characters.create(d.campaignId, owner, name, payload.system, sheet);
     emitCharacter(io, d.campaignId, character);
     broadcastDirectory(io, d.campaignId);
@@ -63,13 +64,21 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     emitCharacter(io, d.campaignId, character);
   }));
 
-  socket.on(C2S.CREATE_RANDOM_NPC, safe(socket, ({ count }: CreateRandomNpcPayload) => {
+  socket.on(C2S.CREATE_RANDOM_NPC, safe(socket, ({ count, modelId }: CreateRandomNpcPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM generates NPCs.'); return; }
     const campaign = campaigns.byId(d.campaignId)!;
+    // Modeling after a compendium NPC keeps names/flavor appropriate to its
+    // type (a dragon doesn't get a townsfolk's name) while jittering its stats.
+    let model: ReturnType<typeof npcById> | undefined;
+    if (modelId) {
+      model = npcById(modelId);
+      if (!model) throw new Error('Unknown model NPC.');
+      if (model.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
+    }
     const n = Math.max(1, Math.min(10, count ?? 1));
     for (let i = 0; i < n; i++) {
-      const gen = generateNpc(campaign.system);
+      const gen = model ? generateNpcFromModel(model) : generateNpc(campaign.system);
       const character = characters.create(d.campaignId, null, gen.name, campaign.system, gen.sheet);
       emitCharacter(io, d.campaignId, character);
     }

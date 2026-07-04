@@ -113,6 +113,12 @@ export function WorldTreePanel() {
     // Can't parent an item under itself or its own descendant.
     if (targetId && (targetId === drag.id || isAncestor(drag.id, targetId))) return;
     intents.setParent(drag.kind, drag.id, targetId);
+    // Dragging a character onto a map relocates its token there server-side;
+    // switch the DM's view to that map so the new token is immediately
+    // visible instead of silently landing on a map nobody is looking at.
+    if (drag.kind === 'character' && targetId && byId.get(targetId)?.kind === 'map') {
+      intents.viewMap(targetId);
+    }
   }
 
   // A plain recursive render function (NOT a nested component) so that the

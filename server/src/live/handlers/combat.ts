@@ -5,7 +5,7 @@ import {
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker,
   type Character, type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
   type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
-  type SheetData, type UndoEntry, type UsePowerPayload,
+  type SheetData, type Token, type UndoEntry, type UsePowerPayload,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -19,6 +19,11 @@ function requireCampaign(socket: Socket) {
   if (!d.campaignId || !d.role) throw new Error('Join a campaign first.');
   return d as typeof d & { campaignId: string; role: 'dm' | 'player' };
 }
+
+// A save is always a single d20 roll; client/src/table/dice3d.ts settles a
+// single die within ~1700ms (delay 0 + dur up to 1450-1700ms). Add a 1s pause
+// on top per the requested "wait for the animation, pause a beat" pacing.
+const SAVE_STEP_DELAY_MS = 2800;
 
 /** Players never receive hidden entries; the DM sees everything. */
 export function initiativeViewFor(state: InitiativeState, isDm: boolean): InitiativeState {
@@ -376,58 +381,81 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }));
 
-  // DM "call for save": every listed token rolls its own save vs the DC; the
-  // shared damage roll (if any) is applied fully on a fail, halved/negated on a
-  // save. One chat card summarizes the group.
+  // DM "call for save": each listed token rolls its own save vs the DC, one
+  // at a time — each roll posts as its own red/green chat card, and the next
+  // target's roll waits for the dice animation to settle everywhere (plus a
+  // beat) before firing. The shared damage roll (if any) always comes last,
+  // applied per target based on their own pass/fail.
   socket.on(C2S.REQUEST_SAVE, safe(socket, (p: RequestSavePayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM calls for saves.'); return; }
-    const dmg = p.damageExpr && /\d*d\d/i.test(p.damageExpr) ? roll(p.damageExpr) : null;
-    const base = dmg ? Math.max(0, dmg.total) : 0;
-    let saveLabel = p.saveId;
+
+    const targets: { tok: Token; ch: Character | undefined; sc: { expr: string; threshold: number; label: string } }[] = [];
     let touchedMap: string | null = null;
-    const lines: string[] = [];
-    const undo: UndoEntry[] = [];
     for (const tid of p.tokenIds) {
       const tok = tokens.byId(tid);
       if (!tok) continue;
       touchedMap = tok.mapId;
       const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
-      let passed: boolean; let total: number; let threshold: number;
-      if (ch) {
-        const sc = systemFor(ch.system).saveCheck(ch.sheet, p.saveId, p.dc);
-        const br = roll(sc.expr);
-        total = br.total; threshold = sc.threshold; passed = total >= threshold; saveLabel = sc.label;
-      } else {
-        const br = roll('1d20'); total = br.total; threshold = p.dc; passed = total >= p.dc;
-      }
-      let dealt = 0;
-      if (base > 0) {
+      const sc = ch ? systemFor(ch.system).saveCheck(ch.sheet, p.saveId, p.dc) : { expr: '1d20', threshold: p.dc, label: p.saveId };
+      targets.push({ tok, ch, sc });
+    }
+    if (targets.length === 0) { emitError(socket, 'No valid targets for the save.'); return; }
+
+    const hasDamage = !!p.damageExpr && /\d*d\d/i.test(p.damageExpr);
+    const results: { tok: Token; ch: Character | undefined; passed: boolean }[] = [];
+
+    const finish = (): void => {
+      if (touchedMap) syncMapVision(io, d.campaignId, touchedMap);
+      const header = `${p.label?.trim() || 'Saving throw'} — ${targets[0].sc.label}${p.damageExpr ? ` DC ${p.dc}` : ''}`;
+      io.to(campaignRoom(d.campaignId)).emit(S2C.TABLE_RESULT, { text: header, color: '#c98a3c' });
+    };
+
+    const postDamage = (): void => {
+      const dmg = roll(p.damageExpr!);
+      const base = Math.max(0, dmg.total);
+      const undo: UndoEntry[] = [];
+      for (const { tok, ch, passed } of results) {
         let amt = passed ? (p.onSave === 'half' ? Math.floor(base / 2) : 0) : base;
         if (ch && p.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, p.damageType));
-        if (amt > 0) {
-          if (ch) { applyHpDelta(io, d.campaignId, ch, -amt); undo.push({ t: 'hp', characterId: ch.id, delta: -amt }); }
-          else if (tok.bar) {
-            const nh = Math.max(0, tok.bar.hp - amt);
-            tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
-            io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
-            undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
-          }
-          floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
-          dealt = amt;
+        if (amt <= 0) continue;
+        if (ch) {
+          applyHpDelta(io, d.campaignId, ch, -amt);
+          undo.push({ t: 'hp', characterId: ch.id, delta: -amt });
+        } else if (tok.bar) {
+          const nh = Math.max(0, tok.bar.hp - amt);
+          tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
+          io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+          undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
         }
+        floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
       }
-      lines.push(`${tok.name} ${total} vs ${threshold} — ${passed ? 'save' : 'fail'}${dealt ? ` (−${dealt})` : ''}`);
-    }
-    if (touchedMap) syncMapVision(io, d.campaignId, touchedMap);
-    if (lines.length === 0) { emitError(socket, 'No valid targets for the save.'); return; }
-    const header = `${p.label?.trim() || 'Saving throw'} — ${saveLabel}${p.damageExpr ? ` DC ${p.dc}` : ''}`;
-    const text = `${header}: ${lines.join('; ')}`;
-    const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, kind: 'roll', text, roll: dmg, recipients: null,
-    }, undo.length > 0 ? undo : undefined);
-    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-    io.to(campaignRoom(d.campaignId)).emit(S2C.TABLE_RESULT, { text: header, color: '#c98a3c' });
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'roll',
+        text: `${p.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
+      }, undo.length > 0 ? undo : undefined);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      finish();
+    };
+
+    const postSave = (i: number): void => {
+      const { tok, ch, sc } = targets[i];
+      const br = roll(sc.expr);
+      const passed = br.total >= sc.threshold;
+      results.push({ tok, ch, passed });
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'roll',
+        text: `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+        roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+
+      if (i + 1 < targets.length) setTimeout(() => postSave(i + 1), SAVE_STEP_DELAY_MS);
+      else if (hasDamage) setTimeout(postDamage, SAVE_STEP_DELAY_MS);
+      else finish();
+    };
+
+    postSave(0);
   }));
 
   socket.on(C2S.INIT_ADD, safe(socket, (payload: InitAddPayload) => {

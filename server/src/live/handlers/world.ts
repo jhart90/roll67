@@ -2,10 +2,12 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, applyEntry, contentById, normalizeCurrency,
   type BuyItemPayload, type CreateLocationPayload, type CreateShopPayload,
-  type DeleteLocationPayload, type DeleteShopPayload, type GameSystem, type PresentShopPayload,
+  type CreateWorldFolderPayload, type DeleteLocationPayload, type DeleteShopPayload,
+  type DeleteWorldFolderPayload, type GameSystem, type PresentShopPayload,
   type SheetData, type Shop, type ShopItem, type UpdateLocationPayload, type UpdateShopPayload,
+  type UpdateWorldFolderPayload,
 } from 'shared';
-import { campaigns, characters, chat, locations, shops } from '../../db/repos.js';
+import { campaigns, characters, chat, locations, shops, worldFolders } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { broadcastDirectory } from '../directory.js';
 
@@ -70,6 +72,14 @@ export function broadcastLocations(io: Server, campaignId: string): void {
   for (const socket of campaignSockets(io, campaignId)) {
     const isDm = sdata(socket).role === 'dm';
     socket.emit(S2C.LOCATIONS, { locations: isDm ? all : all.filter((l) => l.visibleToPlayers) });
+  }
+}
+
+/** Folders are pure organization (no secrecy toggle) — everyone gets the full set. */
+export function broadcastWorldFolders(io: Server, campaignId: string): void {
+  const all = worldFolders.forCampaign(campaignId);
+  for (const socket of campaignSockets(io, campaignId)) {
+    socket.emit(S2C.WORLD_FOLDERS, { folders: all });
   }
 }
 
@@ -220,5 +230,32 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (!l || l.campaignId !== d.campaignId) return;
     locations.delete(locationId);
     broadcastLocations(io, d.campaignId);
+  }));
+
+  // ----- world-tree folders -----
+
+  socket.on(C2S.CREATE_WORLD_FOLDER, safe(socket, ({ name, parentId }: CreateWorldFolderPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM manages folders.'); return; }
+    worldFolders.create(d.campaignId, name?.trim() || 'New folder', parentId ?? null);
+    broadcastWorldFolders(io, d.campaignId);
+  }));
+
+  socket.on(C2S.UPDATE_WORLD_FOLDER, safe(socket, ({ folderId, ...fields }: UpdateWorldFolderPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const f = worldFolders.byId(folderId);
+    if (!f || f.campaignId !== d.campaignId) return;
+    worldFolders.update(folderId, fields);
+    broadcastWorldFolders(io, d.campaignId);
+  }));
+
+  socket.on(C2S.DELETE_WORLD_FOLDER, safe(socket, ({ folderId }: DeleteWorldFolderPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const f = worldFolders.byId(folderId);
+    if (!f || f.campaignId !== d.campaignId) return;
+    worldFolders.delete(folderId);
+    broadcastWorldFolders(io, d.campaignId);
   }));
 }

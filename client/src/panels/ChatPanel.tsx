@@ -4,8 +4,10 @@ import { intents, useGameStore } from '../store/game';
 
 function RollCard({ msg }: { msg: ChatMessage }) {
   const r = msg.roll!;
-  const isCrit = r.dice.some((d) => d.sides === 20 && d.kept && d.value === 20);
-  const isFumble = r.dice.some((d) => d.sides === 20 && d.kept && d.value === 1);
+  // A pass/fail roll (e.g. a saving throw) reuses the crit/fumble green/red
+  // theme so it reads at a glance without inventing a separate color scheme.
+  const isCrit = r.outcome === 'success' || r.dice.some((d) => d.sides === 20 && d.kept && d.value === 20);
+  const isFumble = r.outcome === 'failure' || r.dice.some((d) => d.sides === 20 && d.kept && d.value === 1);
   return (
     <div className={`roll-card ${isCrit ? 'crit' : ''} ${isFumble ? 'fumble' : ''}`}>
       {msg.text && <div className="roll-label">{msg.text}</div>}

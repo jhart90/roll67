@@ -2,7 +2,7 @@ import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, Macro, MapDef, MapMeta,
-  RollableTable, RollBreakdown, Role, Shop, ShopItem, Token, Wall,
+  RollableTable, RollBreakdown, Role, Shop, ShopItem, Token, Wall, WorldFolder,
 } from 'shared';
 import { db, newId, now } from './db.js';
 
@@ -362,6 +362,47 @@ export const locations = {
     const cur = db.prepare('SELECT parent_id FROM locations WHERE id = ?').get(id) as { parent_id: string | null } | undefined;
     db.prepare('UPDATE locations SET parent_id = ? WHERE parent_id = ?').run(cur?.parent_id ?? null, id);
     db.prepare('DELETE FROM locations WHERE id = ?').run(id);
+  },
+};
+
+// ---------- world folders (pure organization; no game behavior) ----------
+
+interface WorldFolderRow {
+  id: string; name: string; parent_id: string | null;
+}
+function toWorldFolder(r: WorldFolderRow): WorldFolder {
+  return { id: r.id, name: r.name, parentId: r.parent_id };
+}
+
+export const worldFolders = {
+  forCampaign(campaignId: string): WorldFolder[] {
+    const rows = db.prepare('SELECT * FROM world_folders WHERE campaign_id = ? ORDER BY sort_order, name').all(campaignId) as WorldFolderRow[];
+    return rows.map(toWorldFolder);
+  },
+  byId(id: string): (WorldFolder & { campaignId: string }) | undefined {
+    const r = db.prepare('SELECT * FROM world_folders WHERE id = ?').get(id) as (WorldFolderRow & { campaign_id: string }) | undefined;
+    return r ? { ...toWorldFolder(r), campaignId: r.campaign_id } : undefined;
+  },
+  create(campaignId: string, name: string, parentId: string | null): WorldFolder {
+    const id = newId();
+    const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM world_folders WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
+    db.prepare('INSERT INTO world_folders (id, campaign_id, name, parent_id, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, parentId, maxOrder + 1);
+    return { id, name, parentId };
+  },
+  update(id: string, fields: Partial<Omit<WorldFolder, 'id'>>): void {
+    const cur = db.prepare('SELECT * FROM world_folders WHERE id = ?').get(id) as WorldFolderRow | undefined;
+    if (!cur) return;
+    db.prepare('UPDATE world_folders SET name = ?, parent_id = ? WHERE id = ?').run(
+      fields.name ?? cur.name,
+      fields.parentId !== undefined ? fields.parentId : cur.parent_id,
+      id,
+    );
+  },
+  delete(id: string): void {
+    // Re-parent children up to this node's parent (mirrors locations.delete).
+    const cur = db.prepare('SELECT parent_id FROM world_folders WHERE id = ?').get(id) as { parent_id: string | null } | undefined;
+    db.prepare('UPDATE world_folders SET parent_id = ? WHERE parent_id = ?').run(cur?.parent_id ?? null, id);
+    db.prepare('DELETE FROM world_folders WHERE id = ?').run(id);
   },
 };
 

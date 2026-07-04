@@ -6,7 +6,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  RollableTable, SheetData, Shop, Token, TokenLayer, TokenShape, TokenView, VisionStats,
+  RollableTable, SheetData, Shop, Token, TokenLayer, TokenShape, TokenView, VisionStats, WorldFolder,
 } from './types.js';
 
 // ---------- Client -> server intents ----------
@@ -64,6 +64,10 @@ export const C2S = {
   CREATE_LOCATION: 'createLocation',
   UPDATE_LOCATION: 'updateLocation',
   DELETE_LOCATION: 'deleteLocation',
+  // world-tree folders (pure organization; distinct from the asset-library folders below)
+  CREATE_WORLD_FOLDER: 'createWorldFolder',
+  UPDATE_WORLD_FOLDER: 'updateWorldFolder',
+  DELETE_WORLD_FOLDER: 'deleteWorldFolder',
   // chat & macros
   CHAT: 'chat',
   SAVE_MACRO: 'saveMacro',
@@ -223,6 +227,10 @@ export interface UpdateLocationPayload {
   handoutIds?: string[];
 }
 export interface DeleteLocationPayload { locationId: string }
+
+export interface CreateWorldFolderPayload { name: string; parentId?: string | null }
+export interface UpdateWorldFolderPayload { folderId: string; name?: string; parentId?: string | null }
+export interface DeleteWorldFolderPayload { folderId: string }
 export interface UpdateCharacterPayload {
   characterId: string;
   patch: SheetData;
@@ -398,6 +406,7 @@ export const S2C = {
   SHOPS: 'shops',
   SHOP_PRESENTATION: 'shopPresentation',
   LOCATIONS: 'locations',
+  WORLD_FOLDERS: 'worldFolders',
   ASSETS: 'assets',
   AUDIO_TRACKS: 'audioTracks',
   AUDIO_STATE: 'audioState',
@@ -502,6 +511,7 @@ export interface ShopsPayload { shops: Shop[] }
 /** Which shop (if any) to pop for this viewer; DM receives the presented id for a badge. */
 export interface ShopPresentationPayload { shopId: string | null }
 export interface LocationsPayload { locations: LocationNode[] }
+export interface WorldFoldersPayload { folders: WorldFolder[] }
 export interface AssetsPayload { folders: AssetFolder[]; assets: AssetInfo[] }
 export interface AudioTracksPayload { tracks: AudioTrack[] }
 export interface AudioStatePayload { state: AudioState }

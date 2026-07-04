@@ -9,7 +9,7 @@ import {
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
   type MemberInfo, type PingShownPayload, type RollableTable, type Shop,
   type TableResultPayload,
-  type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type YouArePayload,
+  type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow } from './windowManager';
@@ -44,6 +44,7 @@ interface GameState {
   audioState: AudioState;
   shopList: Shop[];
   locationList: LocationNode[];
+  worldFolderList: WorldFolder[];
   /** Shop the DM is presenting to this viewer (players pop a storefront). */
   presentedShopId: string | null;
   closePresentedShop(): void;
@@ -134,6 +135,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
   shopList: [],
   locationList: [],
+  worldFolderList: [],
   presentedShopId: null,
   closePresentedShop() { set({ presentedShopId: null }); },
   directory: null,
@@ -492,6 +494,10 @@ export function wireSocket(): void {
     useGameStore.setState({ locationList: locations });
   });
 
+  socket.on(S2C.WORLD_FOLDERS, ({ folders }: { folders: WorldFolder[] }) => {
+    useGameStore.setState({ worldFolderList: folders });
+  });
+
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
     useGameStore.setState({ initiativeState: state });
   });
@@ -709,14 +715,20 @@ export const intents = {
   updateLocation: (locationId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_LOCATION, { locationId, ...fields }),
   deleteLocation: (locationId: string) => socket.emit(C2S.DELETE_LOCATION, { locationId }),
 
+  /** Pure-organization world-tree folders (DM). Distinct from the art/handout library's asset folders. */
+  createWorldFolder: (name: string, parentId?: string | null) => socket.emit(C2S.CREATE_WORLD_FOLDER, { name, parentId }),
+  updateWorldFolder: (folderId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_WORLD_FOLDER, { folderId, ...fields }),
+  deleteWorldFolder: (folderId: string) => socket.emit(C2S.DELETE_WORLD_FOLDER, { folderId }),
+
   /** Reparent any world-tree entity (DM). parentId=null → top level. */
-  setParent: (kind: 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map', id: string, parentId: string | null) => {
+  setParent: (kind: 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map' | 'folder', id: string, parentId: string | null) => {
     if (kind === 'character') socket.emit(C2S.UPDATE_CHARACTER, { characterId: id, patch: {}, parentId });
     else if (kind === 'location') socket.emit(C2S.UPDATE_LOCATION, { locationId: id, parentId });
     else if (kind === 'shop') socket.emit(C2S.UPDATE_SHOP, { shopId: id, parentId });
     else if (kind === 'table') socket.emit(C2S.UPDATE_TABLE, { tableId: id, parentId });
     else if (kind === 'handout') socket.emit(C2S.UPDATE_HANDOUT, { handoutId: id, parentId });
     else if (kind === 'map') socket.emit(C2S.UPDATE_MAP, { mapId: id, parentId });
+    else if (kind === 'folder') socket.emit(C2S.UPDATE_WORLD_FOLDER, { folderId: id, parentId });
   },
 
   /** Dragged a character from the World tab straight onto the map canvas: nest it under the map and drop its token at the exact hex released. */

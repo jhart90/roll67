@@ -4,10 +4,11 @@ import {
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type MoveTokenPayload, type UpdateTokenPayload,
 } from 'shared';
-import { characters, maps, tokens } from '../../db/repos.js';
+import { campaigns, characters, maps, tokens } from '../../db/repos.js';
 import { dmRoom, emitError, safe, sdata } from '../hub.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
+import { broadcastPresence, sendMapStateToUser } from './session.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -194,6 +195,15 @@ export function placeCharacterToken(
     });
     io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: created });
     touchedMaps.add(mapId);
+  }
+
+  // A player's own token landing on a map they're not currently viewing
+  // (e.g. the DM dragged their character onto a new map) pulls that player
+  // onto it — the same mechanism as the DM manually assigning them a map.
+  if (character.ownerUserId && campaigns.viewMapIdFor(campaignId, character.ownerUserId) !== mapId) {
+    campaigns.setMemberMap(campaignId, character.ownerUserId, mapId);
+    sendMapStateToUser(io, campaignId, character.ownerUserId);
+    broadcastPresence(io, campaignId);
   }
 
   for (const m of touchedMaps) syncMapVision(io, campaignId, m);

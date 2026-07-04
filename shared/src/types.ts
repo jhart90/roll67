@@ -189,6 +189,8 @@ export interface RollBreakdown {
   dice: DieRoll[];
   /** Human-readable expansion, e.g. "2d20kh1 (14, ~3~) + 5". */
   detail: string;
+  /** Set for pass/fail rolls (e.g. a saving throw) so chat can theme the card red/green. */
+  outcome?: 'success' | 'failure';
 }
 
 export interface ChatMessage {
@@ -376,4 +378,12 @@ export interface LocationNode {
   npcIds: string[];
   shopIds: string[];
   handoutIds: string[];
+}
+
+// ---------- World folders (pure organization; no game behavior) ----------
+
+export interface WorldFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
 }

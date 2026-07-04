@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Character, Handout, LocationNode, MapMeta, RollableTable, Shop } from 'shared';
+import type { Character, Handout, LocationNode, MapMeta, RollableTable, Shop, WorldFolder } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
@@ -14,11 +14,12 @@ interface TreeNode {
   sub: string; // secondary label (owner, kind, item count…)
 }
 
-const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️' };
+const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁' };
 
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
   locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
+  folders: WorldFolder[],
 ): TreeNode[] {
   const out: TreeNode[] = [];
   for (const m of maps) out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: 'map' });
@@ -27,6 +28,7 @@ function buildNodes(
   for (const s of shops) out.push({ kind: 'shop', id: s.id, name: s.name || 'Shop', parentId: s.parentId ?? null, sub: `${s.items.length} items` });
   for (const t of tables) out.push({ kind: 'table', id: t.id, name: t.name || 'Table', parentId: t.parentId ?? null, sub: `${t.items.length}` });
   for (const h of handouts) out.push({ kind: 'handout', id: h.id, name: h.title || 'Handout', parentId: h.parentId ?? null, sub: '' });
+  for (const f of folders) out.push({ kind: 'folder', id: f.id, name: f.name || 'Folder', parentId: f.parentId ?? null, sub: '' });
   return out;
 }
 
@@ -38,6 +40,7 @@ export function WorldTreePanel() {
   const tables = useGameStore((s) => s.tableList);
   const handouts = useGameStore((s) => s.handoutList);
   const maps = useGameStore((s) => s.mapsMeta);
+  const folders = useGameStore((s) => s.worldFolderList);
   const isDm = you?.role === 'dm';
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -49,8 +52,8 @@ export function WorldTreePanel() {
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null);
 
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts, maps),
-    [locations, characters, shops, tables, handouts, maps],
+    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders),
+    [locations, characters, shops, tables, handouts, maps, folders],
   );
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const childrenOf = useMemo(() => {
@@ -75,6 +78,13 @@ export function WorldTreePanel() {
     if (node.kind === 'map') {
       if (isDm) openWindow('mapEditor', node.id, {}, node.name || 'Edit map');
       else intents.viewMap(node.id);
+      return;
+    }
+    if (node.kind === 'folder') {
+      // Folders are pure organization — no editor window, just an inline rename.
+      if (!isDm) return;
+      const name = prompt('Folder name', node.name);
+      if (name && name.trim()) intents.updateWorldFolder(node.id, { name: name.trim() });
       return;
     }
     // The DM edits (each in its own draggable window); players get a
@@ -154,6 +164,18 @@ export function WorldTreePanel() {
           <span className="wt-icon">{ICON[node.kind]}</span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
+          {isDm && node.kind === 'folder' && (
+            <button
+              className="link danger"
+              title="Delete folder"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(`Delete folder "${node.name}"? Its contents move up a level.`)) intents.deleteWorldFolder(node.id);
+              }}
+            >
+              ✕
+            </button>
+          )}
         </div>
         {isOpen && kids.map((k) => renderNode(k, depth + 1))}
       </div>
@@ -176,6 +198,7 @@ export function WorldTreePanel() {
           <button className="btn btn-sm" onClick={() => intents.createShop('New shop')}>+ Shop</button>
           <button className="btn btn-sm" onClick={() => intents.createTable('New table')}>+ Table</button>
           <button className="btn btn-sm" onClick={() => openWindow('handout', 'new', {}, 'New handout')}>+ Handout</button>
+          <button className="btn btn-sm" onClick={() => intents.createWorldFolder('New folder', null)}>+ Folder</button>
           <button className="btn btn-sm" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
       )}

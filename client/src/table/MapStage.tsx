@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { canMoveToken, pixelToHex } from 'shared';
+import { canMoveToken, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { worldDrag } from '../store/worldDrag';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
@@ -13,6 +13,9 @@ import { TokenLayer } from './TokenLayer';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 4;
+const SQRT3 = Math.sqrt(3);
+/** How many hexes across the shorter viewport dimension when centered on your own token — a tactical close-in view, not a whole-map fit. */
+const FOCUS_HEXES_ACROSS = 12;
 
 /** Pan/zoom container holding every map layer, ordered bottom to top. */
 export function MapStage({ children }: { children?: React.ReactNode }) {
@@ -130,11 +133,36 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Center the map when it first loads (or changes).
+  // Center the map when it first loads (or changes). A player whose own
+  // character has a token here gets a tactical close-in view centered on it
+  // (e.g. the DM just moved their token onto a new map); everyone else — the
+  // DM, or a player with no token here yet — gets the whole map fit to
+  // screen, as before.
   useEffect(() => {
     if (!map) return;
     const el = containerRef.current;
     if (!el) return;
+
+    const s = useGameStore.getState();
+    const myToken = s.you && s.you.role !== 'dm'
+      ? Object.values(s.tokens).find((t) => {
+          const c = s.characters.find((ch) => ch.id === t.characterId);
+          return !!c && c.ownerUserId === s.you!.userId;
+        })
+      : undefined;
+
+    if (myToken) {
+      const center = hexToPixel({ q: myToken.q, r: myToken.r }, map.grid);
+      const target = Math.min(el.clientWidth, el.clientHeight) / (map.grid.hexSize * SQRT3 * FOCUS_HEXES_ACROSS);
+      const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, Number.isFinite(target) && target > 0 ? target : 1));
+      useGameStore.getState().setCamera({
+        x: el.clientWidth / 2 - center.x * scale,
+        y: el.clientHeight / 2 - center.y * scale,
+        scale,
+      });
+      return;
+    }
+
     const { width, height } = mapPixelSize(map);
     // Clamp: a zero/tiny container (e.g. hidden panel) must never zero the
     // scale — camera math multiplies it, so 0 would be unrecoverable.

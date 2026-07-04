@@ -8,7 +8,7 @@ import {
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
   type MemberInfo, type PingShownPayload, type RollableTable, type Shop,
-  type TableResultPayload,
+  type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -68,6 +68,8 @@ interface GameState {
   measures: Record<string, MeasureShownPayload>;
   /** Everyone's currently-aimed AoE templates, keyed by caster's userId. */
   aoePreviews: Record<string, AoePreviewShownPayload>;
+  /** Everyone's in-progress single-target selections, keyed by caster's userId. */
+  targetPreviews: Record<string, TargetPreviewShownPayload>;
   errorToast: string | null;
   /** Live 3D dice animation for the latest roll. */
   diceAnim: { id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string } | null;
@@ -163,6 +165,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   pings: [],
   measures: {},
   aoePreviews: {},
+  targetPreviews: {},
   errorToast: null,
   diceAnim: null,
   targeting: null,
@@ -173,8 +176,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
     set({ targeting: { characterId, sourceTokenId, action, adv }, tool: 'select', selectedTokenId: null });
+    // Live-broadcast the range highlight so the DM + other players see the
+    // same in-range/out-of-range tokens the caster sees, before they click.
+    socket.emit(C2S.TARGET_PREVIEW, {
+      sourceTokenId, rangeFt: action.rangeFt, effect: action.effect, label: action.label, active: true,
+    });
   },
-  cancelTargeting() { set({ targeting: null }); },
+  cancelTargeting() {
+    const t = get().targeting;
+    set({ targeting: null });
+    if (t) {
+      socket.emit(C2S.TARGET_PREVIEW, {
+        sourceTokenId: t.sourceTokenId, rangeFt: t.action.rangeFt, effect: t.action.effect, label: t.action.label, active: false,
+      });
+    }
+  },
   resolveTarget(targetTokenId) {
     const t = get().targeting;
     if (!t) return;
@@ -183,6 +199,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv,
     });
     set({ targeting: null });
+    socket.emit(C2S.TARGET_PREVIEW, {
+      sourceTokenId: t.sourceTokenId, rangeFt: t.action.rangeFt, effect: t.action.effect, label: t.action.label, active: false,
+    });
   },
   beginAoeTargeting(characterId, sourceTokenId, action, adv) {
     const src = get().tokens[sourceTokenId];
@@ -276,7 +295,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
-      targeting: null, aoeTargeting: null, aoePreviews: {}, floats: [], castPrompt: null,
+      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], castPrompt: null,
     });
   },
 
@@ -605,6 +624,14 @@ export function wireSocket(): void {
     if (p.active) aoePreviews[p.userId] = p;
     else delete aoePreviews[p.userId];
     useGameStore.setState({ aoePreviews });
+  });
+
+  socket.on(S2C.TARGET_PREVIEW_SHOWN, (p: TargetPreviewShownPayload) => {
+    const s = useGameStore.getState();
+    const targetPreviews = { ...s.targetPreviews };
+    if (p.active) targetPreviews[p.userId] = p;
+    else delete targetPreviews[p.userId];
+    useGameStore.setState({ targetPreviews });
   });
 
   socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId, diceColor }: { userId: string; online: boolean; mapId: string | null; diceColor: string | null }) => {

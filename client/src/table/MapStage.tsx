@@ -10,6 +10,7 @@ import { DrawingLayer } from './DrawingLayer';
 import { FogCanvas } from './FogCanvas';
 import { GeometryLayer } from './GeometryLayer';
 import { PingMeasureLayer } from './PingMeasureLayer';
+import { TargetPreviewLayer } from './TargetPreviewLayer';
 import { TokenLayer } from './TokenLayer';
 
 const MIN_SCALE = 0.1;
@@ -269,6 +270,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <GeometryLayer />
           <PingMeasureLayer />
           <AoeTemplateLayer />
+          <TargetPreviewLayer />
           <CombatTextLayer />
           {children}
         </div>

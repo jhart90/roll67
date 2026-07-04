@@ -6,7 +6,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  RollableTable, SheetData, Shop, Token, TokenLayer, TokenShape, TokenView, VisionStats, WorldFolder,
+  RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WorldFolder,
 } from './types.js';
 
 // ---------- Client -> server intents ----------
@@ -54,6 +54,7 @@ export const C2S = {
   REQUEST_SAVE: 'requestSave',
   AOE_PREVIEW: 'aoePreview',
   CAST_AOE: 'castAoe',
+  TARGET_PREVIEW: 'targetPreview',
   MODERATE_MESSAGE: 'moderateMessage',
   // shops
   CREATE_SHOP: 'createShop',
@@ -308,6 +309,15 @@ export interface AoePreviewPayload {
   active: boolean;
 }
 
+/** Live-broadcast a single-target selection in progress; active:false clears it. */
+export interface TargetPreviewPayload {
+  sourceTokenId: string;
+  rangeFt: number;
+  effect: 'damage' | 'heal';
+  label: string;
+  active: boolean;
+}
+
 /** Lock in an AoE spell's template: server resolves which tokens are inside it
  *  and rolls saves/damage against exactly that set (never the client's guess). */
 export interface CastAoePayload {
@@ -432,6 +442,7 @@ export const S2C = {
   PING_SHOWN: 'pingShown',
   MEASURE_SHOWN: 'measureShown',
   AOE_PREVIEW_SHOWN: 'aoePreviewShown',
+  TARGET_PREVIEW_SHOWN: 'targetPreviewShown',
   HANDOUTS: 'handouts',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
@@ -539,6 +550,7 @@ export interface DrawingsClearedPayload { mapId: string; layer: DrawingLayerName
 export interface PingShownPayload extends PingInfo {}
 export interface MeasureShownPayload extends MeasureInfo { userId: string }
 export interface AoePreviewShownPayload extends AoePreviewInfo { userId: string }
+export interface TargetPreviewShownPayload extends TargetPreviewInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
 export interface ShopsPayload { shops: Shop[] }

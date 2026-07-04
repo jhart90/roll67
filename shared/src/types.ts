@@ -324,6 +324,19 @@ export interface AoePreviewInfo {
   active: boolean;
 }
 
+/** A caster's in-progress single-target selection — everyone sees the same
+ *  in-range/out-of-range token highlighting the caster sees, before they click. */
+export interface TargetPreviewInfo {
+  sourceTokenId: string;
+  rangeFt: number;
+  effect: 'damage' | 'heal';
+  label: string;
+  byName: string;
+  color: string;
+  /** false clears this user's preview (they resolved or cancelled it). */
+  active: boolean;
+}
+
 // ---------- Handouts ----------
 
 export interface Handout {

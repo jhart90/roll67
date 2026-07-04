@@ -4,7 +4,7 @@ import {
   type AoePreviewPayload, type ClearDrawingsPayload, type CreateHandoutPayload, type CreateTablePayload,
   type DeleteHandoutPayload, type DeleteTablePayload, type DrawPayload,
   type EraseDrawingPayload, type MeasurePayload, type PingPayload, type RollTablePayload,
-  type ShareHandoutPayload, type UpdateHandoutPayload, type UpdateTablePayload,
+  type ShareHandoutPayload, type TargetPreviewPayload, type UpdateHandoutPayload, type UpdateTablePayload,
 } from 'shared';
 import { campaigns, chat, drawings, handouts, maps, rollableTables } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata } from '../hub.js';
@@ -106,6 +106,18 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     io.to(campaignRoom(d.campaignId)).emit(S2C.AOE_PREVIEW_SHOWN, {
       userId: d.userId, shape, sizeFt, widthFt, originHex, aimHex, active: !!active,
+      byName: d.username, color: colorFor(d.userId),
+    });
+  }));
+
+  // A caster's single-target selection (range highlighting) relayed live so
+  // everyone sees the same in-range/out-of-range tokens before the caster
+  // clicks — mirrors AOE_PREVIEW but there's no aim point to update, just a
+  // begin (active:true) and an end (active:false) around the click.
+  socket.on(C2S.TARGET_PREVIEW, safe(socket, ({ sourceTokenId, rangeFt, effect, label, active }: TargetPreviewPayload) => {
+    const d = requireCampaign(socket);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.TARGET_PREVIEW_SHOWN, {
+      userId: d.userId, sourceTokenId, rangeFt, effect, label, active: !!active,
       byName: d.username, color: colorFor(d.userId),
     });
   }));

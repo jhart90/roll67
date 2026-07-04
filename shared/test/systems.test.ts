@@ -62,6 +62,61 @@ describe('D&D 5e sheet', () => {
     expect(dnd5e.vision(sheet)).toEqual({ visionRange: 30, darkvision: 12 });
     expect(dnd5e.hp(sheet)).toEqual({ hp: 21, maxHp: 30 });
   });
+
+  it('with nothing equipped, AC falls back to the manually-typed field (existing NPCs unaffected)', () => {
+    const sheet = { ...dnd5e.defaultSheet(), ac: 16, dex: 18, armor: [] };
+    expect(dnd5e.derive(sheet).ac).toBe(16);
+  });
+
+  it('equipping body armor overrides the manual AC field with base + capped Dex', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(), ac: 10, dex: 18, // +4 dex
+      armor: [{ name: 'Breastplate', baseAc: 14, addDex: true, maxDex: 2, equipped: true }],
+    };
+    expect(dnd5e.derive(sheet).ac).toBe(16); // 14 + min(4, 2)
+  });
+
+  it('unequipping armor falls back to the manual AC field again', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(), ac: 10, dex: 18,
+      armor: [{ name: 'Breastplate', baseAc: 14, addDex: true, maxDex: 2, equipped: false }],
+    };
+    expect(dnd5e.derive(sheet).ac).toBe(10);
+  });
+
+  it('an equipped shield adds its AC on top, whether or not body armor is worn', () => {
+    const unarmored = { ...dnd5e.defaultSheet(), ac: 10, armor: [{ name: 'Shield', baseAc: 2, shield: true, equipped: true }] };
+    expect(dnd5e.derive(unarmored).ac).toBe(12);
+    const armored = {
+      ...dnd5e.defaultSheet(), ac: 10, dex: 10,
+      armor: [
+        { name: 'Chain Mail', baseAc: 16, addDex: false, equipped: true },
+        { name: 'Shield', baseAc: 2, shield: true, equipped: true },
+      ],
+    };
+    expect(dnd5e.derive(armored).ac).toBe(18);
+  });
+
+  it('an equipped item AC/save bonus (e.g. Cloak of Protection) applies only while equipped', () => {
+    const worn = {
+      ...dnd5e.defaultSheet(), ac: 12, level: 5, str: 16, save_str: true,
+      inventory: [{ name: 'Cloak of Protection', acBonus: 1, saveBonus: 1, equipped: true }],
+    };
+    expect(dnd5e.derive(worn).ac).toBe(13);
+    expect(dnd5e.derive(worn).save_str).toBe('+7'); // +3 mod +3 prof +1 item
+    const stashed = { ...worn, inventory: [{ ...worn.inventory[0], equipped: false }] };
+    expect(dnd5e.derive(stashed).ac).toBe(12);
+    expect(dnd5e.derive(stashed).save_str).toBe('+6');
+  });
+
+  it('save rollables also carry the equipped item bonus', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(), dex: 14,
+      inventory: [{ name: 'Ring of Protection', acBonus: 1, saveBonus: 1, equipped: true }],
+    };
+    const rolls = dnd5e.rollables(sheet);
+    expect(rolls.find((r) => r.id === 'save_dex')?.expr).toBe('1d20+3'); // +2 mod +1 item
+  });
 });
 
 describe('SWN sheet', () => {

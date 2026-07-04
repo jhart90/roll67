@@ -167,6 +167,21 @@ function weaponShockSwn(props: string[]): number {
   return m ? Number(m[1]) : 0;
 }
 
+/**
+ * Pull an "equip this and get a flat AC/save bonus" number out of a magic
+ * item's free-text summary ("+1 AC and saving throws", "+2 Con save",
+ * "+1 armor"). Items whose benefit isn't a flat numeric bonus (stat-setting,
+ * advantage grants, unique actions) intentionally fall through to {0, 0}
+ * rather than guessing a number that isn't in the source text.
+ */
+function parseAcSaveBonus(text: string): { ac: number; save: number } {
+  const both = text.match(/\+(\d+)\s*AC\s*and\s*saving\s*throws/i);
+  if (both) return { ac: Number(both[1]), save: Number(both[1]) };
+  const acMatch = text.match(/\+(\d+)\s*(?:AC|armor)\b/i);
+  const saveMatch = text.match(/\+(\d+)\s*(?:\w+\s+)?sav(?:e|ing throws?)\b/i);
+  return { ac: acMatch ? Number(acMatch[1]) : 0, save: saveMatch ? Number(saveMatch[1]) : 0 };
+}
+
 /** Rough default shop prices by kind; the DM can adjust after adding. */
 const KIND_PRICE: Record<ContentKind, number> = {
   weapon: 25, armor: 75, gear: 10, magicitem: 150, spell: 25, power: 0,
@@ -287,27 +302,34 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
   if (entry.kind === 'armor' && entry.armor) {
     if (is5e) {
       return {
-        listId: 'inventory',
-        row: { name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, notes: entry.subtitle },
-        label: `${entry.name} added to equipment`,
+        listId: 'armor',
+        row: {
+          name: entry.name, baseAc: entry.armor.baseAc, addDex: entry.armor.addDex,
+          maxDex: entry.armor.maxDex ?? -1, shield: entry.category === 'Shield',
+          equipped: false, notes: entry.armor.notes ?? '',
+        },
+        label: `${entry.name} added to armor`,
       };
     }
     return {
       listId: 'armor',
-      row: { name: entry.name, ac: entry.armor.baseAc, notes: entry.armor.notes ?? '' },
+      row: { name: entry.name, ac: entry.armor.baseAc, equipped: false, notes: entry.armor.notes ?? '' },
       label: `${entry.name} added to armor`,
     };
   }
 
-  // gear + magic items -> inventory. Healing consumables become usable.
+  // gear + magic items -> inventory. Healing consumables become usable; magic
+  // items with a flat numeric AC/save bonus become equippable for it.
   if (entry.kind === 'gear' || entry.kind === 'magicitem') {
     const heal = healAmountFrom(`${entry.subtitle} ${entry.detail ?? ''}`);
     const usable = heal ? { effect: 'heal', amount: heal, range: 5 } : {};
+    const bonus = entry.kind === 'magicitem' ? parseAcSaveBonus(entry.subtitle) : { ac: 0, save: 0 };
+    const equip = { equipped: false, acBonus: bonus.ac, saveBonus: bonus.save };
     return {
       listId: 'inventory',
       row: is5e
-        ? { name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, ...usable, notes: entry.subtitle }
-        : { name: entry.name, qty: 1, enc: 1, ...usable, notes: entry.subtitle },
+        ? { name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, ...usable, ...equip, notes: entry.subtitle }
+        : { name: entry.name, qty: 1, enc: 1, ...usable, ...equip, notes: entry.subtitle },
       label: `${entry.name} added to inventory`,
     };
   }

@@ -143,6 +143,26 @@ describe('Phase 7: SWN gear/economy', () => {
     expect(swn.derive(sheet).ac).toBe(10);
   });
 
+  it('equipped gear (e.g. Dermal Plating) adds an AC bonus on top of worn armor', () => {
+    const sheet = char({
+      ac: 10, armor: [{ name: 'Vacc Suit', ac: 13, equipped: true }],
+      inventory: [{ name: 'Dermal Plating', acBonus: 1, equipped: true }],
+    });
+    expect(swn.derive(sheet).ac).toBe(14);
+  });
+
+  it('unequipping gear removes its AC/save bonus', () => {
+    const item = { name: 'Dermal Plating', acBonus: 1, saveBonus: 1, equipped: true };
+    expect(swn.derive(char({ ac: 10, inventory: [item] })).ac).toBe(11);
+    expect(swn.derive(char({ ac: 10, inventory: [{ ...item, equipped: false }] })).ac).toBe(10);
+  });
+
+  it('an equipped save bonus lowers the save target number (easier to meet/beat)', () => {
+    const sheet = char({ level: 1, str: 10, dex: 10, con: 10, inventory: [{ name: 'Ward Charm', saveBonus: 2, equipped: true }] });
+    const base = swn.derive(char({ level: 1, str: 10, dex: 10, con: 10 })).save_physical;
+    expect(swn.derive(sheet).save_physical).toBe(Number(base) - 2);
+  });
+
   it('encumbrance sums qty x enc across inventory, and capacity scales with STR', () => {
     const sheet = char({
       str: 14, // +1 mod

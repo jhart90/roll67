@@ -141,4 +141,45 @@ describe('applyEntry -> sheet rows', () => {
     const bag = contentById('dnd5e-magicitem-bag-of-holding')!;
     expect(applyEntry(bag, dnd5e.defaultSheet())!.listId).toBe('inventory');
   });
+
+  it('5e armor becomes an equippable row in the armor list, unworn by default', () => {
+    const breastplate = contentById('dnd5e-armor-breastplate')!;
+    const res = applyEntry(breastplate, dnd5e.defaultSheet())!;
+    expect(res.listId).toBe('armor');
+    expect(res.row).toMatchObject({ baseAc: 14, addDex: true, maxDex: 2, shield: false, equipped: false });
+  });
+
+  it('a 5e shield is flagged so it adds on top instead of replacing worn armor', () => {
+    const shield = contentById('dnd5e-armor-shield')!;
+    const res = applyEntry(shield, dnd5e.defaultSheet())!;
+    expect(res.row).toMatchObject({ baseAc: 2, shield: true });
+  });
+
+  it('a 5e magic item with a flat "+N AC and saving throws" bonus becomes equippable for it', () => {
+    const cloak = contentById('dnd5e-magicitem-cloak-of-protection')!;
+    const res = applyEntry(cloak, dnd5e.defaultSheet())!;
+    expect(res.listId).toBe('inventory');
+    expect(res.row).toMatchObject({ equipped: false, acBonus: 1, saveBonus: 1 });
+  });
+
+  it('a magic item whose benefit is a stat override (not a flat bonus) fabricates no AC/save numbers', () => {
+    const amulet = contentById('dnd5e-magicitem-amulet-of-health')!;
+    const res = applyEntry(amulet, dnd5e.defaultSheet())!;
+    expect(res.row.acBonus).toBe(0);
+    expect(res.row.saveBonus).toBe(0);
+  });
+
+  it('SWN armor rows are unworn by default so equipping is an explicit action', () => {
+    const suit = contentById('swn-armor-assault-suit')!;
+    const res = applyEntry(suit, swn.defaultSheet())!;
+    expect(res.listId).toBe('armor');
+    expect(res.row).toMatchObject({ ac: 18, equipped: false });
+  });
+
+  it('SWN cyberware with a flat "+N armor" note becomes equippable for an AC bonus', () => {
+    const plating = contentById('swn-gear-cyber-dermal-plating')!;
+    const res = applyEntry(plating, swn.defaultSheet())!;
+    expect(res.listId).toBe('inventory');
+    expect(res.row).toMatchObject({ equipped: false, acBonus: 1 });
+  });
 });

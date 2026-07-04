@@ -46,6 +46,40 @@ export const SKILLS_5E = [
   { id: 'survival', label: 'Survival', ability: 'wis' },
 ] as const;
 
+/** Sum of AC/save bonuses from equipped (checked) inventory items, e.g. a
+ *  worn Cloak of Protection ("+1 AC and saving throws"). */
+function equippedItemBonuses(sheet: SheetData): { ac: number; save: number } {
+  return rows(sheet, 'inventory')
+    .filter((i) => i.equipped === true)
+    .reduce<{ ac: number; save: number }>(
+      (acc, i) => ({ ac: acc.ac + num(i, 'acBonus', 0), save: acc.save + num(i, 'saveBonus', 0) }),
+      { ac: 0, save: 0 },
+    );
+}
+
+/**
+ * AC from worn armor: an equipped non-shield armor row replaces the
+ * manually-typed base AC (base + Dex, capped per its maxDex); a manually-typed
+ * base AC is used as a fallback when nothing is equipped (preserves existing
+ * NPCs/monsters that never use the armor list). Equipped shields always add
+ * their AC on top, whichever base is in play.
+ */
+function armorAc(sheet: SheetData): number {
+  const armor = rows(sheet, 'armor').filter((a) => a.equipped === true);
+  const body = armor.find((a) => a.shield !== true);
+  const shields = armor.filter((a) => a.shield === true);
+  let base: number;
+  if (body) {
+    const dexMod = abilityMod(num(sheet, 'dex', 10));
+    const maxDex = num(body, 'maxDex', -1);
+    const dexBonus = body.addDex ? (maxDex < 0 ? dexMod : Math.min(dexMod, maxDex)) : 0;
+    base = num(body, 'baseAc', 10) + dexBonus;
+  } else {
+    base = num(sheet, 'ac', 10);
+  }
+  return base + shields.reduce((sum, s) => sum + num(s, 'baseAc', 0), 0);
+}
+
 function abilityMod(score: number): number {
   return Math.floor((score - 10) / 2);
 }
@@ -206,6 +240,22 @@ const coreTab: SheetTab = {
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
+    {
+      kind: 'list', id: 'armor', title: 'Armor',
+      columns: [
+        { id: 'name', label: 'Armor', type: 'text', width: 'third' },
+        { id: 'baseAc', label: 'Base AC', type: 'number', width: 'sixth', default: 10 },
+        { id: 'addDex', label: 'Add Dex', type: 'checkbox', width: 'sixth' },
+        { id: 'maxDex', label: 'Max Dex (-1=none)', type: 'number', width: 'sixth', default: -1 },
+        { id: 'shield', label: 'Shield', type: 'checkbox', width: 'sixth' },
+        { id: 'equipped', label: 'Worn', type: 'checkbox', width: 'sixth' },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
+      ],
+    },
+    {
+      kind: 'derived', id: 'acDerived', title: 'Effective AC (worn armor + magic bonuses)',
+      items: [{ key: 'ac', label: 'Effective AC' }],
+    },
     { kind: 'fields', id: 'currency', title: 'Currency', fields: currencyFields },
     {
       kind: 'list', id: 'inventory', title: 'Equipment',
@@ -215,6 +265,9 @@ const coreTab: SheetTab = {
         { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
         { id: 'effect', label: 'Use', type: 'select', width: 'sixth', options: ['none', 'heal', 'damage'], default: 'none' },
         { id: 'amount', label: 'Amount', type: 'text', width: 'sixth' },
+        { id: 'equipped', label: 'Equipped', type: 'checkbox', width: 'sixth' },
+        { id: 'acBonus', label: 'AC bonus', type: 'number', width: 'sixth', default: 0 },
+        { id: 'saveBonus', label: 'Save bonus', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },
@@ -362,12 +415,13 @@ export const dnd5e: SystemSchema = {
     const level = num(sheet, 'level', 1);
     const pb = profBonus(level);
     out.profBonus = fmtMod(pb);
+    const itemBonus = equippedItemBonuses(sheet);
     for (const a of ABILITIES) {
       const mod = abilityMod(num(sheet, a.id, 10));
       // Keyed by field id (badge next to the score) and by <id>Mod (used elsewhere).
       out[a.id] = fmtMod(mod);
       out[`${a.id}Mod`] = fmtMod(mod);
-      out[`save_${a.id}`] = fmtMod(mod + (bool(sheet, `save_${a.id}`) ? pb : 0));
+      out[`save_${a.id}`] = fmtMod(mod + (bool(sheet, `save_${a.id}`) ? pb : 0) + itemBonus.save);
     }
     for (const s of SKILLS_5E) {
       const mod = abilityMod(num(sheet, s.ability, 10));
@@ -382,9 +436,10 @@ export const dnd5e: SystemSchema = {
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.spellDc = 8 + pb + spellMod;
     out.spellAttack = fmtMod(pb + spellMod);
-    // AC stays a manually-typed field; this only surfaces the Dual Wielder
-    // toggle's +1 as a badge next to it (and is what combat resolution reads).
-    out.ac = num(sheet, 'ac', 10) + dualWielderAcBonus(sheet);
+    // Equipped armor (and shields) replace/augment the manually-typed base AC;
+    // Dual Wielder and equipped-item AC bonuses (e.g. a worn Cloak of
+    // Protection) always add on top. This is what combat resolution reads.
+    out.ac = armorAc(sheet) + dualWielderAcBonus(sheet) + itemBonus.ac;
     return out;
   },
 
@@ -394,11 +449,12 @@ export const dnd5e: SystemSchema = {
     const out: Rollable[] = [];
     // Champion Remarkable Athlete: half proficiency to STR/DEX/CON checks.
     const ra = remarkableAthleteBonus(sheet);
+    const itemBonus = equippedItemBonuses(sheet);
     for (const a of ABILITIES) {
       const mod = abilityMod(num(sheet, a.id, 10));
       const check = mod + (ra && (a.id === 'str' || a.id === 'dex' || a.id === 'con') ? ra : 0);
       out.push({ id: `check_${a.id}`, label: `${a.label} check`, expr: `1d20${fmtMod(check)}`, group: 'Ability checks', d20: true });
-      const save = mod + (bool(sheet, `save_${a.id}`) ? pb : 0);
+      const save = mod + (bool(sheet, `save_${a.id}`) ? pb : 0) + itemBonus.save;
       out.push({ id: `save_${a.id}`, label: `${a.label} save`, expr: `1d20${fmtMod(save)}`, group: 'Saving throws', d20: true });
     }
     for (const s of SKILLS_5E) {

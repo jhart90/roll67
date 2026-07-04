@@ -119,19 +119,31 @@ function ironhideNaturalAc(sheet: SheetData): number {
   return 0;
 }
 
+/** Sum of AC/save bonuses from equipped (checked) gear, e.g. Dermal Plating
+ *  ("+1 armor") or an attuned protective trinket. */
+function equippedItemBonuses(sheet: SheetData): { ac: number; save: number } {
+  return rows(sheet, 'inventory')
+    .filter((i) => i.equipped === true)
+    .reduce<{ ac: number; save: number }>(
+      (acc, i) => ({ ac: acc.ac + num(i, 'acBonus', 0), save: acc.save + num(i, 'saveBonus', 0) }),
+      { ac: 0, save: 0 },
+    );
+}
+
 /**
  * Derived AC: an equipped armor row wins over the manually-typed AC field
  * (Phase 7's armor→AC auto-calc); Ironhide's natural AC is a floor under
  * that (it doesn't stack with worn armor — bounded by taking the max, not
  * adding); Alert adds a flat +1 (its real trigger is "first round of
  * combat only", simplified here to always-on since derive() has no access
- * to initiative-round state).
+ * to initiative-round state); equipped gear (cyberware, trinkets) adds its
+ * AC bonus on top of whichever base is in play.
  */
 export function swnDerivedAc(sheet: SheetData): number {
   const equipped = rows(sheet, 'armor').find((a) => a.equipped === true);
   const base = equipped ? num(equipped, 'ac', 10) : num(sheet, 'ac', 10);
   const withNatural = Math.max(base, ironhideNaturalAc(sheet));
-  return withNatural + (hasFocus(sheet, 'alert', 1) ? 1 : 0);
+  return withNatural + (hasFocus(sheet, 'alert', 1) ? 1 : 0) + equippedItemBonuses(sheet).ac;
 }
 
 /** Total carried encumbrance (sum of qty × enc across inventory) and a rough
@@ -301,6 +313,9 @@ const gearTab: SheetTab = {
         { id: 'enc', label: 'Enc', type: 'number', width: 'sixth', default: 1 },
         { id: 'effect', label: 'Use', type: 'select', width: 'sixth', options: ['none', 'heal', 'damage'], default: 'none' },
         { id: 'amount', label: 'Amount', type: 'text', width: 'sixth' },
+        { id: 'equipped', label: 'Equipped', type: 'checkbox', width: 'sixth' },
+        { id: 'acBonus', label: 'AC bonus', type: 'number', width: 'sixth', default: 0 },
+        { id: 'saveBonus', label: 'Save bonus', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },
@@ -404,9 +419,10 @@ export const swn: SystemSchema = {
       out[a.id] = fmtMod(mod);
       out[`${a.id}Mod`] = fmtMod(mod);
     }
+    const itemBonus = equippedItemBonuses(sheet);
     for (const s of SAVES) {
       const best = Math.max(...s.attrs.map((a) => swnMod(num(sheet, a, 10))));
-      out[`save_${s.id}`] = 15 - level - best;
+      out[`save_${s.id}`] = 15 - level - best - itemBonus.save;
     }
     out.effortMax = effortMaxFor(sheet);
     out.ac = swnDerivedAc(sheet);
@@ -421,9 +437,10 @@ export const swn: SystemSchema = {
   rollables(sheet: SheetData): Rollable[] {
     const out: Rollable[] = [];
     const level = num(sheet, 'level', 1);
+    const itemBonus = equippedItemBonuses(sheet);
     for (const s of SAVES) {
       const best = Math.max(...s.attrs.map((a) => swnMod(num(sheet, a, 10))));
-      const target = 15 - level - best;
+      const target = 15 - level - best - itemBonus.save;
       out.push({ id: `save_${s.id}`, label: `${s.label} save (need ${target}+)`, expr: '1d20', group: 'Saving throws', d20: true });
     }
     const specSkill = specialistSkillName(sheet);

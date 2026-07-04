@@ -40,35 +40,6 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
           <button className="link" title="Randomize an NPC based on a compendium model" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
 
-        <div className="npc-quickadd">
-          <div className="npc-quickadd-hint">New character</div>
-          <table>
-            <tbody>
-              <tr>
-                <td className="npc-name">Blank character sheet</td>
-                <td className="dim" colSpan={3}>Start from a fresh, empty sheet</td>
-                <td><button className="link" disabled={!!added.__blank} onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
-              </tr>
-            </tbody>
-          </table>
-          <div className="npc-quickadd-hint">New player character</div>
-          <table>
-            <tbody>
-              {classRows.map((c) => (
-                <tr key={c.id}>
-                  <td className="npc-name">{c.name}</td>
-                  <td className="dim" colSpan={3}>A blank sheet with class pre-filled</td>
-                  <td>
-                    <button className="link" disabled={!!added[`class:${c.id}`]} onClick={() => createClass(c.name, c.id)}>
-                      {added[`class:${c.id}`] ? 'created ✓' : '+ create'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
         <div className="npc-controls">
           <input
             placeholder="Search by name or type…"
@@ -88,6 +59,35 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="npc-list">
+          <div className="npc-quickadd">
+            <div className="npc-quickadd-hint">New character</div>
+            <table>
+              <tbody>
+                <tr>
+                  <td className="npc-name">Blank character sheet</td>
+                  <td className="dim" colSpan={3}>Start from a fresh, empty sheet</td>
+                  <td><button className="link" disabled={!!added.__blank} onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="npc-quickadd-hint">New player character</div>
+            <table>
+              <tbody>
+                {classRows.map((c) => (
+                  <tr key={c.id}>
+                    <td className="npc-name">{c.name}</td>
+                    <td className="dim" colSpan={3}>A blank sheet with class pre-filled</td>
+                    <td>
+                      <button className="link" disabled={!!added[`class:${c.id}`]} onClick={() => createClass(c.name, c.id)}>
+                        {added[`class:${c.id}`] ? 'created ✓' : '+ create'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
           <table>
             <thead>
               <tr>

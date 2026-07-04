@@ -32,6 +32,7 @@ const DM_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'wall', icon: '🧱', label: 'Walls (block movement & sight)' },
   { id: 'door', icon: '🚪', label: 'Doors' },
   { id: 'light', icon: '💡', label: 'Lights' },
+  { id: 'spawn', icon: '🎯', label: 'Set token spawn point (where dropped tokens appear)' },
 ];
 
 type DockTab = 'chat' | 'initiative' | 'world';

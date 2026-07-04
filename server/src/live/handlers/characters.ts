@@ -6,7 +6,8 @@ import {
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared';
 import { generateNpc, npcById } from 'shared';
-import { campaigns, characters, chat, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, maps, tokens } from '../../db/repos.js';
+import { placeCharacterToken } from './tokens.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -97,7 +98,13 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       return;
     }
     // Reparenting in the world tree is DM-only and separate from sheet edits.
-    if (parentId !== undefined && d.role === 'dm') characters.setParent(characterId, parentId);
+    if (parentId !== undefined && d.role === 'dm') {
+      characters.setParent(characterId, parentId);
+      // Dragging a character onto a map moves its token onto that map.
+      if (parentId && maps.byId(parentId)?.campaignId === d.campaignId) {
+        placeCharacterToken(io, d.campaignId, character, parentId);
+      }
+    }
     applyCharacterPatch(io, d.campaignId, character, patch, name);
   }));
 

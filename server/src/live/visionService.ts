@@ -161,6 +161,7 @@ export function buildMapState(
     bgWidth: map.bgWidth,
     bgHeight: map.bgHeight,
     grid: map.grid,
+    spawn: map.spawn ?? null,
   };
   const allTokens = tokens.forMap(map.id);
 

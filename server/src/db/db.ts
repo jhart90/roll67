@@ -41,6 +41,7 @@ ensureColumn('handouts', 'parent_id', 'parent_id TEXT');
 ensureColumn('shops', 'parent_id', 'parent_id TEXT');
 ensureColumn('rollable_tables', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'parent_id', 'parent_id TEXT');
+ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
 
 export function newId(): string {
   return crypto.randomBytes(9).toString('hex');

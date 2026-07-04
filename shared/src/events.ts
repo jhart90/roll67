@@ -24,6 +24,7 @@ export const C2S = {
   DELETE_MAP: 'deleteMap',
   UPDATE_MAP: 'updateMap',
   SET_GRID_CONFIG: 'setGridConfig',
+  SET_SPAWN: 'setSpawn',
   // map geometry (DM, except toggleDoor)
   UPSERT_WALL: 'upsertWall',
   DELETE_WALL: 'deleteWall',
@@ -127,6 +128,7 @@ export interface UpdateMapPayload {
   parentId?: string | null;
 }
 export interface SetGridConfigPayload { mapId: string; grid: Partial<GridConfig> }
+export interface SetSpawnPayload { mapId: string; q: number; r: number }
 
 export interface UpsertWallPayload {
   mapId: string;
@@ -432,6 +434,7 @@ export interface MapEditedPayload {
   bgUrl?: string | null;
   bgWidth?: number;
   bgHeight?: number;
+  spawn?: import('./types.js').Hex | null;
 }
 
 export interface VisionUpdatePayload {

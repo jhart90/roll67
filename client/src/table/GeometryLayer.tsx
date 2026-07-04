@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Light, Point } from 'shared';
-import { hexCorners, pixelToHex } from 'shared';
+import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
@@ -88,7 +88,7 @@ export function GeometryLayer() {
 
   const { width, height } = mapPixelSize(map);
   const grid = map.grid;
-  const editing = isDm && (tool === 'wall' || tool === 'door' || tool === 'light' || tool === 'erase');
+  const editing = isDm && (tool === 'wall' || tool === 'door' || tool === 'light' || tool === 'erase' || tool === 'spawn');
 
   const walls = isDm ? dmGeometry?.walls ?? [] : [];
   const doors = isDm ? dmGeometry?.doors ?? [] : knownDoors;
@@ -148,6 +148,9 @@ export function GeometryLayer() {
       }
     } else if (tool === 'light') {
       intents.upsertLight(map.id, { x: raw.x, y: raw.y, brightRadius: 4, dimRadius: 8 });
+    } else if (tool === 'spawn') {
+      const hex = pixelToHex(raw, grid);
+      intents.setSpawn(map.id, hex.q, hex.r);
     } else if (tool === 'erase') {
       const threshold = 12;
       for (const w of walls) {
@@ -243,6 +246,17 @@ export function GeometryLayer() {
           mapId={map.id}
         />
       ))}
+
+      {/* spawn point (DM only): where new tokens dropped onto this map appear */}
+      {isDm && map.spawn && (() => {
+        const p = hexToPixel(map.spawn, grid);
+        return (
+          <g pointerEvents="none">
+            <circle cx={p.x} cy={p.y} r={grid.hexSize * 0.55} fill="rgba(126,210,138,0.15)" stroke="#7ed28a" strokeWidth={2} strokeDasharray="5 4" />
+            <text x={p.x} y={p.y + 6} textAnchor="middle" fontSize={18}>🎯</text>
+          </g>
+        );
+      })()}
 
       {/* walls (DM only) — colored + dashed by type */}
       {walls.map((w) => {

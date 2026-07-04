@@ -1,8 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canMoveToken, inBounds, reachableAlong,
-  type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type MoveTokenPayload, type UpdateTokenPayload,
+  C2S, S2C, canMoveToken, firstFreeHex, inBounds, packHex, reachableAlong, systemFor,
+  type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
+  type GridConfig, type Hex, type MoveTokenPayload, type UpdateTokenPayload,
 } from 'shared';
 import { characters, maps, tokens } from '../../db/repos.js';
 import { dmRoom, emitError, safe, sdata } from '../hub.js';
@@ -130,4 +130,58 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       if (s.id !== socket.id) s.emit(S2C.TOKEN_DRAG_GHOST, { tokenId, x, y, done: !!done });
     }
   }));
+}
+
+const TOKEN_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#c9c96c'];
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return h;
+}
+
+/** The map's rough center hex (odd-r offset → axial). */
+function centerHex(grid: GridConfig): Hex {
+  const r = Math.floor(grid.rows / 2);
+  const col = Math.floor(grid.cols / 2);
+  return { q: col - (r - (r & 1)) / 2, r };
+}
+
+/**
+ * Relocate a character's token to a map (used when a character is dragged onto a
+ * map in the world tree): remove its tokens from other maps and, unless one is
+ * already on the target map, drop a fresh token at the map's spawn point (or
+ * center), nudged to the nearest free hex.
+ */
+export function placeCharacterToken(io: Server, campaignId: string, character: Character, mapId: string): void {
+  const map = maps.byId(mapId);
+  if (!map || map.campaignId !== campaignId) return;
+
+  const touchedMaps = new Set<string>();
+  let onTarget = false;
+  for (const t of tokens.forCharacter(character.id)) {
+    if (t.mapId === mapId) { onTarget = true; continue; }
+    tokens.delete(t.id);
+    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId: t.id });
+    touchedMaps.add(t.mapId);
+  }
+
+  if (!onTarget) {
+    const spawn = map.spawn ?? centerHex(map.grid);
+    const occupied = new Set(tokens.forMap(mapId).map((t) => packHex({ q: t.q, r: t.r })));
+    const hex = firstFreeHex(spawn, occupied, map.grid);
+    const artAssetId = typeof character.sheet.tokenImageAssetId === 'string' ? character.sheet.tokenImageAssetId : null;
+    const hp = systemFor(character.system).hp(character.sheet);
+    const created = tokens.create({
+      mapId, characterId: character.id, name: character.name, artAssetId,
+      q: hex.q, r: hex.r, layer: character.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
+      color: TOKEN_COLORS[Math.abs(hashStr(character.id)) % TOKEN_COLORS.length],
+      vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
+    });
+    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: created });
+    touchedMaps.add(mapId);
+  }
+
+  for (const m of touchedMaps) syncMapVision(io, campaignId, m);
+  broadcastDirectory(io, campaignId);
 }

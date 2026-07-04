@@ -106,6 +106,8 @@ export interface MapDef extends MapMeta {
   walls: Wall[];
   doors: Door[];
   lights: Light[];
+  /** Where new tokens spawn (axial hex); null = map center. */
+  spawn: Hex | null;
 }
 
 /** What players receive: geometry stripped, doors reduced to known state. */
@@ -114,6 +116,7 @@ export interface MapView extends MapMeta {
   bgWidth: number;
   bgHeight: number;
   grid: GridConfig;
+  spawn?: Hex | null;
 }
 
 // ---------- Tokens ----------

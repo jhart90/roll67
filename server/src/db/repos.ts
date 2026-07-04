@@ -457,6 +457,7 @@ interface MapRow {
   walls_json: string;
   doors_json: string;
   lights_json: string;
+  spawn_json: string | null;
   sort_order: number;
 }
 
@@ -485,6 +486,7 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     walls: JSON.parse(row.walls_json),
     doors: JSON.parse(row.doors_json),
     lights: JSON.parse(row.lights_json),
+    spawn: row.spawn_json ? JSON.parse(row.spawn_json) : null,
   };
 }
 
@@ -512,6 +514,9 @@ export const maps = {
   },
   setGrid(id: string, grid: GridConfig): void {
     db.prepare('UPDATE maps SET grid_json = ? WHERE id = ?').run(JSON.stringify(grid), id);
+  },
+  setSpawn(id: string, spawn: { q: number; r: number } | null): void {
+    db.prepare('UPDATE maps SET spawn_json = ? WHERE id = ?').run(spawn ? JSON.stringify(spawn) : null, id);
   },
   setWalls(id: string, walls: Wall[]): void {
     db.prepare('UPDATE maps SET walls_json = ? WHERE id = ?').run(JSON.stringify(walls), id);

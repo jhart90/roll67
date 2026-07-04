@@ -3,7 +3,7 @@ import {
   C2S, S2C,
   type CreateMapPayload, type DeleteMapPayload, type DeleteDoorPayload,
   type DeleteLightPayload, type DeleteWallPayload, type MapEditedPayload,
-  type SetGridConfigPayload, type ToggleDoorPayload, type UpdateMapPayload,
+  type SetGridConfigPayload, type SetSpawnPayload, type ToggleDoorPayload, type UpdateMapPayload,
   type UpsertDoorPayload, type UpsertLightPayload, type UpsertWallPayload,
 } from 'shared';
 import { assets, campaigns, fog, maps } from '../../db/repos.js';
@@ -85,6 +85,13 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setGrid(mapId, merged);
     io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, grid: merged });
     syncMapVision(io, d.campaignId!, mapId);
+  }));
+
+  socket.on(C2S.SET_SPAWN, safe(socket, ({ mapId, q, r }: SetSpawnPayload) => {
+    const { d } = requireDmMap(socket, mapId);
+    const spawn = { q: Math.round(q), r: Math.round(r) };
+    maps.setSpawn(mapId, spawn);
+    io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, spawn });
   }));
 
   // ----- walls -----

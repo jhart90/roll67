@@ -3,7 +3,7 @@
 // global illumination). Pure — fully unit-testable.
 
 import type { Door, GridConfig, Hex, Light, VisionStats, Wall } from '../types.js';
-import { hexDistance, hexRange } from '../hex/coords.js';
+import { hexDistance, hexRange, hexRing } from '../hex/coords.js';
 import { hexToPixel, pixelToHex } from '../hex/pixel.js';
 import { packHex } from '../hex/pack.js';
 import { rayBlocked, sightSegments, type Segment } from './raycast.js';
@@ -16,6 +16,22 @@ export function inBounds(h: Hex, grid: Pick<GridConfig, 'cols' | 'rows'>): boole
   const row = h.r;
   const col = h.q + (h.r - (h.r & 1)) / 2;
   return row >= 0 && row < grid.rows && col >= 0 && col < grid.cols;
+}
+
+/**
+ * The nearest free, in-bounds hex to `center`: `center` itself if open, else the
+ * closest hex on an expanding ring (searched outward up to `maxRadius`). Falls
+ * back to `center` if nothing free is found.
+ */
+export function firstFreeHex(
+  center: Hex, occupied: Set<number>, grid: Pick<GridConfig, 'cols' | 'rows'>, maxRadius = 12,
+): Hex {
+  const free = (h: Hex) => inBounds(h, grid) && !occupied.has(packHex(h));
+  if (free(center)) return center;
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    for (const h of hexRing(center, radius)) if (free(h)) return h;
+  }
+  return center;
 }
 
 export interface FovInput {

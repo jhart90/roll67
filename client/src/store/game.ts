@@ -13,7 +13,7 @@ import {
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 
-export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping';
+export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn';
 
 interface Camera {
   x: number;
@@ -316,6 +316,7 @@ export function wireSocket(): void {
       ...(p.bgUrl !== undefined ? { bgUrl: p.bgUrl } : {}),
       ...(p.bgWidth !== undefined ? { bgWidth: p.bgWidth } : {}),
       ...(p.bgHeight !== undefined ? { bgHeight: p.bgHeight } : {}),
+      ...(p.spawn !== undefined ? { spawn: p.spawn } : {}),
     };
     const dmGeometry = s.dmGeometry
       ? {
@@ -568,6 +569,7 @@ export const intents = {
   updateMap: (mapId: string, fields: { name?: string; bgAssetId?: string | null }) =>
     socket.emit(C2S.UPDATE_MAP, { mapId, ...fields }),
   setGrid: (mapId: string, grid: Partial<GridConfig>) => socket.emit(C2S.SET_GRID_CONFIG, { mapId, grid }),
+  setSpawn: (mapId: string, q: number, r: number) => socket.emit(C2S.SET_SPAWN, { mapId, q, r }),
 
   upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway'; flip?: boolean }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),

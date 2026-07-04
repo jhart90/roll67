@@ -1,13 +1,14 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Character, Handout, LocationNode, RollableTable, Shop } from 'shared';
+import type { Character, Handout, LocationNode, MapMeta, RollableTable, Shop } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { LocationEditor } from './LocationsPanel';
 import { ShopEditor } from './ShopsPanel';
 import { TableEditor } from './RollableTables';
 import { HandoutWindow } from './HandoutsPanel';
 import { NpcLibrary } from './NpcLibrary';
+import { MapEditorWindow } from '../table/dm/MapManager';
 
-type Kind = 'location' | 'character' | 'shop' | 'table' | 'handout';
+type Kind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map';
 
 interface TreeNode {
   kind: Kind;
@@ -17,13 +18,14 @@ interface TreeNode {
   sub: string; // secondary label (owner, kind, item count…)
 }
 
-const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄' };
+const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️' };
 
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
-  locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[],
+  locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
 ): TreeNode[] {
   const out: TreeNode[] = [];
+  for (const m of maps) out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: 'map' });
   for (const l of locations) out.push({ kind: 'location', id: l.id, name: l.name || 'Location', parentId: l.parentId ?? null, sub: l.kind });
   for (const c of characters) out.push({ kind: 'character', id: c.id, name: c.name || 'Character', parentId: c.parentId ?? null, sub: c.ownerUserId ? '' : 'NPC' });
   for (const s of shops) out.push({ kind: 'shop', id: s.id, name: s.name || 'Shop', parentId: s.parentId ?? null, sub: `${s.items.length} items` });
@@ -40,10 +42,12 @@ export function WorldTreePanel() {
   const shops = useGameStore((s) => s.shopList);
   const tables = useGameStore((s) => s.tableList);
   const handouts = useGameStore((s) => s.handoutList);
+  const maps = useGameStore((s) => s.mapsMeta);
   const isDm = you?.role === 'dm';
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<{ kind: Exclude<Kind, 'character'>; id: string | 'new' } | null>(null);
+  const [editing, setEditing] = useState<{ kind: 'location' | 'shop' | 'table' | 'handout'; id: string | 'new' } | null>(null);
+  const [editingMap, setEditingMap] = useState<string | null>(null);
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
   // The dragged item lives in a ref so `drop` reads it synchronously (React
@@ -52,8 +56,8 @@ export function WorldTreePanel() {
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null);
 
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts),
-    [locations, characters, shops, tables, handouts],
+    () => buildNodes(locations, characters, shops, tables, handouts, maps),
+    [locations, characters, shops, tables, handouts, maps],
   );
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const childrenOf = useMemo(() => {
@@ -72,11 +76,20 @@ export function WorldTreePanel() {
     setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
+  // The "open editor" action (right-click / double-click).
   function open(node: TreeNode) {
     if (node.kind === 'character') { useGameStore.getState().openSheet(node.id); return; }
+    if (node.kind === 'map') { if (isDm) setEditingMap(node.id); else intents.viewMap(node.id); return; }
     // The DM edits; players get a read-only view of what they can see.
-    if (isDm) setEditing({ kind: node.kind, id: node.id });
+    if (isDm) setEditing({ kind: node.kind as 'location' | 'shop' | 'table' | 'handout', id: node.id });
     else setReading(node);
+  }
+
+  // The primary left-click action.
+  function activate(node: TreeNode, hasKids: boolean) {
+    if (node.kind === 'map') { intents.viewMap(node.id); return; } // open in the viewer
+    if (hasKids) toggle(node.id);
+    else open(node);
   }
 
   /** True if `maybeAncestorId` is at or above `nodeId` in the tree (cycle guard). */
@@ -122,12 +135,17 @@ export function WorldTreePanel() {
           } : undefined}
           onDragOver={isDm ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropTarget !== node.id) setDropTarget(node.id); } : undefined}
           onDrop={isDm ? (e) => { e.preventDefault(); e.stopPropagation(); drop(node.id); } : undefined}
-          onClick={() => (kids.length ? toggle(node.id) : open(node))}
+          onClick={() => activate(node, kids.length > 0)}
           onDoubleClick={() => open(node)}
           onContextMenu={(e) => { e.preventDefault(); open(node); }}
-          title="Click to expand · double/right-click to open · drag to re-parent"
+          title={node.kind === 'map' ? 'Click to open in the viewer · double/right-click to edit · drag to re-parent' : 'Click to expand · double/right-click to open · drag to re-parent'}
         >
-          <span className="wt-caret">{kids.length ? (isOpen ? '▾' : '▸') : ''}</span>
+          <span
+            className="wt-caret"
+            onClick={kids.length ? (e) => { e.stopPropagation(); toggle(node.id); } : undefined}
+          >
+            {kids.length ? (isOpen ? '▾' : '▸') : ''}
+          </span>
           <span className="wt-icon">{ICON[node.kind]}</span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
@@ -147,6 +165,7 @@ export function WorldTreePanel() {
 
       {isDm && (
         <div className="wt-toolbar">
+          <button className="btn btn-sm" onClick={() => setEditingMap('new')}>+ Map</button>
           <button className="btn btn-sm" onClick={() => intents.createLocation('New location', null)}>+ Location</button>
           <button className="btn btn-sm" onClick={() => campaign && intents.createCharacter('New NPC', campaign.system)}>+ NPC</button>
           <button className="btn btn-sm" onClick={() => intents.createShop('New shop')}>+ Shop</button>
@@ -185,6 +204,7 @@ export function WorldTreePanel() {
           onClose={() => setEditing(null)}
         />
       )}
+      {editingMap && <MapEditorWindow mapId={editingMap} onClose={() => setEditingMap(null)} />}
       {showLibrary && <NpcLibrary onClose={() => setShowLibrary(false)} />}
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}
     </div>

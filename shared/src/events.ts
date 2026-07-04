@@ -124,6 +124,7 @@ export interface UpdateMapPayload {
   mapId: string;
   name?: string;
   bgAssetId?: string | null;
+  parentId?: string | null;
 }
 export interface SetGridConfigPayload { mapId: string; grid: Partial<GridConfig> }
 

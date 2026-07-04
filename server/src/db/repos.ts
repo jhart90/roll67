@@ -502,12 +502,13 @@ export const maps = {
     return row ? toMapDef(row) : undefined;
   },
   forCampaign(campaignId: string): MapMeta[] {
-    const rows = db.prepare('SELECT id, name, sort_order FROM maps WHERE campaign_id = ? ORDER BY sort_order').all(campaignId) as Array<{ id: string; name: string; sort_order: number }>;
-    return rows.map((r) => ({ id: r.id, name: r.name, sortOrder: r.sort_order }));
+    const rows = db.prepare('SELECT id, name, sort_order, parent_id FROM maps WHERE campaign_id = ? ORDER BY sort_order').all(campaignId) as Array<{ id: string; name: string; sort_order: number; parent_id: string | null }>;
+    return rows.map((r) => ({ id: r.id, name: r.name, sortOrder: r.sort_order, parentId: r.parent_id ?? null }));
   },
-  update(id: string, fields: { name?: string; bgAssetId?: string | null }): void {
+  update(id: string, fields: { name?: string; bgAssetId?: string | null; parentId?: string | null }): void {
     if (fields.name !== undefined) db.prepare('UPDATE maps SET name = ? WHERE id = ?').run(fields.name, id);
     if (fields.bgAssetId !== undefined) db.prepare('UPDATE maps SET bg_asset_id = ? WHERE id = ?').run(fields.bgAssetId, id);
+    if (fields.parentId !== undefined) db.prepare('UPDATE maps SET parent_id = ? WHERE id = ?').run(fields.parentId, id);
   },
   setGrid(id: string, grid: GridConfig): void {
     db.prepare('UPDATE maps SET grid_json = ? WHERE id = ?').run(JSON.stringify(grid), id);

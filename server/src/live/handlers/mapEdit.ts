@@ -63,7 +63,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
 
   socket.on(C2S.UPDATE_MAP, safe(socket, (payload: UpdateMapPayload) => {
     const { d, map } = requireDmMap(socket, payload.mapId);
-    maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId });
+    maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId, parentId: payload.parentId });
     const updated = maps.byId(map.id)!;
     const edit: MapEditedPayload = {
       mapId: map.id,

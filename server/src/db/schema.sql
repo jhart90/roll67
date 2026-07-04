@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS maps (
   walls_json TEXT NOT NULL DEFAULT '[]',
   doors_json TEXT NOT NULL DEFAULT '[]',
   lights_json TEXT NOT NULL DEFAULT '[]',
+  parent_id TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 

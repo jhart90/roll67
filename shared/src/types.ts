@@ -93,6 +93,8 @@ export interface MapMeta {
   id: string;
   name: string;
   sortOrder: number;
+  /** Parent in the unified world tree (any entity id, or null = top level). */
+  parentId?: string | null;
 }
 
 /** Full map definition — walls/doors/lights are DM-only over the wire. */

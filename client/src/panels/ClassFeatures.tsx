@@ -1,16 +1,20 @@
 import { useState } from 'react';
-import type { Character, SheetData } from 'shared';
+import type { Character, NamedPick, SheetData } from 'shared';
 import {
-  attacksPerAction, classId, classResources, critRange, divineSmite, isRaging, isThirdCaster,
-  martialArtsDie, rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice, takenFeats,
+  applyNamedPick, attacksPerAction, classId, classResources, critRange, divineSmite, isRaging,
+  isThirdCaster, martialArtsDie, rageDamage, remarkableAthleteBonus, sneakAttackDice, superiorityDice,
+  takenFeats, takenPickIds, INFUSIONS_5E, INVOCATIONS_5E, METAMAGIC_5E,
 } from 'shared';
 import { intents } from '../store/game';
 import { FeatPicker } from './FeatPicker';
+
+type PickModal = null | 'invocations' | 'metamagic' | 'infusions';
 
 /** Class resource trackers (rage/ki/…), Extra Attack / Sneak Attack notes, and
  *  the Rage toggle. Rendered on the Core tab for 5e characters. */
 export function ClassFeatures({ character, editable }: { character: Character; editable: boolean }) {
   const [showFeats, setShowFeats] = useState(false);
+  const [pickModal, setPickModal] = useState<PickModal>(null);
   const sheet = character.sheet;
   const feats = takenFeats(sheet);
   const resources = classResources(sheet);
@@ -29,12 +33,24 @@ export function ClassFeatures({ character, editable }: { character: Character; e
   const battleMaster = !!superiorityDice(sheet);
   const thirdCaster = isThirdCaster(sheet) && (Number(sheet.level) || 1) >= 3;
   const smite = divineSmite(sheet);
+  const invocations = takenPickIds(sheet, 'invocations');
+  const metamagic = takenPickIds(sheet, 'metamagic');
+  const infusions = takenPickIds(sheet, 'infusions');
+  const showInvocations = cls === 'warlock' && level >= 2;
+  const showMetamagic = cls === 'sorcerer' && level >= 3;
+  const showInfusions = cls === 'artificer' && level >= 2;
   const hasSub = crit < 20 || remarkable || battleMaster || thirdCaster || !!smite;
-  const hasContent = resources.length > 0 || attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle || hasSub || feats.length > 0;
+  const hasContent = resources.length > 0 || attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle || hasSub || feats.length > 0
+    || showInvocations || showMetamagic || showInfusions;
   const powerAttackFeat = feats.find((f) => f.powerAttack);
   const powerAttackOn = sheet.powerAttackActive === true;
   const dualWielderFeat = feats.find((f) => f.dualWielderAc);
   const dualWieldOn = sheet.dualWieldingActive === true;
+
+  function addPick(listId: 'invocations' | 'metamagic' | 'infusions', catalog: NamedPick[], id: string) {
+    intents.updateCharacter(character.id, applyNamedPick(sheet, listId, catalog, id));
+    setPickModal(null);
+  }
 
   // Editable 5e sheets always show the panel so "+ Feat" is available.
   if (!hasContent && !editable) return null;
@@ -177,7 +193,96 @@ export function ClassFeatures({ character, editable }: { character: Character; e
         {editable && <button className="link cf-add-feat" onClick={() => setShowFeats(true)}>+ Feat</button>}
       </div>
 
+      {showInvocations && (
+        <div className="cf-feats">
+          <span className="cf-feats-label">Invocations</span>
+          {invocations.map((id) => {
+            const p = INVOCATIONS_5E.find((x) => x.id === id);
+            return p ? <span key={id} className="cf-chip" title={p.desc}>{p.name}</span> : null;
+          })}
+          {invocations.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
+          {editable && <button className="link cf-add-feat" onClick={() => setPickModal('invocations')}>+ Invocation</button>}
+        </div>
+      )}
+
+      {showMetamagic && (
+        <div className="cf-feats">
+          <span className="cf-feats-label">Metamagic</span>
+          {metamagic.map((id) => {
+            const p = METAMAGIC_5E.find((x) => x.id === id);
+            return p ? <span key={id} className="cf-chip" title={p.desc}>{p.name}</span> : null;
+          })}
+          {metamagic.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
+          {editable && <button className="link cf-add-feat" onClick={() => setPickModal('metamagic')}>+ Metamagic</button>}
+        </div>
+      )}
+
+      {showInfusions && (
+        <div className="cf-feats">
+          <span className="cf-feats-label">Infusions</span>
+          {infusions.map((id) => {
+            const p = INFUSIONS_5E.find((x) => x.id === id);
+            return p ? <span key={id} className="cf-chip" title={p.desc}>{p.name}</span> : null;
+          })}
+          {infusions.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
+          {editable && <button className="link cf-add-feat" onClick={() => setPickModal('infusions')}>+ Infusion</button>}
+        </div>
+      )}
+
       {showFeats && <FeatPicker character={character} onClose={() => setShowFeats(false)} />}
+      {pickModal === 'invocations' && (
+        <NamedPickModal title="Eldritch Invocations" catalog={INVOCATIONS_5E} taken={invocations} onAdd={(id) => addPick('invocations', INVOCATIONS_5E, id)} onClose={() => setPickModal(null)} />
+      )}
+      {pickModal === 'metamagic' && (
+        <NamedPickModal title="Metamagic" catalog={METAMAGIC_5E} taken={metamagic} onAdd={(id) => addPick('metamagic', METAMAGIC_5E, id)} onClose={() => setPickModal(null)} />
+      )}
+      {pickModal === 'infusions' && (
+        <NamedPickModal title="Infusions" catalog={INFUSIONS_5E} taken={infusions} onAdd={(id) => addPick('infusions', INFUSIONS_5E, id)} onClose={() => setPickModal(null)} />
+      )}
     </section>
+  );
+}
+
+/** Reusable searchable add-list modal for invocations/metamagic/infusions,
+ *  mirroring FeatPicker's styling. */
+function NamedPickModal({
+  title, catalog, taken, onAdd, onClose,
+}: {
+  title: string; catalog: NamedPick[]; taken: string[]; onAdd: (id: string) => void; onClose: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const q = search.trim().toLowerCase();
+  const list = catalog.filter((p) => !q || p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q));
+  const takenSet = new Set(taken);
+
+  return (
+    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet-window npc-library feat-picker">
+        <div className="sheet-header">
+          <h3 style={{ margin: 0 }}>{title}</h3>
+          <span className="spacer" />
+          <button className="link" onClick={onClose}>close</button>
+        </div>
+        <div className="npc-controls">
+          <input placeholder={`Search ${title.toLowerCase()}…`} value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
+        </div>
+        <div className="feat-list">
+          {list.map((p) => (
+            <div key={p.id} className={`feat-row ${takenSet.has(p.id) ? 'taken' : ''}`}>
+              <div className="feat-main">
+                <span className="feat-name">{p.name}{p.prereq ? <span className="dim"> · {p.prereq}</span> : null}</span>
+                <span className="feat-desc dim">{p.desc}</span>
+              </div>
+              <div className="feat-actions">
+                <button className="btn btn-sm btn-accent" disabled={takenSet.has(p.id)} onClick={() => onAdd(p.id)}>
+                  {takenSet.has(p.id) ? 'known' : 'add'}
+                </button>
+              </div>
+            </div>
+          ))}
+          {list.length === 0 && <p className="dim" style={{ padding: 12 }}>Nothing matches that search.</p>}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -63,6 +63,17 @@ function hasSubclass(sheet: SheetData, re: RegExp): boolean {
   return re.test(str(sheet, 'subclass', ''));
 }
 
+/** Wild Shape's max beast CR by druid level (null = no limit, Circle of the
+ *  Moon from level 2 on — it also ignores the fly/swim restriction below CR 1). */
+export function wildShapeMaxCr(sheet: SheetData): number | null {
+  if (classId(sheet) !== 'druid') return null;
+  const lvl = num(sheet, 'level', 1);
+  if (hasSubclass(sheet, /circle of the moon/i) && lvl >= 2) return null;
+  if (lvl >= 8) return 1;
+  if (lvl >= 4) return 0.5;
+  return 0.25;
+}
+
 /** Battle Master superiority dice pool (null if not a Battle Master ≥3);
  *  the Martial Adept feat grants a single d6 die outside that subclass. */
 export function superiorityDice(sheet: SheetData): { count: number; die: string } | null {
@@ -189,7 +200,11 @@ export function classResources(sheet: SheetData): ClassResource[] {
       if (lvl >= 2) defs.push({ id: 'channelDivinity', name: 'Channel Divinity', max: lvl >= 18 ? 3 : lvl >= 6 ? 2 : 1, reset: 'short' });
       break;
     case 'druid':
-      if (lvl >= 2) defs.push({ id: 'wildShape', name: 'Wild Shape', max: 2, reset: 'short' });
+      if (lvl >= 2) {
+        const cr = wildShapeMaxCr(sheet);
+        const crNote = cr === null ? 'no CR limit; ignores the fly/swim restriction' : `max CR ${cr}${cr < 1 ? ' (no fly/swim)' : ''}`;
+        defs.push({ id: 'wildShape', name: 'Wild Shape', max: 2, reset: 'short', note: crNote });
+      }
       break;
     case 'bard':
       defs.push({ id: 'bardicInspiration', name: 'Bardic Inspiration', max: Math.max(1, mod(sheet, 'cha')), reset: lvl >= 5 ? 'short' : 'long' });

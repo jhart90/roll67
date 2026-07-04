@@ -643,6 +643,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const state = initiative.get(d.campaignId);
     const entry = state.entries.find((e) => e.id === payload.entryId);
     if (!entry) return;
+    // Re-roll uses the entry's own token/character (same expr as the original
+    // roll) and posts a fresh chat card, same as adding it the first time —
+    // an explicit `value` in the same payload still wins below if both are sent.
+    if (payload.reroll) {
+      const token = entry.tokenId ? tokens.byId(entry.tokenId) : undefined;
+      const character = token?.characterId ? characters.byId(token.characterId) : undefined;
+      const expr = character ? systemFor(character.system).initiativeExpr(character.sheet) : '1d20';
+      const breakdown = roll(expr);
+      entry.value = breakdown.total;
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'roll',
+        text: `${entry.name}: initiative (re-roll)`, roll: breakdown, recipients: null,
+      });
+      io.to(entry.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    }
     if (payload.value !== undefined) entry.value = payload.value;
     if (payload.hidden !== undefined) entry.hidden = payload.hidden;
     if (payload.name !== undefined) entry.name = payload.name;

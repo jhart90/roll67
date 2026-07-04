@@ -369,7 +369,14 @@ export interface InitAddPayload {
 /** Roll initiative for every token on a map at once (DM). */
 export interface InitRollMapPayload { mapId: string; includeGm?: boolean }
 export interface InitRemovePayload { entryId: string }
-export interface InitUpdatePayload { entryId: string; value?: number; hidden?: boolean; name?: string }
+export interface InitUpdatePayload {
+  entryId: string;
+  value?: number;
+  hidden?: boolean;
+  name?: string;
+  /** DM: re-roll this entry's initiative server-side (uses its own expr, posts to chat). */
+  reroll?: boolean;
+}
 
 export interface DrawPayload { mapId: string; layer: DrawingLayerName; shape: Drawing['shape'] }
 export interface EraseDrawingPayload { drawingId: string }

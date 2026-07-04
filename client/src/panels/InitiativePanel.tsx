@@ -28,10 +28,27 @@ export function InitiativePanel() {
       <ol className="init-list">
         {state.entries.map((e, i) => (
           <li key={e.id} className={`${i === state.turnIdx && state.active ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''}`}>
-            <span className="init-value">{e.value}</span>
+            {isDm ? (
+              <input
+                key={`${e.id}:${e.value}`}
+                type="number"
+                className="init-value-input"
+                defaultValue={e.value}
+                title="Manually set this entry's initiative"
+                onBlur={(ev) => {
+                  const v = Number(ev.target.value);
+                  if (!Number.isNaN(v) && v !== e.value) intents.initUpdate(e.id, { value: v });
+                }}
+              />
+            ) : (
+              <span className="init-value">{e.value}</span>
+            )}
             <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}</span>
             {isDm && (
               <span className="init-actions">
+                <button className="link" title="Re-roll this entry's initiative" onClick={() => intents.initUpdate(e.id, { reroll: true })}>
+                  🎲
+                </button>
                 <button className="link" title={e.hidden ? 'Reveal to players' : 'Hide from players'}
                   onClick={() => intents.initUpdate(e.id, { hidden: !e.hidden })}>
                   {e.hidden ? '👁' : '🕶'}

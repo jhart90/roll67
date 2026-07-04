@@ -730,7 +730,7 @@ export const intents = {
   initAdd: (p: { tokenId?: string | null; name?: string; value?: number; roll?: boolean; hidden?: boolean }) =>
     socket.emit(C2S.INIT_ADD, p),
   initRemove: (entryId: string) => socket.emit(C2S.INIT_REMOVE, { entryId }),
-  initUpdate: (entryId: string, fields: { value?: number; hidden?: boolean; name?: string }) =>
+  initUpdate: (entryId: string, fields: { value?: number; hidden?: boolean; name?: string; reroll?: boolean }) =>
     socket.emit(C2S.INIT_UPDATE, { entryId, ...fields }),
   initNext: () => socket.emit(C2S.INIT_NEXT),
   initPrev: () => socket.emit(C2S.INIT_PREV),

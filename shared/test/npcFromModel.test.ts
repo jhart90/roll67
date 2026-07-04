@@ -35,10 +35,35 @@ describe('generateNpcFromModel', () => {
   it('gives a creature a monster-flavored name, never a person-style name', () => {
     const model = entry('dnd5e-ancient-red-dragon');
     const npc = generateNpcFromModel(model, seededRng(2));
-    // Creature names come from the epithet pool, not the townsfolk first/last pools.
-    expect(npc.name).toMatch(/\w+ the \S+/);
+    // Draconic names come from the dragon-specific pool, not the townsfolk first/last pools.
+    expect(npc.name.length).toBeGreaterThan(0);
+    expect(npc.name).not.toBe(model.name);
     expect(String(npc.sheet.notes)).toContain('ancient red dragon');
     expect(String(npc.sheet.backstory)).toContain('ancient red dragon');
+  });
+
+  it('varies the *structure* of monster names, not just the words (not always "Given the Epithet")', () => {
+    const model = entry('dnd5e-ancient-red-dragon');
+    const names = Array.from({ length: 40 }, (_, i) => generateNpcFromModel(model, seededRng(i)).name);
+    const isGivenThe = (n: string) => /^\S+ the \S/.test(n);
+    // Some names use the classic "Given the Epithet" shape, but not all of them —
+    // bare epithets, plain given names, and "of <domain>" forms should also appear.
+    expect(names.some(isGivenThe)).toBe(true);
+    expect(names.some((n) => !isGivenThe(n))).toBe(true);
+  });
+
+  it('gives each 5e monster category its own name pool, distinct from the others', () => {
+    const dragon = generateNpcFromModel(entry('dnd5e-ancient-red-dragon'), seededRng(3)).name;
+    const undead = generateNpcFromModel(entry('dnd5e-lich'), seededRng(3)).name;
+    const goblinoid = generateNpcFromModel(entry('dnd5e-goblin'), seededRng(3)).name;
+    expect(new Set([dragon, undead, goblinoid]).size).toBe(3);
+  });
+
+  it('gives Savage Humanoids a tribal name, not a townsfolk First-Last name', () => {
+    const model = entry('dnd5e-gnoll');
+    const names = Array.from({ length: 20 }, (_, i) => generateNpcFromModel(model, seededRng(i)).name);
+    const looksHuman = (n: string) => /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(n);
+    expect(names.every((n) => !looksHuman(n))).toBe(true);
   });
 
   it('gives a robot a serial designation and machine flavor text', () => {

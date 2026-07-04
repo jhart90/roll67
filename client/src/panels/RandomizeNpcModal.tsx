@@ -1,12 +1,6 @@
-import { npcKindForEntry, type NpcEntry } from 'shared';
+import { npcFlavorHint, type NpcEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { useNpcPicker } from './useNpcPicker';
-
-const KIND_HINT: Record<string, string> = {
-  person: 'a person — gets a fresh human name & backstory',
-  creature: 'a creature — gets a monster-appropriate name & flavor',
-  robot: 'a machine — gets a serial designation & flavor',
-};
 
 /** Pick a compendium NPC to model a randomized NPC after: stats jitter a
  *  little, and the new name/description fit what the model actually is (a
@@ -90,7 +84,7 @@ function ModelRow({ entry, header, onPick }: {
         <tr className="npc-category-row"><td colSpan={5}>{header}</td></tr>
       )}
       <tr>
-        <td className="npc-name" title={KIND_HINT[npcKindForEntry(entry)]}>{entry.name}</td>
+        <td className="npc-name" title={npcFlavorHint(entry)}>{entry.name}</td>
         <td>{entry.challengeLabel}</td>
         <td>{entry.ac}</td>
         <td>{entry.hp}</td>

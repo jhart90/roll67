@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Character, Handout, LocationNode, RollableTable, Shop } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { LocationEditor } from './LocationsPanel';
@@ -46,7 +46,9 @@ export function WorldTreePanel() {
   const [editing, setEditing] = useState<{ kind: Exclude<Kind, 'character'>; id: string | 'new' } | null>(null);
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [drag, setDrag] = useState<{ kind: Kind; id: string } | null>(null);
+  // The dragged item lives in a ref so `drop` reads it synchronously (React
+  // batches state, so it wouldn't be set yet when a fast drop fires).
+  const dragRef = useRef<{ kind: Kind; id: string } | null>(null);
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null);
 
   const nodes = useMemo(
@@ -90,27 +92,35 @@ export function WorldTreePanel() {
   }
 
   function drop(targetId: string | null) {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    setDropTarget(null);
     if (!drag) return;
     // Can't parent an item under itself or its own descendant.
-    if (targetId && (targetId === drag.id || isAncestor(drag.id, targetId))) { setDrag(null); setDropTarget(null); return; }
+    if (targetId && (targetId === drag.id || isAncestor(drag.id, targetId))) return;
     intents.setParent(drag.kind, drag.id, targetId);
-    setDrag(null);
-    setDropTarget(null);
   }
 
-  function Row({ node, depth }: { node: TreeNode; depth: number }) {
+  // A plain recursive render function (NOT a nested component) so that the
+  // setState calls fired during a native drag don't remount the row being
+  // dragged — which would silently abort the drag.
+  function renderNode(node: TreeNode, depth: number): ReactNode {
     const kids = childrenOf.get(node.id) ?? [];
     const isOpen = expanded.has(node.id);
     const isDropOn = dropTarget === node.id;
     return (
-      <>
+      <div key={`${node.kind}:${node.id}`}>
         <div
           className={`wt-row ${isDropOn ? 'drop-on' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
           draggable={isDm}
-          onDragStart={() => setDrag({ kind: node.kind, id: node.id })}
-          onDragOver={isDm ? (e) => { e.preventDefault(); setDropTarget(node.id); } : undefined}
-          onDragLeave={() => setDropTarget((t) => (t === node.id ? null : t))}
+          onDragStart={isDm ? (e) => {
+            e.stopPropagation();
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', node.id);
+            dragRef.current = { kind: node.kind, id: node.id };
+          } : undefined}
+          onDragOver={isDm ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropTarget !== node.id) setDropTarget(node.id); } : undefined}
           onDrop={isDm ? (e) => { e.preventDefault(); e.stopPropagation(); drop(node.id); } : undefined}
           onClick={() => (kids.length ? toggle(node.id) : open(node))}
           onDoubleClick={() => open(node)}
@@ -122,8 +132,8 @@ export function WorldTreePanel() {
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
         </div>
-        {isOpen && kids.map((k) => <Row key={`${k.kind}:${k.id}`} node={k} depth={depth + 1} />)}
-      </>
+        {isOpen && kids.map((k) => renderNode(k, depth + 1))}
+      </div>
     );
   }
 
@@ -152,7 +162,7 @@ export function WorldTreePanel() {
         onDragOver={isDm ? (e) => { e.preventDefault(); setDropTarget('root'); } : undefined}
         onDrop={isDm ? (e) => { e.preventDefault(); drop(null); } : undefined}
       >
-        {roots.map((n) => <Row key={`${n.kind}:${n.id}`} node={n} depth={0} />)}
+        {roots.map((n) => renderNode(n, 0))}
         {roots.length === 0 && <p className="dim" style={{ padding: 8 }}>Nothing here yet.{isDm ? ' Use the buttons above to add locations, NPCs, shops, tables, and handouts.' : ''}</p>}
       </div>
       {isDm && <p className="dim wt-hint">Drag an item onto another to nest it; drag to empty space to move it to the top level.</p>}

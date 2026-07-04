@@ -78,8 +78,8 @@ const CYBER: C[] = [
   ['Prosthetic Limb', 'Replacement limb, integral tool'],
 ];
 
-// [name, discipline, level, notes]
-type P = [string, string, number, string];
+// [name, discipline, level, notes, damage?, save?, damageType?, heal?]
+type P = [string, string, number, string, string?, string?, string?, boolean?];
 const POWERS: P[] = [
   ['Sense Danger', 'Precognition', 1, 'Sixth sense for imminent threats'],
   ['See Future Prospects', 'Precognition', 2, 'Divine likely outcome of a plan'],
@@ -92,7 +92,7 @@ const POWERS: P[] = [
   ['Telekinetic Grip', 'Telekinesis', 1, 'Move objects with your mind'],
   ['Telekinetic Manipulation', 'Telekinesis', 2, 'Fine manipulation at range'],
   ['Kinetic Barrier', 'Telekinesis', 2, 'Deflect incoming attacks'],
-  ['Telekinetic Ram', 'Telekinesis', 3, 'Blast a target: 2d8 kinetic'],
+  ['Telekinetic Ram', 'Telekinesis', 3, 'Blast a target: 2d8 kinetic', '2d8', undefined, 'kinetic'],
   ['Personal Apport', 'Teleportation', 1, 'Blink a short distance'],
   ['Astral Wandering', 'Teleportation', 2, 'Project awareness elsewhere'],
   ['Rift Step', 'Teleportation', 3, 'Teleport with allies'],
@@ -103,7 +103,7 @@ const POWERS: P[] = [
   ['Revivification', 'Biopsionics', 4, 'Restore the recently dead'],
   ['Psychic Static', 'Metapsionics', 1, 'Disrupt hostile psychics'],
   ['Amplify Power', 'Metapsionics', 2, 'Boost another psionic effect'],
-  ['Psionic Assault', 'Metapsionics', 3, 'Mental attack: 3d6 vs Mental save'],
+  ['Psionic Assault', 'Metapsionics', 3, 'Mental attack: 3d6 vs Mental save', '3d6', 'mental'],
   ['Suppress Discipline', 'Metapsionics', 4, 'Shut down a subject\'s powers'],
 ];
 
@@ -128,10 +128,10 @@ export const CONTENT_SWN: ContentEntry[] = [
     id: contentSlug('swn', 'gear', 'cyber-' + name),
     system: 'swn', kind: 'magicitem', name, category: 'Cyberware', order: i, subtitle,
   })),
-  ...POWERS.map(([name, discipline, level, notes], i): ContentEntry => ({
+  ...POWERS.map(([name, discipline, level, notes, damage, save, damageType, heal], i): ContentEntry => ({
     id: contentSlug('swn', 'power', name),
     system: 'swn', kind: 'power', name, category: `Psionics: ${discipline}`, order: level * 100 + i,
     subtitle: `${discipline} · Level ${level} · ${notes}`,
-    power: { discipline, level, notes },
+    power: { discipline, level, notes, damage, save, damageType, heal },
   })),
 ];

@@ -38,11 +38,28 @@ describe('applyEntry -> sheet rows', () => {
     expect(res.listId).toBe('attacks');
     expect(res.row.bonus).toBe(6);        // +3 mod +3 prof
     expect(res.row.damage).toBe('1d8+3');
+    // Damage type and range must land in their own fields (not just free-text
+    // notes) so resistance calcs and the range check actually see them.
+    expect(res.row.dtype).toBe('slashing');
+    expect(res.row.range).toBe(5); // plain melee, no reach
     // Once on the sheet, rollables exposes it as a click-to-roll attack.
     const withWeapon = { ...sheet, attacks: [res.row] };
     const rolls = dnd5e.rollables(withWeapon);
     expect(rolls.find((r) => r.id === 'attack_0')?.expr).toBe('1d20+6');
     expect(rolls.find((r) => r.id === 'damage_0')?.expr).toBe('1d8+3');
+  });
+
+  it('a 5e ranged weapon\'s range comes from its ammunition property', () => {
+    const longbow = contentById('dnd5e-weapon-longbow')!;
+    const res = applyEntry(longbow, dnd5e.defaultSheet())!;
+    expect(res.row.range).toBe(150); // "ammunition (150/600)" -> short range
+    expect(res.row.dtype).toBe('piercing');
+  });
+
+  it('a 5e reach weapon gets 10-ft range', () => {
+    const glaive = contentById('dnd5e-weapon-glaive')!;
+    const res = applyEntry(glaive, dnd5e.defaultSheet())!;
+    expect(res.row.range).toBe(10);
   });
 
   it('a finesse weapon uses the better of STR/DEX', () => {
@@ -77,6 +94,20 @@ describe('applyEntry -> sheet rows', () => {
     const res = applyEntry(rifle, swn.defaultSheet())!;
     expect(res.listId).toBe('attacks');
     expect(res.row.damage).toBe('1d12');
+    expect(res.row.dtype).toBe('kinetic');
+    expect(res.row.range).toBe(100); // "range 100/300" -> short range
+  });
+
+  it('an SWN melee weapon\'s "shock N/AC M" property lands in the shock column', () => {
+    const monoBlade = contentById('swn-weapon-mono-blade')!;
+    const res = applyEntry(monoBlade, swn.defaultSheet())!;
+    expect(res.row.shock).toBe(2);
+  });
+
+  it('a thrown SWN grenade with no explicit range number still gets a usable range', () => {
+    const grenade = contentById('swn-weapon-frag-grenade')!;
+    const res = applyEntry(grenade, swn.defaultSheet())!;
+    expect(res.row.range).toBeGreaterThan(5);
   });
 
   it('an SWN psychic power lands in the powers list', () => {
@@ -84,6 +115,24 @@ describe('applyEntry -> sheet rows', () => {
     const res = applyEntry(ram, swn.defaultSheet())!;
     expect(res.listId).toBe('powers');
     expect(res.row.discipline).toBe('Telekinesis');
+    // A power with a described combat effect must carry real damage/type so
+    // it actually shows up as a usable action, not just flavor text.
+    expect(res.row.damage).toBe('2d8');
+    expect(res.row.dtype).toBe('kinetic');
+  });
+
+  it('a save-based SWN power carries its save ability', () => {
+    const assault = contentById('swn-power-psionic-assault')!;
+    const res = applyEntry(assault, swn.defaultSheet())!;
+    expect(res.row.damage).toBe('3d6');
+    expect(res.row.save).toBe('mental');
+  });
+
+  it('a purely utility power (no combat effect) never fabricates damage/save data', () => {
+    const sense = contentById('swn-power-sense-danger')!;
+    const res = applyEntry(sense, swn.defaultSheet())!;
+    expect(res.row.damage).toBeUndefined();
+    expect(res.row.save).toBeUndefined();
   });
 
   it('gear and magic items go to inventory', () => {

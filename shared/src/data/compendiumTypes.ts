@@ -41,6 +41,14 @@ export interface PowerData {
   discipline: string;
   level: number;          // SWN power level 1-4
   notes?: string;
+  /** Rollable damage/heal expression, for powers with a direct combat effect. */
+  damage?: string;
+  /** True if `damage` is healing rather than harm. */
+  heal?: boolean;
+  /** Save the power forces (SWN save names: physical/evasion/mental). */
+  save?: string;
+  /** Damage type, e.g. "kinetic". */
+  damageType?: string;
 }
 
 export interface GearData {
@@ -124,6 +132,41 @@ function parseSpellSave(save: string | undefined): { ability: string; onSave: 'h
   return { ability: ability[1].toLowerCase(), onSave: /half/i.test(save) ? 'half' : 'negate' };
 }
 
+/**
+ * A 5e weapon's reach/range in feet, from its property tags: "thrown (20/60)"
+ * or "ammunition (80/320)" use the short-range number; "reach" melee weapons
+ * get 10 ft; everything else is plain 5-ft melee.
+ */
+function weaponRangeFt5e(props: string[]): number {
+  const ranged = props.find((p) => /^(thrown|ammunition)\b/i.test(p));
+  if (ranged) {
+    const m = ranged.match(/\((\d+)/);
+    if (m) return Number(m[1]);
+  }
+  return props.some((p) => /reach/i.test(p)) ? 10 : 5;
+}
+
+/**
+ * A SWN weapon's range in feet, from a "range 30/100" property tag. Thrown
+ * items with no explicit number (grenades) default to a short throw.
+ */
+function weaponRangeFtSwn(props: string[]): number {
+  const tag = props.find((p) => /^range\b/i.test(p));
+  if (tag) {
+    const m = tag.match(/(\d+)/);
+    if (m) return Number(m[1]);
+  }
+  return props.some((p) => /thrown/i.test(p)) ? 30 : 5;
+}
+
+/** A SWN weapon's "shock N/AC M" property tag into its shock-damage number. */
+function weaponShockSwn(props: string[]): number {
+  const tag = props.find((p) => /^shock\b/i.test(p));
+  if (!tag) return 0;
+  const m = tag.match(/(\d+)/);
+  return m ? Number(m[1]) : 0;
+}
+
 /** Rough default shop prices by kind; the DM can adjust after adding. */
 const KIND_PRICE: Record<ContentKind, number> = {
   weapon: 25, armor: 75, gear: 10, magicitem: 150, spell: 25, power: 0,
@@ -176,14 +219,22 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       const dmg = mod !== 0 ? `${w.damage}${fmt(mod)}` : w.damage;
       return {
         listId: 'attacks',
-        row: { name: entry.name, bonus: mod + pb, damage: dmg, notes: `${w.damageType}${w.props.length ? '; ' + w.props.join(', ') : ''}` },
+        row: {
+          name: entry.name, bonus: mod + pb, damage: dmg,
+          dtype: w.damageType, range: weaponRangeFt5e(w.props),
+          notes: w.props.join(', '),
+        },
         label: `${entry.name} added to attacks`,
       };
     }
     // SWN: weapon-specific bonus 0; sheet attackBonus applies in rollables.
     return {
       listId: 'attacks',
-      row: { name: entry.name, bonus: 0, damage: w.damage, notes: `${w.damageType}${w.props.length ? '; ' + w.props.join(', ') : ''}` },
+      row: {
+        name: entry.name, bonus: 0, damage: w.damage,
+        dtype: w.damageType, range: weaponRangeFtSwn(w.props), shock: weaponShockSwn(w.props),
+        notes: w.props.join(', '),
+      },
       label: `${entry.name} added to weapons`,
     };
   }
@@ -217,9 +268,18 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
   }
 
   if (entry.kind === 'power' && entry.power) {
+    const p = entry.power;
     return {
       listId: 'powers',
-      row: { name: entry.name, discipline: entry.power.discipline, level: entry.power.level, notes: entry.power.notes ?? '' },
+      row: {
+        name: entry.name, discipline: p.discipline, level: p.level, notes: p.notes ?? '',
+        ...(p.damage ? {
+          effect: p.heal ? 'heal' : 'damage',
+          damage: p.damage,
+          dtype: p.heal ? '' : (p.damageType ?? ''),
+          save: p.heal ? '' : (p.save ?? ''),
+        } : {}),
+      },
       label: `${entry.name} added to psychic powers`,
     };
   }

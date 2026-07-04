@@ -3,6 +3,8 @@ import {
   fmtMod, num, rows, str,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
+import { DAMAGE_TYPES } from './effects.js';
+import type { RNG } from '../dice/roller.js';
 
 const ATTRIBUTES = [
   { id: 'str', label: 'STR' },
@@ -46,6 +48,58 @@ export const SKILLS_SWN = [
 export const PSYCHIC_DISCIPLINES_SWN = [
   'Biopsionics', 'Metapsionics', 'Precognition', 'Telekinesis', 'Telepathy', 'Teleportation',
 ];
+
+// ---------- psionics: Effort, discipline gating, mishaps ----------
+
+/** The character's best trained discipline-skill level, or -1 if untrained
+ *  in every discipline (SWN's "untrained" floor). */
+export function bestPsychicSkillLevel(sheet: SheetData): number {
+  const levels = rows(sheet, 'skills')
+    .filter((sk) => PSYCHIC_DISCIPLINES_SWN.includes(str(sk, 'name', '')))
+    .map((sk) => num(sk, 'level', 0));
+  return levels.length ? Math.max(...levels) : -1;
+}
+
+/** Auto max Effort: 1 + the better of a trained discipline skill or WIS/CON mod. */
+export function effortMaxFor(sheet: SheetData): number {
+  const best = bestPsychicSkillLevel(sheet);
+  const wisMod = swnMod(num(sheet, 'wis', 10));
+  const conMod = swnMod(num(sheet, 'con', 10));
+  return 1 + Math.max(best, wisMod, conMod);
+}
+
+/** True if the character has any training (even level 0) in the discipline —
+ *  gates which powers can actually be activated as a combat action. */
+export function hasDiscipline(sheet: SheetData, discipline: string): boolean {
+  return rows(sheet, 'skills').some((sk) => str(sk, 'name', '') === discipline);
+}
+
+export interface PsychicMishap {
+  id: string;
+  text: string;
+  /** Extra system strain the mishap adds (0 = none). */
+  systemStrain: number;
+  /** Self-inflicted damage dice from backlash ('' = none). */
+  selfDamage: string;
+  /** Draws unwanted attention — narrative flag surfaced in chat. */
+  torched: boolean;
+}
+
+const MISHAP_TABLE: PsychicMishap[] = [
+  { id: 'strain', text: 'feedback wracks their nerves — system strain flares', systemStrain: 1, selfDamage: '', torched: false },
+  { id: 'backlash', text: 'the power backlashes painfully', systemStrain: 0, selfDamage: '1d6', torched: false },
+  { id: 'overload', text: 'their control slips and the committed effort bleeds away uselessly', systemStrain: 1, selfDamage: '', torched: false },
+  { id: 'attention', text: 'something about the moment draws unwanted attention', systemStrain: 0, selfDamage: '', torched: true },
+];
+
+/** Snake-eyes (both activation-check d6 show 1) triggers a psychic mishap. */
+export function isPsychicMishap(d6Values: number[]): boolean {
+  return d6Values.length >= 2 && d6Values.every((v) => v === 1);
+}
+
+export function rollMishap(rng: RNG = Math.random): PsychicMishap {
+  return MISHAP_TABLE[Math.floor(rng() * MISHAP_TABLE.length)];
+}
 
 export const SPECIES_SWN = [
   'Human', 'Android', 'VI (True AI)', 'Uplifted Bioform', 'Alien Sophont', 'Transhuman',
@@ -180,9 +234,12 @@ const psionicsTab: SheetTab = {
     {
       kind: 'fields', id: 'effort', title: 'Effort',
       fields: [
-        { id: 'effortMax', label: 'Max effort', type: 'number', width: 'third', default: 0 },
         { id: 'effortCommitted', label: 'Committed', type: 'number', width: 'third', default: 0 },
       ],
+    },
+    {
+      kind: 'derived', id: 'effortStats', title: 'Effort Capacity',
+      items: [{ key: 'effortMax', label: 'Max Effort (1 + best of discipline skill / WIS / CON)' }],
     },
     {
       kind: 'list', id: 'powers', title: 'Psychic Powers',
@@ -190,6 +247,12 @@ const psionicsTab: SheetTab = {
         { id: 'name', label: 'Power', type: 'text', width: 'third' },
         { id: 'discipline', label: 'Discipline', type: 'text', width: 'third', suggestions: PSYCHIC_DISCIPLINES_SWN },
         { id: 'level', label: 'Level', type: 'number', width: 'sixth', default: 0 },
+        { id: 'effort', label: 'Effort', type: 'number', width: 'sixth', default: 0 },
+        { id: 'effect', label: 'Effect', type: 'select', width: 'sixth', default: 'damage', options: ['damage', 'heal'] },
+        { id: 'damage', label: 'Amount', type: 'text', width: 'sixth' },
+        { id: 'save', label: 'Save', type: 'select', width: 'sixth', default: '', options: ['', 'physical', 'evasion', 'mental'] },
+        { id: 'dtype', label: 'Type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES] },
+        { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -241,6 +304,7 @@ export const swn: SystemSchema = {
       const best = Math.max(...s.attrs.map((a) => swnMod(num(sheet, a, 10))));
       out[`save_${s.id}`] = 15 - level - best;
     }
+    out.effortMax = effortMaxFor(sheet);
     return out;
   },
 

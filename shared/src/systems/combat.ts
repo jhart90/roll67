@@ -1,6 +1,6 @@
 import type { Character } from '../types.js';
 import { dnd5e } from './dnd5e.js';
-import { swn } from './swn.js';
+import { hasDiscipline, swn } from './swn.js';
 import { num, rows, str, type CombatAction } from './types.js';
 
 const DICE_RE = /\d*d\d+/i;
@@ -72,6 +72,40 @@ export function combatActions(character: Character): CombatAction[] {
   };
   spellAction('cantrips', 'cantrip', false);
   spellAction('spells', 'spell', true);
+
+  // Psychic powers with an amount become targeted actions too, gated on the
+  // character actually having the discipline trained (a skill row by that
+  // name) — untrained disciplines simply don't offer the power as an action.
+  // Effort cost defaults to the power's level (SWN's usual convention) unless
+  // an explicit Effort column value is set.
+  rows(sheet, 'powers').forEach((pw, i) => {
+    const amount = str(pw, 'damage', '').trim();
+    if (!amount || !DICE_RE.test(amount)) return;
+    const discipline = str(pw, 'discipline', '');
+    if (!discipline || !hasDiscipline(sheet, discipline)) return;
+    const name = str(pw, 'name', '').trim() || `Power ${i + 1}`;
+    const effect = str(pw, 'effect', 'damage') === 'heal' ? 'heal' : 'damage';
+    const save = str(pw, 'save', '');
+    const rangeFt = Math.max(1, num(pw, 'range', 0) || 5);
+    const level = Math.max(1, num(pw, 'level', 1));
+    const effortCost = Math.max(1, num(pw, 'effort', 0) || level);
+    out.push({
+      id: `power:${i}`,
+      label: name,
+      effect,
+      attackExpr: null,
+      amountExpr: amount,
+      rangeFt,
+      damageType: str(pw, 'dtype', ''),
+      ranged: rangeFt > 5,
+      consumesItem: false,
+      source: 'power',
+      index: i,
+      effortCost,
+      disciplineId: discipline,
+      ...(save && effect === 'damage' ? { saveId: save, onSave: 'half' as const } : {}),
+    });
+  });
 
   rows(sheet, 'inventory').forEach((it, i) => {
     const effect = str(it, 'effect', '').toLowerCase();

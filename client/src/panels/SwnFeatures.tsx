@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Character } from 'shared';
 import {
-  applyBackground, applyFocus, applyPackage, getSwnClass,
+  applyBackground, applyFocus, applyPackage, bestPsychicSkillLevel, effortMaxFor, getSwnClass,
   SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
 } from 'shared';
 import { intents } from '../store/game';
@@ -17,9 +17,9 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
   const cls = getSwnClass(String(sheet.class ?? ''));
   const foci = Array.isArray(sheet.foci) ? (sheet.foci as Array<Record<string, unknown>>) : [];
   const attackBonus = Number(sheet.attackBonus ?? 0);
-  const effortMax = Number(sheet.effortMax ?? 0);
+  const effortMax = effortMaxFor(sheet);
   const effortCommitted = Number(sheet.effortCommitted ?? 0);
-  const isPsychic = cls?.id === 'psychic' || effortMax > 0;
+  const isPsychic = cls?.id === 'psychic' || bestPsychicSkillLevel(sheet) >= 0;
 
   function setEffort(committed: number) {
     intents.updateCharacter(character.id, { effortCommitted: Math.max(0, Math.min(effortMax, committed)) });

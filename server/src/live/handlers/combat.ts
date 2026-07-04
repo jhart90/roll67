@@ -1,8 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, num,
+  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr,
-  damageMultiplier, multiplierLabel,
+  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap,
   type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
   type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
   type SheetData, type UndoEntry,
@@ -94,6 +94,46 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
     }
 
+    // Activating a psychic power commits Effort up front (gated on having
+    // enough left), then rolls the discipline's activation check — snake-eyes
+    // on the 2d6 is a mishap: the effort is spent either way, but something
+    // also goes wrong (system strain, backlash damage, or drawing attention).
+    if (action.source === 'power') {
+      const effortMax = Number(systemFor(actor.system).derive(actor.sheet).effortMax) || 0;
+      const committed = num(actor.sheet, 'effortCommitted', 0);
+      const cost = action.effortCost ?? 1;
+      if (committed + cost > effortMax) {
+        emitError(socket, `Not enough Effort (${Math.max(0, effortMax - committed)} available, need ${cost}).`);
+        return;
+      }
+      const actorPatch: SheetData = { effortCommitted: committed + cost };
+      undo.push({ t: 'field', characterId: actor.id, key: 'effortCommitted', value: committed });
+
+      const disciplineSkill = rows(actor.sheet, 'skills').find((sk) => str(sk, 'name', '') === action.disciplineId);
+      const skillLvl = disciplineSkill ? num(disciplineSkill, 'level', 0) : 0;
+      const skillAttr = disciplineSkill ? str(disciplineSkill, 'attr', 'int') : 'int';
+      const checkMod = skillLvl + swnMod(num(actor.sheet, skillAttr, 10));
+      const checkRoll = roll(`2d6${fmtMod(checkMod)}`);
+      const d6s = checkRoll.dice.filter((x) => x.sides === 6).map((x) => x.value);
+      if (isPsychicMishap(d6s)) {
+        const mishap = rollMishap();
+        if (mishap.systemStrain) actorPatch.systemStrain = num(actor.sheet, 'systemStrain', 0) + mishap.systemStrain;
+        actor = persistSheet(io, d.campaignId, actor, actorPatch);
+        if (mishap.selfDamage) {
+          const { character: updated } = applyHpDelta(io, d.campaignId, actor, -Math.max(0, roll(mishap.selfDamage).total));
+          actor = updated;
+        }
+        const mishapMsg = chat.add(d.campaignId, {
+          userId: d.userId, fromName: d.username, kind: 'system',
+          text: `⚡ Mishap! ${actor.name}'s ${action.label} check (${checkRoll.total}) snake-eyes — ${mishap.text}.${mishap.torched ? ' 🔥 Torched.' : ''}`,
+          roll: checkRoll, recipients: null,
+        });
+        io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: mishapMsg });
+      } else {
+        actor = persistSheet(io, d.campaignId, actor, actorPatch);
+      }
+    }
+
     // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;
     // otherwise compare to the target's AC. Save-based spells skip the to-hit:
     // the target rolls a save vs the caster's DC and damage is scaled instead.
@@ -110,7 +150,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       attackBreakdown = roll(sc.expr);
       const passed = attackBreakdown.total >= sc.threshold;
       saveScale = passed ? (action.onSave === 'negate' ? 0 : 0.5) : 1;
-      hitLabel = ` — ${sc.label} ${attackBreakdown.total} vs DC ${casterDc} · ${passed ? 'SAVE' : 'FAIL'}`;
+      // 5e's threshold is always the caster's DC; SWN's is target-number based
+      // (ignores the caster's DC entirely) — showing sc.threshold is correct
+      // for both instead of hard-coding "vs DC" around the 5e-only casterDc.
+      hitLabel = ` — ${sc.label} ${attackBreakdown.total} vs ${sc.threshold} · ${passed ? 'SAVE' : 'FAIL'}`;
     } else if (action.attackExpr) {
       // Net advantage folds the roller's choice with attacker/target conditions.
       const netAdv = action.attackExpr.toLowerCase().startsWith('1d20')

@@ -84,7 +84,7 @@ export interface CombatAction {
   ranged: boolean;
   /** Decrement the inventory row's quantity when used (consumables). */
   consumesItem: boolean;
-  source: 'attack' | 'item' | 'spell';
+  source: 'attack' | 'item' | 'spell' | 'power';
   index: number;
   /** Spends a spell slot of this level on use (leveled spells). */
   slotLevel?: number;
@@ -96,6 +96,10 @@ export interface CombatAction {
   concentration?: boolean;
   /** Spell name (for concentration + chat). */
   spellName?: string;
+  /** SWN: commits this much Effort on use (psychic powers). */
+  effortCost?: number;
+  /** SWN: the power's discipline, for skill-check/mishap resolution. */
+  disciplineId?: string;
 }
 
 export interface SystemSchema {

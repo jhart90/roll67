@@ -15,7 +15,10 @@ export * from './subclassFeatures5e.js';
 export * from './effects.js';
 export * from './swnData.js';
 export { dnd5e, SKILLS_5E } from './dnd5e.js';
-export { swn, swnMod } from './swn.js';
+export {
+  swn, swnMod, PSYCHIC_DISCIPLINES_SWN,
+  bestPsychicSkillLevel, effortMaxFor, hasDiscipline, isPsychicMishap, rollMishap, type PsychicMishap,
+} from './swn.js';
 
 export const SYSTEMS: Record<GameSystem, SystemSchema> = { dnd5e, swn };
 

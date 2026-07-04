@@ -24,6 +24,8 @@ export function CombatStatus({ character, editable }: { character: Character; ed
     const scopes = resetsCleared(action);
     const patch: SheetData = {};
     for (const r of resources) if (scopes.includes(r.reset)) patch[`res_${r.id}`] = 0;
+    // SWN Effort fully returns at the end of a scene.
+    if (action === 'scene' && character.system === 'swn') patch.effortCommitted = 0;
     intents.updateCharacter(character.id, patch);
   }
 

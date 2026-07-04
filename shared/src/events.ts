@@ -240,6 +240,8 @@ export interface UpdateCharacterPayload {
   parentId?: string | null;
   /** Exact hex to drop the token at (dragged onto the map canvas), overriding the default spawn/first-free-hex placement. */
   dropHex?: { q: number; r: number } | null;
+  /** DM-only: reassign who controls this character. null = DM-only NPC. */
+  ownerUserId?: string | null;
 }
 /**
  * Apply a level-up whose HP is rolled: the server rolls the hit die (+CON),

@@ -98,9 +98,9 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     broadcastDirectory(io, d.campaignId);
   }));
 
-  socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name, parentId, dropHex }: UpdateCharacterPayload) => {
+  socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name, parentId, dropHex, ownerUserId }: UpdateCharacterPayload) => {
     const d = requireCampaign(socket);
-    const character = characters.byId(characterId);
+    let character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) return;
     if (!canEditCharacter(d.role, d.userId, character)) {
       emitError(socket, 'You cannot edit this character.');
@@ -114,6 +114,20 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       if (parentId && maps.byId(parentId)?.campaignId === d.campaignId) {
         placeCharacterToken(io, d.campaignId, character, parentId, dropHex ?? null);
       }
+    }
+    // Reassigning control is DM-only. The previous owner stops receiving this
+    // character's sheet, and vision resyncs since who owns its tokens affects
+    // whose FOV they contribute to.
+    if (ownerUserId !== undefined && d.role === 'dm') {
+      const previousOwner = character.ownerUserId;
+      characters.setOwner(characterId, ownerUserId);
+      character = characters.byId(characterId)!;
+      if (previousOwner && previousOwner !== ownerUserId) {
+        io.to(userRoom(previousOwner)).emit(S2C.CHARACTER_REMOVED, { characterId });
+      }
+      const touchedMaps = new Set(tokens.forCharacter(characterId).map((t) => t.mapId));
+      for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
+      broadcastDirectory(io, d.campaignId);
     }
     applyCharacterPatch(io, d.campaignId, character, patch, name);
   }));

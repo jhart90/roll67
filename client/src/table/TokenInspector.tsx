@@ -17,6 +17,7 @@ const SHAPES: Array<{ id: TokenShape; label: string }> = [
 export function TokenInspector() {
   const you = useGameStore((s) => s.you);
   const campaign = useGameStore((s) => s.campaign);
+  const members = useGameStore((s) => s.members);
   const token = useGameStore((s) => (s.inspectorTokenId ? s.tokens[s.inspectorTokenId] : undefined));
   const character = useGameStore((s) => s.characters.find((c) => c.id === token?.characterId));
   const fileRef = useRef<HTMLInputElement>(null);
@@ -82,6 +83,20 @@ export function TokenInspector() {
             <option value="gm">GM only (hidden)</option>
           </select>
         </label>
+        {character && (
+          <label>
+            Controlled by
+            <select
+              value={character.ownerUserId ?? ''}
+              onChange={(e) => intents.setCharacterOwner(character.id, e.target.value || null)}
+            >
+              <option value="">DM only (NPC)</option>
+              {members.filter((m) => m.role === 'player').map((m) => (
+                <option key={m.userId} value={m.userId}>{m.username}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Color
           <input

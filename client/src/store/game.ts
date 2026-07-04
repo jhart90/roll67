@@ -676,6 +676,9 @@ export const intents = {
   deleteCharacter: (characterId: string) => socket.emit(C2S.DELETE_CHARACTER, { characterId }),
   updateCharacter: (characterId: string, patch: Record<string, unknown>, name?: string) =>
     socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch, name }),
+  /** DM-only: reassign who controls a character. null = DM-only NPC. */
+  setCharacterOwner: (characterId: string, ownerUserId: string | null) =>
+    socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch: {}, ownerUserId }),
   levelUpRoll: (p: { characterId: string; patch: Record<string, unknown>; hitDie: number; conMod: number; avgHp: number; label: string }) =>
     socket.emit(C2S.LEVEL_UP_ROLL, p),
   sheetRoll: (characterId: string, rollableId: string, adv?: 'adv' | 'dis' | null) =>

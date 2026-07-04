@@ -485,6 +485,9 @@ export const characters = {
   setParent(id: string, parentId: string | null): void {
     db.prepare('UPDATE characters SET parent_id = ?, updated_at = ? WHERE id = ?').run(parentId, now(), id);
   },
+  setOwner(id: string, ownerUserId: string | null): void {
+    db.prepare('UPDATE characters SET owner_user_id = ?, updated_at = ? WHERE id = ?').run(ownerUserId, now(), id);
+  },
   delete(id: string): void {
     db.prepare('DELETE FROM characters WHERE id = ?').run(id);
   },

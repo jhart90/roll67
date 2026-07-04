@@ -98,7 +98,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     broadcastDirectory(io, d.campaignId);
   }));
 
-  socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name, parentId }: UpdateCharacterPayload) => {
+  socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name, parentId, dropHex }: UpdateCharacterPayload) => {
     const d = requireCampaign(socket);
     const character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) return;
@@ -109,9 +109,10 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     // Reparenting in the world tree is DM-only and separate from sheet edits.
     if (parentId !== undefined && d.role === 'dm') {
       characters.setParent(characterId, parentId);
-      // Dragging a character onto a map moves its token onto that map.
+      // Dragging a character onto a map (or directly onto the map canvas,
+      // which supplies dropHex) moves its token onto that map.
       if (parentId && maps.byId(parentId)?.campaignId === d.campaignId) {
-        placeCharacterToken(io, d.campaignId, character, parentId);
+        placeCharacterToken(io, d.campaignId, character, parentId, dropHex ?? null);
       }
     }
     applyCharacterPatch(io, d.campaignId, character, patch, name);

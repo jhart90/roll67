@@ -718,4 +718,8 @@ export const intents = {
     else if (kind === 'handout') socket.emit(C2S.UPDATE_HANDOUT, { handoutId: id, parentId });
     else if (kind === 'map') socket.emit(C2S.UPDATE_MAP, { mapId: id, parentId });
   },
+
+  /** Dragged a character from the World tab straight onto the map canvas: nest it under the map and drop its token at the exact hex released. */
+  dropCharacterOnMap: (characterId: string, mapId: string, q: number, r: number) =>
+    socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch: {}, parentId: mapId, dropHex: { q, r } }),
 };

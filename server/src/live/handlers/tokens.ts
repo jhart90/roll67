@@ -149,27 +149,41 @@ function centerHex(grid: GridConfig): Hex {
 
 /**
  * Relocate a character's token to a map (used when a character is dragged onto a
- * map in the world tree): remove its tokens from other maps and, unless one is
- * already on the target map, drop a fresh token at the map's spawn point (or
- * center), nudged to the nearest free hex.
+ * map in the world tree, or dropped directly on the map canvas): remove its
+ * tokens from other maps and place it on the target map. If `dropHex` is given
+ * (an explicit drop location on the canvas) an existing token on the target map
+ * is moved there and a new one is created there rather than at the spawn point;
+ * otherwise a fresh token lands at the map's spawn point (or center), nudged to
+ * the nearest free hex, and an existing token on the target map is left alone.
  */
-export function placeCharacterToken(io: Server, campaignId: string, character: Character, mapId: string): void {
+export function placeCharacterToken(
+  io: Server, campaignId: string, character: Character, mapId: string, dropHex?: Hex | null,
+): void {
   const map = maps.byId(mapId);
   if (!map || map.campaignId !== campaignId) return;
+  if (dropHex && !inBounds(dropHex, map.grid)) dropHex = null;
 
   const touchedMaps = new Set<string>();
-  let onTarget = false;
+  let existingOnTarget: string | null = null;
   for (const t of tokens.forCharacter(character.id)) {
-    if (t.mapId === mapId) { onTarget = true; continue; }
+    if (t.mapId === mapId) { existingOnTarget = t.id; continue; }
     tokens.delete(t.id);
     io.to(dmRoom(campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId: t.id });
     touchedMaps.add(t.mapId);
   }
 
-  if (!onTarget) {
-    const spawn = map.spawn ?? centerHex(map.grid);
-    const occupied = new Set(tokens.forMap(mapId).map((t) => packHex({ q: t.q, r: t.r })));
-    const hex = firstFreeHex(spawn, occupied, map.grid);
+  if (existingOnTarget && dropHex) {
+    tokens.move(existingOnTarget, dropHex.q, dropHex.r);
+    const moved = tokens.byId(existingOnTarget)!;
+    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: moved });
+    touchedMaps.add(mapId);
+  } else if (!existingOnTarget) {
+    let hex = dropHex;
+    if (!hex) {
+      const spawn = map.spawn ?? centerHex(map.grid);
+      const occupied = new Set(tokens.forMap(mapId).map((t) => packHex({ q: t.q, r: t.r })));
+      hex = firstFreeHex(spawn, occupied, map.grid);
+    }
     const artAssetId = typeof character.sheet.tokenImageAssetId === 'string' ? character.sheet.tokenImageAssetId : null;
     const hp = systemFor(character.system).hp(character.sheet);
     const created = tokens.create({

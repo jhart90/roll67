@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { Character, Handout, LocationNode, MapMeta, RollableTable, Shop } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
+import { worldDrag, type WorldDragKind } from '../store/worldDrag';
 
-type Kind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map';
+type Kind = WorldDragKind;
 
 interface TreeNode {
   kind: Kind;
@@ -41,9 +42,10 @@ export function WorldTreePanel() {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
-  // The dragged item lives in a ref so `drop` reads it synchronously (React
-  // batches state, so it wouldn't be set yet when a fast drop fires).
-  const dragRef = useRef<{ kind: Kind; id: string } | null>(null);
+  // The dragged item lives in a module-level ref (not state) so `drop` reads
+  // it synchronously and so a drop on the map canvas — a different panel
+  // entirely — can read it too.
+  const dragRef = worldDrag;
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null);
 
   const nodes = useMemo(
@@ -137,6 +139,7 @@ export function WorldTreePanel() {
           } : undefined}
           onDragOver={isDm ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropTarget !== node.id) setDropTarget(node.id); } : undefined}
           onDrop={isDm ? (e) => { e.preventDefault(); e.stopPropagation(); drop(node.id); } : undefined}
+          onDragEnd={isDm ? () => { dragRef.current = null; setDropTarget(null); } : undefined}
           onClick={() => activate(node, kids.length > 0)}
           onDoubleClick={() => open(node)}
           onContextMenu={(e) => { e.preventDefault(); open(node); }}

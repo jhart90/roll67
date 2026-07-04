@@ -223,7 +223,14 @@ export interface UpdateLocationPayload {
   handoutIds?: string[];
 }
 export interface DeleteLocationPayload { locationId: string }
-export interface UpdateCharacterPayload { characterId: string; patch: SheetData; name?: string; parentId?: string | null }
+export interface UpdateCharacterPayload {
+  characterId: string;
+  patch: SheetData;
+  name?: string;
+  parentId?: string | null;
+  /** Exact hex to drop the token at (dragged onto the map canvas), overriding the default spawn/first-free-hex placement. */
+  dropHex?: { q: number; r: number } | null;
+}
 /**
  * Apply a level-up whose HP is rolled: the server rolls the hit die (+CON),
  * adjusts the patch's HP from the average baseline, applies it, and posts the

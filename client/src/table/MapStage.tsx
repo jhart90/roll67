@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { canMoveToken } from 'shared';
+import { canMoveToken, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { worldDrag } from '../store/worldDrag';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
 import { BackgroundCanvas } from './BackgroundCanvas';
 import { CombatTextLayer } from './CombatTextLayer';
@@ -180,6 +181,27 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
     }
   }
 
+  // DM dragging a character row from the World tab and dropping it on the
+  // map: place its token at the exact hex released and nest it under this
+  // map (mirrors dragging onto the map's row in the tree, but with an
+  // explicit landing spot instead of the spawn point).
+  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
+    if (worldDrag.current?.kind !== 'character') return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    const drag = worldDrag.current;
+    worldDrag.current = null;
+    if (!drag || drag.kind !== 'character' || !map) return;
+    e.preventDefault();
+    if (useGameStore.getState().you?.role !== 'dm') return;
+    const p = stageApi.toMap(e.clientX, e.clientY);
+    const hex = pixelToHex(p, map.grid);
+    intents.dropCharacterOnMap(drag.id, map.id, hex.q, hex.r);
+  }
+
   if (!map) {
     return (
       <div className="stage-empty">
@@ -196,6 +218,8 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
       >
         <div
           className="map-surface"

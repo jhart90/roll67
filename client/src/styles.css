@@ -130,8 +130,8 @@ button.link:hover { text-decoration: underline; }
 }
 .dock button.link:hover { background: var(--accent); border-color: var(--accent); color: #10131a; text-decoration: none; }
 .dock button.link:disabled { background: var(--panel-2); border-color: var(--border); color: var(--text-dim); }
-.dock button.link.danger { color: var(--danger); }
-.dock button.link.danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+.dock button.link.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.dock button.link.danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; filter: brightness(1.12); }
 
 /* Clickable names in the dock get an obvious tappable affordance */
 .dock .char-name, .dock .dir-link {
@@ -157,12 +157,16 @@ button.link:hover { text-decoration: underline; }
   background: var(--accent); border-color: var(--accent); color: #10131a; text-decoration: none;
 }
 .sheet-window button.link:disabled { background: var(--panel-2); border-color: var(--border); color: var(--text-dim); }
-.sheet-window button.link.danger, .sheet-backdrop .panel button.link.danger { color: var(--danger); }
-.sheet-window button.link.danger:hover, .sheet-backdrop .panel button.link.danger:hover {
+.sheet-window button.link.danger, .sheet-backdrop .panel button.link.danger {
   background: var(--danger); border-color: var(--danger); color: #fff;
+}
+.sheet-window button.link.danger:hover, .sheet-backdrop .panel button.link.danger:hover {
+  background: var(--danger); border-color: var(--danger); color: #fff; filter: brightness(1.12);
 }
 /* Keep the per-row delete "×" compact so list tables stay tidy. */
 .sheet-list button.link.danger { padding: 2px 8px; }
+
+.sheet-footer { display: flex; justify-content: flex-end; padding: 10px 4px 2px; border-top: 1px solid var(--border); margin-top: 8px; }
 
 .row { display: flex; gap: 8px; align-items: center; }
 .row button { width: auto; }
@@ -360,7 +364,12 @@ button.link:hover { text-decoration: underline; }
 .char-owner { font-size: 11px; color: var(--text-dim); }
 .char-owner.npc { color: var(--accent-2); }
 .char-actions { display: flex; gap: 10px; margin-top: 2px; }
-.link.danger { color: var(--danger); }
+/* Every delete/remove action reads as a solid red button (matches .btn-danger). */
+.link.danger {
+  background: var(--danger); border: 1px solid var(--danger); color: #fff;
+  padding: 3px 10px; border-radius: 6px; font-weight: 600;
+}
+.link.danger:hover { filter: brightness(1.12); text-decoration: none; }
 
 .token-inspector {
   position: absolute;
@@ -1023,7 +1032,8 @@ button.link:hover { text-decoration: underline; }
   padding: 2px 6px; border-radius: 5px; font-size: 12px; line-height: 1;
 }
 .icon-btn:hover { border-color: var(--border); color: var(--text); background: var(--panel-2); }
-.icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+.icon-btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.icon-btn.danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; filter: brightness(1.12); }
 
 .shop-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
 .shop-table th { text-align: left; color: var(--text-dim); font-weight: 400; padding: 2px 4px; }

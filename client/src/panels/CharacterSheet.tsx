@@ -508,6 +508,22 @@ export function CharacterSheet() {
           </div>
           <RollsColumn character={character} canRoll={editable} />
         </div>
+
+        {you.role === 'dm' && (
+          <div className="sheet-footer">
+            <button
+              className="btn btn-sm btn-danger"
+              onClick={() => {
+                if (confirm(`Delete character "${character.name}"? This can't be undone.`)) {
+                  intents.deleteCharacter(character.id);
+                  useGameStore.getState().openSheet(null);
+                }
+              }}
+            >
+              Delete character
+            </button>
+          </div>
+        )}
       </div>
 
       {pickingField && (

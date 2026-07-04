@@ -3,9 +3,9 @@ import {
   C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap,
-  type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
+  type Character, type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
   type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
-  type SheetData, type UndoEntry,
+  type SheetData, type UndoEntry, type UsePowerPayload,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -32,6 +32,51 @@ export function broadcastInitiative(io: Server, campaignId: string): void {
     const d = sdata(socket);
     socket.emit(S2C.INITIATIVE, { state: initiativeViewFor(state, d.role === 'dm') });
   }
+}
+
+/**
+ * Commit Effort to activate a psychic power and roll its discipline's 2d6
+ * activation check: snake-eyes is a mishap (system strain, backlash damage,
+ * or drawing unwanted attention), posted as its own chat line. Effort is
+ * spent either way. Shared by targeted power actions (COMBAT_ACTION) and
+ * untargeted/utility powers (USE_POWER). Returns null (after emitting the
+ * error) if there isn't enough Effort left.
+ */
+function activatePsychicPower(
+  io: Server, campaignId: string, d: { userId: string; username: string },
+  socket: Socket, actor: Character, cost: number, disciplineId: string, label: string,
+): { actor: Character; undo: UndoEntry } | null {
+  const effortMax = Number(systemFor(actor.system).derive(actor.sheet).effortMax) || 0;
+  const committed = num(actor.sheet, 'effortCommitted', 0);
+  if (committed + cost > effortMax) {
+    emitError(socket, `Not enough Effort (${Math.max(0, effortMax - committed)} available, need ${cost}).`);
+    return null;
+  }
+  const actorPatch: SheetData = { effortCommitted: committed + cost };
+  const undo: UndoEntry = { t: 'field', characterId: actor.id, key: 'effortCommitted', value: committed };
+
+  const disciplineSkill = rows(actor.sheet, 'skills').find((sk) => str(sk, 'name', '') === disciplineId);
+  const skillLvl = disciplineSkill ? num(disciplineSkill, 'level', 0) : 0;
+  const skillAttr = disciplineSkill ? str(disciplineSkill, 'attr', 'int') : 'int';
+  const checkMod = skillLvl + swnMod(num(actor.sheet, skillAttr, 10));
+  const checkRoll = roll(`2d6${fmtMod(checkMod)}`);
+  const d6s = checkRoll.dice.filter((x) => x.sides === 6).map((x) => x.value);
+  if (isPsychicMishap(d6s)) {
+    const mishap = rollMishap();
+    if (mishap.systemStrain) actorPatch.systemStrain = num(actor.sheet, 'systemStrain', 0) + mishap.systemStrain;
+    let updated = persistSheet(io, campaignId, actor, actorPatch);
+    if (mishap.selfDamage) {
+      updated = applyHpDelta(io, campaignId, updated, -Math.max(0, roll(mishap.selfDamage).total)).character;
+    }
+    const mishapMsg = chat.add(campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'system',
+      text: `⚡ Mishap! ${updated.name}'s ${label} check (${checkRoll.total}) snake-eyes — ${mishap.text}.${mishap.torched ? ' 🔥 Torched.' : ''}`,
+      roll: checkRoll, recipients: null,
+    });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg: mishapMsg });
+    return { actor: updated, undo };
+  }
+  return { actor: persistSheet(io, campaignId, actor, actorPatch), undo };
 }
 
 export function registerCombatHandlers(io: Server, socket: Socket): void {
@@ -94,44 +139,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
     }
 
-    // Activating a psychic power commits Effort up front (gated on having
-    // enough left), then rolls the discipline's activation check — snake-eyes
-    // on the 2d6 is a mishap: the effort is spent either way, but something
-    // also goes wrong (system strain, backlash damage, or drawing attention).
+    // Activating a psychic power commits Effort up front and rolls the
+    // discipline's activation check (see activatePsychicPower).
     if (action.source === 'power') {
-      const effortMax = Number(systemFor(actor.system).derive(actor.sheet).effortMax) || 0;
-      const committed = num(actor.sheet, 'effortCommitted', 0);
-      const cost = action.effortCost ?? 1;
-      if (committed + cost > effortMax) {
-        emitError(socket, `Not enough Effort (${Math.max(0, effortMax - committed)} available, need ${cost}).`);
-        return;
-      }
-      const actorPatch: SheetData = { effortCommitted: committed + cost };
-      undo.push({ t: 'field', characterId: actor.id, key: 'effortCommitted', value: committed });
-
-      const disciplineSkill = rows(actor.sheet, 'skills').find((sk) => str(sk, 'name', '') === action.disciplineId);
-      const skillLvl = disciplineSkill ? num(disciplineSkill, 'level', 0) : 0;
-      const skillAttr = disciplineSkill ? str(disciplineSkill, 'attr', 'int') : 'int';
-      const checkMod = skillLvl + swnMod(num(actor.sheet, skillAttr, 10));
-      const checkRoll = roll(`2d6${fmtMod(checkMod)}`);
-      const d6s = checkRoll.dice.filter((x) => x.sides === 6).map((x) => x.value);
-      if (isPsychicMishap(d6s)) {
-        const mishap = rollMishap();
-        if (mishap.systemStrain) actorPatch.systemStrain = num(actor.sheet, 'systemStrain', 0) + mishap.systemStrain;
-        actor = persistSheet(io, d.campaignId, actor, actorPatch);
-        if (mishap.selfDamage) {
-          const { character: updated } = applyHpDelta(io, d.campaignId, actor, -Math.max(0, roll(mishap.selfDamage).total));
-          actor = updated;
-        }
-        const mishapMsg = chat.add(d.campaignId, {
-          userId: d.userId, fromName: d.username, kind: 'system',
-          text: `⚡ Mishap! ${actor.name}'s ${action.label} check (${checkRoll.total}) snake-eyes — ${mishap.text}.${mishap.torched ? ' 🔥 Torched.' : ''}`,
-          roll: checkRoll, recipients: null,
-        });
-        io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: mishapMsg });
-      } else {
-        actor = persistSheet(io, d.campaignId, actor, actorPatch);
-      }
+      const result = activatePsychicPower(io, d.campaignId, d, socket, actor, action.effortCost ?? 1, action.disciplineId ?? '', action.label);
+      if (!result) return;
+      actor = result.actor;
+      undo.push(result.undo);
     }
 
     // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;
@@ -239,6 +253,37 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
     }, undo.length > 0 ? undo : undefined);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }));
+
+  // Activate a psychic power that has no target (utility/self powers, e.g.
+  // Attunement or Astral Wandering): commits Effort and rolls the discipline
+  // check, same as a targeted power, but never touches anyone's HP.
+  socket.on(C2S.USE_POWER, safe(socket, (p: UsePowerPayload) => {
+    const d = requireCampaign(socket);
+    let actor = characters.byId(p.characterId);
+    if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    if (d.role !== 'dm' && actor.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only act with your own character.');
+      return;
+    }
+    const pw = rows(actor.sheet, 'powers')[p.powerIndex];
+    if (!pw) { emitError(socket, 'That power is no longer available.'); return; }
+    const discipline = str(pw, 'discipline', '');
+    const name = str(pw, 'name', '').trim() || 'a power';
+    if (!discipline || !rows(actor.sheet, 'skills').some((sk) => str(sk, 'name', '') === discipline)) {
+      emitError(socket, `${actor.name} hasn't trained in ${discipline || 'that discipline'}.`);
+      return;
+    }
+    const level = Math.max(1, num(pw, 'level', 1));
+    const cost = Math.max(1, num(pw, 'effort', 0) || level);
+    const result = activatePsychicPower(io, d.campaignId, d, socket, actor, cost, discipline, name);
+    if (!result) return;
+    actor = result.actor;
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'system',
+      text: `${actor.name} uses ${name} (−${cost} Effort).`, roll: null, recipients: null,
+    }, [result.undo]);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }));
 

@@ -49,6 +49,7 @@ export const C2S = {
   SHEET_ROLL: 'sheetRoll',
   CAST_SPELL: 'castSpell',
   COMBAT_ACTION: 'combatAction',
+  USE_POWER: 'usePower',
   DEATH_SAVE: 'deathSave',
   REQUEST_SAVE: 'requestSave',
   MODERATE_MESSAGE: 'moderateMessage',
@@ -253,6 +254,13 @@ export interface CombatActionPayload {
   sourceTokenId: string;
   targetTokenId: string;
   adv?: 'adv' | 'dis' | null;
+}
+
+/** Activate a psychic power that has no target (utility/self powers): commits
+ *  Effort and rolls the discipline's activation check server-side. */
+export interface UsePowerPayload {
+  characterId: string;
+  powerIndex: number;
 }
 
 /** Roll a 5e death saving throw for a downed character (server-authoritative). */

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Character } from 'shared';
 import {
   applyBackground, applyFocus, applyPackage, bestPsychicSkillLevel, effortMaxFor, getSwnClass,
-  SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
+  hasDiscipline, num, rows, str, SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
 } from 'shared';
 import { intents } from '../store/game';
 
@@ -24,6 +24,13 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
   function setEffort(committed: number) {
     intents.updateCharacter(character.id, { effortCommitted: Math.max(0, Math.min(effortMax, committed)) });
   }
+
+  // Utility powers (no damage/heal amount) aren't targeted combat actions —
+  // give them their own "Use" button here so activating one still commits
+  // Effort and rolls the discipline's mishap check.
+  const utilityPowers = rows(sheet, 'powers')
+    .map((pw, i) => ({ pw, i }))
+    .filter(({ pw }) => !str(pw, 'damage', '').trim());
 
   function addFocus(id: string) {
     const f = SWN_FOCI.find((x) => x.id === id)!;
@@ -66,6 +73,35 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
       </div>
 
       {cls && <p className="dim" style={{ fontSize: 12, margin: '4px 0' }}>{cls.ability}</p>}
+
+      {isPsychic && utilityPowers.length > 0 && (
+        <div className="cf-feats">
+          <span className="cf-feats-label">Powers</span>
+          {utilityPowers.map(({ pw, i }) => {
+            const discipline = str(pw, 'discipline', '');
+            const level = Math.max(1, num(pw, 'level', 1));
+            const cost = Math.max(1, num(pw, 'effort', 0) || level);
+            const trained = discipline !== '' && hasDiscipline(sheet, discipline);
+            const affordable = effortCommitted + cost <= effortMax;
+            return (
+              <span key={i} className="cf-chip" title={str(pw, 'notes', '')}>
+                {str(pw, 'name', 'Power')} ({discipline || '?'}, {cost} Effort)
+                {editable && (
+                  <button
+                    className="link"
+                    style={{ marginLeft: 4 }}
+                    disabled={!trained || !affordable}
+                    title={!trained ? `Not trained in ${discipline || 'this discipline'}` : !affordable ? 'Not enough Effort' : 'Activate'}
+                    onClick={() => intents.usePower(character.id, i)}
+                  >
+                    use
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       <div className="cf-feats">
         <span className="cf-feats-label">Foci</span>

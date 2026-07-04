@@ -1,6 +1,6 @@
 import type { Server } from 'socket.io';
-import { S2C, conditionsOf, num, systemFor, type Character, type SheetData } from 'shared';
-import { characters, tokens } from '../db/repos.js';
+import { S2C, conditionsOf, num, roll, str, systemFor, type Character, type SheetData } from 'shared';
+import { characters, chat, tokens } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { syncMapVision } from './visionService.js';
 
@@ -61,6 +61,7 @@ export function applyHpDelta(
   const cap = maxHp > 0 ? maxHp : Math.max(hp, hp + delta);
   const patch: SheetData = {};
   let note = '';
+  let concCheck: { spell: string; damage: number } | null = null;
 
   if (delta < 0) {
     let amount = -delta;
@@ -75,11 +76,16 @@ export function applyHpDelta(
     patch.hp = newHp;
     if (newHp === 0 && hp > 0) {
       // Dropped to 0. 5e characters fall unconscious and start death saves;
-      // others are simply downed.
+      // others are simply downed. Concentration always ends.
       patch.conditions = withCondition(character.sheet, 'unconscious');
       patch.deathSuccesses = 0;
       patch.deathFailures = 0;
+      if (str(character.sheet, 'concentration', '')) patch.concentration = '';
       note += ' — downed!';
+    } else if (-delta > 0 && str(character.sheet, 'concentration', '') && character.system === 'dnd5e') {
+      // Concentration: DC = max(10, half the damage taken). Auto-roll a CON save;
+      // on a failure the spell ends. (Posted after persist so chat is ordered.)
+      concCheck = { spell: str(character.sheet, 'concentration', ''), damage: -delta };
     }
   } else if (delta > 0) {
     const wasDown = hp <= 0;
@@ -93,7 +99,20 @@ export function applyHpDelta(
     }
   }
 
-  const updated = persistSheet(io, campaignId, character, patch);
+  let updated = persistSheet(io, campaignId, character, patch);
+
+  // Concentration save, after the HP change is persisted so events stay ordered.
+  if (concCheck) {
+    const dc = Math.max(10, Math.floor(concCheck.damage / 2));
+    const sc = systemFor(updated.system).saveCheck(updated.sheet, 'con', dc);
+    const br = roll(sc.expr);
+    const passed = br.total >= dc;
+    if (!passed) updated = persistSheet(io, campaignId, updated, { concentration: '' });
+    const text = `${updated.name} concentration (${concCheck.spell}) — CON save ${br.total} vs DC ${dc}: ${passed ? 'holds' : 'BROKEN'}`;
+    const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'roll', text, roll: br, recipients: null });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+    if (!passed) note += ` — ${concCheck.spell} lost`;
+  }
   return { character: updated, note };
 }
 

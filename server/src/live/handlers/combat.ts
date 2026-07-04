@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, roll, systemFor, combatActions, critRange, hexDistance, num,
+  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, num,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr,
   damageMultiplier, multiplierLabel,
   type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
@@ -37,7 +37,7 @@ export function broadcastInitiative(io: Server, campaignId: string): void {
 export function registerCombatHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.COMBAT_ACTION, safe(socket, (p: CombatActionPayload) => {
     const d = requireCampaign(socket);
-    const actor = characters.byId(p.characterId);
+    let actor = characters.byId(p.characterId);
     if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
     if (d.role !== 'dm' && actor.ownerUserId !== d.userId) {
       emitError(socket, 'You can only act with your own character.');
@@ -73,13 +73,40 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     const targetC = targetChar ? conditionCombat(conditionsOf(targetChar.sheet)) : conditionCombat([]);
 
-    // To-hit (weapons). Nat 20 always hits, nat 1 always misses; otherwise
-    // compare to the target's AC when known, else auto-resolve as a hit.
+    // Casting a spell spends a slot (leveled) and sets concentration on the
+    // caster before resolving the effect.
+    if (action.source === 'spell') {
+      const actorPatch: SheetData = {};
+      if (action.slotLevel) {
+        const lvl = action.slotLevel;
+        if (!castableLevels(actor.sheet, lvl).includes(lvl)) {
+          emitError(socket, `No level-${lvl} spell slot available.`);
+          return;
+        }
+        actorPatch[`slotsUsed${lvl}`] = num(actor.sheet, `slotsUsed${lvl}`, 0) + 1;
+      }
+      if (action.concentration && action.spellName) actorPatch.concentration = action.spellName;
+      if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
+    }
+
+    // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;
+    // otherwise compare to the target's AC. Save-based spells skip the to-hit:
+    // the target rolls a save vs the caster's DC and damage is scaled instead.
     let hit = true;
     let crit = false;
+    let saveScale = 1;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
     let hitLabel = '';
-    if (action.attackExpr) {
+    if (action.saveId && action.effect === 'damage') {
+      const casterDc = Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
+      const sc = targetChar
+        ? systemFor(targetChar.system).saveCheck(targetChar.sheet, action.saveId, casterDc)
+        : { expr: '1d20', threshold: casterDc, label: `${action.saveId.toUpperCase()} save` };
+      attackBreakdown = roll(sc.expr);
+      const passed = attackBreakdown.total >= sc.threshold;
+      saveScale = passed ? (action.onSave === 'negate' ? 0 : 0.5) : 1;
+      hitLabel = ` — ${sc.label} ${attackBreakdown.total} vs DC ${casterDc} · ${passed ? 'SAVE' : 'FAIL'}`;
+    } else if (action.attackExpr) {
       // Net advantage folds the roller's choice with attacker/target conditions.
       const netAdv = action.attackExpr.toLowerCase().startsWith('1d20')
         ? attackAdvantage(p.adv ?? null, attackerC, targetC, action.ranged)
@@ -102,6 +129,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const dmgExpr = crit ? critDamageExpr(action.amountExpr) : action.amountExpr;
     const amountRoll = roll(dmgExpr);
     let magnitude = Math.max(0, amountRoll.total);
+    // Save-based spells scale the rolled damage (half / none on a save).
+    if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
     let resistTag = '';
     if (action.effect === 'damage' && hit && targetChar) {
       const mult = damageMultiplier(targetChar.sheet, action.damageType);

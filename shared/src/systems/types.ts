@@ -84,8 +84,18 @@ export interface CombatAction {
   ranged: boolean;
   /** Decrement the inventory row's quantity when used (consumables). */
   consumesItem: boolean;
-  source: 'attack' | 'item';
+  source: 'attack' | 'item' | 'spell';
   index: number;
+  /** Spends a spell slot of this level on use (leveled spells). */
+  slotLevel?: number;
+  /** Target rolls this saving throw vs the caster's DC instead of a to-hit. */
+  saveId?: string;
+  /** Outcome of a successful save for a save-based spell. */
+  onSave?: 'half' | 'negate';
+  /** Casting this becomes the caster's active concentration. */
+  concentration?: boolean;
+  /** Spell name (for concentration + chat). */
+  spellName?: string;
 }
 
 export interface SystemSchema {

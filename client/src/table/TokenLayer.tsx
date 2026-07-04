@@ -125,6 +125,9 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
   const conditionIcons = character
     ? conditionsOf(character.sheet).map((id) => getCondition(id)?.icon).filter(Boolean) as string[]
     : [];
+  if (character && typeof character.sheet.concentration === 'string' && character.sheet.concentration) {
+    conditionIcons.push('🌀');
+  }
 
   return (
     <g

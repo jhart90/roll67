@@ -1,8 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, DiceParseError, castableLevels, num, roll, systemFor,
+  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, str, systemFor,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
-  type ReorderMacrosPayload, type SaveMacroPayload, type SheetRollPayload,
+  type ReorderMacrosPayload, type SaveMacroPayload, type SheetData, type SheetRollPayload,
 } from 'shared';
 import { campaigns, characters, chat, macros } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
@@ -104,9 +104,21 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       emitError(socket, `No level-${level} spell slot available.`);
       return;
     }
-    // Spend the slot, then roll.
-    const used = num(character.sheet, `slotsUsed${level}`, 0) + 1;
-    characters.update(characterId, undefined, { ...character.sheet, [`slotsUsed${level}`]: used });
+    // Spend the slot. A concentration spell also becomes the active
+    // concentration, ending any prior one.
+    const patch: SheetData = { [`slotsUsed${level}`]: num(character.sheet, `slotsUsed${level}`, 0) + 1 };
+    let concNote = '';
+    const m = /^spell_(\d+)$/.exec(rollableId);
+    if (m) {
+      const row = rows(character.sheet, 'spells')[Number(m[1])];
+      if (row && row.conc === true) {
+        const name = str(row, 'name', 'a spell');
+        const prev = str(character.sheet, 'concentration', '');
+        patch.concentration = name;
+        if (prev && prev !== name) concNote = ` (concentration on ${prev} ends)`;
+      }
+    }
+    characters.update(characterId, undefined, { ...character.sheet, ...patch });
     const updated = characters.byId(characterId)!;
     io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
     if (updated.ownerUserId) io.to(userRoom(updated.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
@@ -115,7 +127,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const atLabel = level > minLevel ? ` (cast at level ${level})` : '';
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll',
-      text: `${character.name}: ${rollable.label}${atLabel}`, roll: breakdown, recipients: null,
+      text: `${character.name}: ${rollable.label}${atLabel}${concNote}`, roll: breakdown, recipients: null,
     });
     deliver(io, d.campaignId, msg);
   }));

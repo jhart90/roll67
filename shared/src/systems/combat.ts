@@ -40,6 +40,39 @@ export function combatActions(character: Character): CombatAction[] {
     });
   });
 
+  // Spells & cantrips with an amount become targeted actions: a spell attack
+  // (save 'attack'), a save-for-effect spell, or an auto-applied heal. Leveled
+  // spells carry a slotLevel so the server spends a slot on use.
+  const spellAttackExpr = rollables.find((r) => r.id === 'spellAttack')?.expr ?? '1d20';
+  const spellAction = (listId: string, prefix: string, leveled: boolean) => {
+    rows(sheet, listId).forEach((sp, i) => {
+      const amount = str(sp, 'damage', '').trim();
+      if (!amount || !DICE_RE.test(amount)) return;
+      const name = str(sp, 'name', '').trim() || `${prefix} ${i + 1}`;
+      const effect = str(sp, 'effect', 'damage') === 'heal' ? 'heal' : 'damage';
+      const save = str(sp, 'save', '');
+      const rangeFt = Math.max(1, num(sp, 'range', 0) || 5);
+      out.push({
+        id: `${prefix}:${i}`,
+        label: name,
+        effect,
+        attackExpr: save === 'attack' && effect === 'damage' ? spellAttackExpr : null,
+        amountExpr: amount,
+        rangeFt,
+        damageType: str(sp, 'dtype', ''),
+        ranged: rangeFt > 5,
+        consumesItem: false,
+        source: 'spell',
+        index: i,
+        ...(leveled ? { slotLevel: Math.max(1, num(sp, 'level', 1)) } : {}),
+        ...(save && save !== 'attack' && effect === 'damage' ? { saveId: save, onSave: 'half' as const } : {}),
+        ...(sp.conc === true ? { concentration: true, spellName: name } : {}),
+      });
+    });
+  };
+  spellAction('cantrips', 'cantrip', false);
+  spellAction('spells', 'spell', true);
+
   rows(sheet, 'inventory').forEach((it, i) => {
     const effect = str(it, 'effect', '').toLowerCase();
     if (effect !== 'heal' && effect !== 'damage') return;

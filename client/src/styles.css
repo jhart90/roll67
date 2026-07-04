@@ -425,6 +425,11 @@ button.link:hover { text-decoration: underline; }
 .cs-death-pips { display: flex; gap: 8px; letter-spacing: 2px; }
 .cs-death.succ { color: #7ed28a; }
 .cs-death.fail { color: #d26c6c; }
+.cs-concentration {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 6px 10px; margin-bottom: 8px; border-radius: 8px;
+  background: rgba(108, 155, 210, 0.15); border: 1px solid rgba(108, 155, 210, 0.5);
+}
 .cs-resources { margin-top: 6px; }
 .cs-res-head { display: flex; justify-content: flex-end; }
 .save-targets {

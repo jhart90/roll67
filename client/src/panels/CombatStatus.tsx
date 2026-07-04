@@ -29,10 +29,18 @@ export function CombatStatus({ character, editable }: { character: Character; ed
 
   const succ = Number(sheet.deathSuccesses) || 0;
   const fail = Number(sheet.deathFailures) || 0;
+  const concentration = typeof sheet.concentration === 'string' ? sheet.concentration : '';
 
   return (
     <section className="sheet-section combat-status">
       <h4>Combat Status</h4>
+
+      {concentration && (
+        <div className="cs-concentration">
+          <span>🌀 Concentrating: <strong>{concentration}</strong></span>
+          {editable && <button className="link" onClick={() => intents.updateCharacter(character.id, { concentration: '' })}>drop</button>}
+        </div>
+      )}
 
       {(downed || dead) && (
         <div className={`cs-downed ${dead ? 'dead' : ''}`}>

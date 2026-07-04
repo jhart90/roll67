@@ -6,8 +6,9 @@ import {
   type EraseDrawingPayload, type MeasurePayload, type PingPayload, type RollTablePayload,
   type ShareHandoutPayload, type TargetPreviewPayload, type UpdateHandoutPayload, type UpdateTablePayload,
 } from 'shared';
-import { campaigns, chat, drawings, handouts, maps, rollableTables } from '../../db/repos.js';
+import { campaigns, chat, drawings, handouts, maps, rollableTables, tokens } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata } from '../hub.js';
+import { socketsSeeingToken } from '../visionService.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -99,27 +100,37 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     });
   }));
 
-  // A caster's AoE template as they aim it — relayed live to everyone so
-  // players can see where a spell is about to land (and later, whether they're
-  // in it) before it's locked in via C2S.CAST_AOE.
-  socket.on(C2S.AOE_PREVIEW, safe(socket, ({ shape, sizeFt, widthFt, originHex, aimHex, active }: AoePreviewPayload) => {
+  // A caster's AoE template as they aim it — relayed live to whoever can
+  // currently SEE the caster's token (DM always; the caster themself, since
+  // they own or control it; any other player with it in their own FOV), so a
+  // spell's shape/aim point never leaks to a player who couldn't otherwise
+  // spot the caster before it's locked in via C2S.CAST_AOE.
+  socket.on(C2S.AOE_PREVIEW, safe(socket, ({ sourceTokenId, shape, sizeFt, widthFt, originHex, aimHex, active }: AoePreviewPayload) => {
     const d = requireCampaign(socket);
-    io.to(campaignRoom(d.campaignId)).emit(S2C.AOE_PREVIEW_SHOWN, {
-      userId: d.userId, shape, sizeFt, widthFt, originHex, aimHex, active: !!active,
-      byName: d.username, color: colorFor(d.userId),
-    });
+    const token = tokens.byId(sourceTokenId);
+    if (!token) return;
+    for (const s of socketsSeeingToken(io, d.campaignId, token)) {
+      s.emit(S2C.AOE_PREVIEW_SHOWN, {
+        userId: d.userId, shape, sizeFt, widthFt, originHex, aimHex, active: !!active,
+        byName: d.username, color: colorFor(d.userId),
+      });
+    }
   }));
 
-  // A caster's single-target selection (range highlighting) relayed live so
-  // everyone sees the same in-range/out-of-range tokens before the caster
-  // clicks — mirrors AOE_PREVIEW but there's no aim point to update, just a
-  // begin (active:true) and an end (active:false) around the click.
+  // A caster's single-target selection (range highlighting) relayed live, the
+  // same visibility-scoped way as AOE_PREVIEW — there's no aim point to
+  // update, just a begin (active:true) and an end (active:false) around the
+  // click.
   socket.on(C2S.TARGET_PREVIEW, safe(socket, ({ sourceTokenId, rangeFt, effect, label, active }: TargetPreviewPayload) => {
     const d = requireCampaign(socket);
-    io.to(campaignRoom(d.campaignId)).emit(S2C.TARGET_PREVIEW_SHOWN, {
-      userId: d.userId, sourceTokenId, rangeFt, effect, label, active: !!active,
-      byName: d.username, color: colorFor(d.userId),
-    });
+    const token = tokens.byId(sourceTokenId);
+    if (!token) return;
+    for (const s of socketsSeeingToken(io, d.campaignId, token)) {
+      s.emit(S2C.TARGET_PREVIEW_SHOWN, {
+        userId: d.userId, sourceTokenId, rangeFt, effect, label, active: !!active,
+        byName: d.username, color: colorFor(d.userId),
+      });
+    }
   }));
 
   // ----- handouts -----

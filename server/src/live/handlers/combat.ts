@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, inBounds, num, rows, str, fmtMod,
-  applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr,
+  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
+  applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe,
   type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type InitAddPayload,
   type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
@@ -215,6 +215,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const dist = hexDistance({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
     if (dist > rangeHexes) {
       emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${action.rangeFt} ft).`);
+      return;
+    }
+    // Line of sight: a wall or closed door blocks targeting entirely, the
+    // same raycast FOV already uses — never trust the client's own guess.
+    const srcPx = hexToPixel({ q: src.q, r: src.r }, map.grid);
+    const sightSegs = sightSegments(map.walls, map.doors, srcPx);
+    if (rayBlocked(srcPx, hexToPixel({ q: tgt.q, r: tgt.r }, map.grid), sightSegs)) {
+      emitError(socket, `${tgt.name} is out of sight (blocked by a wall or door).`);
       return;
     }
 
@@ -463,6 +471,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         return;
       }
     }
+    // Line of sight: a point-target shape (sphere/cylinder) can't be centered
+    // somewhere the caster can't see, and no shape can reach a token hidden
+    // behind a wall/closed door from the caster — filtered below, alongside
+    // the geometric hit-test, never trusting the client's own guess.
+    const srcPx = hexToPixel({ q: src.q, r: src.r }, map.grid);
+    const sightSegs = sightSegments(map.walls, map.doors, srcPx);
+    if ((action.aoe.shape === 'sphere' || action.aoe.shape === 'cylinder')
+      && rayBlocked(srcPx, hexToPixel(p.aimHex, map.grid), sightSegs)) {
+      emitError(socket, 'That point is out of sight (blocked by a wall or door).');
+      return;
+    }
 
     // Casting a spell spends a slot (leveled) and sets concentration on the
     // caster before resolving the effect — mirrors C2S.COMBAT_ACTION.
@@ -478,7 +497,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (action.concentration && action.spellName) actorPatch.concentration = action.spellName;
     if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
 
-    const hitIds = tokensInAoe(action.aoe, p.originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
+    const geometricHitIds = tokensInAoe(action.aoe, p.originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
+    const hitIds = geometricHitIds.filter((tid) => {
+      const t = tokens.byId(tid);
+      return !!t && !rayBlocked(srcPx, hexToPixel({ q: t.q, r: t.r }, map.grid), sightSegs);
+    });
     if (hitIds.length === 0) { emitError(socket, `${action.label} caught no one in its area.`); return; }
 
     if (action.saveId) {

@@ -218,7 +218,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const aoe = t.action.aoe;
     if (!aoe) return;
     socket.emit(C2S.AOE_PREVIEW, {
-      shape: aoe.shape, sizeFt: aoe.sizeFt, widthFt: aoe.widthFt,
+      sourceTokenId: t.sourceTokenId, shape: aoe.shape, sizeFt: aoe.sizeFt, widthFt: aoe.widthFt,
       originHex: t.originHex, aimHex: hex, active: true,
     });
   },
@@ -227,7 +227,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ aoeTargeting: null });
     if (t?.action.aoe) {
       socket.emit(C2S.AOE_PREVIEW, {
-        shape: t.action.aoe.shape, sizeFt: t.action.aoe.sizeFt, widthFt: t.action.aoe.widthFt,
+        sourceTokenId: t.sourceTokenId, shape: t.action.aoe.shape, sizeFt: t.action.aoe.sizeFt, widthFt: t.action.aoe.widthFt,
         originHex: t.originHex, aimHex: t.aimHex, active: false,
       });
     }
@@ -238,7 +238,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ aoeTargeting: null });
     if (t.action.aoe) {
       socket.emit(C2S.AOE_PREVIEW, {
-        shape: t.action.aoe.shape, sizeFt: t.action.aoe.sizeFt, widthFt: t.action.aoe.widthFt,
+        sourceTokenId: t.sourceTokenId, shape: t.action.aoe.shape, sizeFt: t.action.aoe.sizeFt, widthFt: t.action.aoe.widthFt,
         originHex: t.originHex, aimHex: t.aimHex, active: false,
       });
     }

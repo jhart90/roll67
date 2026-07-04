@@ -138,6 +138,11 @@ async function main() {
   // The DM may have a personal working-map override pinned; explicitly view
   // the smoke map so the test runs there regardless.
   dmSock.emit('viewMap', { mapId: smokeMapId });
+  // Likewise the player may have their own personal map pin left over from a
+  // previous session/manual test — force them onto the smoke map too, or
+  // every vision/movement/targeting assertion below silently runs against
+  // whatever map they were actually last pinned to instead.
+  dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: smokeMapId });
   const dmMapState = await dmMapPromise;
   ok(!!dmMapState.map, `DM switched to "${dmMapState.map?.name}"`);
   ok(dmMapState.dmGeometry !== null, 'DM receives walls/doors/lights geometry');
@@ -255,6 +260,84 @@ async function main() {
     p.tokens.some((t) => t.id === beast.id));
   ok(stillHidden === null, 'closed door still hides the monster');
 
+  // ---------- preview broadcasts are scoped by line of sight, too ----------
+  console.log('preview visibility scoping:');
+  // A second player, far on the other side of the wall (well away from the
+  // door gap) who genuinely cannot see the caster right now -- the negative
+  // control for the AOE_PREVIEW / TARGET_PREVIEW fix: a caster's live aim
+  // must never leak to someone who couldn't otherwise spot them.
+  const player2 = await login('testplayer2', 'test1234');
+  const player2Camps = (await api('/api/campaigns', undefined, player2.token)).data.campaigns;
+  if (!player2Camps.find((c) => c.id === camp.id)) {
+    await api('/api/campaigns/join', { inviteCode: camp.inviteCode }, player2.token);
+  }
+  dmSock.emit('assignPlayerMap', { userId: player2.user.id, mapId });
+  for (const c of dmCampaign.characters.filter((x) => x.name === 'Smoke PC2')) {
+    dmSock.emit('deleteCharacter', { characterId: c.id });
+  }
+  const pc2Upsert = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.name === 'Smoke PC2');
+  dmSock.emit('createCharacter', { name: 'Smoke PC2', system: camp.system ?? 'dnd5e', ownerUserId: player2.user.id });
+  const pc2 = (await pc2Upsert).character;
+  const pc2TokenReady = waitFor(dmSock, 'tokenUpserted', 5000, (p) => p.token.name === 'Smoke PC2');
+  dmSock.emit('createToken', { mapId, name: 'Smoke PC2', q: 15, r: 1, characterId: pc2.id, layer: 'token' });
+  await pc2TokenReady;
+
+  const player2Sock = await connect(player2.token);
+  const p2MapReady = waitFor(player2Sock, 'mapState');
+  player2Sock.emit('joinCampaign', { campaignId: camp.id });
+  await p2MapReady;
+  // Confirm the setup is a valid negative control before trusting silence below.
+  const p2SeesCaster = await expectSilence(player2Sock, 'visionUpdate', 800, (p) => p.tokens.some((t) => t.id === pcToken.id));
+  ok(p2SeesCaster === null, 'setup check: player2 cannot see the caster yet (behind the wall)');
+
+  const dmSeesAoe = waitFor(dmSock, 'aoePreviewShown', 3000, (p) => p.userId === player.user.id).catch(() => null);
+  const p2SilentAoe = expectSilence(player2Sock, 'aoePreviewShown', 1200, (p) => p.userId === player.user.id);
+  playerSock.emit('aoePreview', {
+    sourceTokenId: pcToken.id, shape: 'sphere', sizeFt: 10, originHex: { q: 6, r: 5 }, aimHex: { q: 7, r: 5 }, active: true,
+  });
+  const [dmAoe, p2Aoe] = await Promise.all([dmSeesAoe, p2SilentAoe]);
+  ok(!!dmAoe, "DM (always-visible) receives the caster's live AoE preview");
+  ok(p2Aoe === null, 'a player who cannot see the caster does NOT receive their live AoE preview');
+  playerSock.emit('aoePreview', {
+    sourceTokenId: pcToken.id, shape: 'sphere', sizeFt: 10, originHex: { q: 6, r: 5 }, aimHex: { q: 7, r: 5 }, active: false,
+  });
+
+  const dmSeesTarget = waitFor(dmSock, 'targetPreviewShown', 3000, (p) => p.userId === player.user.id).catch(() => null);
+  const p2SilentTarget = expectSilence(player2Sock, 'targetPreviewShown', 1200, (p) => p.userId === player.user.id);
+  playerSock.emit('targetPreview', { sourceTokenId: pcToken.id, rangeFt: 60, effect: 'damage', label: 'Sniper Bow', active: true });
+  const [dmTarget, p2Target] = await Promise.all([dmSeesTarget, p2SilentTarget]);
+  ok(!!dmTarget, "DM receives the caster's live single-target preview");
+  ok(p2Target === null, 'a player who cannot see the caster does NOT receive their live target preview');
+  playerSock.emit('targetPreview', { sourceTokenId: pcToken.id, rangeFt: 60, effect: 'damage', label: 'Sniper Bow', active: false });
+
+  dmSock.emit('assignPlayerMap', { userId: player2.user.id, mapId: null });
+  dmSock.emit('deleteCharacter', { characterId: pc2.id });
+  player2Sock.close();
+
+  // ---------- line of sight blocks targeting, independent of range ----------
+  console.log('line of sight on attacks:');
+  // A long-range weapon so range is never the limiting factor — only LOS. A
+  // second, AoE-shaped "attack" (mirrors a breath weapon) tests the same
+  // gate for CAST_AOE: a sphere aimed straight at the hidden monster.
+  const attackReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { attacks: [
+    { name: 'Sniper Bow', bonus: 5, damage: '1d8+3', range: 500 },
+    { name: 'Sphere Blast', bonus: 0, damage: '2d6', save: 'dex', saveDc: 10, range: 500, aoeShape: 'sphere', aoeSize: 10 },
+  ] } });
+  await attackReady;
+  const losBlocked = waitFor(playerSock, 'errorMsg', 3000).catch(() => null);
+  playerSock.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id, targetTokenId: beast.id, adv: null });
+  const losErr = await losBlocked;
+  ok(!!losErr?.message && /sight/i.test(losErr.message), `attack through a closed door is rejected for lack of line of sight ("${losErr?.message}")`);
+
+  const aoeBlocked = waitFor(playerSock, 'errorMsg', 3000).catch(() => null);
+  playerSock.emit('castAoe', {
+    characterId: pc.id, actionId: 'attack:1', sourceTokenId: pcToken.id,
+    originHex: { q: 6, r: 5 }, aimHex: { q: 12, r: 5 }, adv: null,
+  });
+  const aoeErr = await aoeBlocked;
+  ok(!!aoeErr?.message && /sight/i.test(aoeErr.message), `AoE aimed at a hidden target through a closed door is rejected for lack of line of sight ("${aoeErr?.message}")`);
+
   // Door id arrives via dm mapEdited.
   dmSock.emit('joinCampaign', { campaignId: camp.id }); // refresh dm state
   const dmMap2 = await waitFor(dmSock, 'mapState');
@@ -272,6 +355,14 @@ async function main() {
   dmSock.emit('toggleDoor', { mapId, doorId: door.id });
   await revealed;
   ok(true, 'opening the door reveals the monster');
+
+  // Same attack, same range, only the door state changed -> now resolves
+  // (chat roll posted) instead of an "out of sight" error.
+  const losOpenRoll = waitFor(playerSock, 'chatMsg', 3000, (p) => p.msg?.text?.includes('Sniper Bow')).catch(() => null);
+  const losOpenErr = waitFor(playerSock, 'errorMsg', 1500).catch(() => null);
+  playerSock.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id, targetTokenId: beast.id, adv: null });
+  const [openRoll, openErr] = await Promise.all([losOpenRoll, losOpenErr]);
+  ok(!!openRoll && !openErr, 'the same attack resolves once the door is open (line of sight restored)');
 
   // With the door open the same move is legal.
   const moveThrough = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === 10);
@@ -685,6 +776,7 @@ async function main() {
   // ---------- cleanup: restore the campaign exactly as we found it ----------
   dmSock.emit('initClear');
   if (originalActiveMapId) dmSock.emit('switchActiveMap', { mapId: originalActiveMapId });
+  dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: null }); // clear the pin this run forced
   dmSock.emit('deleteMap', { mapId: smokeMapId }); // cascades smoke tokens + fog
   dmSock.emit('deleteCharacter', { characterId: pc.id });
   dmSock.emit('deleteCharacter', { characterId: npc.id });

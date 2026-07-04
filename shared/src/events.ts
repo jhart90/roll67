@@ -301,6 +301,7 @@ export interface RequestSavePayload {
 
 /** Live-broadcast an AoE template as its caster aims it; active:false clears it. */
 export interface AoePreviewPayload {
+  sourceTokenId: string;
   shape: AoeShape;
   sizeFt: number;
   widthFt?: number;

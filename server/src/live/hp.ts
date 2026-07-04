@@ -48,15 +48,16 @@ function withCondition(sheet: SheetData, add: string): string[] {
 }
 
 /**
- * Apply an HP delta with temp-HP absorption (damage) and downed/wake handling.
- * Damage first drains Temp HP, then real HP; reaching 0 HP knocks a character
- * unconscious (5e) and resets death saves. Healing above 0 clears the
- * unconscious/dead conditions and death saves. Returns the updated character
- * plus a short human note ("(12 temp absorbed)", "— downed!", "— revived").
+ * Pure calculation half of applyHpDelta: works out the sheet patch (HP,
+ * temp-HP absorption, unconscious/dead conditions, death-save reset) and any
+ * concentration check an incoming hit would trigger, without writing or
+ * broadcasting anything. Lets a caller preview the outcome — e.g. to build a
+ * chat card's text — before the change is actually applied (which callers
+ * now delay until the roll that determined it has finished animating).
  */
-export function applyHpDelta(
-  io: Server, campaignId: string, character: Character, delta: number,
-): { character: Character; note: string } {
+export function computeHpDelta(
+  character: Character, delta: number,
+): { patch: SheetData; note: string; concCheck: { spell: string; damage: number } | null } {
   const schema = systemFor(character.system);
   const { hp, maxHp } = schema.hp(character.sheet);
   const cap = maxHp > 0 ? maxHp : Math.max(hp, hp + delta);
@@ -99,7 +100,21 @@ export function applyHpDelta(
       note += ' — revived';
     }
   }
+  return { patch, note, concCheck };
+}
 
+/**
+ * Apply an HP delta with temp-HP absorption (damage) and downed/wake handling.
+ * Damage first drains Temp HP, then real HP; reaching 0 HP knocks a character
+ * unconscious (5e) and resets death saves. Healing above 0 clears the
+ * unconscious/dead conditions and death saves. Returns the updated character
+ * plus a short human note ("(12 temp absorbed)", "— downed!", "— revived").
+ */
+export function applyHpDelta(
+  io: Server, campaignId: string, character: Character, delta: number,
+): { character: Character; note: string } {
+  const { patch, note: baseNote, concCheck } = computeHpDelta(character, delta);
+  let note = baseNote;
   let updated = persistSheet(io, campaignId, character, patch);
 
   // Concentration save, after the HP change is persisted so events stay ordered.

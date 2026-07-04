@@ -253,6 +253,32 @@ async function main() {
   ok(!!beastSave, 'cone caught the monster in its area');
   ok(selfSave === null, "caster is NOT included in their own cone's save (PHB: point of origin excluded)");
 
+  // ---------- damage/heal application waits for its own dice to settle ----------
+  console.log('damage timing (waits for the dice roll animation):');
+  // A bare token with a tracked HP bar, adjacent to the player, well within
+  // range and line of sight -- isolates the timing behavior from any to-hit
+  // or save mechanics.
+  const dummyReady = waitFor(dmSock, 'tokenUpserted', 5000, (p) => p.token.name === 'Timing Dummy');
+  dmSock.emit('createToken', { mapId, name: 'Timing Dummy', q: 7, r: 5, layer: 'token', bar: { hp: 20, maxHp: 20 } });
+  const dummy = (await dummyReady).token;
+  const timingReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { attacks: [
+    { name: 'Timing Bow', bonus: 5, damage: '1d8+3', range: 60 },
+  ] } });
+  await timingReady;
+
+  const attackCardP = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg?.text?.includes('Timing Bow'));
+  const tooSoonUpsert = expectSilence(dmSock, 'tokenUpserted', 1500, (p) => p.token.id === dummy.id);
+  const tooSoonFloat = expectSilence(playerSock, 'hpFloat', 1500, (p) => p.tokenId === dummy.id);
+  playerSock.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id, targetTokenId: dummy.id, adv: null });
+  await attackCardP;
+  ok(true, 'the damage roll card posts immediately (the dice can start animating)');
+  const [su, sf] = await Promise.all([tooSoonUpsert, tooSoonFloat]);
+  ok(su === null, "target HP does not change while its damage roll is still animating");
+  ok(sf === null, "no floating damage number appears while its damage roll is still animating");
+  const applied = await waitFor(dmSock, 'tokenUpserted', 3500, (p) => p.token.id === dummy.id && p.token.bar.hp < 20).catch(() => null);
+  ok(!!applied, "target HP changes once the damage roll's dice have settled (+1s pause)");
+
   // Drop a long wall between player and monster.
   const wallGone = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
   const wallEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.walls);

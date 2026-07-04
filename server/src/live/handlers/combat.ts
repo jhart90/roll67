@@ -10,7 +10,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyHpDelta, floatHp, persistSheet } from '../hp.js';
+import { applyHpDelta, computeHpDelta, floatHp, persistSheet } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 
@@ -24,6 +24,19 @@ function requireCampaign(socket: Socket) {
 // single die within ~1700ms (delay 0 + dur up to 1450-1700ms). Add a 1s pause
 // on top per the requested "wait for the animation, pause a beat" pacing.
 const SAVE_STEP_DELAY_MS = 2800;
+
+// General form of the same pacing, for rolls with more than one die (e.g. a
+// multi-die damage/heal roll): client/src/table/dice3d.ts staggers each die's
+// start by 110ms and gives it a 1450-1700ms roll-in (capped at the 12 dice
+// the overlay actually renders), so this is that roll's worst-case on-screen
+// settle time plus the same 1s pause. Used to delay the moment a roll's HP
+// effect (and the floating number over the token) actually lands until after
+// its own dice have visibly finished — never before, or the token reacts
+// before the player has seen why.
+function diceSettleDelayMs(diceCount: number): number {
+  const n = Math.max(1, Math.min(diceCount, 12));
+  return (n - 1) * 110 + 1700 + 1000;
+}
 
 /** Players never receive hidden entries; the DM sees everything. */
 export function initiativeViewFor(state: InitiativeState, isDm: boolean): InitiativeState {
@@ -86,27 +99,39 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const dmg = roll(spec.damageExpr!);
     const base = Math.max(0, dmg.total);
     const undo: UndoEntry[] = [];
+    // Figure out who takes what now (for undo + the card), but hold off on
+    // actually touching anyone's HP until this roll's own dice have settled.
+    const applications: Array<() => void> = [];
     for (const { tok, ch, passed } of results) {
       let amt = passed ? (spec.onSave === 'half' ? Math.floor(base / 2) : 0) : base;
       if (ch && spec.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, spec.damageType));
       if (amt <= 0) continue;
-      if (ch) {
-        applyHpDelta(io, spec.campaignId, ch, -amt);
-        undo.push({ t: 'hp', characterId: ch.id, delta: -amt });
-      } else if (tok.bar) {
-        const nh = Math.max(0, tok.bar.hp - amt);
-        tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
-        io.to(dmRoom(spec.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
-        undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
-      }
-      floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt);
+      if (!ch && !tok.bar) continue;
+      undo.push(ch ? { t: 'hp', characterId: ch.id, delta: -amt } : { t: 'hp', tokenId: tok.id, delta: -amt });
+      applications.push(() => {
+        if (ch) {
+          const fresh = characters.byId(ch.id);
+          if (fresh) applyHpDelta(io, spec.campaignId, fresh, -amt);
+        } else {
+          const live = tokens.byId(tok.id);
+          if (live?.bar) {
+            const nh = Math.max(0, live.bar.hp - amt);
+            tokens.update(tok.id, { bar: { hp: nh, maxHp: live.bar.maxHp } });
+            io.to(dmRoom(spec.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+          }
+        }
+        floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt);
+      });
     }
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
       text: `${spec.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
-    finish();
+    setTimeout(() => {
+      for (const apply of applications) apply();
+      finish();
+    }, diceSettleDelayMs(dmg.dice.length));
   };
 
   const postSave = (i: number): void => {
@@ -343,30 +368,44 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
       const delta = action.effect === 'heal' ? applied : -applied;
 
-      // Apply to the target's HP (character-backed or bare token bar) + float.
+      // Work out the outcome now, for the chat card's text — but don't touch
+      // the target's HP yet. That (and the floating number over their token)
+      // is deferred to fire only once this roll's own dice have visibly
+      // settled, so the token never reacts before the player sees why.
       let hpNote = '';
+      let applyToTarget: (() => void) | null = null;
       if (applied !== 0) {
         if (targetChar) {
-          const { character: updated, note } = applyHpDelta(io, d.campaignId, targetChar, delta);
-          const nh = systemFor(updated.system).hp(updated.sheet);
+          const { patch, note } = computeHpDelta(targetChar, delta);
+          const nh = systemFor(targetChar.system).hp({ ...targetChar.sheet, ...patch });
           hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
           undo.push({ t: 'hp', characterId: targetChar.id, delta });
+          const targetId = targetChar.id;
+          applyToTarget = () => {
+            // Re-read fresh: item/ammo consumption below may have already
+            // patched this same sheet (when the actor heals themself).
+            const fresh = characters.byId(targetId);
+            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta);
+            floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
+          };
         } else if (tgt.bar) {
           const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
           const nh = Math.max(0, Math.min(cap, tgt.bar.hp + delta));
-          tokens.update(tgt.id, { bar: { hp: nh, maxHp: tgt.bar.maxHp } });
-          io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tgt.id)! });
-          syncMapVision(io, d.campaignId, src.mapId);
-          hpNote = ` (${tgt.name} ${nh}/${tgt.bar.maxHp})`;
+          const maxHp = tgt.bar.maxHp;
+          hpNote = ` (${tgt.name} ${nh}/${maxHp})`;
           undo.push({ t: 'hp', tokenId: tgt.id, delta });
+          applyToTarget = () => {
+            tokens.update(tgt.id, { bar: { hp: nh, maxHp } });
+            io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tgt.id)! });
+            syncMapVision(io, d.campaignId, src.mapId);
+            floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
+          };
         }
-        floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
       }
       if (resistTag) hitLabel += resistTag;
 
       // Consume a used item (decrement the actor's inventory row). Re-read the
-      // character first: a self-heal above may have just changed its sheet, and
-      // we must not clobber that HP change.
+      // character first in case something else already patched its sheet.
       if (action.consumesItem && action.source === 'item') {
         const fresh = characters.byId(actor.id) ?? actor;
         const inv = Array.isArray(fresh.sheet.inventory) ? [...(fresh.sheet.inventory as SheetData[])] : [];
@@ -416,6 +455,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
       }, undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+
+      if (applyToTarget) setTimeout(applyToTarget, diceSettleDelayMs(cardRoll.dice.length));
     };
 
     if (deferredSave) {
@@ -522,6 +563,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const dmg = roll(action.amountExpr);
     const base = Math.max(0, dmg.total);
     const undo: UndoEntry[] = [];
+    // As above: figure out who takes what now, apply once this roll's own
+    // dice have settled.
+    const applications: Array<() => void> = [];
     for (const tid of hitIds) {
       const tok = tokens.byId(tid);
       if (!tok) continue;
@@ -529,22 +573,30 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       let amt = base;
       if (ch && action.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, action.damageType));
       if (amt <= 0) continue;
-      if (ch) {
-        applyHpDelta(io, d.campaignId, ch, -amt);
-        undo.push({ t: 'hp', characterId: ch.id, delta: -amt });
-      } else if (tok.bar) {
-        const nh = Math.max(0, tok.bar.hp - amt);
-        tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
-        io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
-        undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
-      }
-      floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
+      undo.push(ch ? { t: 'hp', characterId: ch.id, delta: -amt } : { t: 'hp', tokenId: tok.id, delta: -amt });
+      applications.push(() => {
+        if (ch) {
+          const fresh = characters.byId(ch.id);
+          if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt);
+        } else {
+          const live = tokens.byId(tok.id);
+          if (live?.bar) {
+            const nh = Math.max(0, live.bar.hp - amt);
+            tokens.update(tok.id, { bar: { hp: nh, maxHp: live.bar.maxHp } });
+            io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+          }
+        }
+        floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
+      });
     }
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll', text: `${actor.name} casts ${action.label}`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-    syncMapVision(io, d.campaignId, src.mapId);
+    setTimeout(() => {
+      for (const apply of applications) apply();
+      syncMapVision(io, d.campaignId, src.mapId);
+    }, diceSettleDelayMs(dmg.dice.length));
   }));
 
   // Activate a psychic power that has no target (utility/self powers, e.g.
@@ -598,16 +650,20 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let fail = num(character.sheet, 'deathFailures', 0);
     let outcome: string;
     if (v === 20) {
-      // Nat 20: regain 1 HP and wake up (applyHpDelta clears unconscious).
-      applyHpDelta(io, d.campaignId, characters.byId(characterId)!, 1);
+      // Nat 20: regain 1 HP and wake up — deferred until the d20 has settled
+      // on screen, same as any other roll that inflicts damage or healing.
       outcome = 'NAT 20 — back up with 1 HP!';
-      succ = 0; fail = 0;
-      persistSheet(io, d.campaignId, characters.byId(characterId)!, { deathSuccesses: 0, deathFailures: 0 });
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'roll',
         text: `${character.name} death save: ${outcome}`, roll: br, recipients: null,
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      setTimeout(() => {
+        const fresh = characters.byId(characterId);
+        if (!fresh) return;
+        applyHpDelta(io, d.campaignId, fresh, 1); // clears unconscious
+        persistSheet(io, d.campaignId, characters.byId(characterId)!, { deathSuccesses: 0, deathFailures: 0 });
+      }, diceSettleDelayMs(br.dice.length));
       return;
     }
     if (v === 1) fail += 2;

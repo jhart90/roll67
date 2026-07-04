@@ -237,6 +237,15 @@ const coreTab: SheetTab = {
         { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6' },
         { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES_5E] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
+        // A save-based special attack (breath weapons, etc.) leaves "bonus" as
+        // the flat +0 SRD monsters use and forces this save instead of a to-hit
+        // roll; "Save DC" is a fixed stat-block number, not derived like a PC's.
+        { id: 'save', label: 'Forces save', type: 'select', width: 'sixth', default: '', options: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'] },
+        { id: 'onSave', label: 'On save', type: 'select', width: 'sixth', default: 'half', options: ['half', 'negate'] },
+        { id: 'saveDc', label: 'Save DC', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', ...AOE_SHAPES_5E] },
+        { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeWidth', label: 'Area width ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },

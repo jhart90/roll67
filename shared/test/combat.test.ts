@@ -64,6 +64,42 @@ describe('combatActions', () => {
     expect(res?.row.amount).toBe('2d4+2');
   });
 
+  it('a save-based attack row (breath weapon) forces a save with a fixed DC instead of a to-hit roll', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(),
+      attacks: [{
+        name: 'Fire Breath', bonus: 0, damage: '26d6', dtype: 'fire',
+        save: 'dex', onSave: 'half', saveDc: 24, aoeShape: 'cone', aoeSize: 90,
+      }],
+    };
+    const [a] = combatActions(pc(sheet));
+    expect(a.attackExpr).toBeNull();
+    expect(a.saveId).toBe('dex');
+    expect(a.onSave).toBe('half');
+    expect(a.fixedDc).toBe(24);
+    expect(a.aoe).toEqual({ shape: 'cone', sizeFt: 90 });
+    expect(a.amountExpr).toBe('26d6');
+    expect(a.damageType).toBe('fire');
+  });
+
+  it('a line-shaped breath weapon carries its width', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(),
+      attacks: [{ name: 'Lightning Breath', bonus: 0, damage: '12d10', save: 'dex', saveDc: 19, aoeShape: 'line', aoeSize: 90, aoeWidth: 5 }],
+    };
+    const [a] = combatActions(pc(sheet));
+    expect(a.aoe).toEqual({ shape: 'line', sizeFt: 90, widthFt: 5 });
+  });
+
+  it('a plain attack row with no save stays a normal to-hit action, unaffected by the new columns', () => {
+    const sheet = { ...dnd5e.defaultSheet(), level: 5, str: 16, attacks: [{ name: 'Longsword', bonus: 5, damage: '1d8+3' }] };
+    const [a] = combatActions(pc(sheet));
+    expect(a.attackExpr).toBe('1d20+5');
+    expect(a.saveId).toBeUndefined();
+    expect(a.fixedDc).toBeUndefined();
+    expect(a.aoe).toBeUndefined();
+  });
+
   it('leveled spells carry a slotLevel; cantrips do not', () => {
     const sheet = {
       ...dnd5e.defaultSheet(),

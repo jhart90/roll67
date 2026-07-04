@@ -270,7 +270,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let hitLabel = '';
     let deferredSave: { total: number; threshold: number; label: string; passed: boolean } | null = null;
     if (action.saveId && action.effect === 'damage') {
-      const casterDc = Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
+      // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
+      // rather than deriving one from the actor's spellcasting stat.
+      const casterDc = action.fixedDc || Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
       const sc = targetChar
         ? systemFor(targetChar.system).saveCheck(targetChar.sheet, action.saveId, casterDc)
         : { expr: '1d20', threshold: casterDc, label: `${action.saveId.toUpperCase()} save` };
@@ -480,7 +482,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (hitIds.length === 0) { emitError(socket, `${action.label} caught no one in its area.`); return; }
 
     if (action.saveId) {
-      const casterDc = Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
+      // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
+      // rather than deriving one from the actor's spellcasting stat.
+      const casterDc = action.fixedDc || Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
       runGroupSave(io, {
         campaignId: d.campaignId, userId: d.userId, username: d.username,
         tokenIds: hitIds, saveId: action.saveId, dc: casterDc,

@@ -102,6 +102,10 @@ export interface CombatAction {
   disciplineId?: string;
   /** Area this action affects, if it hits a zone rather than one target. */
   aoe?: AoeSpec;
+  /** A save DC baked into the stat block (monster breath weapons) rather
+   *  than derived from the caster's ability/proficiency (PC spells). Wins
+   *  over the derived spellDc when resolving a saveId action. */
+  fixedDc?: number;
 }
 
 export interface SystemSchema {

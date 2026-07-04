@@ -25,11 +25,19 @@ export function combatActions(character: Character): CombatAction[] {
     const damage = rollables.find((r) => r.id === `damage_${i}`);
     if (!attack && !damage) return;
     const rangeFt = Math.max(0, num(atk, 'range', 5));
+    // A save-based special attack (breath weapons, etc.) forces a saving
+    // throw instead of a to-hit roll, and may hit an area rather than one
+    // target — mirrors how save-based spells/cantrips are built below, but
+    // with a fixed stat-block DC instead of one derived from the caster.
+    const save = str(atk, 'save', '');
+    const aoeShape = str(atk, 'aoeShape', '');
+    const aoeSize = num(atk, 'aoeSize', 0);
+    const aoeWidth = num(atk, 'aoeWidth', 0);
     out.push({
       id: `attack:${i}`,
       label: name,
       effect: 'damage',
-      attackExpr: attack?.expr ?? null,
+      attackExpr: save ? null : (attack?.expr ?? null),
       amountExpr: damage?.expr ?? '0',
       rangeFt,
       damageType: str(atk, 'dtype', ''),
@@ -37,6 +45,10 @@ export function combatActions(character: Character): CombatAction[] {
       consumesItem: false,
       source: 'attack',
       index: i,
+      ...(save ? { saveId: save, onSave: str(atk, 'onSave', 'half') === 'negate' ? 'negate' as const : 'half' as const, fixedDc: num(atk, 'saveDc', 13) } : {}),
+      ...(aoeShape && aoeSize > 0
+        ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
+        : {}),
     });
   });
 

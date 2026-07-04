@@ -44,7 +44,9 @@ export function pointInAoe(point: Point, spec: AoeSpec, geo: AoeGeometry, pxPerF
 
   if (spec.shape === 'cone') {
     const dist = Math.hypot(px, py);
-    if (dist <= 1e-6) return true; // the caster's own hex is inside their cone
+    // PHB 204: "A cone's point of origin is not included in the cone's area
+    // of effect" — i.e. the caster doesn't hit themself with their own cone.
+    if (dist <= 1e-6) return false;
     if (dist > sizePx || dirLen <= 1e-6) return false;
     const cos = (px * dirX + py * dirY) / (dirLen * dist);
     return Math.acos(Math.max(-1, Math.min(1, cos))) <= CONE_HALF_ANGLE;
@@ -53,6 +55,9 @@ export function pointInAoe(point: Point, spec: AoeSpec, geo: AoeGeometry, pxPerF
   // line and cube: a rectangle from the origin toward the aim direction.
   // A cube "originates from you" and extends sizeFt in the chosen direction —
   // approximated here as a square (width = length) rather than a true 3D cube.
+  // Same self-exclusion as the cone: a line/cube that erupts from the caster
+  // (e.g. a breath weapon) doesn't hit the caster's own square either.
+  if (px * px + py * py <= 1e-6) return false;
   if (dirLen <= 1e-6) return px * px + py * py <= sizePx * sizePx;
   const ux = dirX / dirLen;
   const uy = dirY / dirLen;

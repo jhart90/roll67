@@ -46,6 +46,18 @@ describe('pointInAoe', () => {
     expect(pointInAoe({ x: 7 * pxPerFt, y: 7 * pxPerFt }, spec, geo, pxPerFt)).toBe(true); // within the 15ft square
     expect(pointInAoe({ x: 7 * pxPerFt, y: 9 * pxPerFt }, spec, geo, pxPerFt)).toBe(false); // past half-width
   });
+
+  it('cone/line/cube never include the caster\'s own point of origin (PHB 204)', () => {
+    const pxPerFt = pxPerFoot(GRID);
+    const geo = { originPx: origin, aimPx: { x: 100, y: 0 } };
+    expect(pointInAoe(origin, { shape: 'cone', sizeFt: 15 }, geo, pxPerFt)).toBe(false);
+    expect(pointInAoe(origin, { shape: 'line', sizeFt: 100, widthFt: 5 }, geo, pxPerFt)).toBe(false);
+    expect(pointInAoe(origin, { shape: 'cube', sizeFt: 15 }, geo, pxPerFt)).toBe(false);
+    // A sphere/cylinder is unaffected by this rule — it's centered on the aim
+    // point, not the caster, so the caster standing at the origin has nothing
+    // to do with whether their own square is inside it.
+    expect(pointInAoe(origin, { shape: 'sphere', sizeFt: 15 }, { originPx: origin, aimPx: origin }, pxPerFt)).toBe(true);
+  });
 });
 
 describe('tokensInAoe', () => {

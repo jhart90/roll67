@@ -233,6 +233,26 @@ async function main() {
   await monsterVisible;
   ok(true, 'monster on token layer visible in open field');
 
+  // ---------- self-origin AoE shapes never hit the caster ----------
+  console.log('AoE self-exclusion:');
+  // A cone erupting from the player's own token, aimed at the monster 6 hexes
+  // east — regression test for a bug where the caster's own hex counted as
+  // "inside" their cone (PHB 204 says a cone's point of origin is excluded).
+  const coneReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { attacks: [
+    { name: 'Cone Blast', bonus: 0, damage: '3d6', save: 'dex', saveDc: 10, range: 0, aoeShape: 'cone', aoeSize: 60 },
+  ] } });
+  await coneReady;
+  const beastSaveRoll = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg?.text?.startsWith('Wall Beast')).catch(() => null);
+  const selfSaveRoll = expectSilence(playerSock, 'chatMsg', 4000, (p) => p.msg?.text?.startsWith('Smoke PC'));
+  playerSock.emit('castAoe', {
+    characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id,
+    originHex: { q: 6, r: 5 }, aimHex: { q: 12, r: 5 }, adv: null,
+  });
+  const [beastSave, selfSave] = await Promise.all([beastSaveRoll, selfSaveRoll]);
+  ok(!!beastSave, 'cone caught the monster in its area');
+  ok(selfSave === null, "caster is NOT included in their own cone's save (PHB: point of origin excluded)");
+
   // Drop a long wall between player and monster.
   const wallGone = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
   const wallEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.walls);

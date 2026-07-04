@@ -4,12 +4,10 @@ import { MapStage } from '../table/MapStage';
 import { MapManager } from '../table/dm/MapManager';
 import { TokenInspector } from '../table/TokenInspector';
 import { LightInspector } from '../table/LightInspector';
-import { CharactersPanel } from '../panels/CharactersPanel';
 import { ChatPanel } from '../panels/ChatPanel';
 import { CharacterSheet } from '../panels/CharacterSheet';
 import { InitiativePanel } from '../panels/InitiativePanel';
-import { DirectoryPanel } from '../panels/DirectoryPanel';
-import { WorldPanel } from '../panels/WorldPanel';
+import { WorldTreePanel } from '../panels/WorldTreePanel';
 import { ShopStorefront } from '../panels/ShopStorefront';
 import { TargetPopup } from '../panels/TargetPopup';
 import { CastLevelPopup } from '../panels/CastLevelPopup';
@@ -36,7 +34,7 @@ const DM_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'light', icon: '💡', label: 'Lights' },
 ];
 
-type DockTab = 'chat' | 'characters' | 'directory' | 'initiative' | 'world';
+type DockTab = 'chat' | 'initiative' | 'world';
 
 export function Table({ campaignId, onExit }: { campaignId: string; onExit: () => void }) {
   const you = useGameStore((s) => s.you);
@@ -55,7 +53,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const [showDice, setShowDice] = useState(false);
   const [showAssets, setShowAssets] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
-  const [dockTab, setDockTab] = useState<DockTab>('characters');
+  const [dockTab, setDockTab] = useState<DockTab>('world');
 
   useEffect(() => {
     wireSocket();
@@ -130,7 +128,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         <aside className="dock">
           <div className="dock-tabs">
-            {(['characters', 'chat', 'initiative', 'directory', 'world'] as DockTab[]).map((t) => (
+            {(['world', 'chat', 'initiative'] as DockTab[]).map((t) => (
               <button
                 key={t}
                 className={dockTab === t ? 'active' : ''}
@@ -140,11 +138,9 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               </button>
             ))}
           </div>
-          {dockTab === 'characters' && <CharactersPanel />}
+          {dockTab === 'world' && <WorldTreePanel />}
           {dockTab === 'chat' && <ChatPanel />}
           {dockTab === 'initiative' && <InitiativePanel />}
-          {dockTab === 'directory' && <DirectoryPanel />}
-          {dockTab === 'world' && <WorldPanel />}
         </aside>
 
         {showMaps && isDm && (

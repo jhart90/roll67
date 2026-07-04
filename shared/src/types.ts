@@ -162,6 +162,8 @@ export interface Character {
   name: string;
   system: GameSystem;
   sheet: SheetData;
+  /** Parent in the unified world tree (any entity id, or null = top level). */
+  parentId?: string | null;
 }
 
 // ---------- Chat & dice ----------
@@ -220,6 +222,7 @@ export interface RollableTable {
   name: string;
   playersCanRoll: boolean;
   items: RollableTableItem[];
+  parentId?: string | null;
 }
 
 // ---------- Initiative ----------
@@ -284,6 +287,7 @@ export interface Handout {
   /** userIds; only meaningful for the DM's view. */
   sharedWith: string[];
   folderId: string | null;
+  parentId?: string | null;
 }
 
 // ---------- Asset library ----------
@@ -348,6 +352,7 @@ export interface Shop {
   currency: string;
   playersCanBuy: boolean;
   items: ShopItem[];
+  parentId?: string | null;
 }
 
 // ---------- Locations ----------

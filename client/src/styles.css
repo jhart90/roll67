@@ -468,6 +468,22 @@ button.link:hover { text-decoration: underline; }
   100% { opacity: 0; transform: translateY(-6px) scale(0.98); }
 }
 
+/* ---------- world tree ---------- */
+.world-tree .wt-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.wt-tree { flex: 1; overflow-y: auto; min-height: 60px; }
+.wt-tree.drop-on { outline: 2px dashed var(--accent); outline-offset: -3px; }
+.wt-row {
+  display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+  cursor: pointer; user-select: none; border-radius: 4px;
+}
+.wt-row:hover { background: rgba(255, 255, 255, 0.05); }
+.wt-row.drop-on { background: rgba(108, 155, 210, 0.25); outline: 1px solid var(--accent); }
+.wt-caret { width: 12px; text-align: center; color: var(--text-dim); font-size: 10px; }
+.wt-icon { font-size: 13px; }
+.wt-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wt-sub { font-size: 10px; color: var(--text-dim); text-transform: uppercase; }
+.wt-hint { font-size: 10px; padding: 4px 8px; }
+
 /* ---------- chat ---------- */
 
 .chat-msg.hidden { opacity: 0.65; }

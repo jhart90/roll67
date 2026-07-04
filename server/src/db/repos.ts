@@ -255,7 +255,7 @@ export const assetFolders = {
 
 interface ShopRow {
   id: string; name: string; description: string; currency: string;
-  players_can_buy: number; items_json: string;
+  players_can_buy: number; items_json: string; parent_id: string | null;
 }
 function toShop(r: ShopRow): Shop {
   const items = (JSON.parse(r.items_json) as Array<Partial<ShopItem>>).map((it) => ({
@@ -269,7 +269,7 @@ function toShop(r: ShopRow): Shop {
     ...(it.amount ? { amount: String(it.amount) } : {}),
     ...(typeof it.range === 'number' ? { range: it.range } : {}),
   }));
-  return { id: r.id, name: r.name, description: r.description, currency: r.currency, playersCanBuy: !!r.players_can_buy, items };
+  return { id: r.id, name: r.name, description: r.description, currency: r.currency, playersCanBuy: !!r.players_can_buy, items, parentId: r.parent_id ?? null };
 }
 
 export const shops = {
@@ -287,15 +287,16 @@ export const shops = {
     db.prepare('INSERT INTO shops (id, campaign_id, name, currency, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, currency, maxOrder + 1);
     return { id, name, description: '', currency, playersCanBuy: true, items: [] };
   },
-  update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[] }): void {
+  update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[]; parentId?: string | null }): void {
     const cur = db.prepare('SELECT * FROM shops WHERE id = ?').get(id) as ShopRow | undefined;
     if (!cur) return;
-    db.prepare('UPDATE shops SET name = ?, description = ?, currency = ?, players_can_buy = ?, items_json = ? WHERE id = ?').run(
+    db.prepare('UPDATE shops SET name = ?, description = ?, currency = ?, players_can_buy = ?, items_json = ?, parent_id = ? WHERE id = ?').run(
       fields.name ?? cur.name,
       fields.description ?? cur.description,
       fields.currency ?? cur.currency,
       fields.playersCanBuy !== undefined ? (fields.playersCanBuy ? 1 : 0) : cur.players_can_buy,
       fields.items !== undefined ? JSON.stringify(fields.items) : cur.items_json,
+      fields.parentId !== undefined ? fields.parentId : cur.parent_id,
       id,
     );
   },
@@ -396,6 +397,7 @@ interface CharacterRow {
   name: string;
   system: GameSystem;
   sheet_json: string;
+  parent_id?: string | null;
 }
 
 function toCharacter(row: CharacterRow): Character {
@@ -406,6 +408,7 @@ function toCharacter(row: CharacterRow): Character {
     name: row.name,
     system: row.system,
     sheet: JSON.parse(row.sheet_json),
+    parentId: row.parent_id ?? null,
   };
 }
 
@@ -434,6 +437,9 @@ export const characters = {
       db.prepare('UPDATE characters SET sheet_json = ?, updated_at = ? WHERE id = ?')
         .run(JSON.stringify(sheet), now(), id);
     }
+  },
+  setParent(id: string, parentId: string | null): void {
+    db.prepare('UPDATE characters SET parent_id = ?, updated_at = ? WHERE id = ?').run(parentId, now(), id);
   },
   delete(id: string): void {
     db.prepare('DELETE FROM characters WHERE id = ?').run(id);
@@ -657,6 +663,7 @@ interface HandoutRow {
   asset_id: string | null;
   shared_all: number;
   folder_id?: string | null;
+  parent_id?: string | null;
 }
 
 function toHandout(row: HandoutRow): Handout {
@@ -669,6 +676,7 @@ function toHandout(row: HandoutRow): Handout {
     sharedAll: !!row.shared_all,
     sharedWith: shares.map((s) => s.user_id),
     folderId: row.folder_id ?? null,
+    parentId: row.parent_id ?? null,
   };
 }
 
@@ -687,13 +695,14 @@ export const handouts = {
     const rows = db.prepare('SELECT * FROM handouts WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as HandoutRow[];
     return rows.map(toHandout);
   },
-  update(id: string, fields: { title?: string; bodyMd?: string; assetId?: string | null }): void {
+  update(id: string, fields: { title?: string; bodyMd?: string; assetId?: string | null; parentId?: string | null }): void {
     const cur = db.prepare('SELECT * FROM handouts WHERE id = ?').get(id) as HandoutRow | undefined;
     if (!cur) return;
-    db.prepare('UPDATE handouts SET title = ?, body_md = ?, asset_id = ? WHERE id = ?').run(
+    db.prepare('UPDATE handouts SET title = ?, body_md = ?, asset_id = ?, parent_id = ? WHERE id = ?').run(
       fields.title ?? cur.title,
       fields.bodyMd ?? cur.body_md,
       fields.assetId !== undefined ? fields.assetId : cur.asset_id,
+      fields.parentId !== undefined ? fields.parentId : (cur.parent_id ?? null),
       id,
     );
   },
@@ -772,7 +781,7 @@ export const macros = {
 // ---------- rollable tables ----------
 
 interface TableRow {
-  id: string; name: string; players_can_roll: number; items_json: string; sort_order: number;
+  id: string; name: string; players_can_roll: number; items_json: string; sort_order: number; parent_id: string | null;
 }
 
 function toTable(r: TableRow): RollableTable {
@@ -782,6 +791,7 @@ function toTable(r: TableRow): RollableTable {
     name: r.name,
     playersCanRoll: !!r.players_can_roll,
     items: raw.map((it) => ({ text: it.text, weight: typeof it.weight === 'number' && it.weight > 0 ? it.weight : 1 })),
+    parentId: r.parent_id ?? null,
   };
 }
 
@@ -801,13 +811,14 @@ export const rollableTables = {
       .run(id, campaignId, name, '[]', maxOrder + 1);
     return { id, name, playersCanRoll: true, items: [] };
   },
-  update(id: string, fields: { name?: string; playersCanRoll?: boolean; items?: RollableTable['items'] }): void {
+  update(id: string, fields: { name?: string; playersCanRoll?: boolean; items?: RollableTable['items']; parentId?: string | null }): void {
     const cur = db.prepare('SELECT * FROM rollable_tables WHERE id = ?').get(id) as TableRow | undefined;
     if (!cur) return;
-    db.prepare('UPDATE rollable_tables SET name = ?, players_can_roll = ?, items_json = ? WHERE id = ?').run(
+    db.prepare('UPDATE rollable_tables SET name = ?, players_can_roll = ?, items_json = ?, parent_id = ? WHERE id = ?').run(
       fields.name ?? cur.name,
       fields.playersCanRoll !== undefined ? (fields.playersCanRoll ? 1 : 0) : cur.players_can_roll,
       fields.items !== undefined ? JSON.stringify(fields.items) : cur.items_json,
+      fields.parentId !== undefined ? fields.parentId : cur.parent_id,
       id,
     );
   },

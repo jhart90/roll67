@@ -35,6 +35,11 @@ ensureColumn('tokens', 'shape', "shape TEXT NOT NULL DEFAULT 'circle'");
 ensureColumn('tokens', 'light_json', 'light_json TEXT');
 ensureColumn('chat_messages', 'hidden', 'hidden INTEGER NOT NULL DEFAULT 0');
 ensureColumn('chat_messages', 'undo_json', 'undo_json TEXT');
+// Unified world tree: any entity can be parented to any other by id.
+ensureColumn('characters', 'parent_id', 'parent_id TEXT');
+ensureColumn('handouts', 'parent_id', 'parent_id TEXT');
+ensureColumn('shops', 'parent_id', 'parent_id TEXT');
+ensureColumn('rollable_tables', 'parent_id', 'parent_id TEXT');
 
 export function newId(): string {
   return crypto.randomBytes(9).toString('hex');

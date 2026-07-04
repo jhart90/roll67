@@ -88,7 +88,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     broadcastDirectory(io, d.campaignId);
   }));
 
-  socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name }: UpdateCharacterPayload) => {
+  socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name, parentId }: UpdateCharacterPayload) => {
     const d = requireCampaign(socket);
     const character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) return;
@@ -96,6 +96,8 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'You cannot edit this character.');
       return;
     }
+    // Reparenting in the world tree is DM-only and separate from sheet edits.
+    if (parentId !== undefined && d.role === 'dm') characters.setParent(characterId, parentId);
     applyCharacterPatch(io, d.campaignId, character, patch, name);
   }));
 

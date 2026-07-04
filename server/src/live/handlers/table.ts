@@ -111,12 +111,12 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     broadcastHandouts(io, d.campaignId);
   }));
 
-  socket.on(C2S.UPDATE_HANDOUT, safe(socket, ({ handoutId, title, bodyMd, assetId }: UpdateHandoutPayload) => {
+  socket.on(C2S.UPDATE_HANDOUT, safe(socket, ({ handoutId, title, bodyMd, assetId, parentId }: UpdateHandoutPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const h = handouts.byId(handoutId);
     if (!h) return;
-    handouts.update(handoutId, { title, bodyMd, assetId });
+    handouts.update(handoutId, { title, bodyMd, assetId, parentId });
     broadcastHandouts(io, d.campaignId);
   }));
 
@@ -143,7 +143,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     broadcastTables(io, d.campaignId);
   }));
 
-  socket.on(C2S.UPDATE_TABLE, safe(socket, ({ tableId, name, playersCanRoll, items }: UpdateTablePayload) => {
+  socket.on(C2S.UPDATE_TABLE, safe(socket, ({ tableId, name, playersCanRoll, items, parentId }: UpdateTablePayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const t = rollableTables.byId(tableId);
@@ -151,6 +151,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     rollableTables.update(tableId, {
       name,
       playersCanRoll,
+      parentId,
       items: items?.map((it) => ({ text: String(it.text ?? ''), weight: it.weight && it.weight > 0 ? it.weight : 1 })).filter((it) => it.text.trim()),
     });
     broadcastTables(io, d.campaignId);

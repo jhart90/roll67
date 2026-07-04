@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS characters (
   name TEXT NOT NULL,
   system TEXT NOT NULL,
   sheet_json TEXT NOT NULL DEFAULT '{}',
+  parent_id TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS handouts (
   body_md TEXT NOT NULL DEFAULT '',
   asset_id TEXT REFERENCES assets(id),
   shared_all INTEGER NOT NULL DEFAULT 0,
+  parent_id TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -166,6 +168,7 @@ CREATE TABLE IF NOT EXISTS shops (
   currency TEXT NOT NULL DEFAULT 'gp',
   players_can_buy INTEGER NOT NULL DEFAULT 1,
   items_json TEXT NOT NULL DEFAULT '[]',
+  parent_id TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -187,6 +190,7 @@ CREATE TABLE IF NOT EXISTS rollable_tables (
   name TEXT NOT NULL,
   players_can_roll INTEGER NOT NULL DEFAULT 1,
   items_json TEXT NOT NULL DEFAULT '[]',
+  parent_id TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 

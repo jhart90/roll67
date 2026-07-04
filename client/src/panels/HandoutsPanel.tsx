@@ -3,7 +3,7 @@ import type { Handout } from 'shared';
 import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
 
-function HandoutEditor({ handout, onDone }: { handout: Handout | null; onDone: () => void }) {
+export function HandoutEditor({ handout, onDone }: { handout: Handout | null; onDone: () => void }) {
   const campaign = useGameStore((s) => s.campaign)!;
   const [title, setTitle] = useState(handout?.title ?? '');
   const [body, setBody] = useState(handout?.bodyMd ?? '');

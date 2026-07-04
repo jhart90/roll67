@@ -188,6 +188,7 @@ export interface UpdateShopPayload {
   description?: string;
   currency?: string;
   playersCanBuy?: boolean;
+  parentId?: string | null;
   items?: Array<{
     name: string; price?: number; qty?: number; notes?: string;
     contentId?: string; effect?: 'heal' | 'damage'; amount?: string; range?: number;
@@ -211,7 +212,7 @@ export interface UpdateLocationPayload {
   handoutIds?: string[];
 }
 export interface DeleteLocationPayload { locationId: string }
-export interface UpdateCharacterPayload { characterId: string; patch: SheetData; name?: string }
+export interface UpdateCharacterPayload { characterId: string; patch: SheetData; name?: string; parentId?: string | null }
 /**
  * Apply a level-up whose HP is rolled: the server rolls the hit die (+CON),
  * adjusts the patch's HP from the average baseline, applies it, and posts the
@@ -294,6 +295,7 @@ export interface UpdateTablePayload {
   tableId: string;
   name?: string;
   playersCanRoll?: boolean;
+  parentId?: string | null;
   items?: Array<{ text: string; weight?: number }>;
 }
 export interface DeleteTablePayload { tableId: string }
@@ -335,7 +337,7 @@ export interface AudioControlPayload {
 }
 
 export interface CreateHandoutPayload { title: string; bodyMd?: string; assetId?: string | null }
-export interface UpdateHandoutPayload { handoutId: string; title?: string; bodyMd?: string; assetId?: string | null }
+export interface UpdateHandoutPayload { handoutId: string; title?: string; bodyMd?: string; assetId?: string | null; parentId?: string | null }
 export interface DeleteHandoutPayload { handoutId: string }
 export interface ShareHandoutPayload { handoutId: string; to: string[] | 'all' | 'none' }
 

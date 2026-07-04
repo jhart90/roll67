@@ -695,4 +695,13 @@ export const intents = {
   createLocation: (name: string, parentId?: string | null) => socket.emit(C2S.CREATE_LOCATION, { name, parentId }),
   updateLocation: (locationId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_LOCATION, { locationId, ...fields }),
   deleteLocation: (locationId: string) => socket.emit(C2S.DELETE_LOCATION, { locationId }),
+
+  /** Reparent any world-tree entity (DM). parentId=null → top level. */
+  setParent: (kind: 'location' | 'character' | 'shop' | 'table' | 'handout', id: string, parentId: string | null) => {
+    if (kind === 'character') socket.emit(C2S.UPDATE_CHARACTER, { characterId: id, patch: {}, parentId });
+    else if (kind === 'location') socket.emit(C2S.UPDATE_LOCATION, { locationId: id, parentId });
+    else if (kind === 'shop') socket.emit(C2S.UPDATE_SHOP, { shopId: id, parentId });
+    else if (kind === 'table') socket.emit(C2S.UPDATE_TABLE, { tableId: id, parentId });
+    else if (kind === 'handout') socket.emit(C2S.UPDATE_HANDOUT, { handoutId: id, parentId });
+  },
 };

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { RollableTable } from 'shared';
 import { intents, useGameStore } from '../store/game';
 
-function TableEditor({ table, onClose }: { table: RollableTable; onClose: () => void }) {
+export function TableEditor({ table, onClose }: { table: RollableTable; onClose: () => void }) {
   const [name, setName] = useState(table.name);
   const [playersCanRoll, setPlayers] = useState(table.playersCanRoll);
   const [items, setItems] = useState(table.items.map((i) => i.text).join('\n'));

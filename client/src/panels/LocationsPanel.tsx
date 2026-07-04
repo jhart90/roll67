@@ -28,7 +28,7 @@ function LinkPicker<T extends { id: string; name?: string; title?: string }>(
   );
 }
 
-function LocationEditor({ loc, onClose }: { loc: LocationNode; onClose: () => void }) {
+export function LocationEditor({ loc, onClose }: { loc: LocationNode; onClose: () => void }) {
   const all = useGameStore((s) => s.locationList);
   const characters = useGameStore((s) => s.characters);
   const shops = useGameStore((s) => s.shopList);

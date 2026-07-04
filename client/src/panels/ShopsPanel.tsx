@@ -47,7 +47,7 @@ function StockRow({ item, editing, onEdit, onSave, onDelete, onCancel }: {
   );
 }
 
-function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void }) {
+export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void }) {
   const system = (useGameStore((s) => s.campaign?.system) ?? 'dnd5e') as GameSystem;
   const currencies = currenciesFor(system);
   const [name, setName] = useState(shop.name);

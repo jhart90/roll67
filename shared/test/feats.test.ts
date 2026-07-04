@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { dnd5e } from '../src/systems/dnd5e.js';
 import { applyLevelUp } from '../src/systems/levelup5e.js';
+import { combatResources } from '../src/systems/effects.js';
+import { superiorityDice } from '../src/systems/features5e.js';
 import {
-  applyFeat, featBonuses, featEffects, FEATS_5E, takenFeatIds,
+  applyFeat, dualWielderAcBonus, featBonuses, featEffects, FEATS_5E,
+  hasConcentrationAdvantage, meetsPrereq, powerAttackBonus, takenFeatIds,
 } from '../src/systems/feats5e.js';
 
 describe('feat catalog', () => {
@@ -64,5 +67,91 @@ describe('feats via the level-up wizard', () => {
     });
     expect(patch.cha).toBe(13);
     expect(takenFeatIds(patch)).toContain('actor');
+  });
+});
+
+describe('feat prerequisites', () => {
+  it('checkable ability prereqs block until met, and pass once met', () => {
+    const duelist = FEATS_5E.find((f) => f.id === 'defensive-duelist')!;
+    expect(meetsPrereq({ dex: 12 }, duelist)).toBe(false);
+    expect(meetsPrereq({ dex: 13 }, duelist)).toBe(true);
+  });
+
+  it('an "X or Y" prereq passes if either ability meets the threshold', () => {
+    const ritualCaster = FEATS_5E.find((f) => f.id === 'ritual-caster')!;
+    expect(meetsPrereq({ int: 10, wis: 10 }, ritualCaster)).toBe(false);
+    expect(meetsPrereq({ int: 10, wis: 13 }, ritualCaster)).toBe(true);
+    expect(meetsPrereq({ int: 13, wis: 10 }, ritualCaster)).toBe(true);
+  });
+
+  it('unchecked prereqs (spellcasting, armor proficiency) never block', () => {
+    const warCaster = FEATS_5E.find((f) => f.id === 'war-caster')!;
+    expect(meetsPrereq({}, warCaster)).toBe(true);
+    const heavyArmorMaster = FEATS_5E.find((f) => f.id === 'heavy-armor-master')!;
+    expect(meetsPrereq({}, heavyArmorMaster)).toBe(true);
+  });
+});
+
+describe('Great Weapon Master / Sharpshooter power-attack toggle', () => {
+  it('does nothing until the toggle is on, even with the feat', () => {
+    const sheet = { feats: ['great-weapon-master'] };
+    expect(powerAttackBonus(sheet, false)).toEqual({ toHit: 0, damage: 0 });
+  });
+
+  it('GWM applies −5/+10 to melee only; Sharpshooter to ranged only', () => {
+    const gwm = { feats: ['great-weapon-master'], powerAttackActive: true };
+    expect(powerAttackBonus(gwm, false)).toEqual({ toHit: -5, damage: 10 });
+    expect(powerAttackBonus(gwm, true)).toEqual({ toHit: 0, damage: 0 });
+
+    const ss = { feats: ['sharpshooter'], powerAttackActive: true };
+    expect(powerAttackBonus(ss, true)).toEqual({ toHit: -5, damage: 10 });
+    expect(powerAttackBonus(ss, false)).toEqual({ toHit: 0, damage: 0 });
+  });
+
+  it('flows through to the attack/damage rollables for a melee weapon', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(), feats: ['great-weapon-master'], powerAttackActive: true,
+      attacks: [{ name: 'Greataxe', bonus: 5, damage: '1d12+3', range: 5 }],
+    };
+    const rollables = dnd5e.rollables(sheet);
+    expect(rollables.find((r) => r.id === 'attack_0')?.expr).toBe('1d20+0'); // 5 − 5
+    expect(rollables.find((r) => r.id === 'damage_0')?.expr).toBe('1d12+3+10');
+  });
+});
+
+describe('Dual Wielder AC toggle', () => {
+  it('adds its bonus only while toggled on, surfaced as the derived ac badge', () => {
+    const sheet = { ...dnd5e.defaultSheet(), ac: 14, feats: ['dual-wielder'] };
+    expect(dualWielderAcBonus(sheet)).toBe(0);
+    expect(dnd5e.derive(sheet).ac).toBe(14);
+
+    const on = { ...sheet, dualWieldingActive: true };
+    expect(dualWielderAcBonus(on)).toBe(1);
+    expect(dnd5e.derive(on).ac).toBe(15);
+  });
+});
+
+describe('War Caster concentration advantage', () => {
+  it('is only granted with the feat', () => {
+    expect(hasConcentrationAdvantage({ feats: ['war-caster'] })).toBe(true);
+    expect(hasConcentrationAdvantage({ feats: ['tough'] })).toBe(false);
+  });
+});
+
+describe('Savage Attacker resource pool', () => {
+  it('only appears for characters with the feat, resets each round', () => {
+    expect(combatResources('dnd5e', {}).some((r) => r.id === 'savageAttacker')).toBe(false);
+    const resources = combatResources('dnd5e', { feats: ['savage-attacker'] });
+    const sa = resources.find((r) => r.id === 'savageAttacker')!;
+    expect(sa).toBeDefined();
+    expect(sa.max).toBe(1);
+    expect(sa.reset).toBe('round');
+  });
+});
+
+describe('Martial Adept superiority die', () => {
+  it('grants a single d6 die outside Battle Master', () => {
+    expect(superiorityDice({ class: 'Fighter', feats: ['martial-adept'] })).toEqual({ count: 1, die: 'd6' });
+    expect(superiorityDice({ class: 'Wizard' })).toBeNull();
   });
 });

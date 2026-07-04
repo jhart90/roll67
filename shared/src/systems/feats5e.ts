@@ -26,6 +26,16 @@ export interface Feat {
   initiativeBonus?: number;
   /** Observant: bonus to passive Perception/Investigation (ongoing). */
   passivePerceptionBonus?: number;
+  /** GWM/Sharpshooter: eligible for the −5 attack / +10 damage toggle. */
+  powerAttack?: 'melee' | 'ranged';
+  /** Dual Wielder: +1 AC while the dual-wielding toggle is on. */
+  dualWielderAc?: number;
+  /** War Caster: advantage on concentration saves. */
+  concentrationAdvantage?: boolean;
+  /** Savage Attacker: once per round, reroll a melee weapon's damage and keep the higher total. */
+  savageAttacker?: boolean;
+  /** Martial Adept: grants one Battle-Master-style superiority die even without the subclass. */
+  martialAdeptDie?: boolean;
 }
 
 const ALL = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
@@ -37,12 +47,12 @@ export const FEATS_5E: Feat[] = [
   { id: 'charger', name: 'Charger', desc: 'Dash + attack or shove as a bonus action for +5 damage or 10-ft push.' },
   { id: 'crossbow-expert', name: 'Crossbow Expert', desc: 'Ignore loading; no disadvantage in melee; bonus-action hand crossbow shot.' },
   { id: 'defensive-duelist', name: 'Defensive Duelist', prereq: 'Dex 13+', desc: 'Reaction: add proficiency to AC against one melee attack with a finesse weapon.' },
-  { id: 'dual-wielder', name: 'Dual Wielder', desc: '+1 AC while dual-wielding; two-weapon fight with non-light weapons; draw two at once.' },
+  { id: 'dual-wielder', name: 'Dual Wielder', desc: '+1 AC while dual-wielding; two-weapon fight with non-light weapons; draw two at once.', dualWielderAc: 1 },
   { id: 'dungeon-delver', name: 'Dungeon Delver', desc: 'Advantage vs traps; search at normal pace; resistance to trap damage.' },
   { id: 'durable', name: 'Durable', desc: 'Minimum HP regained on a Hit Die = 2× CON mod.', abilityFixed: 'con' },
   { id: 'elemental-adept', name: 'Elemental Adept', prereq: 'spellcasting', desc: 'Spells of a chosen damage type ignore resistance; treat 1s as 2s.' },
   { id: 'grappler', name: 'Grappler', prereq: 'Str 13+', desc: 'Advantage vs creatures you grapple; can pin a grappled creature.' },
-  { id: 'great-weapon-master', name: 'Great Weapon Master', desc: 'Bonus attack on a crit/kill; optional −5 attack for +10 damage with heavy weapons.' },
+  { id: 'great-weapon-master', name: 'Great Weapon Master', desc: 'Bonus attack on a crit/kill; optional −5 attack for +10 damage with heavy weapons.', powerAttack: 'melee' },
   { id: 'healer', name: 'Healer', desc: 'Use a healer’s kit to restore 1d6+4+HD HP; stabilize with 1 HP.' },
   { id: 'heavily-armored', name: 'Heavily Armored', prereq: 'medium armor prof', desc: 'Proficiency with heavy armor.', abilityFixed: 'str' },
   { id: 'heavy-armor-master', name: 'Heavy Armor Master', prereq: 'heavy armor prof', desc: 'Reduce nonmagical bludgeoning/piercing/slashing damage by 3.', abilityFixed: 'str' },
@@ -53,7 +63,7 @@ export const FEATS_5E: Feat[] = [
   { id: 'lucky', name: 'Lucky', desc: '3 luck points/long rest: reroll an attack, check, save, or an attacker’s roll.' },
   { id: 'mage-slayer', name: 'Mage Slayer', desc: 'Reaction attack vs adjacent casters; advantage on saves vs their spells.' },
   { id: 'magic-initiate', name: 'Magic Initiate', desc: 'Learn two cantrips and one 1st-level spell from a chosen class.' },
-  { id: 'martial-adept', name: 'Martial Adept', desc: 'Learn two Battle Master maneuvers and gain one d6 superiority die.' },
+  { id: 'martial-adept', name: 'Martial Adept', desc: 'Learn two Battle Master maneuvers and gain one d6 superiority die.', martialAdeptDie: true },
   { id: 'medium-armor-master', name: 'Medium Armor Master', prereq: 'medium armor prof', desc: 'No Stealth disadvantage; add up to +3 Dex to medium-armor AC.', abilityFixed: 'dex' },
   { id: 'mobile', name: 'Mobile', desc: '+10 ft speed; Dash ignores difficult terrain; no opportunity attacks from targets you melee.', speedBonus: 10 },
   { id: 'moderately-armored', name: 'Moderately Armored', prereq: 'light armor prof', desc: 'Proficiency with medium armor and shields.', abilityChoice: ['str', 'dex'] },
@@ -62,16 +72,16 @@ export const FEATS_5E: Feat[] = [
   { id: 'polearm-master', name: 'Polearm Master', desc: 'Bonus-action butt-end attack (1d4); opportunity attacks when foes enter your reach.' },
   { id: 'resilient', name: 'Resilient', desc: '+1 to a chosen ability and proficiency in its saving throw.', abilityChoice: [...ALL], saveProficiency: true },
   { id: 'ritual-caster', name: 'Ritual Caster', prereq: 'Int or Wis 13+', desc: 'Learn and cast ritual spells from a chosen class’s ritual book.' },
-  { id: 'savage-attacker', name: 'Savage Attacker', desc: 'Once per turn, reroll melee weapon damage and use either total.' },
+  { id: 'savage-attacker', name: 'Savage Attacker', desc: 'Once per turn, reroll melee weapon damage and use either total.', savageAttacker: true },
   { id: 'sentinel', name: 'Sentinel', desc: 'Opportunity attacks stop movement; hit foes who attack others near you; ignore Disengage.' },
-  { id: 'sharpshooter', name: 'Sharpshooter', desc: 'No long-range disadvantage; ignore cover; optional −5 attack for +10 damage with ranged weapons.' },
+  { id: 'sharpshooter', name: 'Sharpshooter', desc: 'No long-range disadvantage; ignore cover; optional −5 attack for +10 damage with ranged weapons.', powerAttack: 'ranged' },
   { id: 'shield-master', name: 'Shield Master', desc: 'Bonus-action shove; add shield AC to Dex saves; reaction to negate damage.' },
   { id: 'skilled', name: 'Skilled', desc: 'Gain proficiency in any three skills or tools.' },
   { id: 'skulker', name: 'Skulker', prereq: 'Dex 13+', desc: 'Hide when lightly obscured; missing with ranged doesn’t reveal you; no dim-light disadvantage.' },
   { id: 'spell-sniper', name: 'Spell Sniper', prereq: 'spellcasting', desc: 'Double spell attack range; ignore cover; learn an attack cantrip.' },
   { id: 'tavern-brawler', name: 'Tavern Brawler', desc: 'Proficient with improvised weapons; unarmed strike d4; bonus-action grapple after a hit.', abilityChoice: ['str', 'con'] },
   { id: 'tough', name: 'Tough', desc: 'Max HP increases by 2 per level.', hpPerLevel: 2 },
-  { id: 'war-caster', name: 'War Caster', prereq: 'spellcasting', desc: 'Advantage on concentration saves; cast with hands full; cast as an opportunity attack.' },
+  { id: 'war-caster', name: 'War Caster', prereq: 'spellcasting', desc: 'Advantage on concentration saves; cast with hands full; cast as an opportunity attack.', concentrationAdvantage: true },
   { id: 'weapon-master', name: 'Weapon Master', desc: 'Proficiency with four weapons of your choice.', abilityChoice: ['str', 'dex'] },
 ];
 
@@ -140,4 +150,57 @@ export function applyFeat(sheet: SheetData, featId: string, ability?: string): S
 
 export function featLabel(id: string): string {
   return getFeat(id)?.name ?? id;
+}
+
+/**
+ * Checkable prerequisites only: "Str 13+", "Dex 13+", "Int or Wis 13+", etc.
+ * Prereqs the engine can't verify (spellcasting, armor proficiency) always
+ * pass — the picker still shows the text, it just doesn't block on it.
+ */
+export function meetsPrereq(sheet: SheetData, feat: Feat): boolean {
+  if (!feat.prereq) return true;
+  const m = feat.prereq.match(/^(str|dex|con|int|wis|cha)(?:\s+or\s+(str|dex|con|int|wis|cha))?\s+(\d+)\+$/i);
+  if (!m) return true;
+  const [, a1, a2, minStr] = m;
+  const min = Number(minStr);
+  return [a1, a2].filter((x): x is string => !!x).some((ab) => num(sheet, ab.toLowerCase(), 10) >= min);
+}
+
+/** GWM/Sharpshooter −5 attack / +10 damage toggle, gated on the matching
+ *  feat and melee-vs-ranged (SS applies to ranged weapons, GWM to melee). */
+export function powerAttackBonus(sheet: SheetData, ranged: boolean): { toHit: number; damage: number } {
+  if (sheet.powerAttackActive !== true) return { toHit: 0, damage: 0 };
+  const want = ranged ? 'ranged' : 'melee';
+  const has = takenFeats(sheet).some((f) => f.powerAttack === want);
+  return has ? { toHit: -5, damage: 10 } : { toHit: 0, damage: 0 };
+}
+
+/** Whether the character could use the power-attack toggle on some weapon
+ *  they own (used to decide whether to show the toggle at all). */
+export function hasPowerAttackFeat(sheet: SheetData): boolean {
+  return takenFeats(sheet).some((f) => f.powerAttack);
+}
+
+/** Dual Wielder: +1 AC while the player marks themself as dual-wielding. */
+export function dualWielderAcBonus(sheet: SheetData): number {
+  if (sheet.dualWieldingActive !== true) return 0;
+  const feat = takenFeats(sheet).find((f) => f.dualWielderAc);
+  return feat?.dualWielderAc ?? 0;
+}
+
+/** War Caster: advantage on concentration (CON) saves. */
+export function hasConcentrationAdvantage(sheet: SheetData): boolean {
+  return takenFeats(sheet).some((f) => f.concentrationAdvantage);
+}
+
+/** Martial Adept: grants a single d6 superiority die outside Battle Master. */
+export function hasMartialAdeptDie(sheet: SheetData): boolean {
+  return takenFeats(sheet).some((f) => f.martialAdeptDie);
+}
+
+/** Savage Attacker: once per round, reroll a melee weapon's damage dice and
+ *  keep the higher total. Tracked as a `res_savageAttacker` pool (max 1,
+ *  resets each round) so the existing resource-tracker UI/reset buttons work. */
+export function hasSavageAttacker(sheet: SheetData): boolean {
+  return takenFeats(sheet).some((f) => f.savageAttacker);
 }

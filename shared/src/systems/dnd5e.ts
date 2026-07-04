@@ -7,7 +7,7 @@ import {
   classId, divineFury, divineSmite, fightingStyleBonus, isRaging, martialArtsDie, rageDamage,
   remarkableAthleteBonus, sneakAttackDice, superiorityDice,
 } from './features5e.js';
-import { featBonuses } from './feats5e.js';
+import { dualWielderAcBonus, featBonuses, powerAttackBonus } from './feats5e.js';
 
 const ABILITIES = [
   { id: 'str', label: 'STR' },
@@ -372,6 +372,9 @@ export const dnd5e: SystemSchema = {
     const spellMod = abilityMod(num(sheet, spellAbility, 10));
     out.spellDc = 8 + pb + spellMod;
     out.spellAttack = fmtMod(pb + spellMod);
+    // AC stays a manually-typed field; this only surfaces the Dual Wielder
+    // toggle's +1 as a badge next to it (and is what combat resolution reads).
+    out.ac = num(sheet, 'ac', 10) + dualWielderAcBonus(sheet);
     return out;
   },
 
@@ -399,11 +402,13 @@ export const dnd5e: SystemSchema = {
       const name = str(atk, 'name', `Attack ${i + 1}`);
       const ranged = num(atk, 'range', 5) > 5;
       const fs = fightingStyleBonus(style, ranged);
-      out.push({ id: `attack_${i}`, label: `${name} (attack)`, expr: `1d20${fmtMod(num(atk, 'bonus', 0) + fs.attack)}`, group: 'Attacks', d20: true });
+      // GWM/Sharpshooter −5/+10 power-attack toggle (melee vs ranged gated).
+      const pa = powerAttackBonus(sheet, ranged);
+      out.push({ id: `attack_${i}`, label: `${name} (attack)`, expr: `1d20${fmtMod(num(atk, 'bonus', 0) + fs.attack + pa.toHit)}`, group: 'Attacks', d20: true });
       let dmg = str(atk, 'damage', '').trim();
       if (dmg) {
         // Melee-only bonuses stack: Rage damage + Dueling fighting style.
-        const bonus = (!ranged ? rageBonus : 0) + fs.damage;
+        const bonus = (!ranged ? rageBonus : 0) + fs.damage + pa.damage;
         if (bonus > 0) dmg = `${dmg}+${bonus}`;
         out.push({ id: `damage_${i}`, label: `${name} (damage)`, expr: dmg, group: 'Attacks', d20: false });
       }

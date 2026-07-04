@@ -31,6 +31,10 @@ export function ClassFeatures({ character, editable }: { character: Character; e
   const smite = divineSmite(sheet);
   const hasSub = crit < 20 || remarkable || battleMaster || thirdCaster || !!smite;
   const hasContent = resources.length > 0 || attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle || hasSub || feats.length > 0;
+  const powerAttackFeat = feats.find((f) => f.powerAttack);
+  const powerAttackOn = sheet.powerAttackActive === true;
+  const dualWielderFeat = feats.find((f) => f.dualWielderAc);
+  const dualWieldOn = sheet.dualWieldingActive === true;
 
   // Editable 5e sheets always show the panel so "+ Feat" is available.
   if (!hasContent && !editable) return null;
@@ -61,6 +65,12 @@ export function ClassFeatures({ character, editable }: { character: Character; e
     intents.updateCharacter(character.id, { res_ki: ki.used + cost });
     intents.chat(`${character.name} uses ${name} (−${cost} ki)`);
   }
+  function togglePowerAttack() {
+    intents.updateCharacter(character.id, { powerAttackActive: !powerAttackOn });
+  }
+  function toggleDualWield() {
+    intents.updateCharacter(character.id, { dualWieldingActive: !dualWieldOn });
+  }
 
   const rageOut = (resources.find((r) => r.id === 'rage')?.remaining ?? 0) <= 0;
 
@@ -76,7 +86,7 @@ export function ClassFeatures({ character, editable }: { character: Character; e
         )}
       </h4>
 
-      {(attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle) && (
+      {(attacks > 1 || sneak > 0 || isBarbarian || isMonk || hasStyle || powerAttackFeat || dualWielderFeat) && (
         <div className="cf-notes">
           {attacks > 1 && <span className="cf-chip">Extra Attack — {attacks} attacks / action</span>}
           {sneak > 0 && <span className="cf-chip">Sneak Attack {sneak}d6</span>}
@@ -96,6 +106,16 @@ export function ClassFeatures({ character, editable }: { character: Character; e
               {rageOut ? 'No rages left' : 'Enter Rage'}
             </button>
           ))}
+          {powerAttackFeat && (
+            <button className={`cf-rage ${powerAttackOn ? 'on' : ''}`} disabled={!editable} onClick={togglePowerAttack} title={powerAttackFeat.name}>
+              {powerAttackOn ? '● Power Attack (−5/+10) · on' : 'Power Attack (−5/+10)'}
+            </button>
+          )}
+          {dualWielderFeat && (
+            <button className={`cf-rage ${dualWieldOn ? 'on' : ''}`} disabled={!editable} onClick={toggleDualWield} title={dualWielderFeat.name}>
+              {dualWieldOn ? `● Dual-Wielding +${dualWielderFeat.dualWielderAc} AC` : 'Dual-Wielding?'}
+            </button>
+          )}
         </div>
       )}
 

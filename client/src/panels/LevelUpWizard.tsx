@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Character } from 'shared';
-import { applyLevelUp, CLASS_LIST_5E, FEATS_5E, getClass5e, getFeat, planLevelUp, SKILLS_5E } from 'shared';
+import { applyLevelUp, CLASS_LIST_5E, FEATS_5E, getClass5e, getFeat, meetsPrereq, planLevelUp, SKILLS_5E } from 'shared';
 import { intents } from '../store/game';
 
 const FEATS_SORTED = [...FEATS_5E].sort((a, b) => a.name.localeCompare(b.name));
@@ -153,7 +153,9 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
                           <select value={featId} onChange={(e) => { setFeatId(e.target.value); setFeatAbility(''); }}>
                             <option value="">Choose a feat…</option>
                             {FEATS_SORTED.map((ft) => (
-                              <option key={ft.id} value={ft.id}>{ft.name}{ft.prereq ? ` (${ft.prereq})` : ''}</option>
+                              <option key={ft.id} value={ft.id} disabled={!meetsPrereq(character.sheet, ft)}>
+                                {ft.name}{ft.prereq ? ` (${ft.prereq}${!meetsPrereq(character.sheet, ft) ? ' — not met' : ''})` : ''}
+                              </option>
                             ))}
                           </select>
                           {featChoice && (

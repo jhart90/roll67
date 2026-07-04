@@ -1,8 +1,9 @@
 import type { Server } from 'socket.io';
-import { S2C, conditionsOf, num, roll, str, systemFor, type Character, type SheetData } from 'shared';
+import { S2C, conditionsOf, hasConcentrationAdvantage, num, roll, str, systemFor, type Character, type SheetData } from 'shared';
 import { characters, chat, tokens } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { syncMapVision } from './visionService.js';
+import { applyAdv } from './handlers/chat.js';
 
 /**
  * Persist a sheet patch, emit the private character upsert (DM + owner), mirror
@@ -105,7 +106,9 @@ export function applyHpDelta(
   if (concCheck) {
     const dc = Math.max(10, Math.floor(concCheck.damage / 2));
     const sc = systemFor(updated.system).saveCheck(updated.sheet, 'con', dc);
-    const br = roll(sc.expr);
+    // War Caster: advantage on concentration saves.
+    const expr = hasConcentrationAdvantage(updated.sheet) ? applyAdv(sc.expr, 'adv') : sc.expr;
+    const br = roll(expr);
     const passed = br.total >= dc;
     if (!passed) updated = persistSheet(io, campaignId, updated, { concentration: '' });
     const text = `${updated.name} concentration (${concCheck.spell}) — CON save ${br.total} vs DC ${dc}: ${passed ? 'holds' : 'BROKEN'}`;

@@ -6,6 +6,7 @@
 import type { SheetData } from '../types.js';
 import { num, str } from './types.js';
 import { getClass5e, spellSlotsForClass } from './classes5e.js';
+import { hasMartialAdeptDie } from './feats5e.js';
 
 export interface ClassResource {
   id: string;
@@ -62,15 +63,19 @@ function hasSubclass(sheet: SheetData, re: RegExp): boolean {
   return re.test(str(sheet, 'subclass', ''));
 }
 
-/** Battle Master superiority dice pool (null if not a Battle Master ≥3). */
+/** Battle Master superiority dice pool (null if not a Battle Master ≥3);
+ *  the Martial Adept feat grants a single d6 die outside that subclass. */
 export function superiorityDice(sheet: SheetData): { count: number; die: string } | null {
-  if (classId(sheet) !== 'fighter' || !hasSubclass(sheet, /battle\s*master/i)) return null;
+  const isBattleMaster = classId(sheet) === 'fighter' && hasSubclass(sheet, /battle\s*master/i);
   const lvl = num(sheet, 'level', 1);
-  if (lvl < 3) return null;
-  return {
-    count: lvl >= 15 ? 6 : lvl >= 7 ? 5 : 4,
-    die: lvl >= 18 ? 'd12' : lvl >= 10 ? 'd10' : 'd8',
-  };
+  if (isBattleMaster && lvl >= 3) {
+    return {
+      count: lvl >= 15 ? 6 : lvl >= 7 ? 5 : 4,
+      die: lvl >= 18 ? 'd12' : lvl >= 10 ? 'd10' : 'd8',
+    };
+  }
+  if (hasMartialAdeptDie(sheet)) return { count: 1, die: 'd6' };
+  return null;
 }
 
 export const MANEUVERS = [

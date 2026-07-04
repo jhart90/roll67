@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr,
-  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap,
+  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker,
   type Character, type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
   type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
   type SheetData, type UndoEntry, type UsePowerPayload,
@@ -180,7 +180,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const critAt = critRange(actor.sheet);
       crit = d20s.some((x) => x.value >= critAt && x.value !== 1);
       const nat1 = d20s.some((x) => x.value === 1);
-      const ac = targetChar ? num(targetChar.sheet, 'ac', 0) : 0;
+      // Prefer the derived AC (folds in toggles like Dual Wielder's +1) over
+      // the raw sheet field, which stays the DM/player's manually-typed base.
+      const ac = targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0;
       hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
       const advTag = netAdv === 'adv' ? ' [adv]' : netAdv === 'dis' ? ' [dis]' : '';
       hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
@@ -189,7 +191,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // Damage: a crit doubles the dice. Resistance/vulnerability/immunity from the
     // target's sheet then scales the total.
     const dmgExpr = crit ? critDamageExpr(action.amountExpr) : action.amountExpr;
-    const amountRoll = roll(dmgExpr);
+    let amountRoll = roll(dmgExpr);
+    // Savage Attacker: once per round, reroll a melee hit's damage and keep
+    // the higher total (auto-applied — no reason to ever decline it).
+    if (hit && action.source === 'attack' && !action.ranged && hasSavageAttacker(actor.sheet)) {
+      const used = num(actor.sheet, 'res_savageAttacker', 0);
+      if (used < 1) {
+        const reroll = roll(dmgExpr);
+        if (reroll.total > amountRoll.total) amountRoll = reroll;
+        undo.push({ t: 'field', characterId: actor.id, key: 'res_savageAttacker', value: used });
+        actor = persistSheet(io, d.campaignId, actor, { res_savageAttacker: used + 1 });
+      }
+    }
     let magnitude = Math.max(0, amountRoll.total);
     // Save-based spells scale the rolled damage (half / none on a save).
     if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);

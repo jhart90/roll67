@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Character } from 'shared';
-import { applyFeat, FEATS_5E, takenFeatIds } from 'shared';
+import { applyFeat, FEATS_5E, meetsPrereq, takenFeatIds } from 'shared';
 import { intents } from '../store/game';
 
 /** Browse and add a 5e feat to a character; applies its numeric effects. */
@@ -34,22 +34,35 @@ export function FeatPicker({ character, onClose }: { character: Character; onClo
           <input placeholder="Search feats…" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
         </div>
         <div className="feat-list">
-          {list.map((f) => (
-            <div key={f.id} className={`feat-row ${taken.has(f.id) ? 'taken' : ''}`}>
-              <div className="feat-main">
-                <span className="feat-name">{f.name}{f.prereq ? <span className="dim"> · {f.prereq}</span> : null}</span>
-                <span className="feat-desc dim">{f.desc}</span>
+          {list.map((f) => {
+            const ok = meetsPrereq(character.sheet, f);
+            return (
+              <div key={f.id} className={`feat-row ${taken.has(f.id) ? 'taken' : ''}`}>
+                <div className="feat-main">
+                  <span className="feat-name">
+                    {f.name}
+                    {f.prereq ? <span className="dim" style={!ok ? { color: 'var(--danger)' } : undefined}> · {f.prereq}{!ok ? ' (not met)' : ''}</span> : null}
+                  </span>
+                  <span className="feat-desc dim">{f.desc}</span>
+                </div>
+                <div className="feat-actions">
+                  {f.abilityChoice && (
+                    <select value={ability[f.id] ?? f.abilityChoice[0]} onChange={(e) => setAbility((a) => ({ ...a, [f.id]: e.target.value }))}>
+                      {f.abilityChoice.map((ab) => <option key={ab} value={ab}>+1 {ab.toUpperCase()}</option>)}
+                    </select>
+                  )}
+                  <button
+                    className="btn btn-sm btn-accent"
+                    disabled={!ok}
+                    title={!ok ? `Requires ${f.prereq}` : undefined}
+                    onClick={() => add(f.id)}
+                  >
+                    {taken.has(f.id) ? 'add again' : 'add'}
+                  </button>
+                </div>
               </div>
-              <div className="feat-actions">
-                {f.abilityChoice && (
-                  <select value={ability[f.id] ?? f.abilityChoice[0]} onChange={(e) => setAbility((a) => ({ ...a, [f.id]: e.target.value }))}>
-                    {f.abilityChoice.map((ab) => <option key={ab} value={ab}>+1 {ab.toUpperCase()}</option>)}
-                  </select>
-                )}
-                <button className="btn btn-sm btn-accent" onClick={() => add(f.id)}>{taken.has(f.id) ? 'add again' : 'add'}</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {list.length === 0 && <p className="dim" style={{ padding: 12 }}>No feats match that search.</p>}
         </div>
       </div>

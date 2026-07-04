@@ -5,6 +5,7 @@
 
 import type { SheetData } from '../types.js';
 import { num, str } from './types.js';
+import { hasSavageAttacker } from './feats5e.js';
 
 // ---------- damage types & resistance ----------
 
@@ -179,6 +180,9 @@ export function combatResources(system: 'dnd5e' | 'swn', sheet: SheetData): Comb
     const feats = Array.isArray(sheet.feats) ? (sheet.feats as unknown[]) : [];
     if (feats.includes('lucky')) {
       defs.push({ id: 'luck', name: 'Luck', max: 3, reset: 'long', note: 'reroll a d20 (yours or an attacker’s)' });
+    }
+    if (hasSavageAttacker(sheet)) {
+      defs.push({ id: 'savageAttacker', name: 'Savage Attacker', max: 1, reset: 'round', note: 'auto-rerolls melee weapon damage, keeps the higher' });
     }
   } else {
     const cls = str(sheet, 'class', '').toLowerCase();

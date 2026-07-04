@@ -117,6 +117,16 @@ describe('D&D 5e sheet', () => {
     const rolls = dnd5e.rollables(sheet);
     expect(rolls.find((r) => r.id === 'save_dex')?.expr).toBe('1d20+3'); // +2 mod +1 item
   });
+
+  it('saveCheck (used to resolve an actual forced save) also carries the equipped item bonus', () => {
+    const sheet = {
+      ...dnd5e.defaultSheet(), dex: 14,
+      inventory: [{ name: 'Ring of Protection', acBonus: 1, saveBonus: 1, equipped: true }],
+    };
+    expect(dnd5e.saveCheck(sheet, 'dex', 15).expr).toBe('1d20+3'); // +2 mod +1 item
+    const stashed = { ...sheet, inventory: [{ ...sheet.inventory[0], equipped: false }] };
+    expect(dnd5e.saveCheck(stashed, 'dex', 15).expr).toBe('1d20+2');
+  });
 });
 
 describe('SWN sheet', () => {

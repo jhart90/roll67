@@ -521,6 +521,6 @@ export const swn: SystemSchema = {
     const save = SAVES.find((s) => s.id === saveId) ?? SAVES[0];
     const level = num(sheet, 'level', 1);
     const best = Math.max(...save.attrs.map((a) => swnMod(num(sheet, a, 10))));
-    return { expr: '1d20', threshold: 15 - level - best, label: `${save.label} save` };
+    return { expr: '1d20', threshold: 15 - level - best - equippedItemBonuses(sheet).save, label: `${save.label} save` };
   },
 };

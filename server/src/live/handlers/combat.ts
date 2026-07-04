@@ -178,12 +178,17 @@ function activatePsychicPower(
 export function registerCombatHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.COMBAT_ACTION, safe(socket, (p: CombatActionPayload) => {
     const d = requireCampaign(socket);
-    let actor = characters.byId(p.characterId);
-    if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
-    if (d.role !== 'dm' && actor.ownerUserId !== d.userId) {
+    const actorMaybe = characters.byId(p.characterId);
+    if (!actorMaybe || actorMaybe.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    if (d.role !== 'dm' && actorMaybe.ownerUserId !== d.userId) {
       emitError(socket, 'You can only act with your own character.');
       return;
     }
+    // Declared as a fully non-optional Character (rather than relying on the
+    // guard's narrowing) because `resolveDamage` below is a closure that may
+    // run inside a later setTimeout — narrowing from a guard doesn't survive
+    // into a closure over a reassignable `let`.
+    let actor: Character = actorMaybe;
     const action = combatActions(actor).find((a) => a.id === p.actionId);
     if (!action) { emitError(socket, 'That action is no longer available.'); return; }
 
@@ -255,12 +260,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
 
     // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;
     // otherwise compare to the target's AC. Save-based spells skip the to-hit:
-    // the target rolls a save vs the caster's DC and damage is scaled instead.
+    // the target rolls a save vs the caster's DC first, posted as its own
+    // chat card, and (unless it fully negates) the damage roll follows as a
+    // separate card once that save's dice animation has had time to settle.
     let hit = true;
     let crit = false;
     let saveScale = 1;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
     let hitLabel = '';
+    let deferredSave: { total: number; threshold: number; label: string; passed: boolean } | null = null;
     if (action.saveId && action.effect === 'damage') {
       const casterDc = Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
       const sc = targetChar
@@ -272,7 +280,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // 5e's threshold is always the caster's DC; SWN's is target-number based
       // (ignores the caster's DC entirely) — showing sc.threshold is correct
       // for both instead of hard-coding "vs DC" around the 5e-only casterDc.
-      hitLabel = ` — ${sc.label} ${attackBreakdown.total} vs ${sc.threshold} · ${passed ? 'SAVE' : 'FAIL'}`;
+      deferredSave = { total: attackBreakdown.total, threshold: sc.threshold, label: sc.label, passed };
     } else if (action.attackExpr) {
       // Net advantage folds the roller's choice with attacker/target conditions.
       const netAdv = action.attackExpr.toLowerCase().startsWith('1d20')
@@ -293,104 +301,127 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
     }
 
-    // Damage: a crit doubles the dice. Resistance/vulnerability/immunity from the
-    // target's sheet then scales the total.
-    const dmgExpr = crit ? critDamageExpr(action.amountExpr) : action.amountExpr;
-    let amountRoll = roll(dmgExpr);
-    // Savage Attacker: once per round, reroll a melee hit's damage and keep
-    // the higher total (auto-applied — no reason to ever decline it).
-    if (hit && action.source === 'attack' && !action.ranged && hasSavageAttacker(actor.sheet)) {
-      const used = num(actor.sheet, 'res_savageAttacker', 0);
-      if (used < 1) {
-        const reroll = roll(dmgExpr);
-        if (reroll.total > amountRoll.total) amountRoll = reroll;
-        undo.push({ t: 'field', characterId: actor.id, key: 'res_savageAttacker', value: used });
-        actor = persistSheet(io, d.campaignId, actor, { res_savageAttacker: used + 1 });
+    // Damage/heal resolution + chat post, run either immediately (plain
+    // attacks) or after the save card's dice have settled (save-based spells).
+    const resolveDamage = (): void => {
+      // A crit doubles the dice. Resistance/vulnerability/immunity from the
+      // target's sheet then scales the total.
+      const dmgExpr = crit ? critDamageExpr(action.amountExpr) : action.amountExpr;
+      let amountRoll = roll(dmgExpr);
+      // Savage Attacker: once per round, reroll a melee hit's damage and keep
+      // the higher total (auto-applied — no reason to ever decline it).
+      if (hit && action.source === 'attack' && !action.ranged && hasSavageAttacker(actor.sheet)) {
+        const used = num(actor.sheet, 'res_savageAttacker', 0);
+        if (used < 1) {
+          const reroll = roll(dmgExpr);
+          if (reroll.total > amountRoll.total) amountRoll = reroll;
+          undo.push({ t: 'field', characterId: actor.id, key: 'res_savageAttacker', value: used });
+          actor = persistSheet(io, d.campaignId, actor, { res_savageAttacker: used + 1 });
+        }
       }
-    }
-    let magnitude = Math.max(0, amountRoll.total);
-    // Save-based spells scale the rolled damage (half / none on a save).
-    if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
-    let resistTag = '';
-    if (action.effect === 'damage' && hit && targetChar) {
-      const mult = damageMultiplier(targetChar.sheet, action.damageType);
-      if (mult !== 1) {
-        magnitude = applyDamageMultiplier(magnitude, mult);
-        resistTag = ` (${multiplierLabel(mult)})`;
+      let magnitude = Math.max(0, amountRoll.total);
+      // Save-based spells scale the rolled damage (half / none on a save).
+      if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
+      let resistTag = '';
+      if (action.effect === 'damage' && hit && targetChar) {
+        const mult = damageMultiplier(targetChar.sheet, action.damageType);
+        if (mult !== 1) {
+          magnitude = applyDamageMultiplier(magnitude, mult);
+          resistTag = ` (${multiplierLabel(mult)})`;
+        }
       }
-    }
-    const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
-    const delta = action.effect === 'heal' ? applied : -applied;
+      const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
+      const delta = action.effect === 'heal' ? applied : -applied;
 
-    // Apply to the target's HP (character-backed or bare token bar) + float.
-    let hpNote = '';
-    if (applied !== 0) {
-      if (targetChar) {
-        const { character: updated, note } = applyHpDelta(io, d.campaignId, targetChar, delta);
-        const nh = systemFor(updated.system).hp(updated.sheet);
-        hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
-        undo.push({ t: 'hp', characterId: targetChar.id, delta });
-      } else if (tgt.bar) {
-        const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
-        const nh = Math.max(0, Math.min(cap, tgt.bar.hp + delta));
-        tokens.update(tgt.id, { bar: { hp: nh, maxHp: tgt.bar.maxHp } });
-        io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tgt.id)! });
-        syncMapVision(io, d.campaignId, src.mapId);
-        hpNote = ` (${tgt.name} ${nh}/${tgt.bar.maxHp})`;
-        undo.push({ t: 'hp', tokenId: tgt.id, delta });
+      // Apply to the target's HP (character-backed or bare token bar) + float.
+      let hpNote = '';
+      if (applied !== 0) {
+        if (targetChar) {
+          const { character: updated, note } = applyHpDelta(io, d.campaignId, targetChar, delta);
+          const nh = systemFor(updated.system).hp(updated.sheet);
+          hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
+          undo.push({ t: 'hp', characterId: targetChar.id, delta });
+        } else if (tgt.bar) {
+          const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
+          const nh = Math.max(0, Math.min(cap, tgt.bar.hp + delta));
+          tokens.update(tgt.id, { bar: { hp: nh, maxHp: tgt.bar.maxHp } });
+          io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tgt.id)! });
+          syncMapVision(io, d.campaignId, src.mapId);
+          hpNote = ` (${tgt.name} ${nh}/${tgt.bar.maxHp})`;
+          undo.push({ t: 'hp', tokenId: tgt.id, delta });
+        }
+        floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
       }
-      floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
-    }
-    if (resistTag) hitLabel += resistTag;
+      if (resistTag) hitLabel += resistTag;
 
-    // Consume a used item (decrement the actor's inventory row). Re-read the
-    // character first: a self-heal above may have just changed its sheet, and
-    // we must not clobber that HP change.
-    if (action.consumesItem && action.source === 'item') {
-      const fresh = characters.byId(actor.id) ?? actor;
-      const inv = Array.isArray(fresh.sheet.inventory) ? [...(fresh.sheet.inventory as SheetData[])] : [];
-      const row = inv[action.index];
-      if (row) {
-        inv[action.index] = { ...row, qty: Math.max(0, num(row, 'qty', 1) - 1) };
-        const sheet = { ...fresh.sheet, inventory: inv };
-        characters.update(actor.id, undefined, sheet);
-        const updatedActor = characters.byId(actor.id)!;
-        io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-        if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-        undo.push({ t: 'item', characterId: actor.id, index: action.index });
+      // Consume a used item (decrement the actor's inventory row). Re-read the
+      // character first: a self-heal above may have just changed its sheet, and
+      // we must not clobber that HP change.
+      if (action.consumesItem && action.source === 'item') {
+        const fresh = characters.byId(actor.id) ?? actor;
+        const inv = Array.isArray(fresh.sheet.inventory) ? [...(fresh.sheet.inventory as SheetData[])] : [];
+        const row = inv[action.index];
+        if (row) {
+          inv[action.index] = { ...row, qty: Math.max(0, num(row, 'qty', 1) - 1) };
+          const sheet = { ...fresh.sheet, inventory: inv };
+          characters.update(actor.id, undefined, sheet);
+          const updatedActor = characters.byId(actor.id)!;
+          io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          undo.push({ t: 'item', characterId: actor.id, index: action.index });
+        }
       }
-    }
 
-    // Decrement ammo on a weapon that tracks it (leave untouched if the
-    // "Ammo left" field was never set — that means this weapon isn't tracked).
-    if (action.source === 'attack') {
-      const fresh = characters.byId(actor.id) ?? actor;
-      const atks = Array.isArray(fresh.sheet.attacks) ? [...(fresh.sheet.attacks as SheetData[])] : [];
-      const row = atks[action.index];
-      const ammo = row ? num(row, 'ammo', -1) : -1;
-      if (row && ammo > 0) {
-        const before = atks.map((r) => ({ ...r }));
-        atks[action.index] = { ...row, ammo: ammo - 1 };
-        const sheet = { ...fresh.sheet, attacks: atks };
-        characters.update(actor.id, undefined, sheet);
-        const updatedActor = characters.byId(actor.id)!;
-        io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-        if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-        undo.push({ t: 'field', characterId: actor.id, key: 'attacks', value: before });
+      // Decrement ammo on a weapon that tracks it (leave untouched if the
+      // "Ammo left" field was never set — that means this weapon isn't tracked).
+      if (action.source === 'attack') {
+        const fresh = characters.byId(actor.id) ?? actor;
+        const atks = Array.isArray(fresh.sheet.attacks) ? [...(fresh.sheet.attacks as SheetData[])] : [];
+        const row = atks[action.index];
+        const ammo = row ? num(row, 'ammo', -1) : -1;
+        if (row && ammo > 0) {
+          const before = atks.map((r) => ({ ...r }));
+          atks[action.index] = { ...row, ammo: ammo - 1 };
+          const sheet = { ...fresh.sheet, attacks: atks };
+          characters.update(actor.id, undefined, sheet);
+          const updatedActor = characters.byId(actor.id)!;
+          io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          undo.push({ t: 'field', characterId: actor.id, key: 'attacks', value: before });
+        }
       }
-    }
 
-    const verb = action.effect === 'heal' ? 'uses' : 'attacks';
-    const outcome = action.effect === 'heal'
-      ? `heals ${applied}`
-      : hit ? `${applied} damage` : 'no damage';
-    const text = `${actor.name} ${verb} ${action.effect === 'heal' ? action.label + ' on' : ''} ${tgt.name}${action.effect === 'heal' ? '' : ': ' + action.label}${hitLabel} · ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim();
-    // Show the damage/heal dice as the card, unless it was a clean miss.
-    const cardRoll = attackBreakdown && !hit ? attackBreakdown : amountRoll;
-    const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
-    }, undo.length > 0 ? undo : undefined);
-    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      const verb = action.effect === 'heal' ? 'uses' : 'attacks';
+      const outcome = action.effect === 'heal'
+        ? `heals ${applied}`
+        : hit ? `${applied} damage` : 'no damage';
+      // A save-based action already posted its own card for the save roll —
+      // this card is damage-only, not a restatement of the attack/target line.
+      const text = deferredSave
+        ? `${actor.name}'s ${action.label} — ${tgt.name}: ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim()
+        : `${actor.name} ${verb} ${action.effect === 'heal' ? action.label + ' on' : ''} ${tgt.name}${action.effect === 'heal' ? '' : ': ' + action.label}${hitLabel} · ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim();
+      // Show the damage/heal dice as the card, unless it was a clean miss.
+      const cardRoll = attackBreakdown && !hit && !deferredSave ? attackBreakdown : amountRoll;
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
+      }, undo.length > 0 ? undo : undefined);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    };
+
+    if (deferredSave) {
+      const { total, threshold, label, passed } = deferredSave;
+      const noDamage = saveScale === 0;
+      const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${threshold} · ${passed ? 'SAVE' : 'FAIL'}${noDamage ? ' · no damage' : ''}`;
+      const saveMsg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'roll', text: saveText,
+        roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
+      }, noDamage && undo.length > 0 ? undo : undefined);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: saveMsg });
+      if (noDamage) return;
+      setTimeout(resolveDamage, SAVE_STEP_DELAY_MS);
+      return;
+    }
+    resolveDamage();
   }));
 
   // Lock in an AoE spell's template: recompute (never trust the client) which

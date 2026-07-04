@@ -541,7 +541,7 @@ export const dnd5e: SystemSchema = {
   saveCheck(sheet: SheetData, saveId: string, dc: number): { expr: string; threshold: number; label: string } {
     const ability = ABILITIES.find((a) => a.id === saveId) ?? ABILITIES[0];
     const pb = profBonus(num(sheet, 'level', 1));
-    const mod = abilityMod(num(sheet, ability.id, 10)) + (bool(sheet, `save_${ability.id}`) ? pb : 0);
+    const mod = abilityMod(num(sheet, ability.id, 10)) + (bool(sheet, `save_${ability.id}`) ? pb : 0) + equippedItemBonuses(sheet).save;
     return { expr: `1d20${fmtMod(mod)}`, threshold: dc, label: `${ability.label} save` };
   },
 };

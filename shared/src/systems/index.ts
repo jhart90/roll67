@@ -9,6 +9,7 @@ export * from './currency.js';
 export * from './spells.js';
 export * from './classes5e.js';
 export * from './levelup5e.js';
+export * from './npcBoost5e.js';
 export * from './features5e.js';
 export * from './feats5e.js';
 export * from './subclassFeatures5e.js';

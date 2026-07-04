@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { Character, SheetData } from 'shared';
 import {
-  canEditCharacter, castableLevels, combatActions, spellSlots, systemFor,
+  canEditCharacter, castableLevels, combatActions, needsNpcBoost, spellSlots, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { Compendium } from './Compendium';
 import { AssetPicker } from './AssetPicker';
 import { LevelUpWizard } from './LevelUpWizard';
+import { NpcBoostWizard } from './NpcBoostWizard';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnLevelUpWizard } from './SwnLevelUpWizard';
 import { SwnFeatures } from './SwnFeatures';
@@ -478,7 +479,9 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
         {showCompendium && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
         {showLevelUp && (character.system === 'swn'
           ? <SwnLevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />
-          : <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />)}
+          : needsNpcBoost(String(character.sheet.class ?? ''))
+            ? <NpcBoostWizard character={character} onClose={() => setShowLevelUp(false)} />
+            : <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />)}
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (

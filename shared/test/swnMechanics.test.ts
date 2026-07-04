@@ -163,6 +163,12 @@ describe('Phase 7: SWN gear/economy', () => {
     expect(swn.derive(sheet).save_physical).toBe(Number(base) - 2);
   });
 
+  it('saveCheck (used to resolve an actual forced save) also carries the equipped item bonus', () => {
+    const sheet = char({ level: 1, str: 10, dex: 10, con: 10, inventory: [{ name: 'Ward Charm', saveBonus: 2, equipped: true }] });
+    const base = swn.saveCheck(char({ level: 1, str: 10, dex: 10, con: 10 }), 'physical', 0).threshold;
+    expect(swn.saveCheck(sheet, 'physical', 0).threshold).toBe(base - 2);
+  });
+
   it('encumbrance sums qty x enc across inventory, and capacity scales with STR', () => {
     const sheet = char({
       str: 14, // +1 mod

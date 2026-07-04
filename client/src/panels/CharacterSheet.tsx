@@ -422,10 +422,9 @@ function hashStr(s: string): number {
   return h;
 }
 
-export function CharacterSheet() {
+export function CharacterSheetWindow({ characterId, onClose }: { characterId: string; onClose: () => void }) {
   const you = useGameStore((s) => s.you);
-  const character = useGameStore((s) =>
-    s.sheetCharacterId ? s.characters.find((c) => c.id === s.sheetCharacterId) : undefined);
+  const character = useGameStore((s) => s.characters.find((c) => c.id === characterId));
   const [tabId, setTabId] = useState<string | null>(null);
   const [showCompendium, setShowCompendium] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
@@ -452,9 +451,7 @@ export function CharacterSheet() {
   }
 
   return (
-    <div className="sheet-backdrop" onPointerDown={(e) => {
-      if (e.target === e.currentTarget) useGameStore.getState().openSheet(null);
-    }}>
+    <>
       <div className="sheet-window">
         <div className="sheet-header">
           <input
@@ -472,7 +469,6 @@ export function CharacterSheet() {
           <span className="spacer" />
           {editable && <button className="link" onClick={() => setShowLevelUp(true)}>⬆ Level Up</button>}
           {editable && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
-          <button className="link" onClick={() => useGameStore.getState().openSheet(null)}>close</button>
         </div>
 
         {showCompendium && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
@@ -513,7 +509,7 @@ export function CharacterSheet() {
                   onClick={() => {
                     if (confirm(`Delete character "${character.name}"? This can't be undone.`)) {
                       intents.deleteCharacter(character.id);
-                      useGameStore.getState().openSheet(null);
+                      onClose();
                     }
                   }}
                 >
@@ -533,6 +529,6 @@ export function CharacterSheet() {
           onClose={() => setPickingField(null)}
         />
       )}
-    </div>
+    </>
   );
 }

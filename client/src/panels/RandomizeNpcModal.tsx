@@ -18,13 +18,10 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
   let lastCategory = '';
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 65 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="sheet-window npc-library">
         <div className="sheet-header">
           <h3 style={{ margin: 0 }}>Randomize an NPC</h3>
           <span className="dim">pick a model to base stats, name &amp; flavor on</span>
-          <span className="spacer" />
-          <button className="link" onClick={onClose}>close</button>
         </div>
 
         <div className="npc-controls">
@@ -71,7 +68,6 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
           </table>
         </div>
       </div>
-    </div>
   );
 }
 

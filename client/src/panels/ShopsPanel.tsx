@@ -76,9 +76,8 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
   }
 
   return (
-    <div className="sheet-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="panel shop-editor">
-        <div className="dock-header"><h3>Edit shop</h3><button className="link" onClick={onClose}>close</button></div>
+        <div className="dock-header"><h3>Edit shop</h3></div>
         <div className="row">
           <label style={{ flex: 1 }}>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
           <label style={{ width: 130 }}>Currency
@@ -140,7 +139,6 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
           />
         )}
       </div>
-    </div>
   );
 }
 

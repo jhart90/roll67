@@ -591,6 +591,37 @@ button.link:hover { text-decoration: underline; }
 .chat-input input { margin: 0; flex: 1; }
 .chat-input button { flex: 0 0 auto; }
 
+/* ---------- generic draggable/poppable window chrome ---------- */
+
+.win-frame {
+  position: fixed;
+}
+.win-frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  cursor: move;
+  user-select: none;
+  max-width: 96vw;
+}
+.win-frame-bar-popped {
+  border-radius: 0;
+  max-width: none;
+  cursor: default;
+}
+.win-frame-title {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---------- character sheet ---------- */
 
 .sheet-backdrop {

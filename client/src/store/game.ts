@@ -12,6 +12,7 @@ import {
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type YouArePayload,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
+import { closeWindow, openWindow } from './windowManager';
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn';
 
@@ -89,7 +90,6 @@ interface GameState {
   inspectorTokenId: string | null;
   openInspector(id: string | null): void;
   selectedLightId: string | null;
-  sheetCharacterId: string | null;
   /** Local-only: mute audio on this device without affecting others. */
   clientMuted: boolean;
   setClientMuted(m: boolean): void;
@@ -158,8 +158,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   floats: [],
   tableToasts: [],
   beginTargeting(characterId, sourceTokenId, action, adv) {
-    // Clear the sheet so the map is usable; the banner/popup drives selection.
-    set({ targeting: { characterId, sourceTokenId, action, adv }, sheetCharacterId: null, tool: 'select', selectedTokenId: null });
+    // Character sheets are movable windows now (not a full-screen modal), so
+    // the map stays clickable underneath them — no need to force one closed.
+    set({ targeting: { characterId, sourceTokenId, action, adv }, tool: 'select', selectedTokenId: null });
   },
   cancelTargeting() { set({ targeting: null }); },
   resolveTarget(targetTokenId) {
@@ -196,7 +197,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   inspectorTokenId: null,
   openInspector(inspectorTokenId) { set({ inspectorTokenId }); },
   selectedLightId: null,
-  sheetCharacterId: null,
   clientMuted: false,
   setClientMuted(clientMuted) { set({ clientMuted }); },
   drawColor: '#e8d27b',
@@ -219,7 +219,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       you: null, campaign: null, members: [], characters: [], mapsMeta: [],
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, explored: null, knownDoors: [],
-      viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null, sheetCharacterId: null,
+      viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
       targeting: null, floats: [], castPrompt: null,
     });
   },
@@ -235,7 +235,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   selectToken(selectedTokenId) { set({ selectedTokenId }); },
   selectLight(selectedLightId) { set({ selectedLightId }); },
-  openSheet(sheetCharacterId) { set({ sheetCharacterId }); },
+  openSheet(characterId) {
+    if (!characterId) return; // legacy "close" signal — each sheet window now closes itself
+    const char = get().characters.find((c) => c.id === characterId);
+    openWindow('characterSheet', characterId, { characterId }, char?.name ?? 'Character');
+  },
   clearError() { set({ errorToast: null }); },
 
   isDm() { return get().you?.role === 'dm'; },
@@ -416,10 +420,8 @@ export function wireSocket(): void {
 
   socket.on(S2C.CHARACTER_REMOVED, ({ characterId }: { characterId: string }) => {
     const s = useGameStore.getState();
-    useGameStore.setState({
-      characters: s.characters.filter((c) => c.id !== characterId),
-      sheetCharacterId: s.sheetCharacterId === characterId ? null : s.sheetCharacterId,
-    });
+    useGameStore.setState({ characters: s.characters.filter((c) => c.id !== characterId) });
+    closeWindow(`characterSheet:${characterId}`);
   });
 
   socket.on(S2C.CHAT, ({ msg }: { msg: ChatMessage }) => {

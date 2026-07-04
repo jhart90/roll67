@@ -90,11 +90,9 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
   }
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="panel levelup handout-window">
         <div className="dock-header">
           <h3>{handout ? 'Edit handout' : 'New handout'}</h3>
-          <button className="link" onClick={onClose}>close</button>
         </div>
 
         <label>
@@ -153,7 +151,6 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
           </div>
         )}
       </div>
-    </div>
   );
 }
 

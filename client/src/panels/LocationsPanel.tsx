@@ -53,9 +53,8 @@ export function LocationEditor({ loc, onClose }: { loc: LocationNode; onClose: (
   }
 
   return (
-    <div className="sheet-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="panel" style={{ width: 460, maxHeight: '92vh', overflowY: 'auto' }}>
-        <div className="dock-header"><h3>Edit location</h3><button className="link" onClick={onClose}>close</button></div>
+        <div className="dock-header"><h3>Edit location</h3></div>
         <div className="row">
           <label style={{ flex: 1 }}>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
           <label style={{ width: 130 }}>Type
@@ -84,7 +83,6 @@ export function LocationEditor({ loc, onClose }: { loc: LocationNode; onClose: (
           <button className="link danger" onClick={() => { if (confirm(`Delete "${loc.name}"?`)) { intents.deleteLocation(loc.id); onClose(); } }}>delete</button>
         </div>
       </div>
-    </div>
   );
 }
 

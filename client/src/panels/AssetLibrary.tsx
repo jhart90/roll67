@@ -48,13 +48,10 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="sheet-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="sheet-window npc-library">
         <div className="sheet-header">
           <h3 style={{ margin: 0 }}>Asset Library</h3>
           <span className="dim">{assets.length} images</span>
-          <span className="spacer" />
-          <button className="link" onClick={onClose}>close</button>
         </div>
 
         <div className="asset-body">
@@ -97,6 +94,5 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
-    </div>
   );
 }

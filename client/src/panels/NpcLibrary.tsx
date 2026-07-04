@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { CLASS_LIST_5E, npcsForSystem, SWN_CLASS_LIST, type NpcEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { openWindow } from '../store/windowManager';
 import { useNpcPicker } from './useNpcPicker';
-import { RandomizeNpcModal } from './RandomizeNpcModal';
 
 export function NpcLibrary({ onClose }: { onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign);
   const [added, setAdded] = useState<Record<string, boolean>>({});
-  const [showRandomize, setShowRandomize] = useState(false);
 
   const system = campaign?.system ?? 'dnd5e';
   const { search, setSearch, category, setCategory, categories, sort, setSort, entries } = useNpcPicker(system);
@@ -33,16 +32,12 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
   let lastCategory = '';
 
   return (
-    <div className="sheet-backdrop" onPointerDown={(e) => {
-      if (e.target === e.currentTarget) onClose();
-    }}>
       <div className="sheet-window npc-library">
         <div className="sheet-header">
           <h3 style={{ margin: 0 }}>NPC Library</h3>
           <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : 'Stars Without Number'}</span>
           <span className="spacer" />
-          <button className="link" title="Randomize an NPC based on a compendium model" onClick={() => setShowRandomize(true)}>🎲 Random NPC</button>
-          <button className="link" onClick={onClose}>close</button>
+          <button className="link" title="Randomize an NPC based on a compendium model" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
 
         <div className="npc-quickadd">
@@ -119,9 +114,6 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
           </table>
         </div>
       </div>
-
-      {showRandomize && <RandomizeNpcModal onClose={() => setShowRandomize(false)} />}
-    </div>
   );
 }
 

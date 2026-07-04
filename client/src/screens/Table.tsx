@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { intents, useGameStore, wireSocket, type Tool } from '../store/game';
+import { openWindow } from '../store/windowManager';
 import { MapStage } from '../table/MapStage';
 import { MapManager } from '../table/dm/MapManager';
 import { TokenInspector } from '../table/TokenInspector';
 import { LightInspector } from '../table/LightInspector';
 import { ChatPanel } from '../panels/ChatPanel';
-import { CharacterSheet } from '../panels/CharacterSheet';
 import { InitiativePanel } from '../panels/InitiativePanel';
 import { WorldTreePanel } from '../panels/WorldTreePanel';
 import { ShopStorefront } from '../panels/ShopStorefront';
@@ -17,8 +17,8 @@ import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
 import { AudioPlayer } from '../table/AudioPlayer';
-import { AssetLibrary } from '../panels/AssetLibrary';
 import { Jukebox } from '../panels/Jukebox';
+import { WindowHost } from '../window/WindowHost';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -52,7 +52,6 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const wallFlip = useGameStore((s) => s.wallFlip);
   const [showMaps, setShowMaps] = useState(false);
   const [showDice, setShowDice] = useState(false);
-  const [showAssets, setShowAssets] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab>('world');
 
@@ -96,7 +95,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               </select>
             </label>
             <button onClick={() => setShowMaps((v) => !v)}>Maps</button>
-            <button onClick={() => setShowAssets((v) => !v)}>Assets</button>
+            <button onClick={() => openWindow('assetLibrary', 'main', {}, 'Asset Library')}>Assets</button>
           </>
         )}
         <button onClick={() => setShowAudio((v) => !v)} title="Jukebox">🎵</button>
@@ -200,14 +199,13 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         {showDice && <DiceRoller onClose={() => setShowDice(false)} />}
 
-        {showAssets && isDm && <AssetLibrary onClose={() => setShowAssets(false)} />}
         {showAudio && (
           <div className="overlay-panel"><Jukebox onClose={() => setShowAudio(false)} /></div>
         )}
 
         <TokenInspector />
         <LightInspector />
-        <CharacterSheet />
+        <WindowHost />
         <DiceOverlay />
         <Toolbar />
         <PresenceBar />

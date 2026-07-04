@@ -1,13 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Character, Handout, LocationNode, MapMeta, RollableTable, Shop } from 'shared';
 import { intents, useGameStore } from '../store/game';
-import { LocationEditor } from './LocationsPanel';
-import { ShopEditor } from './ShopsPanel';
-import { TableEditor } from './RollableTables';
-import { HandoutWindow } from './HandoutsPanel';
-import { NpcLibrary } from './NpcLibrary';
-import { RandomizeNpcModal } from './RandomizeNpcModal';
-import { MapEditorWindow } from '../table/dm/MapManager';
+import { openWindow } from '../store/windowManager';
 
 type Kind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map';
 
@@ -46,11 +40,7 @@ export function WorldTreePanel() {
   const isDm = you?.role === 'dm';
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<{ kind: 'location' | 'shop' | 'table' | 'handout'; id: string | 'new' } | null>(null);
-  const [editingMap, setEditingMap] = useState<string | null>(null);
   const [reading, setReading] = useState<TreeNode | null>(null);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [showRandomize, setShowRandomize] = useState(false);
   // The dragged item lives in a ref so `drop` reads it synchronously (React
   // batches state, so it wouldn't be set yet when a fast drop fires).
   const dragRef = useRef<{ kind: Kind; id: string } | null>(null);
@@ -80,9 +70,14 @@ export function WorldTreePanel() {
   // The "open editor" action (right-click / double-click).
   function open(node: TreeNode) {
     if (node.kind === 'character') { useGameStore.getState().openSheet(node.id); return; }
-    if (node.kind === 'map') { if (isDm) setEditingMap(node.id); else intents.viewMap(node.id); return; }
-    // The DM edits; players get a read-only view of what they can see.
-    if (isDm) setEditing({ kind: node.kind as 'location' | 'shop' | 'table' | 'handout', id: node.id });
+    if (node.kind === 'map') {
+      if (isDm) openWindow('mapEditor', node.id, {}, node.name || 'Edit map');
+      else intents.viewMap(node.id);
+      return;
+    }
+    // The DM edits (each in its own draggable window); players get a
+    // read-only view of what they can see.
+    if (isDm) openWindow(node.kind as 'location' | 'shop' | 'table' | 'handout', node.id, {}, node.name);
     else setReading(node);
   }
 
@@ -172,13 +167,13 @@ export function WorldTreePanel() {
 
       {isDm && (
         <div className="wt-toolbar">
-          <button className="btn btn-sm" onClick={() => setEditingMap('new')}>+ Map</button>
+          <button className="btn btn-sm" onClick={() => openWindow('mapEditor', 'new', {}, 'New map')}>+ Map</button>
           <button className="btn btn-sm" onClick={() => intents.createLocation('New location', null)}>+ Location</button>
-          <button className="btn btn-sm" onClick={() => setShowLibrary(true)}>+ Character</button>
+          <button className="btn btn-sm" onClick={() => openWindow('npcLibrary', 'main', {}, 'NPC Library')}>+ Character</button>
           <button className="btn btn-sm" onClick={() => intents.createShop('New shop')}>+ Shop</button>
           <button className="btn btn-sm" onClick={() => intents.createTable('New table')}>+ Table</button>
-          <button className="btn btn-sm" onClick={() => setEditing({ kind: 'handout', id: 'new' })}>+ Handout</button>
-          <button className="btn btn-sm" onClick={() => setShowRandomize(true)}>🎲 Random NPC</button>
+          <button className="btn btn-sm" onClick={() => openWindow('handout', 'new', {}, 'New handout')}>+ Handout</button>
+          <button className="btn btn-sm" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
       )}
 
@@ -192,27 +187,6 @@ export function WorldTreePanel() {
       </div>
       {isDm && <p className="dim wt-hint">Drag an item onto another to nest it; drag to empty space to move it to the top level.</p>}
 
-      {editing?.kind === 'location' && (() => {
-        const loc = locations.find((l) => l.id === editing.id);
-        return loc ? <LocationEditor loc={loc} onClose={() => setEditing(null)} /> : null;
-      })()}
-      {editing?.kind === 'shop' && (() => {
-        const shop = shops.find((s) => s.id === editing.id);
-        return shop ? <ShopEditor shop={shop} onClose={() => setEditing(null)} /> : null;
-      })()}
-      {editing?.kind === 'table' && (() => {
-        const table = tables.find((t) => t.id === editing.id);
-        return table ? <TableEditor table={table} onClose={() => setEditing(null)} /> : null;
-      })()}
-      {editing?.kind === 'handout' && (
-        <HandoutWindow
-          handout={editing.id === 'new' ? null : handouts.find((h) => h.id === editing.id) ?? null}
-          onClose={() => setEditing(null)}
-        />
-      )}
-      {editingMap && <MapEditorWindow mapId={editingMap} onClose={() => setEditingMap(null)} />}
-      {showLibrary && <NpcLibrary onClose={() => setShowLibrary(false)} />}
-      {showRandomize && <RandomizeNpcModal onClose={() => setShowRandomize(false)} />}
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}
     </div>
   );

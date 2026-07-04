@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GridConfig } from 'shared';
 import { uploadFile } from '../../api';
 import { intents, useGameStore } from '../../store/game';
+import { openWindow } from '../../store/windowManager';
 
 function GridField({
   label, value, onCommit, step = 1, min,
@@ -71,11 +72,9 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
   }
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="panel levelup map-window">
         <div className="dock-header">
           <h3>{mapId === 'new' ? 'New map' : 'Edit map'}</h3>
-          <button className="link" onClick={onClose}>close</button>
         </div>
 
         {mapId === 'new' ? (
@@ -134,7 +133,6 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
           </>
         )}
       </div>
-    </div>
   );
 }
 
@@ -143,7 +141,6 @@ export function MapManager({ onClose }: { onClose: () => void }) {
   const mapsMeta = useGameStore((s) => s.mapsMeta);
   const map = useGameStore((s) => s.map);
   const activeMapId = campaign?.activeMapId ?? null;
-  const [editingMap, setEditingMap] = useState<string | 'new' | null>(null);
 
   if (!campaign) return null;
 
@@ -171,7 +168,7 @@ export function MapManager({ onClose }: { onClose: () => void }) {
             <button
               className="link"
               title="Edit this map's name, background, and grid"
-              onClick={() => setEditingMap(m.id)}
+              onClick={() => openWindow('mapEditor', m.id, {}, m.name || 'Edit map')}
             >
               ✏️
             </button>
@@ -200,9 +197,7 @@ export function MapManager({ onClose }: { onClose: () => void }) {
         Click a map to view it · ✏️ edits its details · ⭐ makes it the party map for players.
       </p>
 
-      <button className="btn" onClick={() => setEditingMap('new')}>+ New map</button>
-
-      {editingMap && <MapEditorWindow mapId={editingMap} onClose={() => setEditingMap(null)} />}
+      <button className="btn" onClick={() => openWindow('mapEditor', 'new', {}, 'New map')}>+ New map</button>
     </div>
   );
 }

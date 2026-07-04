@@ -14,9 +14,8 @@ export function TableEditor({ table, onClose }: { table: RollableTable; onClose:
   }
 
   return (
-    <div className="sheet-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="panel" style={{ width: 420, maxHeight: '90vh', overflowY: 'auto' }}>
-        <div className="dock-header"><h3>Edit table</h3><button className="link" onClick={onClose}>close</button></div>
+        <div className="dock-header"><h3>Edit table</h3></div>
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
         <label className="check-row">
           <input type="checkbox" checked={playersCanRoll} onChange={(e) => setPlayers(e.target.checked)} />
@@ -33,7 +32,6 @@ export function TableEditor({ table, onClose }: { table: RollableTable; onClose:
           <button className="link danger" onClick={() => { if (confirm(`Delete table "${table.name}"?`)) { intents.deleteTable(table.id); onClose(); } }}>delete</button>
         </div>
       </div>
-    </div>
   );
 }
 

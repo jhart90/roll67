@@ -4,7 +4,7 @@ import { hexToPixel } from '../src/hex/pixel.js';
 import type { AoeSpec, GridConfig } from '../src/types.js';
 
 const GRID: GridConfig = {
-  hexSize: 40, originX: 0, originY: 0, cols: 100, rows: 100, globalIllumination: false, feetPerHex: 5,
+  hexSize: 40, originX: 0, originY: 0, cols: 100, rows: 100, gridEnabled: true, lighting: 'dark', feetPerHex: 5,
 };
 
 describe('pointInAoe', () => {

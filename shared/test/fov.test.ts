@@ -7,10 +7,11 @@ import { hexDistance, hexRange } from '../src/hex/coords.js';
 
 const GRID: GridConfig = {
   hexSize: 10, originX: 0, originY: 0, cols: 40, rows: 40,
-  globalIllumination: true, feetPerHex: 5,
+  gridEnabled: true, lighting: 'light', feetPerHex: 5,
 };
 
-const DARK_GRID: GridConfig = { ...GRID, globalIllumination: false };
+const DARK_GRID: GridConfig = { ...GRID, lighting: 'dark' };
+const DIM_GRID: GridConfig = { ...GRID, lighting: 'dim' };
 
 const EYES: VisionStats = { visionRange: 10, darkvision: 0 };
 const VIEWER: Hex = { q: 4, r: 10 };
@@ -170,5 +171,23 @@ describe('lighting', () => {
     const lit = litHexes({ grid: DARK_GRID, walls: [wall], doors: [], lights: [torch] });
     expect(lit.has(packHex({ q: 8, r: 10 }))).toBe(false); // left of wall (px x≈225)
     expect(lit.has(packHex({ q: 11, r: 10 }))).toBe(true); // torch side
+  });
+
+  it('dim lighting: sees an ambient radius around itself with no light source or darkvision', () => {
+    const visible = fov({ grid: DIM_GRID });
+    for (const h of hexRange(VIEWER, 5)) {
+      if (!inBounds(h, DIM_GRID)) continue;
+      expect(visible.has(packHex(h)), `hex ${h.q},${h.r}`).toBe(hexDistance(VIEWER, h) <= 2);
+    }
+  });
+
+  it('dim lighting still lets a torch or darkvision see further than the ambient radius', () => {
+    const torchHex: Hex = { q: 10, r: 10 };
+    const torchPx = hexToPixel(torchHex, DIM_GRID);
+    const torch: Light = { id: 't', x: torchPx.x, y: torchPx.y, brightRadius: 1, dimRadius: 2 };
+    const visible = fov({ grid: DIM_GRID, lights: [torch], stats: { visionRange: 20, darkvision: 0 } });
+    expect(visible.has(packHex(torchHex))).toBe(true);
+    const withDarkvision = fov({ grid: DIM_GRID, stats: { visionRange: 10, darkvision: 4 } });
+    expect(withDarkvision.has(packHex({ q: 4, r: 6 }))).toBe(true); // 4 hexes away, past the dim ambient radius
   });
 });

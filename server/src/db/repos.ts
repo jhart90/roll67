@@ -514,9 +514,20 @@ export const DEFAULT_GRID: GridConfig = {
   originY: 0,
   cols: 40,
   rows: 30,
-  globalIllumination: true,
+  gridEnabled: true,
+  lighting: 'light',
   feetPerHex: 5,
 };
+
+/** Backfills grids persisted before `gridEnabled`/`lighting` existed (which
+ *  only ever had the old boolean `globalIllumination`). */
+function normalizeGrid(raw: GridConfig & { globalIllumination?: boolean }): GridConfig {
+  return {
+    ...raw,
+    gridEnabled: raw.gridEnabled ?? true,
+    lighting: raw.lighting ?? (raw.globalIllumination ? 'light' : 'dark'),
+  };
+}
 
 function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string | null } {
   const bg = row.bg_asset_id ? assets.byId(row.bg_asset_id) : undefined;
@@ -529,7 +540,7 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     bgUrl: bg ? `/uploads/${bg.id}.${bg.ext}` : null,
     bgWidth: bg?.width ?? 0,
     bgHeight: bg?.height ?? 0,
-    grid: JSON.parse(row.grid_json),
+    grid: normalizeGrid(JSON.parse(row.grid_json)),
     walls: JSON.parse(row.walls_json),
     doors: JSON.parse(row.doors_json),
     lights: JSON.parse(row.lights_json),

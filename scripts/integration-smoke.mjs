@@ -289,9 +289,9 @@ async function main() {
 
   // ---------- lighting ----------
   console.log('lighting:');
-  // Turn off global illumination -> player vision limited to darkvision (0) + lights.
+  // Switch to dark lighting -> player vision limited to darkvision (0) + lights.
   const darkUpdate = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
-  dmSock.emit('setGridConfig', { mapId, grid: { globalIllumination: false } });
+  dmSock.emit('setGridConfig', { mapId, grid: { lighting: 'dark' } });
   await darkUpdate;
   ok(true, 'darkness hides the monster (no lights, no darkvision)');
 
@@ -306,7 +306,7 @@ async function main() {
   const litMap = await waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.lights).catch(() => null);
   const torchId = litMap?.lights?.at(-1)?.id;
   if (torchId) dmSock.emit('deleteLight', { mapId, lightId: torchId });
-  dmSock.emit('setGridConfig', { mapId, grid: { globalIllumination: true } });
+  dmSock.emit('setGridConfig', { mapId, grid: { lighting: 'light' } });
   await new Promise((r) => setTimeout(r, 400));
 
   // ---------- DM view-as ----------

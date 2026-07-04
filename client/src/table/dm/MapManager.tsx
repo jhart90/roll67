@@ -114,21 +114,31 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
             {loaded.bgUrl && <img className="handout-img" src={loaded.bgUrl} alt={loaded.name} />}
 
             <h4>Hex grid</h4>
-            <div className="grid-fields">
-              <GridField label="Hex size" value={grid.hexSize} onCommit={(v) => setGrid({ hexSize: v })} min={8} />
-              <GridField label="Origin X" value={grid.originX} onCommit={(v) => setGrid({ originX: v })} />
-              <GridField label="Origin Y" value={grid.originY} onCommit={(v) => setGrid({ originY: v })} />
-              <GridField label="Columns" value={grid.cols} onCommit={(v) => setGrid({ cols: v })} min={1} />
-              <GridField label="Rows" value={grid.rows} onCommit={(v) => setGrid({ rows: v })} min={1} />
-              <GridField label="Feet per hex" value={grid.feetPerHex} onCommit={(v) => setGrid({ feetPerHex: v })} min={1} />
-            </div>
             <label className="check-row">
               <input
                 type="checkbox"
-                checked={grid.globalIllumination}
-                onChange={(e) => setGrid({ globalIllumination: e.target.checked })}
+                checked={grid.gridEnabled}
+                onChange={(e) => setGrid({ gridEnabled: e.target.checked })}
               />
-              Global illumination (outdoor daylight)
+              Show hex grid
+            </label>
+            {grid.gridEnabled && (
+              <div className="grid-fields">
+                <GridField label="Hex size" value={grid.hexSize} onCommit={(v) => setGrid({ hexSize: v })} min={8} />
+                <GridField label="Origin X" value={grid.originX} onCommit={(v) => setGrid({ originX: v })} />
+                <GridField label="Origin Y" value={grid.originY} onCommit={(v) => setGrid({ originY: v })} />
+                <GridField label="Columns" value={grid.cols} onCommit={(v) => setGrid({ cols: v })} min={1} />
+                <GridField label="Rows" value={grid.rows} onCommit={(v) => setGrid({ rows: v })} min={1} />
+                <GridField label="Feet per hex" value={grid.feetPerHex} onCommit={(v) => setGrid({ feetPerHex: v })} min={1} />
+              </div>
+            )}
+            <label className="lu-field">
+              Lighting
+              <select value={grid.lighting} onChange={(e) => setGrid({ lighting: e.target.value as GridConfig['lighting'] })}>
+                <option value="dark">Dark</option>
+                <option value="dim">Dim</option>
+                <option value="light">Light</option>
+              </select>
             </label>
           </>
         )}

@@ -4,7 +4,7 @@ import { canReachHex, reachableAlong } from '../src/vision/movement.js';
 
 const GRID: GridConfig = {
   hexSize: 10, originX: 0, originY: 0, cols: 40, rows: 40,
-  globalIllumination: true, feetPerHex: 5,
+  gridEnabled: true, lighting: 'light', feetPerHex: 5,
 };
 
 const FROM: Hex = { q: 4, r: 10 };

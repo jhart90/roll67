@@ -57,6 +57,15 @@ export interface AoeSpec {
   widthFt?: number;
 }
 
+/**
+ * Map-wide ambient lighting level (independent of individual light sources):
+ * 'light' = outdoor daylight, every hex in range with LOS is lit; 'dim' =
+ * needs a light source or darkvision to see past a short ambient radius
+ * around each viewer; 'dark' = true darkness, only lit hexes or darkvision
+ * reveal anything.
+ */
+export type LightingLevel = 'dark' | 'dim' | 'light';
+
 export interface GridConfig {
   /** Center-to-corner radius of a hex, in background-image pixels. */
   hexSize: number;
@@ -65,8 +74,10 @@ export interface GridConfig {
   /** Bounds used to limit fog/vision computation, in hex counts. */
   cols: number;
   rows: number;
-  /** Outdoor daylight: every hex in range with LOS is lit. */
-  globalIllumination: boolean;
+  /** Whether the hex grid lines are drawn; the underlying hex math (snapping,
+   *  distance, vision) still applies either way. */
+  gridEnabled: boolean;
+  lighting: LightingLevel;
   /** Label for the ruler, e.g. 5 (ft per hex). */
   feetPerHex: number;
 }

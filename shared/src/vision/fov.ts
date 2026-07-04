@@ -11,6 +11,10 @@ import { rayBlocked, sightSegments, type Segment } from './raycast.js';
 /** Hard cap on vision radius, to bound raycasting cost. */
 export const MAX_VISION_RADIUS = 40;
 
+/** In 'dim' ambient lighting, every viewer can make out this radius around
+ *  themselves without needing a light source or darkvision. */
+export const DIM_AMBIENT_RADIUS = 2;
+
 /** Is a hex inside the map's rectangular bounds (odd-r offset layout)? */
 export function inBounds(h: Hex, grid: Pick<GridConfig, 'cols' | 'rows'>): boolean {
   const row = h.r;
@@ -43,7 +47,7 @@ export interface FovInput {
 
 /**
  * The set of hexes illuminated by light sources (ignores viewers).
- * With globalIllumination the whole map is lit — callers skip this.
+ * With lighting 'light' the whole map is lit — callers skip this.
  */
 export function litHexes(input: FovInput): Set<number> {
   const lit = new Set<number>();
@@ -83,7 +87,8 @@ export function computeFov(
     if (inBounds(viewer, input.grid)) visible.add(packHex(viewer));
     return visible;
   }
-  const needLightCheck = !input.grid.globalIllumination;
+  const lighting = input.grid.lighting;
+  const needLightCheck = lighting !== 'light';
   const lit = needLightCheck ? (precomputed?.lit ?? litHexes(input)) : undefined;
   const viewerPx = hexToPixel(viewer, input.grid);
   // Sight blockers depend on the viewer's position (one-way walls).
@@ -101,8 +106,9 @@ export function computeFov(
     if (needLightCheck) {
       const isLit = lit!.has(key);
       const inDarkvision = dist <= stats.darkvision;
-      if (!isLit && !inDarkvision) continue;
-      if (isLit && dist > stats.visionRange && !inDarkvision) continue;
+      const inDimAmbient = lighting === 'dim' && dist <= DIM_AMBIENT_RADIUS;
+      if (!isLit && !inDarkvision && !inDimAmbient) continue;
+      if ((isLit || inDimAmbient) && dist > stats.visionRange && !inDarkvision) continue;
     }
     const target = hexToPixel(h, input.grid);
     if (!rayBlocked(viewerPx, target, segs)) visible.add(key);
@@ -115,7 +121,7 @@ export function computeUnionFov(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
 ): Set<number> {
-  const lit = input.grid.globalIllumination ? undefined : litHexes(input);
+  const lit = input.grid.lighting === 'light' ? undefined : litHexes(input);
   const union = new Set<number>();
   for (const v of viewers) {
     for (const key of computeFov(v.hex, v.stats, input, { lit })) {
@@ -149,7 +155,7 @@ export function computeUnionFovBands(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
 ): FovBands {
-  const lit = input.grid.globalIllumination ? undefined : litHexes(input);
+  const lit = input.grid.lighting === 'light' ? undefined : litHexes(input);
   const full = new Set<number>();
   const expanded = new Set<number>();
   for (const v of viewers) {

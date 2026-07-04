@@ -41,7 +41,7 @@ export function BackgroundCanvas({ map }: { map: MapView }) {
       ctx.fillStyle = '#1a1d24';
       ctx.fillRect(0, 0, width, height);
       if (img) ctx.drawImage(img, 0, 0, width, height);
-      drawGrid();
+      if (map.grid.gridEnabled) drawGrid();
     }
 
     if (map.bgUrl) {

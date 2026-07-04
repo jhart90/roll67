@@ -166,7 +166,7 @@ button.link:hover { text-decoration: underline; }
 /* Keep the per-row delete "×" compact so list tables stay tidy. */
 .sheet-list button.link.danger { padding: 2px 8px; }
 
-.sheet-footer { display: flex; justify-content: flex-end; padding: 10px 4px 2px; border-top: 1px solid var(--border); margin-top: 8px; }
+.sheet-delete-row { display: flex; justify-content: center; margin-top: 48px; padding-bottom: 8px; }
 
 .row { display: flex; gap: 8px; align-items: center; }
 .row button { width: auto; }
@@ -734,7 +734,10 @@ button.link:hover { text-decoration: underline; }
   pointer-events: none;
 }
 .toolbar > * { pointer-events: auto; }
-.pill-wrap { position: relative; }
+.pill-wrap { position: relative; cursor: grab; border-radius: 14px; transition: transform 0.1s; }
+.pill-wrap:active { cursor: grabbing; }
+.pill-wrap.pill-drop-target { transform: scale(1.06); }
+.pill-wrap.pill-drop-target .roll-pill { box-shadow: 0 0 0 2px var(--accent), 0 2px 6px rgba(0, 0, 0, 0.4); }
 .roll-pill {
   padding: 5px 12px;
   border-radius: 14px;

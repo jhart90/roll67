@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Character, Macro } from 'shared';
 import { castableLevels, combatActions, systemFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -74,6 +74,10 @@ export function Toolbar() {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newCmd, setNewCmd] = useState('');
+  // The dragged pill id lives in a ref (not state) so a fast drop reads it
+  // synchronously — React batches setState, which can still be null on drop.
+  const dragRef = useRef<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   if (!you) return null;
 
@@ -86,20 +90,51 @@ export function Toolbar() {
     setAdding(false);
   }
 
+  function dropOn(targetId: string) {
+    const draggedId = dragRef.current;
+    dragRef.current = null;
+    setDragOverId(null);
+    if (!draggedId || draggedId === targetId) return;
+    const ids = macros.map((m) => m.id);
+    const from = ids.indexOf(draggedId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, draggedId);
+    intents.reorderMacros(ids);
+  }
+
   return (
     <div className="toolbar">
       {macros.map((m, i) => {
         const { disabled, reason } = pillDisabled(m, characters);
         const kind = m.actionId ? 'Action' : m.characterId ? 'Sheet roll' : m.command;
         return (
-          <div key={m.id} className="pill-wrap">
+          <div
+            key={m.id}
+            className={`pill-wrap ${dragOverId === m.id ? 'pill-drop-target' : ''}`}
+            draggable
+            onDragStart={(e) => {
+              dragRef.current = m.id;
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('text/plain', m.id);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (dragOverId !== m.id) setDragOverId(m.id);
+            }}
+            onDragLeave={() => setDragOverId((id) => (id === m.id ? null : id))}
+            onDrop={(e) => { e.preventDefault(); dropOn(m.id); }}
+            onDragEnd={() => { dragRef.current = null; setDragOverId(null); }}
+          >
             <button
               className={`roll-pill ${disabled ? 'pill-disabled' : ''}`}
               style={{ background: m.color ?? 'var(--panel-2)' }}
               disabled={disabled}
               onClick={() => intents.runMacro(m.id)}
               onContextMenu={(e) => { e.preventDefault(); setEditingId((id) => (id === m.id ? null : m.id)); }}
-              title={disabled ? `${reason} · right-click to edit` : `${kind} · right-click to edit`}
+              title={disabled ? `${reason} · drag to reorder · right-click to edit` : `${kind} · drag to reorder · right-click to edit`}
             >
               {m.name}
             </button>

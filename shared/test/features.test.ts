@@ -196,4 +196,48 @@ describe('subclass feature descriptions', () => {
     const feats = patch.features as Array<{ name: string; description: string }>;
     expect(feats.some((f) => f.name === 'Improved Critical')).toBe(true);
   });
+
+  it('Phase 2 fill-in: companion/resource subclasses and remaining Cleric domains are covered', () => {
+    expect(subclassFeatureAt('Rune Knight', 7)?.name).toBe("Giant's Might");
+    expect(subclassFeatureAt('Psi Warrior', 3)?.name).toBe('Psionic Power');
+    expect(subclassFeatureAt('Echo Knight', 3)?.name).toBe('Manifest Echo');
+    expect(subclassFeatureAt('Way of the Four Elements', 3)?.name).toBe('Disciple of the Elements');
+    expect(subclassFeatureAt('Way of the Kensei', 3)?.name).toBe('Path of the Kensei');
+    expect(subclassFeatureAt('Drakewarden', 3)?.name).toBe('Summon Draconic Spirit');
+    for (const domain of [
+      'Knowledge Domain', 'Nature Domain', 'Tempest Domain', 'Trickery Domain', 'Death Domain',
+      'Forge Domain', 'Grave Domain', 'Order Domain', 'Peace Domain', 'Twilight Domain',
+    ]) {
+      expect(subclassFeatureAt(domain, 1), `${domain} level 1`).toBeDefined();
+      expect(subclassFeatureAt(domain, 2), `${domain} level 2`).toBeDefined();
+    }
+  });
+});
+
+describe('Phase 2 resource-pool subclasses', () => {
+  it("Rune Knight gets a Giant's Might pool sized by proficiency bonus", () => {
+    const sheet = { class: 'Fighter', subclass: 'Rune Knight', level: 7 };
+    const r = classResources(sheet).find((x) => x.id === 'giantsMight')!;
+    expect(r).toBeDefined();
+    expect(r.max).toBe(3); // PB at level 7
+    expect(r.reset).toBe('long');
+  });
+
+  it('Psi Warrior gets a Psionic Energy die pool that grows with level', () => {
+    const low = classResources({ class: 'Fighter', subclass: 'Psi Warrior', level: 3 }).find((x) => x.id === 'psionicEnergy')!;
+    const high = classResources({ class: 'Fighter', subclass: 'Psi Warrior', level: 11 }).find((x) => x.id === 'psionicEnergy')!;
+    expect(low.max).toBeLessThan(high.max);
+  });
+
+  it('Echo Knight gets Unleash Incarnation, short-rest reset', () => {
+    const r = classResources({ class: 'Fighter', subclass: 'Echo Knight', level: 3 }).find((x) => x.id === 'unleashIncarnation')!;
+    expect(r).toBeDefined();
+    expect(r.max).toBe(2);
+    expect(r.reset).toBe('short');
+  });
+
+  it('a plain fighter (no matching subclass) gets none of these pools', () => {
+    const resources = classResources({ class: 'Fighter', subclass: 'Champion', level: 10 });
+    expect(resources.some((r) => ['giantsMight', 'psionicEnergy', 'unleashIncarnation'].includes(r.id))).toBe(false);
+  });
 });

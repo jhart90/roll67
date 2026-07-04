@@ -67,6 +67,76 @@ export const SUBCLASS_FEATURES_5E: Record<string, SubclassFeature[]> = {
     f(8, 'Potent Spellcasting', 'Add WIS mod to cantrip damage.'),
     f(17, 'Corona of Light', 'Emit sunlight; foes have disadvantage on fire/radiant saves.'),
   ],
+  'Knowledge Domain': [
+    f(1, 'Blessings of Knowledge', 'Two languages; expertise in two Knowledge-related skills.'),
+    f(2, 'Channel Divinity: Knowledge of the Ages', 'Grant yourself proficiency in a skill or tool briefly.'),
+    f(6, 'Channel Divinity: Read Thoughts', 'Read a creature’s surface thoughts; optionally charm it.'),
+    f(8, 'Potent Spellcasting', 'Add WIS mod to cantrip damage.'),
+    f(17, 'Visions of the Past', 'Glimpse recent events tied to an object or place.'),
+  ],
+  'Nature Domain': [
+    f(1, 'Acolyte of Nature', 'A druid cantrip; proficiency in a nature-related skill.'),
+    f(2, 'Channel Divinity: Charm Animals and Plants', 'Charm beasts and plant creatures nearby.'),
+    f(6, 'Dampen Elements', 'Reaction: grant resistance to acid/cold/fire/lightning/thunder.'),
+    f(8, 'Divine Strike', 'Once/turn, weapon hits deal +1d8 (2d8 at 14) damage of your domain’s type.'),
+    f(17, 'Master of Nature', 'Command charmed animals and plant creatures.'),
+  ],
+  'Tempest Domain': [
+    f(1, 'Wrath of the Storm', 'Reaction: deal lightning or thunder damage to a creature that hits you.'),
+    f(2, 'Channel Divinity: Destructive Wrath', 'Max the damage of a lightning/thunder spell.'),
+    f(6, 'Thunderbolt Strike', 'Lightning damage you deal can push a Large or smaller creature back.'),
+    f(8, 'Divine Strike', 'Once/turn, weapon hits deal +1d8 (2d8 at 14) thunder damage.'),
+    f(17, 'Stormborn', 'Fly speed equal to your walking speed whenever you’re outdoors.'),
+  ],
+  'Trickery Domain': [
+    f(1, 'Blessing of the Trickster', 'Grant an ally advantage on Stealth checks.'),
+    f(2, 'Channel Divinity: Invoke Duplicity', 'Create an illusory duplicate of yourself.'),
+    f(6, 'Channel Divinity: Cloak of Shadows', 'Turn invisible until you attack, cast, or your turn ends.'),
+    f(8, 'Divine Strike', 'Once/turn, weapon hits deal +1d8 (2d8 at 14) poison damage.'),
+    f(17, 'Improved Duplicity', 'Create up to four duplicates of Invoke Duplicity.'),
+  ],
+  'Death Domain': [
+    f(1, 'Bonus Proficiency / Reaper', 'Martial weapon proficiency; necromancy cantrips can target one extra creature.'),
+    f(2, 'Channel Divinity: Touch of Death', 'Melee hits deal extra necrotic damage.'),
+    f(6, 'Inescapable Destruction', 'Your necrotic damage ignores resistance.'),
+    f(8, 'Divine Strike', 'Once/turn, weapon hits deal +1d8 (2d8 at 14) necrotic damage.'),
+    f(17, 'Improved Reaper', 'Necromancy cantrips gain range and can target two creatures.'),
+  ],
+  'Forge Domain': [
+    f(1, 'Bonus Proficiency / Blessing of the Forge', 'Heavy armor & smith’s tools; imbue a weapon/armor with +1 overnight.'),
+    f(2, 'Channel Divinity: Artisan’s Blessing', 'Magically craft a simple item.'),
+    f(6, 'Soul of the Forge', 'Resistance to fire; +1 AC while wearing heavy armor.'),
+    f(8, 'Divine Strike', 'Once/turn, weapon hits deal +1d8 (2d8 at 14) fire damage.'),
+    f(17, 'Saint of Forge and Fire', 'Resistance to nonmagical bludgeoning/piercing/slashing; immune to fire.'),
+  ],
+  'Grave Domain': [
+    f(1, 'Circle of Mortality / Eyes of the Grave', 'Max healing on a dying creature; sense undead nearby.'),
+    f(2, 'Channel Divinity: Path to the Grave', 'Curse a creature: the next hit against it is a critical.'),
+    f(6, 'Sentinel at Death’s Door', 'Reaction: turn a critical hit against a creature into a normal hit.'),
+    f(8, 'Potent Spellcasting', 'Add WIS mod to cantrip damage.'),
+    f(17, 'Keeper of Souls', 'Regain HP when a creature dies near you.'),
+  ],
+  'Order Domain': [
+    f(1, 'Bonus Proficiency / Voice of Authority', 'Heavy armor; an ally can immediately use their reaction to attack after your spell.'),
+    f(2, 'Channel Divinity: Order’s Demand', 'Frighten or compel nearby foes to obey a one-word command.'),
+    f(6, 'Embodiment of the Law', 'Cast certain enchantment spells as a bonus action a few times per rest.'),
+    f(8, 'Divine Strike', 'Once/turn, weapon hits deal +1d8 (2d8 at 14) psychic damage.'),
+    f(17, 'Order’s Wrath', 'Extra damage against creatures marked by your Order’s Demand.'),
+  ],
+  'Peace Domain': [
+    f(1, 'Implement of Peace / Emboldening Bond', 'Bond up to allies who share bonus dice on attacks/checks/saves/damage.'),
+    f(2, 'Channel Divinity: Balm of Peace', 'Move and heal several creatures without provoking opportunity attacks.'),
+    f(6, 'Protective Bond', 'Bonded allies can teleport to intercept damage meant for each other.'),
+    f(8, 'Potent Spellcasting', 'Add WIS mod to cantrip damage.'),
+    f(17, 'Expansive Bond', 'Bond more allies; the bond’s benefits grow.'),
+  ],
+  'Twilight Domain': [
+    f(1, 'Bonus Proficiency / Eyes of Night', 'Martial weapons; share darkvision with nearby allies.'),
+    f(2, 'Channel Divinity: Twilight Sanctuary', 'A protective aura granting temp HP and easing fear each round.'),
+    f(6, 'Steps of Night', 'Fly during dim light or darkness.'),
+    f(8, 'Divine Strike', 'Once/turn, weapon hits deal +1d8 (2d8 at 14) radiant/necrotic damage.'),
+    f(17, 'Twilight Shroud', 'Your Sanctuary aura also lightly obscures and dampens noise.'),
+  ],
 
   // ---- Druid ----
   'Circle of the Moon': [
@@ -104,6 +174,27 @@ export const SUBCLASS_FEATURES_5E: Record<string, SubclassFeature[]> = {
     f(15, 'Arcane Charge', 'Teleport when you Action Surge.'),
     f(18, 'Improved War Magic', 'Bonus-action weapon attack after casting any spell.'),
   ],
+  'Rune Knight': [
+    f(3, 'Bonus Proficiency / Rune Carver', 'Smith’s tools; etch magic runes (Cloud, Fire, Frost, Stone) into gear for their effects.'),
+    f(7, "Giant's Might", 'Bonus action: grow a size, advantage on STR checks, +1d6 melee damage (tracked pool).'),
+    f(10, 'Great Stature', 'Permanently grow slightly taller; +1d4 to Giant’s Might damage.'),
+    f(15, 'Master of Runes', 'Use each rune’s effect twice per rest instead of once.'),
+    f(18, 'Runic Juggernaut', 'Giant’s Might can grow you to Huge, doubling your reach.'),
+  ],
+  'Psi Warrior': [
+    f(3, 'Psionic Power', 'A Psionic Energy die pool (tracked) fuels Protective Field, Psionic Strike, and telekinetic movement.'),
+    f(7, 'Telekinetic Adept', 'Telekinetic Thrust (shove/knock prone) and share your telekinetic movement.'),
+    f(10, 'Guarded Mind', 'Resistance to psychic damage; charm/fear end early on a successful save.'),
+    f(15, 'Bulwark of Force', 'Grant nearby allies half cover with a barrier of force.'),
+    f(18, 'Telekinetic Master', 'Cast Telekinesis at will without spending psionic energy.'),
+  ],
+  'Echo Knight': [
+    f(3, 'Manifest Echo', 'Summon a spectral duplicate of yourself to attack or teleport through.'),
+    f(7, 'Unleash Incarnation', 'Make an extra attack through your Echo a few times per rest (tracked pool).'),
+    f(10, 'Echo Avatar', 'Send your Echo scouting far beyond your normal range.'),
+    f(15, "Shield Echo", 'Reaction: your Echo intercepts an attack, redirecting it to itself.'),
+    f(18, 'Legion of One', 'Manifest two Echoes at once.'),
+  ],
 
   // ---- Monk ----
   'Way of the Open Hand': [
@@ -117,6 +208,18 @@ export const SUBCLASS_FEATURES_5E: Record<string, SubclassFeature[]> = {
     f(6, 'Shadow Step', 'Teleport between shadows with advantage on the next melee attack.'),
     f(11, 'Cloak of Shadows', 'Become invisible in dim light or darkness.'),
     f(17, 'Opportunist', 'Reaction attack when a nearby creature is hit by someone else.'),
+  ],
+  'Way of the Four Elements': [
+    f(3, 'Disciple of the Elements', 'Spend ki to fuel elemental disciplines (Fangs of the Fire Snake, Water Whip, etc.).'),
+    f(6, 'Elemental disciplines', 'Learn another discipline; existing ones scale with your ki spent.'),
+    f(11, 'Elemental disciplines', 'Learn another discipline (higher-ki options like Wave of Rolling Earth).'),
+    f(17, 'Elemental disciplines', 'Learn another discipline (top-tier options like Fist of Unbroken Air).'),
+  ],
+  'Way of the Kensei': [
+    f(3, 'Path of the Kensei', 'Chosen weapons count as monk weapons; Agile Parry and Kensei’s Shot.'),
+    f(6, 'One with the Blade', 'Extra kensei-weapon damage die; redirect a deflected missile at a target.'),
+    f(11, 'Sharpen the Blade', 'Spend ki for a temporary +1 to +3 on a kensei weapon’s attack/damage.'),
+    f(17, 'Unerring Accuracy', 'Reroll a missed kensei-weapon attack once per turn.'),
   ],
 
   // ---- Paladin ----
@@ -151,6 +254,12 @@ export const SUBCLASS_FEATURES_5E: Record<string, SubclassFeature[]> = {
     f(7, 'Exceptional Training', 'Command your beast as a bonus action; its attacks are magical.'),
     f(11, 'Bestial Fury', 'Your beast attacks twice.'),
     f(15, 'Share Spells', 'Target your beast with spells that target only you.'),
+  ],
+  'Drakewarden': [
+    f(3, 'Summon Draconic Spirit', 'A Small dragon companion (Tiny while not fighting) fights at your side.'),
+    f(7, "Dragon's Wrath", 'Extra damage when you and your companion both hit the same target in a turn.'),
+    f(11, 'Dragon Rider', 'Your companion grows Large enough to ride and fly.'),
+    f(15, 'Climb the Ranks', 'Your companion grows Huge and gains a breath weapon.'),
   ],
 
   // ---- Rogue ----

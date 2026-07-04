@@ -169,6 +169,16 @@ export function classResources(sheet: SheetData): ClassResource[] {
       if (lvl >= 9) defs.push({ id: 'indomitable', name: 'Indomitable', max: lvl >= 17 ? 3 : lvl >= 13 ? 2 : 1, reset: 'long' });
       const sup = superiorityDice(sheet);
       if (sup) defs.push({ id: 'superiority', name: `Superiority Dice (${sup.die})`, max: sup.count, reset: 'short', note: 'Battle Master maneuvers' });
+      if (lvl >= 3 && hasSubclass(sheet, /rune\s*knight/i)) {
+        const pb = 2 + Math.floor((lvl - 1) / 4);
+        defs.push({ id: 'giantsMight', name: "Giant's Might", max: pb, reset: 'long', note: 'grow a size, adv on STR checks, +1d6 melee damage' });
+      }
+      if (lvl >= 3 && hasSubclass(sheet, /psi\s*warrior/i)) {
+        defs.push({ id: 'psionicEnergy', name: 'Psionic Energy (d6)', max: 2 + Math.ceil(lvl / 2), reset: 'long', note: 'protective/telekinetic Psi-Powered abilities' });
+      }
+      if (lvl >= 3 && hasSubclass(sheet, /echo\s*knight/i)) {
+        defs.push({ id: 'unleashIncarnation', name: 'Unleash Incarnation', max: 2, reset: 'short', note: 'extra attack through your Echo' });
+      }
       break;
     }
     case 'paladin':

@@ -837,6 +837,30 @@ button.link:hover { text-decoration: underline; }
 .init-controls { margin-bottom: 4px; }
 .init-controls button { font-size: 12px; }
 
+.initiative-float {
+  position: absolute;
+  width: 220px;
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 18;
+  overflow: hidden;
+}
+.initiative-float-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  user-select: none;
+}
+.initiative-float .init-list { overflow-y: auto; padding: 6px 8px; margin: 0; }
+
 /* ---------- handouts ---------- */
 
 .handout-list { list-style: none; padding: 0; margin: 0; }

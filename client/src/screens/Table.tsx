@@ -13,6 +13,7 @@ import { TargetPopup } from '../panels/TargetPopup';
 import { CastLevelPopup } from '../panels/CastLevelPopup';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
+import { InitiativeFloat } from '../table/InitiativeFloat';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -208,6 +209,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <WindowHost />
         <DiceOverlay />
         <Toolbar />
+        <InitiativeFloat />
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />

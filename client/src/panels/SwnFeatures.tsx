@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Character } from 'shared';
 import {
   applyBackground, applyFocus, applyPackage, bestPsychicSkillLevel, effortMaxFor, getSwnClass,
-  hasDiscipline, num, rows, str, SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
+  hasDiscipline, hasFocus, num, rows, str, SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
 } from 'shared';
 import { intents } from '../store/game';
 
@@ -20,9 +20,14 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
   const effortMax = effortMaxFor(sheet);
   const effortCommitted = Number(sheet.effortCommitted ?? 0);
   const isPsychic = cls?.id === 'psychic' || bestPsychicSkillLevel(sheet) >= 0;
+  const isSniper = hasFocus(sheet, 'sniper', 1);
+  const aiming = sheet.aimActive === true;
 
   function setEffort(committed: number) {
     intents.updateCharacter(character.id, { effortCommitted: Math.max(0, Math.min(effortMax, committed)) });
+  }
+  function toggleAim() {
+    intents.updateCharacter(character.id, { aimActive: !aiming });
   }
 
   // Utility powers (no damage/heal amount) aren't targeted combat actions —
@@ -69,6 +74,11 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
               </span>
             )}
           </span>
+        )}
+        {isSniper && (
+          <button className={`cf-rage ${aiming ? 'on' : ''}`} disabled={!editable} onClick={toggleAim} title="Aim: +4 to hit a ranged shot; adds Shoot-die damage at focus level 2">
+            {aiming ? '● Aiming · +4 to hit' : 'Aim (Sniper)'}
+          </button>
         )}
       </div>
 
@@ -158,10 +168,11 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
   );
 }
 
-interface PickItem { id: string; name: string; tag?: string; desc: string; }
+export interface PickItem { id: string; name: string; tag?: string; desc: string; }
 
-/** Reusable searchable add-list modal (mirrors the 5e FeatPicker styling). */
-function PickerModal({
+/** Reusable searchable add-list modal (mirrors the 5e FeatPicker styling).
+ *  Exported so SwnLevelUpWizard can offer the same focus picker inline. */
+export function PickerModal({
   title, subtitle, items, taken, onAdd, onClose,
 }: {
   title: string; subtitle: string; items: PickItem[]; taken: Set<string>;

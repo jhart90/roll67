@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { Character } from 'shared';
 import {
-  applyLevelUpSwn, getSwnClass, planLevelUpSwn, SWN_BACKGROUNDS, SWN_CLASS_LIST, swnMod,
+  applyFocus, applyLevelUpSwn, getSwnClass, planLevelUpSwn, SWN_BACKGROUNDS, SWN_CLASS_LIST,
+  SWN_FOCI, swnMod, takenFocusIds,
 } from 'shared';
 import { intents } from '../store/game';
+import { PickerModal } from './SwnFeatures';
 
 /** Guided SWN level-up: sets class, HP (max at 1 / average / roll), attack bonus,
  *  and — on the first level — a background with its free skill. */
@@ -18,6 +20,7 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
   const [classId, setClassId] = useState(getSwnClass(String(sheet.class ?? 'expert'))?.id ?? 'expert');
   const [hpMode, setHpMode] = useState<'avg' | 'roll'>('avg');
   const [background, setBackground] = useState('');
+  const [showFocus, setShowFocus] = useState(false);
 
   const plan = useMemo(
     () => planLevelUpSwn(sheet, classId, toLevel),
@@ -48,6 +51,14 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
     onClose();
   }
 
+  function addFocus(id: string) {
+    const f = SWN_FOCI.find((x) => x.id === id)!;
+    const already = takenFocusIds(sheet).includes(id);
+    intents.updateCharacter(character.id, applyFocus(sheet, id));
+    intents.chat(`${character.name} ${already ? 'advances' : 'gains'} the ${f.name} focus.`);
+    setShowFocus(false);
+  }
+
   return (
     <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="panel levelup">
@@ -71,7 +82,11 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
               {plan.first
                 ? <>New level <strong>1 {plan.className}</strong></>
                 : <>Level <strong>{plan.fromLevel}</strong> → <strong>{plan.toLevel}</strong></>}
-              {' '}· d6 hit die · attack bonus <strong>+{plan.attackBonus}</strong>
+              {' '}· d6 hit die · attack bonus{' '}
+              {plan.first || Number(sheet.attackBonus ?? 0) === plan.attackBonus
+                ? <strong>+{plan.attackBonus}</strong>
+                : <><strong>+{Number(sheet.attackBonus ?? 0)}</strong> → <strong>+{plan.attackBonus}</strong></>}
+              {' '}· +{2 + (classId === 'expert' || (classId === 'adventurer' && String(sheet.secondaryClass ?? '').toLowerCase() === 'expert') ? 1 : 0)} skill points
             </p>
 
             <div className="lu-field">
@@ -108,6 +123,11 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
               <span className="dim" style={{ fontSize: 12 }}>{plan.ability}</span>
             </div>
 
+            <div className="lu-field">
+              <span>Focus (optional — foci can also be picked any time from the Core tab)</span>
+              <button type="button" className="btn btn-sm" onClick={() => setShowFocus(true)}>+ Pick a focus</button>
+            </div>
+
             <div className="row" style={{ marginTop: 12 }}>
               <button className="primary" style={{ width: 'auto' }} disabled={!valid} onClick={apply}>
                 Apply — become level {plan.toLevel}
@@ -117,6 +137,19 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
           </>
         )}
       </div>
+
+      {showFocus && (
+        <PickerModal
+          title="Foci" subtitle={`add to ${character.name}`} onClose={() => setShowFocus(false)}
+          taken={new Set(takenFocusIds(sheet))}
+          items={SWN_FOCI.map((f) => ({
+            id: f.id, name: f.name,
+            tag: f.combat ? 'combat' : f.grantsSkill ? f.grantsSkill : undefined,
+            desc: f.level1,
+          }))}
+          onAdd={addFocus}
+        />
+      )}
     </div>
   );
 }

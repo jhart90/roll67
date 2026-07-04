@@ -91,6 +91,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const action = combatActions(actor).find((a) => a.id === p.actionId);
     if (!action) { emitError(socket, 'That action is no longer available.'); return; }
 
+    // Weapons that track ammo (SWN's optional "Ammo left" column) can't fire empty.
+    if (action.source === 'attack') {
+      const atkRow = rows(actor.sheet, 'attacks')[action.index];
+      if (atkRow && num(atkRow, 'ammo', -1) === 0) {
+        emitError(socket, `${action.label} is out of ammo.`);
+        return;
+      }
+    }
+
     const src = tokens.byId(p.sourceTokenId);
     const tgt = tokens.byId(p.targetTokenId);
     if (!src || !tgt) { emitError(socket, 'Pick a target on the map.'); return; }
@@ -253,6 +262,25 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
         if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
         undo.push({ t: 'item', characterId: actor.id, index: action.index });
+      }
+    }
+
+    // Decrement ammo on a weapon that tracks it (leave untouched if the
+    // "Ammo left" field was never set — that means this weapon isn't tracked).
+    if (action.source === 'attack') {
+      const fresh = characters.byId(actor.id) ?? actor;
+      const atks = Array.isArray(fresh.sheet.attacks) ? [...(fresh.sheet.attacks as SheetData[])] : [];
+      const row = atks[action.index];
+      const ammo = row ? num(row, 'ammo', -1) : -1;
+      if (row && ammo > 0) {
+        const before = atks.map((r) => ({ ...r }));
+        atks[action.index] = { ...row, ammo: ammo - 1 };
+        const sheet = { ...fresh.sheet, attacks: atks };
+        characters.update(actor.id, undefined, sheet);
+        const updatedActor = characters.byId(actor.id)!;
+        io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+        if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+        undo.push({ t: 'field', characterId: actor.id, key: 'attacks', value: before });
       }
     }
 

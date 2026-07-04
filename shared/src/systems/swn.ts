@@ -105,10 +105,88 @@ export const SPECIES_SWN = [
   'Human', 'Android', 'VI (True AI)', 'Uplifted Bioform', 'Alien Sophont', 'Transhuman',
 ];
 
+// ---------- Phase 6/7: foci mechanics, AC, encumbrance ----------
+
+/** A taken focus at-or-above `minLevel` (foci rows carry an `id` + `level`). */
+export function hasFocus(sheet: SheetData, id: string, minLevel = 1): boolean {
+  return rows(sheet, 'foci').some((f) => str(f, 'id', '') === id && num(f, 'level', 1) >= minLevel);
+}
+
+/** Ironhide's natural AC when unarmored (13 at level 1, 15 at level 2); 0 if untaken. */
+function ironhideNaturalAc(sheet: SheetData): number {
+  if (hasFocus(sheet, 'ironhide', 2)) return 15;
+  if (hasFocus(sheet, 'ironhide', 1)) return 13;
+  return 0;
+}
+
+/**
+ * Derived AC: an equipped armor row wins over the manually-typed AC field
+ * (Phase 7's armor→AC auto-calc); Ironhide's natural AC is a floor under
+ * that (it doesn't stack with worn armor — bounded by taking the max, not
+ * adding); Alert adds a flat +1 (its real trigger is "first round of
+ * combat only", simplified here to always-on since derive() has no access
+ * to initiative-round state).
+ */
+export function swnDerivedAc(sheet: SheetData): number {
+  const equipped = rows(sheet, 'armor').find((a) => a.equipped === true);
+  const base = equipped ? num(equipped, 'ac', 10) : num(sheet, 'ac', 10);
+  const withNatural = Math.max(base, ironhideNaturalAc(sheet));
+  return withNatural + (hasFocus(sheet, 'alert', 1) ? 1 : 0);
+}
+
+/** Total carried encumbrance (sum of qty × enc across inventory) and a rough
+ *  capacity (6 + 3 × STR mod). Exceeding it halves derived speed. */
+export function swnEncumbrance(sheet: SheetData): { total: number; max: number } {
+  const total = rows(sheet, 'inventory').reduce((sum, it) => sum + num(it, 'qty', 1) * num(it, 'enc', 1), 0);
+  const max = 6 + 3 * swnMod(num(sheet, 'str', 10));
+  return { total, max };
+}
+
+/** Total system strain installed cyberware costs (informational only — the
+ *  sheet's own systemStrain field stays the manually-tracked authoritative
+ *  value, since strain also comes from psionic mishaps and other sources). */
+export function cyberwareStrainTotal(sheet: SheetData): number {
+  return rows(sheet, 'cyberware').reduce((sum, c) => sum + num(c, 'strain', 0), 0);
+}
+
+/** The skill Specialist's 3d6-keep-2 bonus applies to: the character's
+ *  highest-level skill (there's no per-focus "which skill" picker yet, so
+ *  this reads as "specializes in what you're already best at"). */
+function specialistSkillName(sheet: SheetData): string | null {
+  if (!hasFocus(sheet, 'specialist', 1)) return null;
+  const skills = rows(sheet, 'skills');
+  if (skills.length === 0) return null;
+  const best = skills.reduce((a, b) => (num(b, 'level', 0) > num(a, 'level', 0) ? b : a));
+  return str(best, 'name', null as unknown as string) || null;
+}
+
+/** Unarmed Strike's damage die: 1d4 baseline, 1d6 with Unarmed Combatant or
+ *  Armsman at level 1, 1d8 with either at level 2. */
+function unarmedDie(sheet: SheetData): string {
+  if (hasFocus(sheet, 'unarmed-combatant', 2) || hasFocus(sheet, 'armsman', 2)) return '1d8';
+  if (hasFocus(sheet, 'unarmed-combatant', 1) || hasFocus(sheet, 'armsman', 1)) return '1d6';
+  return '1d4';
+}
+
+/** Shock bonus damage for a weapon: its own `shock` column, plus Shocking
+ *  Assault (+character level, melee only) and Armsman (+1, melee/unarmed
+ *  only) — Gunslinger's sidearm shock bump is folded in by the caller since
+ *  it depends on the weapon being a named "pistol". */
+function shockBonus(sheet: SheetData, rowShock: number, melee: boolean): number {
+  let bonus = rowShock;
+  if (melee && hasFocus(sheet, 'shocking-assault', 1)) bonus += Math.max(1, num(sheet, 'level', 1));
+  if (melee && hasFocus(sheet, 'armsman', 1)) bonus += 1;
+  return bonus;
+}
+
 // ---------- Tab 1: Core ----------
 
 const identityFields: FieldDef[] = [
   { id: 'class', label: 'Class', type: 'select', options: ['Warrior', 'Expert', 'Psychic', 'Adventurer'], width: 'third', default: 'Expert' },
+  {
+    id: 'secondaryClass', label: 'Adventurer: 2nd class', type: 'select', width: 'third', default: '',
+    options: ['', 'Warrior', 'Expert', 'Psychic'],
+  },
   { id: 'background', label: 'Background', type: 'text', width: 'third', suggestions: BACKGROUNDS_SWN },
   { id: 'homeworld', label: 'Homeworld', type: 'text', width: 'third' },
   { id: 'level', label: 'Level', type: 'number', width: 'sixth', default: 1 },
@@ -165,6 +243,10 @@ const coreTab: SheetTab = {
       ],
     },
     {
+      kind: 'derived', id: 'skillPointsDerived', title: 'Skill Points (2/level, +1 more for Expert)',
+      items: [{ key: 'skillPointsRemaining', label: 'Remaining' }],
+    },
+    {
       kind: 'list', id: 'foci', title: 'Foci & Class Abilities',
       columns: [
         { id: 'name', label: 'Focus', type: 'text', width: 'third' },
@@ -188,7 +270,9 @@ const gearTab: SheetTab = {
         { id: 'bonus', label: 'Hit bonus', type: 'number', width: 'sixth', default: 0 },
         { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6' },
         { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', 'kinetic', 'energy'] },
+        { id: 'shock', label: 'Shock', type: 'number', width: 'sixth', default: 0 },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
+        { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -197,8 +281,13 @@ const gearTab: SheetTab = {
       columns: [
         { id: 'name', label: 'Armor', type: 'text', width: 'third' },
         { id: 'ac', label: 'AC', type: 'number', width: 'sixth', default: 10 },
+        { id: 'equipped', label: 'Worn', type: 'checkbox', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
+    },
+    {
+      kind: 'derived', id: 'acDerived', title: 'AC (from worn armor + Ironhide/Alert)',
+      items: [{ key: 'ac', label: 'Effective AC' }],
     },
     {
       kind: 'fields', id: 'money', title: 'Money',
@@ -213,6 +302,21 @@ const gearTab: SheetTab = {
         { id: 'effect', label: 'Use', type: 'select', width: 'sixth', options: ['none', 'heal', 'damage'], default: 'none' },
         { id: 'amount', label: 'Amount', type: 'text', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
+      ],
+    },
+    {
+      kind: 'derived', id: 'encumbranceDerived', title: 'Encumbrance',
+      items: [
+        { key: 'encumbrance', label: 'Carried' },
+        { key: 'encumbranceMax', label: 'Capacity' },
+      ],
+    },
+    {
+      kind: 'list', id: 'cyberware', title: 'Cyberware',
+      columns: [
+        { id: 'name', label: 'Implant', type: 'text', width: 'third' },
+        { id: 'strain', label: 'System strain', type: 'number', width: 'sixth', default: 1 },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'half' },
       ],
     },
   ],
@@ -305,6 +409,12 @@ export const swn: SystemSchema = {
       out[`save_${s.id}`] = 15 - level - best;
     }
     out.effortMax = effortMaxFor(sheet);
+    out.ac = swnDerivedAc(sheet);
+    const enc = swnEncumbrance(sheet);
+    out.encumbrance = enc.total;
+    out.encumbranceMax = enc.max;
+    const spent = rows(sheet, 'skills').reduce((sum, sk) => sum + Math.max(0, num(sk, 'level', 0)), 0);
+    out.skillPointsRemaining = num(sheet, 'skillPointsEarned', 0) - spent;
     return out;
   },
 
@@ -316,26 +426,55 @@ export const swn: SystemSchema = {
       const target = 15 - level - best;
       out.push({ id: `save_${s.id}`, label: `${s.label} save (need ${target}+)`, expr: '1d20', group: 'Saving throws', d20: true });
     }
+    const specSkill = specialistSkillName(sheet);
+    const shootSkill = rows(sheet, 'skills').find((sk) => str(sk, 'name', '') === 'Shoot');
+    const shootLevel = shootSkill ? Math.max(0, num(shootSkill, 'level', 0)) : 0;
     rows(sheet, 'skills').forEach((sk, i) => {
       const name = str(sk, 'name', `Skill ${i + 1}`);
       const lvl = num(sk, 'level', 0);
       const attr = str(sk, 'attr', 'int');
-      const mod = swnMod(num(sheet, attr, 10));
+      const mod = swnMod(num(sheet, attr, 10)) + (name === 'Lead' && hasFocus(sheet, 'authority', 1) ? 2 : 0);
+      // Specialist: 3d6-keep-2 instead of the usual 2d6 for your best skill.
+      const dice = name === specSkill ? '3d6kh2' : '2d6';
       out.push({
         id: `skill_${i}`,
         label: `${name} (${attr.toUpperCase()})`,
-        expr: `2d6${fmtMod(lvl + mod)}`,
+        expr: `${dice}${fmtMod(lvl + mod)}`,
         group: 'Skills',
         d20: false,
       });
     });
     const ab = num(sheet, 'attackBonus', 0);
+    // Sniper's Aim toggle: +4 to hit a ranged shot, and (at level 2) adds
+    // Shoot-skill dice to the damage. A manual toggle (like the 5e power-attack
+    // toggle) rather than an auto-clearing one-shot buff, for consistency.
+    const aiming = sheet.aimActive === true && hasFocus(sheet, 'sniper', 1);
     rows(sheet, 'attacks').forEach((atk, i) => {
       const name = str(atk, 'name', `Attack ${i + 1}`);
-      out.push({ id: `attack_${i}`, label: `${name} (hit)`, expr: `1d20${fmtMod(ab + num(atk, 'bonus', 0))}`, group: 'Attacks', d20: true });
+      const melee = num(atk, 'range', 5) <= 5;
+      const isPistol = /pistol/i.test(name);
+      let atkBonus = ab + num(atk, 'bonus', 0);
+      if (!melee && isPistol && hasFocus(sheet, 'gunslinger', 1)) atkBonus += 1;
+      if (!melee && aiming) atkBonus += 4;
+      out.push({ id: `attack_${i}`, label: `${name} (hit)`, expr: `1d20${fmtMod(atkBonus)}`, group: 'Attacks', d20: true });
       const dmg = str(atk, 'damage', '').trim();
-      if (dmg) out.push({ id: `damage_${i}`, label: `${name} (damage)`, expr: dmg, group: 'Attacks', d20: false });
+      if (dmg) {
+        let rowShock = num(atk, 'shock', 0);
+        if (!melee && isPistol && hasFocus(sheet, 'gunslinger', 2)) rowShock += 2;
+        const shock = shockBonus(sheet, rowShock, melee);
+        let expr = shock > 0 ? `${dmg}+${shock}` : dmg;
+        if (!melee && aiming && shootLevel > 0 && hasFocus(sheet, 'sniper', 2)) expr = `${expr}+${shootLevel}d6`;
+        out.push({ id: `damage_${i}`, label: `${name} (damage)`, expr, group: 'Attacks', d20: false });
+      }
     });
+    // Unarmed Strike is always available, same as a 5e monk's — base 1d4,
+    // upgraded to 1d6/1d8 by the Unarmed Combatant or Armsman focus.
+    let unarmedAtk = ab;
+    if (hasFocus(sheet, 'unarmed-combatant', 1) || hasFocus(sheet, 'armsman', 1)) unarmedAtk += 1;
+    out.push({ id: 'unarmed_attack', label: 'Unarmed Strike (hit)', expr: `1d20${fmtMod(unarmedAtk)}`, group: 'Attacks', d20: true });
+    const unarmedShock = shockBonus(sheet, 0, true);
+    const unarmedDmg = unarmedShock > 0 ? `${unarmedDie(sheet)}+${unarmedShock}` : unarmedDie(sheet);
+    out.push({ id: 'unarmed_damage', label: 'Unarmed Strike (damage)', expr: unarmedDmg, group: 'Attacks', d20: false });
     return out;
   },
 
@@ -347,7 +486,8 @@ export const swn: SystemSchema = {
   },
 
   initiativeExpr(sheet: SheetData): string {
-    return `1d8${fmtMod(swnMod(num(sheet, 'dex', 10)))}`;
+    const alertBonus = hasFocus(sheet, 'alert', 2) ? 2 : 0;
+    return `1d8${fmtMod(swnMod(num(sheet, 'dex', 10)) + alertBonus)}`;
   },
 
   hp(sheet: SheetData): { hp: number; maxHp: number } {

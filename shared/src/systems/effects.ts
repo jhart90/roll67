@@ -167,6 +167,13 @@ export interface CombatResource {
   note?: string;
 }
 
+// A tiny local copy of swn.ts's hasFocus check — can't import it directly,
+// since swn.ts itself imports DAMAGE_TYPES from this file (circular import).
+function focusAtLevel(sheet: SheetData, id: string, minLevel: number): boolean {
+  const foci = Array.isArray(sheet.foci) ? (sheet.foci as SheetData[]) : [];
+  return foci.some((f) => str(f, 'id', '') === id && num(f, 'level', 1) >= minLevel);
+}
+
 /**
  * Universal combat-economy trackers, spent on the sheet as `res_<id>` like class
  * resources: a per-round Reaction for everyone, plus once-per-scene reroll pools
@@ -186,8 +193,12 @@ export function combatResources(system: 'dnd5e' | 'swn', sheet: SheetData): Comb
     }
   } else {
     const cls = str(sheet, 'class', '').toLowerCase();
-    if (cls === 'warrior') defs.push({ id: 'knack', name: 'Knack', max: 1, reset: 'scene', note: 'reroll a failed attack/save, or make a hit a crit' });
-    if (cls === 'expert') defs.push({ id: 'expertReroll', name: 'Expertise', max: 1, reset: 'scene', note: 'reroll a failed trained-skill check' });
+    // Adventurer folds in whichever of Warrior/Expert it picked as its second class.
+    const secondary = str(sheet, 'secondaryClass', '').toLowerCase();
+    if (cls === 'warrior' || secondary === 'warrior') defs.push({ id: 'knack', name: 'Knack', max: 1, reset: 'scene', note: 'reroll a failed attack/save, or make a hit a crit' });
+    if (cls === 'expert' || secondary === 'expert') defs.push({ id: 'expertReroll', name: 'Expertise', max: 1, reset: 'scene', note: 'reroll a failed trained-skill check' });
+    if (focusAtLevel(sheet, 'authority', 2)) defs.push({ id: 'authorityMorale', name: 'Authority (Command)', max: 1, reset: 'scene', note: 'force an NPC morale check as if badly beaten' });
+    if (focusAtLevel(sheet, 'star-captain', 2)) defs.push({ id: 'starCaptainReroll', name: 'Star Captain (Ally Reroll)', max: 1, reset: 'scene', note: 'let an ally reroll a failed check' });
   }
   return defs.map((d) => {
     const used = num(sheet, `res_${d.id}`, 0);

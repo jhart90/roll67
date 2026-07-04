@@ -318,10 +318,15 @@ export function applyLevelUpSwn(sheet: SheetData, classId: string, toLevel: numb
   if (!cls) return {};
   const first = toLevel <= 1;
   const gain = Math.max(1, Math.floor(choices.hpGained));
+  // Expert's "extra skill point at each level" (Adventurer inherits it too,
+  // if Expert is the chosen second class).
+  const secondary = str(sheet, 'secondaryClass', '').toLowerCase();
+  const isExpertLike = cls.id === 'expert' || (cls.id === 'adventurer' && secondary === 'expert');
   const patch: SheetData = {
     level: toLevel,
     class: cls.name,
     attackBonus: swnAttackBonus(cls.id, toLevel),
+    skillPointsEarned: num(sheet, 'skillPointsEarned', 0) + 2 + (isExpertLike ? 1 : 0),
   };
   if (first) {
     patch.maxHp = gain;

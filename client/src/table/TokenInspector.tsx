@@ -214,6 +214,43 @@ export function TokenInspector() {
           </label>
         </div>
       )}
+
+      <h4>Light source {token.light ? '(on)' : '(off)'}</h4>
+      <div className="inspector-grid">
+        <label>
+          Bright (hexes)
+          <input
+            type="number"
+            min={0}
+            value={token.light?.bright ?? ''}
+            placeholder="0"
+            onChange={(e) => {
+              const bright = Math.max(0, Number(e.target.value) || 0);
+              const dim = Math.max(bright, token.light?.dim ?? 0);
+              intents.updateToken(token.id, { light: bright <= 0 && dim <= 0 ? null : { bright, dim } });
+            }}
+          />
+        </label>
+        <label>
+          Dim (hexes)
+          <input
+            type="number"
+            min={0}
+            value={token.light?.dim ?? ''}
+            placeholder="0"
+            onChange={(e) => {
+              const dim = Math.max(0, Number(e.target.value) || 0);
+              const bright = token.light?.bright ?? 0;
+              intents.updateToken(token.id, { light: bright <= 0 && dim <= 0 ? null : { bright, dim } });
+            }}
+          />
+        </label>
+        {token.light && (
+          <button className="link" onClick={() => intents.updateToken(token.id, { light: null })}>
+            turn off light
+          </button>
+        )}
+      </div>
     </div>
   );
 }

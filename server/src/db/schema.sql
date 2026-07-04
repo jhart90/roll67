@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS tokens (
   shape TEXT NOT NULL DEFAULT 'circle',
   color TEXT NOT NULL DEFAULT '#6c9bd2',
   vision_json TEXT,
-  bar_json TEXT
+  bar_json TEXT,
+  light_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS fog_explored (
@@ -130,6 +131,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   text TEXT NOT NULL,
   roll_json TEXT,
   recipients_json TEXT,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  undo_json TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_campaign ON chat_messages(campaign_id, id);

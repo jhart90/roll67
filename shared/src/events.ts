@@ -50,6 +50,7 @@ export const C2S = {
   COMBAT_ACTION: 'combatAction',
   DEATH_SAVE: 'deathSave',
   REQUEST_SAVE: 'requestSave',
+  MODERATE_MESSAGE: 'moderateMessage',
   // shops
   CREATE_SHOP: 'createShop',
   UPDATE_SHOP: 'updateShop',
@@ -153,11 +154,12 @@ export interface CreateTokenPayload {
   color?: string;
   vision?: VisionStats | null;
   bar?: { hp: number; maxHp: number } | null;
+  light?: { bright: number; dim: number } | null;
 }
 export interface DeleteTokenPayload { tokenId: string }
 export interface UpdateTokenPayload {
   tokenId: string;
-  patch: Partial<Pick<Token, 'name' | 'layer' | 'size' | 'shape' | 'color' | 'vision' | 'bar' | 'characterId'>> & {
+  patch: Partial<Pick<Token, 'name' | 'layer' | 'size' | 'shape' | 'color' | 'vision' | 'bar' | 'light' | 'characterId'>> & {
     artAssetId?: string | null;
   };
 }
@@ -259,6 +261,20 @@ export interface RequestSavePayload {
 }
 
 export interface ChatPayload { text: string }
+
+/** A reversible effect recorded on a roll message so the DM can undo it. */
+export type UndoEntry =
+  | { t: 'hp'; characterId?: string; tokenId?: string; delta: number }
+  | { t: 'slot'; characterId: string; level: number }
+  | { t: 'item'; characterId: string; index: number }
+  | { t: 'field'; characterId: string; key: string; value: unknown };
+
+/** DM moderates a chat message by id: hide it, unhide it, or hide + undo its
+ *  recorded effects on character sheets/tokens. */
+export interface ModerateMessagePayload {
+  messageId: number;
+  action: 'hide' | 'unhide' | 'hideUndo';
+}
 export interface SaveMacroPayload {
   macro: {
     id?: string;
@@ -351,6 +367,7 @@ export const S2C = {
   HANDOUTS: 'handouts',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
+  CHAT_UPDATED: 'chatUpdated',
   SHOPS: 'shops',
   SHOP_PRESENTATION: 'shopPresentation',
   LOCATIONS: 'locations',

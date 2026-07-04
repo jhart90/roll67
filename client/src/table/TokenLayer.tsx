@@ -145,6 +145,12 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
         pointerEvents: 'auto',
       }}
     >
+      {you?.role === 'dm' && token.light && (token.light.bright > 0 || token.light.dim > 0) && (
+        <>
+          <circle r={token.light.dim * map.grid.hexSize * Math.sqrt(3)} fill="rgba(255,220,130,0.05)" stroke="#e8d27b" strokeWidth={1} strokeDasharray="8 6" pointerEvents="none" />
+          <circle r={token.light.bright * map.grid.hexSize * Math.sqrt(3)} fill="rgba(255,220,130,0.08)" stroke="#e8d27b" strokeWidth={1} pointerEvents="none" />
+        </>
+      )}
       {targetState === 'valid' && (
         <circle className="target-ring" r={radius + 6} fill="none" stroke={ringColor} strokeWidth={3} />
       )}

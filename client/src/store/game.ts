@@ -436,6 +436,11 @@ export function wireSocket(): void {
     }
   });
 
+  socket.on(S2C.CHAT_UPDATED, ({ msg }: { msg: ChatMessage }) => {
+    const s = useGameStore.getState();
+    useGameStore.setState({ chatLog: s.chatLog.map((m) => (m.id === msg.id ? msg : m)) });
+  });
+
   socket.on(S2C.MACROS, ({ macros }: { macros: Macro[] }) => {
     useGameStore.setState({ macroList: macros });
   });
@@ -608,6 +613,8 @@ export const intents = {
   deathSave: (characterId: string) => socket.emit(C2S.DEATH_SAVE, { characterId }),
   requestSave: (p: { tokenIds: string[]; saveId: string; dc: number; damageExpr?: string; onSave: 'half' | 'negate'; damageType?: string; label?: string }) =>
     socket.emit(C2S.REQUEST_SAVE, p),
+  moderateMessage: (messageId: number, action: 'hide' | 'unhide' | 'hideUndo') =>
+    socket.emit(C2S.MODERATE_MESSAGE, { messageId, action }),
   runMacro: (macroId: string) => {
     const s = useGameStore.getState();
     const m = s.macroList.find((x) => x.id === macroId);

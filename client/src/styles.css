@@ -470,6 +470,32 @@ button.link:hover { text-decoration: underline; }
 
 /* ---------- chat ---------- */
 
+.chat-msg.hidden { opacity: 0.65; }
+.hidden-text { font-style: italic; color: var(--text-dim); }
+.chat-context-menu {
+  position: fixed;
+  z-index: 200;
+  background: #1a1f2b;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+.chat-context-menu button {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 7px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.chat-context-menu button:hover { background: var(--accent); color: #10131a; }
+
 .chat-panel {
   display: flex;
   flex-direction: column;

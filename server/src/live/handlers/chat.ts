@@ -2,10 +2,12 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, DiceParseError, castableLevels, num, roll, rows, str, systemFor,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
-  type ReorderMacrosPayload, type SaveMacroPayload, type SheetData, type SheetRollPayload,
+  type ModerateMessagePayload, type ReorderMacrosPayload, type SaveMacroPayload,
+  type SheetData, type SheetRollPayload, type UndoEntry,
 } from 'shared';
-import { campaigns, characters, chat, macros } from '../../db/repos.js';
-import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
+import { campaigns, characters, chat, macros, redactChat } from '../../db/repos.js';
+import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
+import { applyUndo } from '../undo.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -107,6 +109,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     // Spend the slot. A concentration spell also becomes the active
     // concentration, ending any prior one.
     const patch: SheetData = { [`slotsUsed${level}`]: num(character.sheet, `slotsUsed${level}`, 0) + 1 };
+    const undo: UndoEntry[] = [{ t: 'slot', characterId, level }];
     let concNote = '';
     const m = /^spell_(\d+)$/.exec(rollableId);
     if (m) {
@@ -115,6 +118,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
         const name = str(row, 'name', 'a spell');
         const prev = str(character.sheet, 'concentration', '');
         patch.concentration = name;
+        undo.push({ t: 'field', characterId, key: 'concentration', value: prev });
         if (prev && prev !== name) concNote = ` (concentration on ${prev} ends)`;
       }
     }
@@ -128,8 +132,28 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll',
       text: `${character.name}: ${rollable.label}${atLabel}${concNote}`, roll: breakdown, recipients: null,
-    });
+    }, undo);
     deliver(io, d.campaignId, msg);
+  }));
+
+  // DM hides / unhides a chat message, optionally undoing its recorded effects.
+  socket.on(C2S.MODERATE_MESSAGE, safe(socket, ({ messageId, action }: ModerateMessagePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can moderate the chat.'); return; }
+    const existing = chat.byId(messageId);
+    if (!existing) return;
+    chat.setHidden(messageId, action !== 'unhide');
+    if (action === 'hideUndo') {
+      const entries = chat.undoFor(messageId) as UndoEntry[] | null;
+      if (Array.isArray(entries) && entries.length > 0) {
+        applyUndo(io, d.campaignId, entries);
+        chat.clearUndo(messageId);
+      }
+    }
+    const updated = chat.byId(messageId)!;
+    for (const s of campaignSockets(io, d.campaignId)) {
+      s.emit(S2C.CHAT_UPDATED, { msg: redactChat(updated, sdata(s).role === 'dm') });
+    }
   }));
 
   socket.on(C2S.REORDER_MACROS, safe(socket, ({ macroIds }: ReorderMacrosPayload) => {

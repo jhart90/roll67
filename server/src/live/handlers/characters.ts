@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, canEditCharacter, num, roll, systemFor,
   type CreateCharacterPayload, type DeleteCharacterPayload, type LevelUpRollPayload,
-  type SheetData, type UpdateCharacterPayload,
+  type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared';
 import { generateNpc, npcById } from 'shared';
@@ -119,12 +119,17 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       maxHp: num(patch as SheetData, 'maxHp', 0) + delta,
       hp: num(patch as SheetData, 'hp', 0) + delta,
     };
+    // Snapshot the prior value of each changed field so the DM can undo the level-up.
+    const prior = character.sheet as SheetData;
+    const undo: UndoEntry[] = Object.keys(adjusted).map((key) => ({
+      t: 'field', characterId: character.id, key, value: prior[key] ?? null,
+    }));
     applyCharacterPatch(io, d.campaignId, character, adjusted);
     // Show the roll to everyone.
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll',
       text: String(label ?? '').slice(0, 120), roll: breakdown, recipients: null,
-    });
+    }, undo);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }));
 }

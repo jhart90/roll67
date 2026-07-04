@@ -536,6 +536,7 @@ interface TokenRow {
   color: string;
   vision_json: string | null;
   bar_json: string | null;
+  light_json: string | null;
 }
 
 function toToken(row: TokenRow): Token {
@@ -553,6 +554,7 @@ function toToken(row: TokenRow): Token {
     color: row.color,
     vision: row.vision_json ? JSON.parse(row.vision_json) : null,
     bar: row.bar_json ? JSON.parse(row.bar_json) : null,
+    light: row.light_json ? JSON.parse(row.light_json) : null,
   };
 }
 
@@ -560,15 +562,16 @@ export const tokens = {
   create(t: {
     mapId: string; characterId: string | null; name: string; artAssetId: string | null;
     q: number; r: number; layer: 'token' | 'gm'; size: number; shape: string; color: string;
-    vision: object | null; bar: object | null;
+    vision: object | null; bar: object | null; light?: object | null;
   }): Token {
     const id = newId();
     db.prepare(
-      `INSERT INTO tokens (id, map_id, character_id, name, art_asset_id, q, r, layer, size, shape, color, vision_json, bar_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tokens (id, map_id, character_id, name, art_asset_id, q, r, layer, size, shape, color, vision_json, bar_json, light_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id, t.mapId, t.characterId, t.name, t.artAssetId, t.q, t.r, t.layer, t.size, t.shape, t.color,
       t.vision ? JSON.stringify(t.vision) : null, t.bar ? JSON.stringify(t.bar) : null,
+      t.light ? JSON.stringify(t.light) : null,
     );
     return tokens.byId(id)!;
   },
@@ -590,12 +593,12 @@ export const tokens = {
   update(id: string, patch: {
     name?: string; layer?: 'token' | 'gm'; size?: number; shape?: string; color?: string;
     characterId?: string | null; artAssetId?: string | null;
-    vision?: object | null; bar?: object | null;
+    vision?: object | null; bar?: object | null; light?: object | null;
   }): void {
     const cur = db.prepare('SELECT * FROM tokens WHERE id = ?').get(id) as TokenRow | undefined;
     if (!cur) return;
     db.prepare(
-      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?
+      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?, light_json = ?
        WHERE id = ?`,
     ).run(
       patch.name ?? cur.name,
@@ -607,6 +610,7 @@ export const tokens = {
       patch.artAssetId !== undefined ? patch.artAssetId : cur.art_asset_id,
       patch.vision !== undefined ? (patch.vision ? JSON.stringify(patch.vision) : null) : cur.vision_json,
       patch.bar !== undefined ? (patch.bar ? JSON.stringify(patch.bar) : null) : cur.bar_json,
+      patch.light !== undefined ? (patch.light ? JSON.stringify(patch.light) : null) : cur.light_json,
       id,
     );
   },
@@ -814,19 +818,45 @@ export const rollableTables = {
 
 // ---------- chat ----------
 
+interface ChatRow {
+  id: number; user_id: string | null; from_name: string; kind: ChatKind; text: string;
+  roll_json: string | null; recipients_json: string | null; hidden: number; created_at: number;
+}
+
+/** Redact a hidden message for non-DM recipients (DM sees the original). */
+export function redactChat(msg: ChatMessage, isDm: boolean): ChatMessage {
+  if (!msg.hidden || isDm) return msg;
+  return { ...msg, text: 'The DM has hidden this message.', roll: null, recipients: null };
+}
+
+function toChatMsg(r: ChatRow): ChatMessage {
+  return {
+    id: r.id,
+    kind: r.kind,
+    fromUserId: r.user_id,
+    fromName: r.from_name,
+    text: r.text,
+    roll: r.roll_json ? JSON.parse(r.roll_json) : null,
+    recipients: r.recipients_json ? (JSON.parse(r.recipients_json) as string[]) : null,
+    at: r.created_at,
+    hidden: r.hidden === 1,
+  };
+}
+
 export const chat = {
   add(campaignId: string, msg: {
     userId: string | null; fromName: string; kind: ChatKind; text: string;
     roll: RollBreakdown | null; recipients: string[] | null;
-  }): ChatMessage {
+  }, undo?: unknown): ChatMessage {
     const at = now();
     const info = db.prepare(
-      `INSERT INTO chat_messages (campaign_id, user_id, from_name, kind, text, roll_json, recipients_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO chat_messages (campaign_id, user_id, from_name, kind, text, roll_json, recipients_json, hidden, undo_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     ).run(
       campaignId, msg.userId, msg.fromName, msg.kind, msg.text,
       msg.roll ? JSON.stringify(msg.roll) : null,
       msg.recipients ? JSON.stringify(msg.recipients) : null,
+      undo ? JSON.stringify(undo) : null,
       at,
     );
     return {
@@ -838,30 +868,34 @@ export const chat = {
       roll: msg.roll,
       recipients: msg.recipients,
       at,
+      hidden: false,
     };
+  },
+  byId(id: number): ChatMessage | undefined {
+    const r = db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(id) as ChatRow | undefined;
+    return r ? toChatMsg(r) : undefined;
+  },
+  setHidden(id: number, hidden: boolean): void {
+    db.prepare('UPDATE chat_messages SET hidden = ? WHERE id = ?').run(hidden ? 1 : 0, id);
+  },
+  /** The recorded reversible effects for a roll message (null once undone/absent). */
+  undoFor(id: number): unknown {
+    const r = db.prepare('SELECT undo_json FROM chat_messages WHERE id = ?').get(id) as { undo_json: string | null } | undefined;
+    return r?.undo_json ? JSON.parse(r.undo_json) : null;
+  },
+  clearUndo(id: number): void {
+    db.prepare('UPDATE chat_messages SET undo_json = NULL WHERE id = ?').run(id);
   },
   /** Last N messages visible to the given user (whispers filtered). */
   tailFor(campaignId: string, userId: string, username: string, isDm: boolean, limit: number): ChatMessage[] {
     const rows = db.prepare(
       'SELECT * FROM chat_messages WHERE campaign_id = ? ORDER BY id DESC LIMIT ?',
-    ).all(campaignId, limit * 2) as Array<{
-      id: number; user_id: string | null; from_name: string; kind: ChatKind; text: string;
-      roll_json: string | null; recipients_json: string | null; created_at: number;
-    }>;
+    ).all(campaignId, limit * 2) as ChatRow[];
     const out: ChatMessage[] = [];
     for (const r of rows) {
       const recipients = r.recipients_json ? (JSON.parse(r.recipients_json) as string[]) : null;
       if (r.kind === 'whisper' && !isDm && r.user_id !== userId && !recipients?.includes(username)) continue;
-      out.push({
-        id: r.id,
-        kind: r.kind,
-        fromUserId: r.user_id,
-        fromName: r.from_name,
-        text: r.text,
-        roll: r.roll_json ? JSON.parse(r.roll_json) : null,
-        recipients,
-        at: r.created_at,
-      });
+      out.push(redactChat(toChatMsg(r), isDm));
       if (out.length >= limit) break;
     }
     return out.reverse();

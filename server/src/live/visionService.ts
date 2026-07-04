@@ -4,8 +4,8 @@
 
 import type { Server, Socket } from 'socket.io';
 import {
-  computeUnionFovBands, hexDistance, packHex, pixelToHex, systemFor,
-  S2C, type Door, type Hex, type MapStatePayload, type Token, type TokenView,
+  computeUnionFovBands, hexDistance, hexToPixel, packHex, pixelToHex, systemFor,
+  S2C, type Door, type Hex, type Light, type MapStatePayload, type Token, type TokenView,
   type VisionStats, type VisionUpdatePayload,
 } from 'shared';
 import { campaigns, characters, fog, maps, tokens } from '../db/repos.js';
@@ -112,10 +112,18 @@ export function computeUserMapView(userId: string, map: MapRecord, mapTokens?: T
     hex: { q: t.q, r: t.r },
     stats: tokenVision(t),
   }));
+  // Tokens flagged as light sources contribute lights at their hex position.
+  const tokenLights: Light[] = allTokens
+    .filter((t) => t.light && (t.light.bright > 0 || t.light.dim > 0))
+    .map((t) => {
+      const px = hexToPixel({ q: t.q, r: t.r }, map.grid);
+      return { id: `tl-${t.id}`, x: px.x, y: px.y, brightRadius: t.light!.bright, dimRadius: t.light!.dim };
+    });
+  const lights = tokenLights.length > 0 ? [...map.lights, ...tokenLights] : map.lights;
   const bands = viewers.length === 0
     ? { full: new Set<number>(), fade: new Set<number>() }
     : computeUnionFovBands(viewers, {
-        grid: map.grid, walls: map.walls, doors: map.doors, lights: map.lights,
+        grid: map.grid, walls: map.walls, doors: map.doors, lights,
       });
   const { full: visible, fade } = bands;
   const newlyExplored: number[] = [];

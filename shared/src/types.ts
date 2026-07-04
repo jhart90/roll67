@@ -143,6 +143,8 @@ export interface Token {
   /** Explicit stats for NPC tokens; PC tokens derive from their character sheet. */
   vision: VisionStats | null;
   bar: { hp: number; maxHp: number } | null;
+  /** Emits light from the token's position (radii in hexes); null = no light. */
+  light: { bright: number; dim: number } | null;
 }
 
 /** Token as seen by a player (same shape; gm-layer tokens never sent). */
@@ -190,6 +192,8 @@ export interface ChatMessage {
   /** For whispers: usernames included. */
   recipients: string[] | null;
   at: number;
+  /** DM hid this roll: players see a placeholder; the DM sees the original. */
+  hidden?: boolean;
 }
 
 export interface Macro {

@@ -32,6 +32,9 @@ ensureColumn('assets', 'folder_id', 'folder_id TEXT');
 ensureColumn('assets', 'title', 'title TEXT');
 ensureColumn('handouts', 'folder_id', 'folder_id TEXT');
 ensureColumn('tokens', 'shape', "shape TEXT NOT NULL DEFAULT 'circle'");
+ensureColumn('tokens', 'light_json', 'light_json TEXT');
+ensureColumn('chat_messages', 'hidden', 'hidden INTEGER NOT NULL DEFAULT 0');
+ensureColumn('chat_messages', 'undo_json', 'undo_json TEXT');
 
 export function newId(): string {
   return crypto.randomBytes(9).toString('hex');

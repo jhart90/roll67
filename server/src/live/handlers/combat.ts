@@ -5,7 +5,7 @@ import {
   damageMultiplier, multiplierLabel,
   type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
   type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
-  type SheetData,
+  type SheetData, type UndoEntry,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -75,6 +75,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
 
     // Casting a spell spends a slot (leveled) and sets concentration on the
     // caster before resolving the effect.
+    const undo: UndoEntry[] = [];
     if (action.source === 'spell') {
       const actorPatch: SheetData = {};
       if (action.slotLevel) {
@@ -84,8 +85,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           return;
         }
         actorPatch[`slotsUsed${lvl}`] = num(actor.sheet, `slotsUsed${lvl}`, 0) + 1;
+        undo.push({ t: 'slot', characterId: actor.id, level: lvl });
       }
-      if (action.concentration && action.spellName) actorPatch.concentration = action.spellName;
+      if (action.concentration && action.spellName) {
+        undo.push({ t: 'field', characterId: actor.id, key: 'concentration', value: actor.sheet.concentration ?? '' });
+        actorPatch.concentration = action.spellName;
+      }
       if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
     }
 
@@ -149,6 +154,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         const { character: updated, note } = applyHpDelta(io, d.campaignId, targetChar, delta);
         const nh = systemFor(updated.system).hp(updated.sheet);
         hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
+        undo.push({ t: 'hp', characterId: targetChar.id, delta });
       } else if (tgt.bar) {
         const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
         const nh = Math.max(0, Math.min(cap, tgt.bar.hp + delta));
@@ -156,6 +162,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tgt.id)! });
         syncMapVision(io, d.campaignId, src.mapId);
         hpNote = ` (${tgt.name} ${nh}/${tgt.bar.maxHp})`;
+        undo.push({ t: 'hp', tokenId: tgt.id, delta });
       }
       floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
     }
@@ -175,6 +182,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         const updatedActor = characters.byId(actor.id)!;
         io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
         if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+        undo.push({ t: 'item', characterId: actor.id, index: action.index });
       }
     }
 
@@ -187,7 +195,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const cardRoll = attackBreakdown && !hit ? attackBreakdown : amountRoll;
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
-    });
+    }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }));
 
@@ -250,6 +258,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let saveLabel = p.saveId;
     let touchedMap: string | null = null;
     const lines: string[] = [];
+    const undo: UndoEntry[] = [];
     for (const tid of p.tokenIds) {
       const tok = tokens.byId(tid);
       if (!tok) continue;
@@ -268,11 +277,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         let amt = passed ? (p.onSave === 'half' ? Math.floor(base / 2) : 0) : base;
         if (ch && p.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, p.damageType));
         if (amt > 0) {
-          if (ch) applyHpDelta(io, d.campaignId, ch, -amt);
+          if (ch) { applyHpDelta(io, d.campaignId, ch, -amt); undo.push({ t: 'hp', characterId: ch.id, delta: -amt }); }
           else if (tok.bar) {
             const nh = Math.max(0, tok.bar.hp - amt);
             tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
             io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+            undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
           }
           floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
           dealt = amt;
@@ -286,7 +296,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const text = `${header}: ${lines.join('; ')}`;
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll', text, roll: dmg, recipients: null,
-    });
+    }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     io.to(campaignRoom(d.campaignId)).emit(S2C.TABLE_RESULT, { text: header, color: '#c98a3c' });
   }));

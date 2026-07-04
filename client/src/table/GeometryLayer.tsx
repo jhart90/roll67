@@ -1,8 +1,61 @@
 import { useEffect, useState } from 'react';
-import type { Point } from 'shared';
+import type { Light, Point } from 'shared';
 import { hexCorners, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
+
+/** A light marker: selectable, draggable, and right-clickable (DM), in both the
+ *  light tool and the normal select cursor. */
+function LightPiece({ light, selected, interactive, hexPx, mapId }: {
+  light: Light; selected: boolean; interactive: boolean; hexPx: number; mapId: string;
+}) {
+  const stage = useStage();
+  const [dragPos, setDragPos] = useState<Point | null>(null);
+  const pos = dragPos ?? { x: light.x, y: light.y };
+
+  function onDown(e: React.PointerEvent<SVGCircleElement>) {
+    if (e.button !== 0) return; // right-click handled by onContextMenu
+    e.stopPropagation();
+    useGameStore.getState().selectLight(light.id);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* noop */ }
+  }
+  function onMove(e: React.PointerEvent<SVGCircleElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    setDragPos(stage.toMap(e.clientX, e.clientY));
+  }
+  function onUp(e: React.PointerEvent<SVGCircleElement>) {
+    if (!dragPos) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    intents.upsertLight(mapId, { ...light, x: dragPos.x, y: dragPos.y });
+    setDragPos(null);
+  }
+  function onContext(e: React.MouseEvent<SVGCircleElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    useGameStore.getState().selectLight(light.id);
+  }
+
+  return (
+    <g>
+      {selected && (
+        <>
+          <circle cx={pos.x} cy={pos.y} r={light.brightRadius * hexPx} fill="rgba(255, 220, 130, 0.10)" stroke="#e8d27b" strokeWidth={1.5} pointerEvents="none" />
+          <circle cx={pos.x} cy={pos.y} r={light.dimRadius * hexPx} fill="none" stroke="#e8d27b" strokeWidth={1} strokeDasharray="8 6" pointerEvents="none" />
+        </>
+      )}
+      <circle
+        cx={pos.x} cy={pos.y} r={10}
+        fill="#e8d27b" stroke={selected ? '#fff' : '#10131a'} strokeWidth={2}
+        style={{ pointerEvents: interactive ? 'auto' : 'none', cursor: interactive ? 'move' : 'default' }}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onContextMenu={onContext}
+      />
+      <text x={pos.x} y={pos.y + 4} textAnchor="middle" fontSize={12} pointerEvents="none">💡</text>
+    </g>
+  );
+}
 
 /** Distance from point to segment, for erase hit-testing. */
 function distToSegment(p: Point, a: Point, b: Point): number {
@@ -144,6 +197,21 @@ export function GeometryLayer() {
     }
   }
 
+  // Right-click exits the wall/door builder: any completed segments are built,
+  // the in-progress segment ending at the cursor is discarded.
+  function onOverlayContextMenu(e: React.MouseEvent<SVGRectElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (tool === 'wall' && draft.length >= 2) {
+      intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip });
+    }
+    if (tool === 'wall' || tool === 'door') {
+      setDraft([]);
+      setCursor(null);
+      useGameStore.getState().setTool('select');
+    }
+  }
+
   return (
     <svg
       width={width}
@@ -160,38 +228,21 @@ export function GeometryLayer() {
           onPointerDown={onOverlayPointerDown}
           onPointerMove={onOverlayPointerMove}
           onDoubleClick={onOverlayDoubleClick}
+          onContextMenu={onOverlayContextMenu}
         />
       )}
 
-      {/* lights (DM only) */}
-      {lights.map((l) => {
-        const hexPx = grid.hexSize * Math.sqrt(3);
-        const selected = l.id === selectedLightId;
-        return (
-          <g key={l.id}>
-            {selected && (
-              <>
-                <circle cx={l.x} cy={l.y} r={l.brightRadius * hexPx} fill="rgba(255, 220, 130, 0.10)" stroke="#e8d27b" strokeWidth={1.5} />
-                <circle cx={l.x} cy={l.y} r={l.dimRadius * hexPx} fill="none" stroke="#e8d27b" strokeWidth={1} strokeDasharray="8 6" />
-              </>
-            )}
-            <circle
-              cx={l.x}
-              cy={l.y}
-              r={10}
-              fill="#e8d27b"
-              stroke="#10131a"
-              strokeWidth={2}
-              style={{ pointerEvents: isDm && tool === 'light' ? 'auto' : 'none', cursor: 'pointer' }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                useGameStore.getState().selectLight(selected ? null : l.id);
-              }}
-            />
-            <text x={l.x} y={l.y + 4} textAnchor="middle" fontSize={12} pointerEvents="none">💡</text>
-          </g>
-        );
-      })}
+      {/* lights (DM only) — interactive in the light tool AND the select cursor */}
+      {lights.map((l) => (
+        <LightPiece
+          key={l.id}
+          light={l}
+          selected={l.id === selectedLightId}
+          interactive={isDm && (tool === 'light' || tool === 'select')}
+          hexPx={grid.hexSize * Math.sqrt(3)}
+          mapId={map.id}
+        />
+      ))}
 
       {/* walls (DM only) — colored + dashed by type */}
       {walls.map((w) => {

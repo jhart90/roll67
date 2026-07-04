@@ -4,7 +4,7 @@ import { intents, useGameStore } from '../store/game';
 import { LocationEditor } from './LocationsPanel';
 import { ShopEditor } from './ShopsPanel';
 import { TableEditor } from './RollableTables';
-import { HandoutEditor } from './HandoutsPanel';
+import { HandoutWindow } from './HandoutsPanel';
 import { NpcLibrary } from './NpcLibrary';
 
 type Kind = 'location' | 'character' | 'shop' | 'table' | 'handout';
@@ -180,9 +180,9 @@ export function WorldTreePanel() {
         return table ? <TableEditor table={table} onClose={() => setEditing(null)} /> : null;
       })()}
       {editing?.kind === 'handout' && (
-        <HandoutEditor
+        <HandoutWindow
           handout={editing.id === 'new' ? null : handouts.find((h) => h.id === editing.id) ?? null}
-          onDone={() => setEditing(null)}
+          onClose={() => setEditing(null)}
         />
       )}
       {showLibrary && <NpcLibrary onClose={() => setShowLibrary(false)} />}

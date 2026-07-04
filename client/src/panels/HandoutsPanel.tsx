@@ -57,6 +57,106 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
   );
 }
 
+/** A pop-up window to edit a handout, with share-to-all / share-to-specific
+ *  controls. Opened from the World tree. */
+export function HandoutWindow({ handout, onClose }: { handout: Handout | null; onClose: () => void }) {
+  const campaign = useGameStore((s) => s.campaign)!;
+  const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const players = useGameStore((s) => s.members).filter((m) => m.role === 'player');
+  const [title, setTitle] = useState(handout?.title ?? '');
+  const [body, setBody] = useState(handout?.bodyMd ?? '');
+  const [uploading, setUploading] = useState(false);
+  const [assetId, setAssetId] = useState<string | null>(null);
+
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const res = await uploadFile(file, campaign.id, 'handout');
+      setAssetId(res.assetId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function save() {
+    if (!title.trim()) return;
+    if (handout) intents.updateHandout(handout.id, { title: title.trim(), bodyMd: body, ...(assetId ? { assetId } : {}) });
+    else intents.createHandout(title.trim(), body, assetId);
+    onClose();
+  }
+
+  return (
+    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="panel levelup handout-window">
+        <div className="dock-header">
+          <h3>{handout ? 'Edit handout' : 'New handout'}</h3>
+          <button className="link" onClick={onClose}>close</button>
+        </div>
+
+        <label>
+          Title
+          <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+        </label>
+        <label>
+          Text
+          <textarea rows={8} value={body} onChange={(e) => setBody(e.target.value)} />
+        </label>
+        <label className="upload-label">
+          Image
+          <input type="file" accept="image/*" onChange={onUpload} disabled={uploading} />
+        </label>
+        {handout?.imageUrl && !assetId && <img className="handout-img" src={handout.imageUrl} alt={handout.title} />}
+
+        <div className="row" style={{ marginTop: 4 }}>
+          <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
+          {handout && (
+            <button className="link danger" onClick={() => { if (confirm(`Delete handout "${handout.title}"?`)) { intents.deleteHandout(handout.id); onClose(); } }}>delete</button>
+          )}
+        </div>
+
+        {handout && isDm && (
+          <div className="handout-share">
+            <h4>Share with players</h4>
+            <div className="share-controls">
+              <button
+                className={`btn btn-sm ${handout.sharedAll ? 'btn-accent' : ''}`}
+                onClick={() => intents.shareHandout(handout.id, handout.sharedAll ? 'none' : 'all')}
+              >
+                {handout.sharedAll ? '✓ All players' : 'Share to all players'}
+              </button>
+              {!handout.sharedAll && (
+                <>
+                  <span className="dim" style={{ alignSelf: 'center' }}>Share to…</span>
+                  {players.map((m) => {
+                    const has = handout.sharedWith.includes(m.userId);
+                    return (
+                      <button
+                        key={m.userId}
+                        className={`btn btn-sm ${has ? 'btn-accent' : ''}`}
+                        onClick={() => {
+                          const next = has ? handout.sharedWith.filter((id) => id !== m.userId) : [...handout.sharedWith, m.userId];
+                          intents.shareHandout(handout.id, next.length ? next : 'none');
+                        }}
+                      >
+                        {m.username}{has ? ' ✓' : ''}
+                      </button>
+                    );
+                  })}
+                  {players.length === 0 && <span className="dim">No players have joined yet.</span>}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ShareControls({ handout }: { handout: Handout }) {
   // Select the stable array and filter in render — a filtering selector
   // returns a fresh array every read and loops React into a crash.

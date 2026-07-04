@@ -469,6 +469,12 @@ button.link:hover { text-decoration: underline; }
 }
 
 /* ---------- world tree ---------- */
+.handout-window { width: min(560px, 92vw); max-height: 88vh; overflow-y: auto; }
+.handout-window .handout-img { max-width: 100%; border-radius: 6px; margin: 4px 0; }
+.handout-share { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+.handout-share h4 { margin: 0 0 6px; font-size: 12px; color: var(--text-dim); text-transform: uppercase; }
+.handout-share .share-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+
 .world-tree .wt-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .wt-tree { flex: 1; overflow-y: auto; min-height: 60px; }
 .wt-tree.drop-on { outline: 2px dashed var(--accent); outline-offset: -3px; }

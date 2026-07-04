@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
-import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex } from 'shared';
+import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, pointInAoe, pxPerFoot } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
@@ -237,6 +237,7 @@ export function TokenLayer() {
   const tokens = useGameStore((s) => s.tokens);
   const dragGhosts = useGameStore((s) => s.dragGhosts);
   const targeting = useGameStore((s) => s.targeting);
+  const aoeTargeting = useGameStore((s) => s.aoeTargeting);
   const { width, height } = mapPixelSize(map);
 
   // In targeting mode, resolve which tokens are valid targets (in range, and
@@ -246,7 +247,23 @@ export function TokenLayer() {
   const rangeHexes = targeting
     ? (targeting.action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(targeting.action.rangeFt / feetPerHex)))
     : 0;
+
+  // While aiming an AoE spell, highlight exactly the tokens the shape covers
+  // right now — the same hit-test the server re-runs authoritatively on cast.
+  const aoeHitIds = useMemo(() => {
+    const aoe = aoeTargeting?.action.aoe;
+    if (!aoe) return null;
+    const pxPerFt = pxPerFoot(map.grid);
+    const geo = { originPx: hexToPixel(aoeTargeting!.originHex, map.grid), aimPx: hexToPixel(aoeTargeting!.aimHex, map.grid) };
+    const hit = new Set<string>();
+    for (const t of Object.values(tokens)) {
+      if (pointInAoe(hexToPixel({ q: t.q, r: t.r }, map.grid), aoe, geo, pxPerFt)) hit.add(t.id);
+    }
+    return hit;
+  }, [aoeTargeting, tokens, map.grid]);
+
   function stateFor(t: TokenView): TargetState {
+    if (aoeTargeting) return aoeHitIds?.has(t.id) ? 'valid' : 'invalid';
     if (!targeting || !src) return 'off';
     const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes;
     const selfBlocked = targeting.action.effect === 'damage' && t.id === src.id;

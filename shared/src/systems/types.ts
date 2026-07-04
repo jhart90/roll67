@@ -2,7 +2,7 @@
 // functions; the client renders any schema generically and the server uses
 // derive()/rollables() to resolve sheet rolls and token vision.
 
-import type { SheetData, VisionStats } from '../types.js';
+import type { AoeSpec, SheetData, VisionStats } from '../types.js';
 
 export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'image';
 
@@ -100,6 +100,8 @@ export interface CombatAction {
   effortCost?: number;
   /** SWN: the power's discipline, for skill-check/mishap resolution. */
   disciplineId?: string;
+  /** Area this action affects, if it hits a zone rather than one target. */
+  aoe?: AoeSpec;
 }
 
 export interface SystemSchema {

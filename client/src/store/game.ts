@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import {
   C2S, S2C, castableLevels, combatActions, systemFor,
-  type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
+  type AoePreviewShownPayload, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload,
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
@@ -66,11 +66,15 @@ interface GameState {
   dragGhosts: Record<string, { x: number; y: number }>;
   pings: Array<PingShownPayload & { id: number }>;
   measures: Record<string, MeasureShownPayload>;
+  /** Everyone's currently-aimed AoE templates, keyed by caster's userId. */
+  aoePreviews: Record<string, AoePreviewShownPayload>;
   errorToast: string | null;
   /** Live 3D dice animation for the latest roll. */
   diceAnim: { id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string } | null;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
+  /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
+  aoeTargeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; originHex: Hex; aimHex: Hex } | null;
   /** Floating +/-HP combat text over tokens. */
   floats: Array<{ id: number; tokenId: string; delta: number }>;
   /** On-screen rollable-table result pills (fade out after ~3s). */
@@ -78,6 +82,10 @@ interface GameState {
   beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
   cancelTargeting(): void;
   resolveTarget(targetTokenId: string): void;
+  beginAoeTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
+  updateAoeAim(hex: Hex): void;
+  cancelAoeTargeting(): void;
+  confirmAoeTargeting(): void;
   /** Pending spell cast awaiting a slot-level choice. */
   castPrompt: { characterId: string; rollableId: string; label: string; levels: number[] } | null;
   beginCast(characterId: string, rollableId: string, minLevel: number, label: string): void;
@@ -154,9 +162,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   dragGhosts: {},
   pings: [],
   measures: {},
+  aoePreviews: {},
   errorToast: null,
   diceAnim: null,
   targeting: null,
+  aoeTargeting: null,
   floats: [],
   tableToasts: [],
   beginTargeting(characterId, sourceTokenId, action, adv) {
@@ -173,6 +183,50 @@ export const useGameStore = create<GameState>((set, get) => ({
       sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv,
     });
     set({ targeting: null });
+  },
+  beginAoeTargeting(characterId, sourceTokenId, action, adv) {
+    const src = get().tokens[sourceTokenId];
+    const originHex = src ? { q: src.q, r: src.r } : { q: 0, r: 0 };
+    set({
+      aoeTargeting: { characterId, sourceTokenId, action, adv, originHex, aimHex: originHex },
+      tool: 'select', selectedTokenId: null,
+    });
+  },
+  updateAoeAim(hex) {
+    const t = get().aoeTargeting;
+    if (!t || (t.aimHex.q === hex.q && t.aimHex.r === hex.r)) return;
+    set({ aoeTargeting: { ...t, aimHex: hex } });
+    const aoe = t.action.aoe;
+    if (!aoe) return;
+    socket.emit(C2S.AOE_PREVIEW, {
+      shape: aoe.shape, sizeFt: aoe.sizeFt, widthFt: aoe.widthFt,
+      originHex: t.originHex, aimHex: hex, active: true,
+    });
+  },
+  cancelAoeTargeting() {
+    const t = get().aoeTargeting;
+    set({ aoeTargeting: null });
+    if (t?.action.aoe) {
+      socket.emit(C2S.AOE_PREVIEW, {
+        shape: t.action.aoe.shape, sizeFt: t.action.aoe.sizeFt, widthFt: t.action.aoe.widthFt,
+        originHex: t.originHex, aimHex: t.aimHex, active: false,
+      });
+    }
+  },
+  confirmAoeTargeting() {
+    const t = get().aoeTargeting;
+    if (!t) return;
+    set({ aoeTargeting: null });
+    if (t.action.aoe) {
+      socket.emit(C2S.AOE_PREVIEW, {
+        shape: t.action.aoe.shape, sizeFt: t.action.aoe.sizeFt, widthFt: t.action.aoe.widthFt,
+        originHex: t.originHex, aimHex: t.aimHex, active: false,
+      });
+    }
+    socket.emit(C2S.CAST_AOE, {
+      characterId: t.characterId, actionId: t.action.id, sourceTokenId: t.sourceTokenId,
+      originHex: t.originHex, aimHex: t.aimHex, adv: t.adv,
+    });
   },
   castPrompt: null,
   beginCast(characterId, rollableId, minLevel, label) {
@@ -222,7 +276,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
-      targeting: null, floats: [], castPrompt: null,
+      targeting: null, aoeTargeting: null, aoePreviews: {}, floats: [], castPrompt: null,
     });
   },
 
@@ -543,6 +597,14 @@ export function wireSocket(): void {
     if (p.active) measures[p.userId] = p;
     else delete measures[p.userId];
     useGameStore.setState({ measures });
+  });
+
+  socket.on(S2C.AOE_PREVIEW_SHOWN, (p: AoePreviewShownPayload) => {
+    const s = useGameStore.getState();
+    const aoePreviews = { ...s.aoePreviews };
+    if (p.active) aoePreviews[p.userId] = p;
+    else delete aoePreviews[p.userId];
+    useGameStore.setState({ aoePreviews });
   });
 
   socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId, diceColor }: { userId: string; online: boolean; mapId: string | null; diceColor: string | null }) => {

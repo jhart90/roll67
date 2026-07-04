@@ -1,4 +1,4 @@
-import type { GameSystem, SheetData } from '../types.js';
+import type { AoeShape, GameSystem, SheetData } from '../types.js';
 
 export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power';
 
@@ -29,6 +29,12 @@ export interface SpellData {
   damage?: string;
   /** Save the spell forces, e.g. "DEX half". */
   save?: string;
+  /** Damage type for damage-dealing spells, e.g. "fire". */
+  damageType?: string;
+  /** True if `damage` is healing rather than harm. */
+  heal?: boolean;
+  /** Area shape/size, for spells that hit a zone rather than one target. */
+  aoe?: { shape: AoeShape; sizeFt: number; widthFt?: number };
 }
 
 export interface PowerData {
@@ -92,6 +98,30 @@ function fmt(n: number): string {
 function healAmountFrom(text: string): string | null {
   const m = text.match(/regain\s+(\d*d\d+(?:\s*\+\s*\d+)?)\s+hit\s+points/i);
   return m ? m[1].replace(/\s+/g, '') : null;
+}
+
+/**
+ * A spell's numeric range in feet, from its free-text range ("150 ft",
+ * "Touch", "Self", "Self (15-ft cone)", "1 mile"). Self-origin spells (the
+ * template always starts at the caster, even if it then reaches out in a
+ * cone/line/cube) have no separate "how far can I place this" distance, so
+ * they resolve to 0.
+ */
+function parseSpellRangeFt(range: string): number {
+  if (/^self\b/i.test(range)) return 0;
+  if (/^touch$/i.test(range)) return 5;
+  const ft = range.match(/(\d+)\s*ft/i);
+  if (ft) return Number(ft[1]);
+  if (/mile/i.test(range)) return 5280;
+  return 5;
+}
+
+/** A spell's save text ("DEX half", "WIS negates") into ability + effect on a save. */
+function parseSpellSave(save: string | undefined): { ability: string; onSave: 'half' | 'negate' } | null {
+  if (!save) return null;
+  const ability = save.match(/\b(STR|DEX|CON|INT|WIS|CHA)\b/i);
+  if (!ability) return null;
+  return { ability: ability[1].toLowerCase(), onSave: /half/i.test(save) ? 'half' : 'negate' };
 }
 
 /** Rough default shop prices by kind; the DM can adjust after adding. */
@@ -160,18 +190,28 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
 
   if (entry.kind === 'spell' && entry.spell) {
     const s = entry.spell;
-    const note = [s.school, s.range, s.save, s.concentration ? 'concentration' : '']
-      .filter(Boolean).join(' · ');
+    const saveInfo = parseSpellSave(s.save);
+    const note = [s.school, s.range, s.concentration ? 'concentration' : ''].filter(Boolean).join(' · ');
+    const common = {
+      effect: s.heal ? 'heal' : 'damage',
+      damage: s.damage ?? '',
+      dtype: s.heal ? '' : (s.damageType ?? ''),
+      save: saveInfo?.ability ?? '',
+      onSave: saveInfo?.onSave ?? 'half',
+      range: parseSpellRangeFt(s.range),
+      notes: note,
+      ...(s.aoe ? { aoeShape: s.aoe.shape, aoeSize: s.aoe.sizeFt, aoeWidth: s.aoe.widthFt ?? 0 } : {}),
+    };
     if (s.level === 0) {
       return {
         listId: 'cantrips',
-        row: { name: entry.name, notes: note, damage: s.damage ?? '' },
+        row: { name: entry.name, ...common },
         label: `${entry.name} added to cantrips`,
       };
     }
     return {
       listId: 'spells',
-      row: { name: entry.name, level: s.level, prepared: false, notes: note, damage: s.damage ?? '' },
+      row: { name: entry.name, level: s.level, prepared: false, conc: s.concentration, ...common },
       label: `${entry.name} added to spells`,
     };
   }

@@ -303,10 +303,14 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
               <button
                 className={`roll-btn action-btn ${a.effect}`}
                 disabled={!canRoll || !myToken}
-                title={myToken ? `Range ${a.rangeFt} ft — pick a target` : "Place this character's token on the map first"}
-                onClick={() => myToken && useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null)}
+                title={myToken ? (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`) : "Place this character's token on the map first"}
+                onClick={() => {
+                  if (!myToken) return;
+                  if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null);
+                  else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null);
+                }}
               >
-                <span>{a.effect === 'heal' ? '🧪' : '⚔️'} {a.label}</span>
+                <span>{a.effect === 'heal' ? '🧪' : a.aoe ? '💥' : '⚔️'} {a.label}</span>
                 <span className="action-meta">
                   {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
                 </span>

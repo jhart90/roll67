@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
-  type ClearDrawingsPayload, type CreateHandoutPayload, type CreateTablePayload,
+  type AoePreviewPayload, type ClearDrawingsPayload, type CreateHandoutPayload, type CreateTablePayload,
   type DeleteHandoutPayload, type DeleteTablePayload, type DrawPayload,
   type EraseDrawingPayload, type MeasurePayload, type PingPayload, type RollTablePayload,
   type ShareHandoutPayload, type UpdateHandoutPayload, type UpdateTablePayload,
@@ -96,6 +96,17 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     io.to(campaignRoom(d.campaignId)).emit(S2C.MEASURE_SHOWN, {
       userId: d.userId, from, to, active: !!active, byName: d.username, color: colorFor(d.userId),
+    });
+  }));
+
+  // A caster's AoE template as they aim it — relayed live to everyone so
+  // players can see where a spell is about to land (and later, whether they're
+  // in it) before it's locked in via C2S.CAST_AOE.
+  socket.on(C2S.AOE_PREVIEW, safe(socket, ({ shape, sizeFt, widthFt, originHex, aimHex, active }: AoePreviewPayload) => {
+    const d = requireCampaign(socket);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.AOE_PREVIEW_SHOWN, {
+      userId: d.userId, shape, sizeFt, widthFt, originHex, aimHex, active: !!active,
+      byName: d.username, color: colorFor(d.userId),
     });
   }));
 

@@ -23,6 +23,8 @@ const DAMAGE_TYPES_5E = [
   'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder',
 ];
 
+const AOE_SHAPES_5E = ['sphere', 'cone', 'line', 'cube', 'cylinder'];
+
 export const SKILLS_5E = [
   { id: 'acrobatics', label: 'Acrobatics', ability: 'dex' },
   { id: 'animalHandling', label: 'Animal Handling', ability: 'wis' },
@@ -303,8 +305,12 @@ const spellsTab: SheetTab = {
         { id: 'effect', label: 'Effect', type: 'select', width: 'sixth', default: 'damage', options: ['damage', 'heal'] },
         { id: 'damage', label: 'Amount', type: 'text', width: 'sixth' },
         { id: 'save', label: 'Save', type: 'select', width: 'sixth', default: '', options: ['', 'attack', 'str', 'dex', 'con', 'int', 'wis', 'cha'] },
+        { id: 'onSave', label: 'On save', type: 'select', width: 'sixth', default: 'half', options: ['half', 'negate'] },
         { id: 'dtype', label: 'Type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES_5E] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', ...AOE_SHAPES_5E] },
+        { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeWidth', label: 'Area width ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -317,8 +323,12 @@ const spellsTab: SheetTab = {
         { id: 'effect', label: 'Effect', type: 'select', width: 'sixth', default: 'damage', options: ['damage', 'heal'] },
         { id: 'damage', label: 'Amount', type: 'text', width: 'sixth' },
         { id: 'save', label: 'Save', type: 'select', width: 'sixth', default: '', options: ['', 'attack', 'str', 'dex', 'con', 'int', 'wis', 'cha'] },
+        { id: 'onSave', label: 'On save', type: 'select', width: 'sixth', default: 'half', options: ['half', 'negate'] },
         { id: 'dtype', label: 'Type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES_5E] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', ...AOE_SHAPES_5E] },
+        { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeWidth', label: 'Area width ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'conc', label: 'Conc.', type: 'checkbox', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],

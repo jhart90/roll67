@@ -1,10 +1,10 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, num, rows, str, fmtMod,
+  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, inBounds, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr,
-  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker,
-  type Character, type CombatActionPayload, type DeathSavePayload, type InitAddPayload, type InitRemovePayload,
-  type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
+  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe,
+  type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type InitAddPayload,
+  type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
   type SheetData, type Token, type UndoEntry, type UsePowerPayload,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
@@ -37,6 +37,97 @@ export function broadcastInitiative(io: Server, campaignId: string): void {
     const d = sdata(socket);
     socket.emit(S2C.INITIATIVE, { state: initiativeViewFor(state, d.role === 'dm') });
   }
+}
+
+interface GroupSaveSpec {
+  campaignId: string;
+  userId: string;
+  username: string;
+  tokenIds: string[];
+  saveId: string;
+  dc: number;
+  damageExpr?: string;
+  onSave: 'half' | 'negate';
+  damageType?: string;
+  label?: string;
+}
+
+/**
+ * Roll each target's save one at a time — each posts as its own red/green
+ * chat card, paced by the dice-settle delay — then (if there's a damage
+ * expression) roll damage once and apply it per target based on their own
+ * pass/fail. Shared by the DM's manual "call for save" tool and an AoE spell
+ * cast once its template is locked in. Returns false (nothing posted) if
+ * none of the given token ids resolve to a real token.
+ */
+function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
+  const targets: { tok: Token; ch: Character | undefined; sc: { expr: string; threshold: number; label: string } }[] = [];
+  let touchedMap: string | null = null;
+  for (const tid of spec.tokenIds) {
+    const tok = tokens.byId(tid);
+    if (!tok) continue;
+    touchedMap = tok.mapId;
+    const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
+    const sc = ch ? systemFor(ch.system).saveCheck(ch.sheet, spec.saveId, spec.dc) : { expr: '1d20', threshold: spec.dc, label: spec.saveId };
+    targets.push({ tok, ch, sc });
+  }
+  if (targets.length === 0) return false;
+
+  const hasDamage = !!spec.damageExpr && /\d*d\d/i.test(spec.damageExpr);
+  const results: { tok: Token; ch: Character | undefined; passed: boolean }[] = [];
+
+  const finish = (): void => {
+    if (touchedMap) syncMapVision(io, spec.campaignId, touchedMap);
+    const header = `${spec.label?.trim() || 'Saving throw'} — ${targets[0].sc.label}${spec.damageExpr ? ` DC ${spec.dc}` : ''}`;
+    io.to(campaignRoom(spec.campaignId)).emit(S2C.TABLE_RESULT, { text: header, color: '#c98a3c' });
+  };
+
+  const postDamage = (): void => {
+    const dmg = roll(spec.damageExpr!);
+    const base = Math.max(0, dmg.total);
+    const undo: UndoEntry[] = [];
+    for (const { tok, ch, passed } of results) {
+      let amt = passed ? (spec.onSave === 'half' ? Math.floor(base / 2) : 0) : base;
+      if (ch && spec.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, spec.damageType));
+      if (amt <= 0) continue;
+      if (ch) {
+        applyHpDelta(io, spec.campaignId, ch, -amt);
+        undo.push({ t: 'hp', characterId: ch.id, delta: -amt });
+      } else if (tok.bar) {
+        const nh = Math.max(0, tok.bar.hp - amt);
+        tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
+        io.to(dmRoom(spec.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+        undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
+      }
+      floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt);
+    }
+    const msg = chat.add(spec.campaignId, {
+      userId: spec.userId, fromName: spec.username, kind: 'roll',
+      text: `${spec.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
+    }, undo.length > 0 ? undo : undefined);
+    io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
+    finish();
+  };
+
+  const postSave = (i: number): void => {
+    const { tok, ch, sc } = targets[i];
+    const br = roll(sc.expr);
+    const passed = br.total >= sc.threshold;
+    results.push({ tok, ch, passed });
+    const msg = chat.add(spec.campaignId, {
+      userId: spec.userId, fromName: spec.username, kind: 'roll',
+      text: `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+      roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
+    });
+    io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
+
+    if (i + 1 < targets.length) setTimeout(() => postSave(i + 1), SAVE_STEP_DELAY_MS);
+    else if (hasDamage) setTimeout(postDamage, SAVE_STEP_DELAY_MS);
+    else finish();
+  };
+
+  postSave(0);
+  return true;
 }
 
 /**
@@ -302,6 +393,102 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }));
 
+  // Lock in an AoE spell's template: recompute (never trust the client) which
+  // tokens the shape actually covers on the server's own map data, then run
+  // the same sequenced save-and-damage pipeline as the DM's "call for save"
+  // tool — one roll per hit target, damage always last.
+  socket.on(C2S.CAST_AOE, safe(socket, (p: CastAoePayload) => {
+    const d = requireCampaign(socket);
+    let actor = characters.byId(p.characterId);
+    if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    if (d.role !== 'dm' && actor.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only act with your own character.');
+      return;
+    }
+    const action = combatActions(actor).find((a) => a.id === p.actionId);
+    if (!action || !action.aoe) { emitError(socket, 'That is not an area spell.'); return; }
+
+    const src = tokens.byId(p.sourceTokenId);
+    if (!src) { emitError(socket, 'Unknown source token.'); return; }
+    if (d.role !== 'dm' && src.characterId !== actor.id) { emitError(socket, 'That is not your token.'); return; }
+    const map = maps.byId(src.mapId);
+    if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
+
+    if (!inBounds(p.aimHex, map.grid) || !inBounds(p.originHex, map.grid)) {
+      emitError(socket, 'That is off the map.');
+      return;
+    }
+    // Range only constrains where a point-target shape (sphere/cylinder) can
+    // be centered. Self-origin shapes (cone/line/cube) always anchor on the
+    // caster — rangeFt is 0 for those, and `aimHex` is just a direction, so
+    // it's never itself distance-limited (the shape's own sizeFt is).
+    if (action.rangeFt > 0) {
+      const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
+      const rangeHexes = Math.max(1, Math.ceil(action.rangeFt / feetPerHex));
+      if (hexDistance({ q: src.q, r: src.r }, p.aimHex) > rangeHexes) {
+        emitError(socket, 'That is out of range.');
+        return;
+      }
+    }
+
+    // Casting a spell spends a slot (leveled) and sets concentration on the
+    // caster before resolving the effect — mirrors C2S.COMBAT_ACTION.
+    const actorPatch: SheetData = {};
+    if (action.slotLevel) {
+      const lvl = action.slotLevel;
+      if (!castableLevels(actor.sheet, lvl).includes(lvl)) {
+        emitError(socket, `No level-${lvl} spell slot available.`);
+        return;
+      }
+      actorPatch[`slotsUsed${lvl}`] = num(actor.sheet, `slotsUsed${lvl}`, 0) + 1;
+    }
+    if (action.concentration && action.spellName) actorPatch.concentration = action.spellName;
+    if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
+
+    const hitIds = tokensInAoe(action.aoe, p.originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
+    if (hitIds.length === 0) { emitError(socket, `${action.label} caught no one in its area.`); return; }
+
+    if (action.saveId) {
+      const casterDc = Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
+      runGroupSave(io, {
+        campaignId: d.campaignId, userId: d.userId, username: d.username,
+        tokenIds: hitIds, saveId: action.saveId, dc: casterDc,
+        damageExpr: action.amountExpr, onSave: action.onSave ?? 'half',
+        damageType: action.damageType, label: action.label,
+      });
+      return;
+    }
+
+    // No save (rare — every compendium AoE spell has one, but a homebrew
+    // action might not): everyone caught in the area takes the same roll.
+    const dmg = roll(action.amountExpr);
+    const base = Math.max(0, dmg.total);
+    const undo: UndoEntry[] = [];
+    for (const tid of hitIds) {
+      const tok = tokens.byId(tid);
+      if (!tok) continue;
+      const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
+      let amt = base;
+      if (ch && action.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, action.damageType));
+      if (amt <= 0) continue;
+      if (ch) {
+        applyHpDelta(io, d.campaignId, ch, -amt);
+        undo.push({ t: 'hp', characterId: ch.id, delta: -amt });
+      } else if (tok.bar) {
+        const nh = Math.max(0, tok.bar.hp - amt);
+        tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
+        io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+        undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
+      }
+      floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
+    }
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'roll', text: `${actor.name} casts ${action.label}`, roll: dmg, recipients: null,
+    }, undo.length > 0 ? undo : undefined);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    syncMapVision(io, d.campaignId, src.mapId);
+  }));
+
   // Activate a psychic power that has no target (utility/self powers, e.g.
   // Attunement or Astral Wandering): commits Effort and rolls the discipline
   // check, same as a targeted power, but never touches anyone's HP.
@@ -389,73 +576,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.REQUEST_SAVE, safe(socket, (p: RequestSavePayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM calls for saves.'); return; }
-
-    const targets: { tok: Token; ch: Character | undefined; sc: { expr: string; threshold: number; label: string } }[] = [];
-    let touchedMap: string | null = null;
-    for (const tid of p.tokenIds) {
-      const tok = tokens.byId(tid);
-      if (!tok) continue;
-      touchedMap = tok.mapId;
-      const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
-      const sc = ch ? systemFor(ch.system).saveCheck(ch.sheet, p.saveId, p.dc) : { expr: '1d20', threshold: p.dc, label: p.saveId };
-      targets.push({ tok, ch, sc });
+    if (!runGroupSave(io, { campaignId: d.campaignId, userId: d.userId, username: d.username, ...p })) {
+      emitError(socket, 'No valid targets for the save.');
     }
-    if (targets.length === 0) { emitError(socket, 'No valid targets for the save.'); return; }
-
-    const hasDamage = !!p.damageExpr && /\d*d\d/i.test(p.damageExpr);
-    const results: { tok: Token; ch: Character | undefined; passed: boolean }[] = [];
-
-    const finish = (): void => {
-      if (touchedMap) syncMapVision(io, d.campaignId, touchedMap);
-      const header = `${p.label?.trim() || 'Saving throw'} — ${targets[0].sc.label}${p.damageExpr ? ` DC ${p.dc}` : ''}`;
-      io.to(campaignRoom(d.campaignId)).emit(S2C.TABLE_RESULT, { text: header, color: '#c98a3c' });
-    };
-
-    const postDamage = (): void => {
-      const dmg = roll(p.damageExpr!);
-      const base = Math.max(0, dmg.total);
-      const undo: UndoEntry[] = [];
-      for (const { tok, ch, passed } of results) {
-        let amt = passed ? (p.onSave === 'half' ? Math.floor(base / 2) : 0) : base;
-        if (ch && p.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, p.damageType));
-        if (amt <= 0) continue;
-        if (ch) {
-          applyHpDelta(io, d.campaignId, ch, -amt);
-          undo.push({ t: 'hp', characterId: ch.id, delta: -amt });
-        } else if (tok.bar) {
-          const nh = Math.max(0, tok.bar.hp - amt);
-          tokens.update(tok.id, { bar: { hp: nh, maxHp: tok.bar.maxHp } });
-          io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
-          undo.push({ t: 'hp', tokenId: tok.id, delta: -amt });
-        }
-        floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
-      }
-      const msg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, kind: 'roll',
-        text: `${p.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
-      }, undo.length > 0 ? undo : undefined);
-      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-      finish();
-    };
-
-    const postSave = (i: number): void => {
-      const { tok, ch, sc } = targets[i];
-      const br = roll(sc.expr);
-      const passed = br.total >= sc.threshold;
-      results.push({ tok, ch, passed });
-      const msg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, kind: 'roll',
-        text: `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
-        roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
-      });
-      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-
-      if (i + 1 < targets.length) setTimeout(() => postSave(i + 1), SAVE_STEP_DELAY_MS);
-      else if (hasDamage) setTimeout(postDamage, SAVE_STEP_DELAY_MS);
-      else finish();
-    };
-
-    postSave(0);
   }));
 
   socket.on(C2S.INIT_ADD, safe(socket, (payload: InitAddPayload) => {

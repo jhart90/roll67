@@ -2,7 +2,7 @@
 // server handlers and client store both import from this file only.
 
 import type {
-  AssetFolder, AssetInfo, AudioState, AudioTrack,
+  AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
@@ -52,6 +52,8 @@ export const C2S = {
   USE_POWER: 'usePower',
   DEATH_SAVE: 'deathSave',
   REQUEST_SAVE: 'requestSave',
+  AOE_PREVIEW: 'aoePreview',
+  CAST_AOE: 'castAoe',
   MODERATE_MESSAGE: 'moderateMessage',
   // shops
   CREATE_SHOP: 'createShop',
@@ -294,6 +296,27 @@ export interface RequestSavePayload {
   label?: string;
 }
 
+/** Live-broadcast an AoE template as its caster aims it; active:false clears it. */
+export interface AoePreviewPayload {
+  shape: AoeShape;
+  sizeFt: number;
+  widthFt?: number;
+  originHex: Hex;
+  aimHex: Hex;
+  active: boolean;
+}
+
+/** Lock in an AoE spell's template: server resolves which tokens are inside it
+ *  and rolls saves/damage against exactly that set (never the client's guess). */
+export interface CastAoePayload {
+  characterId: string;
+  actionId: string;
+  sourceTokenId: string;
+  originHex: Hex;
+  aimHex: Hex;
+  adv?: 'adv' | 'dis' | null;
+}
+
 export interface ChatPayload { text: string }
 
 /** A reversible effect recorded on a roll message so the DM can undo it. */
@@ -399,6 +422,7 @@ export const S2C = {
   DRAWINGS_CLEARED: 'drawingsCleared',
   PING_SHOWN: 'pingShown',
   MEASURE_SHOWN: 'measureShown',
+  AOE_PREVIEW_SHOWN: 'aoePreviewShown',
   HANDOUTS: 'handouts',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
@@ -505,6 +529,7 @@ export interface DrawingRemovedPayload { drawingId: string }
 export interface DrawingsClearedPayload { mapId: string; layer: DrawingLayerName }
 export interface PingShownPayload extends PingInfo {}
 export interface MeasureShownPayload extends MeasureInfo { userId: string }
+export interface AoePreviewShownPayload extends AoePreviewInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
 export interface ShopsPayload { shops: Shop[] }

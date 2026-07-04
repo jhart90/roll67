@@ -44,6 +44,19 @@ export interface Point {
   y: number;
 }
 
+// ---------- Area-of-effect spell templates ----------
+
+export type AoeShape = 'sphere' | 'cone' | 'line' | 'cube' | 'cylinder';
+
+/** A shape + size an action affects, independent of where it's aimed. */
+export interface AoeSpec {
+  shape: AoeShape;
+  /** Radius (sphere/cylinder), length (cone/line/cube), in feet. */
+  sizeFt: number;
+  /** Line width in feet; defaults to 5 ft if omitted. */
+  widthFt?: number;
+}
+
 export interface GridConfig {
   /** Center-to-corner radius of a hex, in background-image pixels. */
   hexSize: number;
@@ -282,6 +295,21 @@ export interface MeasureInfo {
   byName: string;
   color: string;
   /** null clears the shared ruler for this user. */
+  active: boolean;
+}
+
+/** A caster's AoE template as they aim it — everyone sees it live, like the measure ruler. */
+export interface AoePreviewInfo {
+  shape: AoeShape;
+  sizeFt: number;
+  widthFt?: number;
+  /** Where the shape originates (the caster's hex, for cone/line/cube). */
+  originHex: Hex;
+  /** Where the caster is currently aiming. */
+  aimHex: Hex;
+  byName: string;
+  color: string;
+  /** false clears this user's template (they locked it in or cancelled). */
   active: boolean;
 }
 

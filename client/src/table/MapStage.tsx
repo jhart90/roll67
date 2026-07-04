@@ -3,6 +3,7 @@ import { canMoveToken, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { worldDrag } from '../store/worldDrag';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
+import { AoeTemplateLayer } from './AoeTemplateLayer';
 import { BackgroundCanvas } from './BackgroundCanvas';
 import { CombatTextLayer } from './CombatTextLayer';
 import { DrawingLayer } from './DrawingLayer';
@@ -90,6 +91,11 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
       if (e.key === 'Escape' && useGameStore.getState().targeting) {
         e.preventDefault();
         useGameStore.getState().cancelTargeting();
+        return;
+      }
+      if (e.key === 'Escape' && useGameStore.getState().aoeTargeting) {
+        e.preventDefault();
+        useGameStore.getState().cancelAoeTargeting();
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -262,6 +268,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <FogCanvas map={map} visible={visible} fade={fade} explored={explored} />
           <GeometryLayer />
           <PingMeasureLayer />
+          <AoeTemplateLayer />
           <CombatTextLayer />
           {children}
         </div>

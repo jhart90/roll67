@@ -1,4 +1,4 @@
-import type { Character } from '../types.js';
+import type { AoeShape, Character } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
 import { num, rows, str, type CombatAction } from './types.js';
@@ -51,7 +51,11 @@ export function combatActions(character: Character): CombatAction[] {
       const name = str(sp, 'name', '').trim() || `${prefix} ${i + 1}`;
       const effect = str(sp, 'effect', 'damage') === 'heal' ? 'heal' : 'damage';
       const save = str(sp, 'save', '');
-      const rangeFt = Math.max(1, num(sp, 'range', 0) || 5);
+      const onSave = str(sp, 'onSave', 'half') === 'negate' ? 'negate' as const : 'half' as const;
+      const rangeFt = Math.max(0, num(sp, 'range', 0));
+      const aoeShape = str(sp, 'aoeShape', '');
+      const aoeSize = num(sp, 'aoeSize', 0);
+      const aoeWidth = num(sp, 'aoeWidth', 0);
       out.push({
         id: `${prefix}:${i}`,
         label: name,
@@ -65,8 +69,11 @@ export function combatActions(character: Character): CombatAction[] {
         source: 'spell',
         index: i,
         ...(leveled ? { slotLevel: Math.max(1, num(sp, 'level', 1)) } : {}),
-        ...(save && save !== 'attack' && effect === 'damage' ? { saveId: save, onSave: 'half' as const } : {}),
+        ...(save && save !== 'attack' && effect === 'damage' ? { saveId: save, onSave } : {}),
         ...(sp.conc === true ? { concentration: true, spellName: name } : {}),
+        ...(aoeShape && aoeSize > 0
+          ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
+          : {}),
       });
     });
   };

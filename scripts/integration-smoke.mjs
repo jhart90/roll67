@@ -435,6 +435,26 @@ async function main() {
     p.knownDoors.some((x) => x.id === door.id)).catch(() => null);
   ok(playerDoorKnown !== null || true, 'door is in player knownDoors once seen');
 
+  // ---------- gate (always see-through, still blocks movement) ----------
+  console.log('gate:');
+  // The core behavior (never blocks sight, still blocks movement when
+  // closed) is unit-tested directly in shared/test/fov.test.ts and
+  // movement.test.ts; this only checks the type field survives the real
+  // server round trip -- upsert, persisted geometry, and toggle.
+  const gateEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.doors);
+  dmSock.emit('upsertDoor', {
+    mapId, door: { a: { x: -500, y: -500 }, b: { x: -500, y: -480 }, open: false, type: 'gate' },
+  });
+  const gateDoors = (await gateEdit).doors ?? [];
+  const gate = gateDoors.find((x) => x.type === 'gate');
+  ok(!!gate && gate.open === false, 'gate upserted with type persisted');
+
+  const gateToggled = waitFor(dmSock, 'doorState', 3000, (p) => p.doorId === gate?.id);
+  dmSock.emit('toggleDoor', { mapId, doorId: gate.id });
+  const toggled = await gateToggled;
+  ok(toggled.open === true, 'gate toggles open/closed exactly like a regular door');
+  dmSock.emit('deleteDoor', { mapId, doorId: gate.id });
+
   // ---------- lighting ----------
   console.log('lighting:');
   // Switch to dark lighting -> player vision limited to darkvision (0) + lights.

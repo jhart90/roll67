@@ -101,6 +101,13 @@ describe('doors', () => {
     expect(fov({ doors: [doorClosed] }).has(behind)).toBe(false);
     expect(fov({ doors: [{ ...doorClosed, open: true }] }).has(behind)).toBe(true);
   });
+
+  it('a gate never blocks sight, open or closed (movement blocking is covered in movement.test.ts)', () => {
+    const behind = packHex({ q: 8, r: 10 });
+    const gateClosed: Door = { ...doorClosed, type: 'gate' };
+    expect(fov({ doors: [gateClosed] }).has(behind)).toBe(true);
+    expect(fov({ doors: [{ ...gateClosed, open: true }] }).has(behind)).toBe(true);
+  });
 });
 
 describe('fov bands (fade rim)', () => {

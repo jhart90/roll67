@@ -47,6 +47,16 @@ describe('movement blocking', () => {
     expect(reach({ q: 8, r: 10 }, stubs, [{ ...door, open: true }])).toBe(true);
   });
 
+  it('a closed gate blocks movement exactly like a closed door (only sight differs)', () => {
+    const stubs: Wall[] = [
+      { id: 'w1', points: [{ x: 190, y: -100 }, { x: 190, y: 145 }] },
+      { id: 'w2', points: [{ x: 190, y: 155 }, { x: 190, y: 700 }] },
+    ];
+    const gate: Door = { id: 'g', a: { x: 190, y: 145 }, b: { x: 190, y: 155 }, open: false, type: 'gate' };
+    expect(reach({ q: 8, r: 10 }, stubs, [gate])).toBe(false);
+    expect(reach({ q: 8, r: 10 }, stubs, [{ ...gate, open: true }])).toBe(true);
+  });
+
   it('all wall types block movement (window/one-way are still physical walls)', () => {
     const window: Wall = { id: 'w', points: [{ x: 190, y: -100 }, { x: 190, y: 700 }], type: 'window' };
     const oneway: Wall = { id: 'w', points: [{ x: 190, y: -100 }, { x: 190, y: 700 }], type: 'oneway' };

@@ -3,7 +3,7 @@ import {
   C2S, S2C, castableLevels, combatActions, systemFor,
   type AoePreviewShownPayload, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
-  type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
+  type Door, type DoorType, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
@@ -115,6 +115,8 @@ interface GameState {
   wallFlip: boolean;
   setWallType(t: 'solid' | 'window' | 'oneway'): void;
   toggleWallFlip(): void;
+  doorType: DoorType;
+  setDoorType(t: DoorType): void;
 
   // actions
   join(campaignId: string): void;
@@ -287,6 +289,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   wallFlip: false,
   setWallType(wallType) { set({ wallType }); },
   toggleWallFlip() { set({ wallFlip: !get().wallFlip }); },
+  doorType: 'door',
+  setDoorType(doorType) { set({ doorType }); },
 
   join(campaignId) {
     connectSocket();
@@ -686,7 +690,7 @@ export const intents = {
   upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway'; flip?: boolean }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),
   deleteWall: (mapId: string, wallId: string) => socket.emit(C2S.DELETE_WALL, { mapId, wallId }),
-  upsertDoor: (mapId: string, door: { id?: string; a: { x: number; y: number }; b: { x: number; y: number }; open?: boolean }) =>
+  upsertDoor: (mapId: string, door: { id?: string; a: { x: number; y: number }; b: { x: number; y: number }; open?: boolean; type?: DoorType }) =>
     socket.emit(C2S.UPSERT_DOOR, { mapId, door }),
   deleteDoor: (mapId: string, doorId: string) => socket.emit(C2S.DELETE_DOOR, { mapId, doorId }),
   toggleDoor: (mapId: string, doorId: string) => socket.emit(C2S.TOGGLE_DOOR, { mapId, doorId }),

@@ -51,6 +51,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const drawLayer = useGameStore((s) => s.drawLayer);
   const wallType = useGameStore((s) => s.wallType);
   const wallFlip = useGameStore((s) => s.wallFlip);
+  const doorType = useGameStore((s) => s.doorType);
   const [showMaps, setShowMaps] = useState(false);
   const [showDice, setShowDice] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
@@ -170,6 +171,24 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               </button>
             )}
             <span className="dim" style={{ fontSize: 11 }}>click points · double-click/Enter to finish</span>
+          </div>
+        )}
+
+        {tool === 'door' && map && isDm && (
+          <div className="draw-options">
+            <span className="dim" style={{ fontSize: 12 }}>Door:</span>
+            {(['door', 'gate'] as const).map((t) => (
+              <button
+                key={t}
+                className={doorType === t ? 'active' : ''}
+                style={{ fontSize: 12 }}
+                title={t === 'door' ? 'Blocks movement & sight when closed' : 'Blocks movement when closed, always see-through'}
+                onClick={() => useGameStore.getState().setDoorType(t)}
+              >
+                {t === 'door' ? 'Door' : 'Gate'}
+              </button>
+            ))}
+            <span className="dim" style={{ fontSize: 11 }}>click 2 points to place</span>
           </div>
         )}
 

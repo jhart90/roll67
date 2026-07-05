@@ -3,7 +3,7 @@
 
 import type {
   AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
-  CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
+  CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
   RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WorldFolder,
@@ -145,7 +145,7 @@ export interface UpsertWallPayload {
   wall: { id?: string; points: Point[]; type?: 'solid' | 'window' | 'oneway'; flip?: boolean };
 }
 export interface DeleteWallPayload { mapId: string; wallId: string }
-export interface UpsertDoorPayload { mapId: string; door: { id?: string; a: Point; b: Point; open?: boolean } }
+export interface UpsertDoorPayload { mapId: string; door: { id?: string; a: Point; b: Point; open?: boolean; type?: DoorType } }
 export interface DeleteDoorPayload { mapId: string; doorId: string }
 export interface ToggleDoorPayload { mapId: string; doorId: string }
 export interface UpsertLightPayload {

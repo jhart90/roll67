@@ -143,7 +143,7 @@ export function GeometryLayer() {
     } else if (tool === 'door') {
       if (draft.length === 0) setDraft([p]);
       else {
-        intents.upsertDoor(map.id, { a: draft[0], b: p, open: false });
+        intents.upsertDoor(map.id, { a: draft[0], b: p, open: false, type: useGameStore.getState().doorType });
         setDraft([]);
       }
     } else if (tool === 'light') {
@@ -279,18 +279,22 @@ export function GeometryLayer() {
       {/* doors (DM: all; players: known) */}
       {doors.map((d) => {
         const mid = { x: (d.a.x + d.b.x) / 2, y: (d.a.y + d.b.y) / 2 };
+        const isGate = d.type === 'gate';
+        // Gates get a blue palette (always see-through) instead of the
+        // normal door's green/orange (blocks sight too, when closed).
+        const color = isGate ? (d.open ? '#8ad2e8' : '#4b8fc9') : (d.open ? '#7ed28a' : '#c98d4b');
         return (
           <g key={d.id}>
             <line
               x1={d.a.x} y1={d.a.y} x2={d.b.x} y2={d.b.y}
-              stroke={d.open ? '#7ed28a' : '#c98d4b'}
+              stroke={color}
               strokeWidth={5}
               strokeLinecap="round"
               strokeDasharray={d.open ? '4 8' : undefined}
             />
             <circle
               cx={mid.x} cy={mid.y} r={9}
-              fill={d.open ? '#7ed28a' : '#c98d4b'}
+              fill={color}
               stroke="#10131a"
               strokeWidth={2}
               style={{ pointerEvents: tool === 'select' ? 'auto' : 'none', cursor: 'pointer' }}
@@ -299,7 +303,7 @@ export function GeometryLayer() {
                 intents.toggleDoor(map.id, d.id);
               }}
             >
-              <title>{d.open ? 'Close door' : 'Open door'}</title>
+              <title>{`${d.open ? 'Close' : 'Open'}${isGate ? ' gate (always see-through)' : ' door'}`}</title>
             </circle>
           </g>
         );

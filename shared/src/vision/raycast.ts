@@ -44,6 +44,7 @@ export function sightSegments(walls: Wall[], doors: Door[], viewer: Point): Segm
     }
   }
   for (const door of doors) {
+    if (door.type === 'gate') continue; // always see-through, open or closed
     if (!door.open) out.push({ a: door.a, b: door.b });
   }
   return out;

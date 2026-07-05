@@ -106,11 +106,18 @@ export interface Wall {
   flip?: boolean;
 }
 
+export type DoorType = 'door' | 'gate';
+
 export interface Door {
   id: string;
   a: Point;
   b: Point;
   open: boolean;
+  /**
+   * door = blocks movement when closed, sight too (default).
+   * gate = blocks movement when closed, but always see-through (open or not).
+   */
+  type?: DoorType;
 }
 
 export interface Light {

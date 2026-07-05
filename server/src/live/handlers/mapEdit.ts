@@ -125,7 +125,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     const doors = [...map.doors];
     const id = door.id ?? newId();
     const idx = doors.findIndex((x) => x.id === id);
-    const next = { id, a: door.a, b: door.b, open: door.open ?? false };
+    const next = { id, a: door.a, b: door.b, open: door.open ?? false, type: door.type === 'gate' ? 'gate' as const : 'door' as const };
     if (idx >= 0) doors[idx] = next;
     else doors.push(next);
     maps.setDoors(mapId, doors);

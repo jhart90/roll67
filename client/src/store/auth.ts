@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { GameSystem, Role, UserInfo } from 'shared';
 import { api } from '../api';
-import { setToken } from '../socket';
+import { disconnectSocket, setToken } from '../socket';
 
 export interface CampaignListItem {
   id: string;
@@ -46,6 +46,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout() {
     void api.post('/api/logout').catch(() => undefined);
     setToken(null);
+    // The socket is a long-lived singleton authenticated once at connect
+    // time (server stamps socket.data.userId from the handshake token and
+    // never re-checks it) -- leaving it connected would let a fresh login as
+    // someone else keep emitting over the old user's identity. Tearing it
+    // down forces the next connectSocket() to hand-shake fresh with
+    // whatever token is current at that point.
+    disconnectSocket();
     set({ user: null, campaignList: [] });
   },
 
@@ -55,6 +62,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user, checking: false });
       await get().loadCampaigns();
     } catch {
+      disconnectSocket();
       set({ user: null, checking: false });
     }
   },

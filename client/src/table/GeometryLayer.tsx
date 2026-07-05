@@ -81,6 +81,7 @@ export function GeometryLayer() {
   const tool = useGameStore((s) => s.tool);
   const selectedLightId = useGameStore((s) => s.selectedLightId);
   const drawingList = useGameStore((s) => s.drawingList);
+  const cameraScale = useGameStore((s) => s.camera.scale);
 
   // In-progress wall polyline / door first point.
   const [draft, setDraft] = useState<Point[]>([]);
@@ -118,11 +119,16 @@ export function GeometryLayer() {
     return () => window.removeEventListener('keydown', onKey);
   }, [tool, draft, map.id]);
 
-  // How close (in map pixels) a new wall/door point must land to an existing
-  // wall/door endpoint before it snaps there instead of sitting just beside
-  // it -- otherwise a hairline crack between two segments meant to meet (a
-  // corner, a door frame) would let sight/light straight through it.
-  const ENDPOINT_SNAP_DIST = 15;
+  // How close a new wall/door point must land to an existing wall/door
+  // endpoint before it snaps there instead of sitting just beside it --
+  // otherwise a hairline crack between two segments meant to meet (a corner,
+  // a door frame) would let sight/light straight through it. The tolerance
+  // is defined in screen pixels and converted to map-space using the current
+  // zoom, so it's equally easy to hit whether zoomed in or out -- a fixed
+  // map-pixel radius would feel razor-thin when zoomed in and comically loose
+  // when zoomed out.
+  const ENDPOINT_SNAP_SCREEN_PX = 28;
+  const ENDPOINT_SNAP_DIST = ENDPOINT_SNAP_SCREEN_PX / cameraScale;
 
   function nearbyEndpoint(p: Point, existingWalls: Wall[], existingDoors: Door[]): Point | null {
     let best: Point | null = null;

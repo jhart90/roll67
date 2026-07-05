@@ -122,10 +122,13 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
       const character = s.characters.find((c) => c.id === token.characterId);
       if (!canMoveToken(s.you.role, s.you.userId, token, character)) return;
 
-      // Pointy-top axial directions. W/S ("up"/"down") alternate NW-NE / SW-SE
-      // by parity so repeated presses walk visually straight up or down.
-      const vertUp = ((token.q + token.r) & 1) === 0 ? { q: 1, r: -1 } : { q: 0, r: -1 };
-      const vertDown = ((token.q + token.r) & 1) === 0 ? { q: -1, r: 1 } : { q: 0, r: 1 };
+      // Pointy-top axial directions. W/S ("up"/"down") alternate NE-NW / SE-SW
+      // so repeated presses zig-zag visually straight up or down instead of
+      // drifting diagonally. NW/NE (and SW/SE) both step r by the same
+      // amount, so r's own parity flips on every vertical step and can be
+      // read directly -- no separate toggle state needed to keep alternating.
+      const vertUp = (token.r & 1) === 0 ? { q: 1, r: -1 } : { q: 0, r: -1 };
+      const vertDown = (token.r & 1) === 0 ? { q: 0, r: 1 } : { q: -1, r: 1 };
       const DIRS: Record<string, { q: number; r: number }> = {
         a: { q: -1, r: 0 }, arrowleft: { q: -1, r: 0 },
         d: { q: 1, r: 0 }, arrowright: { q: 1, r: 0 },

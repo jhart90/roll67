@@ -81,12 +81,20 @@ function visibleTokens(userId: string, mapTokens: Token[], visible: Set<number>)
   });
 }
 
-/** Doors the player knows about: midpoint inside explored (or visible) hexes. */
-function knownDoors(map: MapRecord, explored: Set<number>, visible: Set<number>): Door[] {
+/**
+ * Doors the player knows about: midpoint inside explored (or visible) hexes,
+ * plus any door within 2 hexes of one of their own tokens regardless of fog
+ * -- otherwise a door right next to you could be missed by FOV (e.g. it sits
+ * across a diagonal the raycast grazes) even though you're standing close
+ * enough to see and use it in person.
+ */
+function knownDoors(map: MapRecord, explored: Set<number>, visible: Set<number>, viewerHexes: Hex[]): Door[] {
   return map.doors.filter((d) => {
     const mid = { x: (d.a.x + d.b.x) / 2, y: (d.a.y + d.b.y) / 2 };
-    const key = packHex(pixelToHex(mid, map.grid));
-    return explored.has(key) || visible.has(key);
+    const doorHex = pixelToHex(mid, map.grid);
+    const key = packHex(doorHex);
+    if (explored.has(key) || visible.has(key)) return true;
+    return viewerHexes.some((h) => hexDistance(h, doorHex) <= 2);
   });
 }
 
@@ -151,7 +159,7 @@ export function computeUserMapView(userId: string, map: MapRecord, mapTokens?: T
     newlyExplored,
     explored: cache.explored,
     tokens: visibleTokens(userId, allTokens, seen),
-    knownDoors: knownDoors(map, cache.explored, seen),
+    knownDoors: knownDoors(map, cache.explored, seen, viewers.map((v) => v.hex)),
   };
 }
 

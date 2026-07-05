@@ -462,14 +462,27 @@ async function main() {
   dmSock.emit('setGridConfig', { mapId, grid: { lighting: 'dark' } });
   const darkPayload = await darkUpdate;
   ok(true, 'darkness hides the monster (no lights, no darkvision)');
-  ok(darkPayload.visiblePolygons === null, 'no smooth polygon under dark lighting -- client falls back to hex fog');
+  ok(
+    Array.isArray(darkPayload.visiblePolygons) && darkPayload.visiblePolygons.length > 0,
+    'the smooth reach polygon still arrives under dark lighting (no longer null)',
+  );
+  ok(
+    !!darkPayload.visibleLitMask
+      && darkPayload.visibleLitMask.circles.length === 1
+      && darkPayload.visibleLitMask.lightPolygons.length === 0,
+    'lit-mask under dark lighting has just the always-visible self-circle (no darkvision, no lights yet)',
+  );
 
   // Torch on the monster's hex lights it up.
   const beastPx = px(12, 5);
   const litUpdate = waitFor(playerSock, 'visionUpdate', 5000, (p) => p.tokens.some((t) => t.id === beast.id));
   dmSock.emit('upsertLight', { mapId, light: { x: beastPx.x, y: beastPx.y, brightRadius: 2, dimRadius: 3 } });
-  await litUpdate;
+  const litPayload = await litUpdate;
   ok(true, 'torch near the monster makes it visible again');
+  ok(
+    !!litPayload.visibleLitMask && litPayload.visibleLitMask.lightPolygons.length === 1,
+    "lit-mask now includes the torch's own wall-aware illumination polygon",
+  );
 
   // Restore daylight and remove the torch so state doesn't accumulate.
   const litMap = await waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.lights).catch(() => null);

@@ -172,41 +172,110 @@ export function computeUnionFovBands(
   return { full, fade };
 }
 
+/**
+ * What's actually illuminated within a viewer's raw wall-aware reach, under
+ * 'dark'/'dim' lighting: darkvision/dim-ambient circles (one set per viewer)
+ * plus each light source's own wall-aware illumination shape. The client
+ * intersects a band's `reach` polygons with this (canvas compositing) before
+ * treating anything as visible -- being in raycast range of your own eyes
+ * isn't enough in the dark; something also has to be lighting it up.
+ */
+export interface VisibilityLitMask {
+  circles: Array<{ x: number; y: number; r: number }>;
+  lightPolygons: Point[][];
+}
+
+export interface VisibilityBand {
+  /** One polygon per viewer: the wall-aware area their eyes could reach, ignoring light. */
+  reach: Point[][];
+  /** Null under 'light' (the whole reach counts as visible, no clipping needed). */
+  lit: VisibilityLitMask | null;
+}
+
 export interface VisibilityPolygonBands {
-  /** One polygon per viewer, out to their vision radius. */
-  full: Point[][];
-  /** One polygon per viewer, out to the +1 hex fade radius. */
-  fade: Point[][];
+  /** Out to each viewer's vision radius. */
+  full: VisibilityBand;
+  /** Out to the +1 hex fade radius. */
+  fade: VisibilityBand;
+}
+
+/** Each light's own wall-aware illumination shape (an eye standing at the light, per litHexes' hex analog). */
+function computeLightPolygons(input: FovInput, pxPerHex: number): Point[][] {
+  const out: Point[][] = [];
+  for (const light of input.lights) {
+    const pos = { x: light.x, y: light.y };
+    const segs = sightSegments(input.walls, input.doors, pos);
+    const radius = Math.min(Math.max(light.dimRadius, light.brightRadius), MAX_VISION_RADIUS);
+    const poly = computeVisibilityPolygon(pos, radius * pxPerHex, segs);
+    if (poly.length > 0) out.push(poly);
+  }
+  return out;
 }
 
 /**
  * The smooth, continuous analog of computeUnionFovBands: a wall-accurate
  * visibility polygon per viewer instead of a set of whole hexes, for
  * rendering a fog edge that cuts through hexes rather than stair-stepping
- * along their boundaries. Only meaningful under global daylight ('light'
- * lighting) -- 'dark'/'dim' need per-light-source shadow polygons and their
- * own intersection-with-viewer-sight math, which this doesn't attempt yet;
- * callers should fall back to the hex-based bands in that case.
+ * along their boundaries.
+ *
+ * Under global daylight ('light'), `reach` alone is the visible area (a pure
+ * raycast, same as the hex model). Under 'dark'/'dim', `lit` describes what's
+ * actually illuminated within that reach -- a simplification of the exact
+ * hex model's rule that a light/dim-ambient hex must also fall within the
+ * viewer's own (non-darkvision) vision range: here it only needs to fall
+ * within the combined max(visionRange, darkvision) reach. The two agree
+ * whenever darkvision <= visionRange, which covers every normal case; they
+ * only diverge for the unusual darkvision > visionRange build, where this
+ * version is very slightly more generous at the fringe.
  */
 export function computeUnionVisibilityPolygons(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
-): VisibilityPolygonBands | null {
-  if (input.grid.lighting !== 'light') return null;
+): VisibilityPolygonBands {
+  const isLight = input.grid.lighting === 'light';
+  const isDim = input.grid.lighting === 'dim';
+  const pxPerHex = input.grid.hexSize * SQRT3;
   const full: Point[][] = [];
   const fade: Point[][] = [];
-  // One hex step's worst-case pixel reach (a viewer moving purely along an
-  // axial axis) -- a slightly generous stand-in for the true hex-distance
-  // disk, which isn't a circle; the mismatch only matters at the outer rim,
-  // far from the wall-shadow edges this is actually meant to fix.
-  const pxPerHex = input.grid.hexSize * SQRT3;
+  const fullCircles: Array<{ x: number; y: number; r: number }> = [];
+  const fadeCircles: Array<{ x: number; y: number; r: number }> = [];
+
   for (const v of viewers) {
     const radius = Math.min(Math.max(v.stats.visionRange, v.stats.darkvision, 0), MAX_VISION_RADIUS);
     if (radius <= 0) continue;
     const originPx = hexToPixel(v.hex, input.grid);
     const segs = sightSegments(input.walls, input.doors, originPx);
     full.push(computeVisibilityPolygon(originPx, radius * pxPerHex, segs));
-    fade.push(computeVisibilityPolygon(originPx, (radius + 1) * pxPerHex, segs));
+
+    const fs = fadeStats(v.stats);
+    const fadeRadius = Math.min(Math.max(fs.visionRange, fs.darkvision, 0), MAX_VISION_RADIUS);
+    fade.push(computeVisibilityPolygon(originPx, fadeRadius * pxPerHex, segs));
+
+    if (!isLight) {
+      // computeFov always treats a viewer's own hex as visible (dist === 0
+      // bypasses the light check entirely) -- you can perceive where you're
+      // standing even in pitch dark. Mirror that here, or the viewer's own
+      // token would otherwise render under an un-punched, un-lit patch of fog.
+      fullCircles.push({ x: originPx.x, y: originPx.y, r: pxPerHex });
+      fadeCircles.push({ x: originPx.x, y: originPx.y, r: pxPerHex });
+      if (v.stats.darkvision > 0) fullCircles.push({ x: originPx.x, y: originPx.y, r: v.stats.darkvision * pxPerHex });
+      if (fs.darkvision > 0) fadeCircles.push({ x: originPx.x, y: originPx.y, r: fs.darkvision * pxPerHex });
+      if (isDim) {
+        // Unlike darkvision, the ambient radius itself doesn't widen for the
+        // fade rim (matching computeFov's use of the DIM_AMBIENT_RADIUS
+        // constant unchanged for both calls).
+        fullCircles.push({ x: originPx.x, y: originPx.y, r: DIM_AMBIENT_RADIUS * pxPerHex });
+        fadeCircles.push({ x: originPx.x, y: originPx.y, r: DIM_AMBIENT_RADIUS * pxPerHex });
+      }
+    }
   }
-  return { full, fade };
+
+  if (isLight) {
+    return { full: { reach: full, lit: null }, fade: { reach: fade, lit: null } };
+  }
+  const lightPolygons = computeLightPolygons(input, pxPerHex);
+  return {
+    full: { reach: full, lit: { circles: fullCircles, lightPolygons } },
+    fade: { reach: fade, lit: { circles: fadeCircles, lightPolygons } },
+  };
 }

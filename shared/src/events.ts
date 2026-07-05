@@ -8,6 +8,7 @@ import type {
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
   RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WorldFolder,
 } from './types.js';
+import type { VisibilityLitMask } from './vision/fov.js';
 
 // ---------- Client -> server intents ----------
 
@@ -497,11 +498,19 @@ export interface MapStatePayload {
   explored: number[] | null;
   /**
    * Smooth, wall-accurate fog edge (one polygon per viewer token), in map
-   * pixel space -- null under 'dark'/'dim' lighting or DM god mode, where the
-   * client falls back to punching out the `visible`/`fade` hex sets instead.
+   * pixel space -- null in DM god mode, where the client falls back to
+   * punching out the `visible`/`fade` hex sets instead.
    */
   visiblePolygons: Point[][] | null;
   fadePolygons: Point[][] | null;
+  /**
+   * Under 'dark'/'dim' lighting, what's actually illuminated within
+   * `visiblePolygons`/`fadePolygons` -- the client intersects them with this
+   * before treating anything as visible. Null under 'light' (the whole
+   * polygon counts) or DM god mode.
+   */
+  visibleLitMask: VisibilityLitMask | null;
+  fadeLitMask: VisibilityLitMask | null;
   /** Doors within the viewer's explored region (players only). */
   knownDoors: Door[];
   /** Non-null when this payload is a DM "view as" preview. */
@@ -526,9 +535,11 @@ export interface VisionUpdatePayload {
   visible: number[];
   /** Fading rim one hex past vision range. */
   fade: number[];
-  /** See MapStatePayload.visiblePolygons/fadePolygons. */
+  /** See MapStatePayload.visiblePolygons/fadePolygons/visibleLitMask/fadeLitMask. */
   visiblePolygons: Point[][] | null;
   fadePolygons: Point[][] | null;
+  visibleLitMask: VisibilityLitMask | null;
+  fadeLitMask: VisibilityLitMask | null;
   newlyExplored: number[];
   /** Full list of tokens currently visible to this viewer. */
   tokens: TokenView[];

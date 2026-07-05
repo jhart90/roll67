@@ -6,7 +6,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, packHex, pixelToHex, systemFor,
   S2C, type Door, type Hex, type Light, type MapStatePayload, type Point, type Token, type TokenView,
-  type VisionStats, type VisionUpdatePayload,
+  type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
 import { campaigns, characters, fog, maps, tokens } from '../db/repos.js';
 import { campaignSockets, sdata, userRoom } from './hub.js';
@@ -95,6 +95,8 @@ export interface UserMapView {
   fade: Set<number>;
   visiblePolygons: Point[][] | null;
   fadePolygons: Point[][] | null;
+  visibleLitMask: VisibilityLitMask | null;
+  fadeLitMask: VisibilityLitMask | null;
   newlyExplored: number[];
   explored: Set<number>;
   tokens: TokenView[];
@@ -142,8 +144,10 @@ export function computeUserMapView(userId: string, map: MapRecord, mapTokens?: T
   return {
     visible,
     fade,
-    visiblePolygons: polyBands?.full ?? null,
-    fadePolygons: polyBands?.fade ?? null,
+    visiblePolygons: polyBands?.full.reach ?? null,
+    fadePolygons: polyBands?.fade.reach ?? null,
+    visibleLitMask: polyBands?.full.lit ?? null,
+    fadeLitMask: polyBands?.fade.lit ?? null,
     newlyExplored,
     explored: cache.explored,
     tokens: visibleTokens(userId, allTokens, seen),
@@ -179,6 +183,8 @@ export function buildMapState(
       fade: null,
       visiblePolygons: null,
       fadePolygons: null,
+      visibleLitMask: null,
+      fadeLitMask: null,
       explored: null,
       knownDoors: [],
       viewingAs: null,
@@ -197,6 +203,8 @@ export function buildMapState(
     fade: [...view.fade],
     visiblePolygons: view.visiblePolygons,
     fadePolygons: view.fadePolygons,
+    visibleLitMask: view.visibleLitMask,
+    fadeLitMask: view.fadeLitMask,
     explored: [...view.explored],
     knownDoors: view.knownDoors,
     viewingAs: viewer.viewingAs ?? null,
@@ -234,6 +242,8 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
           fade: [...view.fade],
           visiblePolygons: view.visiblePolygons,
           fadePolygons: view.fadePolygons,
+          visibleLitMask: view.visibleLitMask,
+          fadeLitMask: view.fadeLitMask,
           newlyExplored: view.newlyExplored,
           tokens: view.tokens,
           knownDoors: view.knownDoors,
@@ -252,6 +262,8 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
       fade: [...view.fade],
       visiblePolygons: view.visiblePolygons,
       fadePolygons: view.fadePolygons,
+      visibleLitMask: view.visibleLitMask,
+      fadeLitMask: view.fadeLitMask,
       newlyExplored: view.newlyExplored,
       tokens: view.tokens,
       knownDoors: view.knownDoors,

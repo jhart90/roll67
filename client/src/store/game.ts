@@ -8,6 +8,7 @@ import {
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
   type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type RollableTable, type Shop,
+  type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
 } from 'shared';
@@ -63,6 +64,9 @@ interface GameState {
   /** Smooth wall-accurate fog edge, one polygon per viewer token; null falls back to hex punching. */
   visiblePolygons: Point[][] | null;
   fadePolygons: Point[][] | null;
+  /** Under 'dark'/'dim' lighting, what's lit within visiblePolygons/fadePolygons -- null under 'light' (the whole polygon counts). */
+  visibleLitMask: VisibilityLitMask | null;
+  fadeLitMask: VisibilityLitMask | null;
   explored: Set<number> | null;
   knownDoors: Door[];
   viewingAs: string | null;
@@ -165,6 +169,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   fade: null,
   visiblePolygons: null,
   fadePolygons: null,
+  visibleLitMask: null,
+  fadeLitMask: null,
   explored: null,
   knownDoors: [],
   viewingAs: null,
@@ -302,7 +308,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       you: null, campaign: null, members: [], characters: [], mapsMeta: [],
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
-      tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null, explored: null, knownDoors: [],
+      tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
+      visibleLitMask: null, fadeLitMask: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], castPrompt: null,
     });
@@ -384,6 +391,8 @@ export function wireSocket(): void {
       fade: p.fade ? new Set(p.fade) : null,
       visiblePolygons: p.visiblePolygons,
       fadePolygons: p.fadePolygons,
+      visibleLitMask: p.visibleLitMask,
+      fadeLitMask: p.fadeLitMask,
       explored: p.explored ? new Set(p.explored) : null,
       knownDoors: p.knownDoors,
       viewingAs: p.viewingAs,
@@ -431,6 +440,8 @@ export function wireSocket(): void {
       fade: new Set(p.fade),
       visiblePolygons: p.visiblePolygons,
       fadePolygons: p.fadePolygons,
+      visibleLitMask: p.visibleLitMask,
+      fadeLitMask: p.fadeLitMask,
       explored,
       tokens: tokensById(p.tokens),
       knownDoors: p.knownDoors,

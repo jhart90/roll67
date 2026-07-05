@@ -95,8 +95,10 @@ export function GeometryLayer() {
   const lights = isDm ? dmGeometry?.lights ?? [] : [];
   const wallType = useGameStore((s) => s.wallType);
   const wallFlip = useGameStore((s) => s.wallFlip);
+  const doorType = useGameStore((s) => s.doorType);
 
   const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b' };
+  const DOOR_STROKE: Record<string, string> = { door: '#c98d4b', gate: '#4b8fc9' };
 
   // Cancel drafts when the tool changes.
   useEffect(() => {
@@ -143,7 +145,7 @@ export function GeometryLayer() {
     } else if (tool === 'door') {
       if (draft.length === 0) setDraft([p]);
       else {
-        intents.upsertDoor(map.id, { a: draft[0], b: p, open: false, type: useGameStore.getState().doorType });
+        intents.upsertDoor(map.id, { a: draft[0], b: p, open: false, type: doorType });
         setDraft([]);
       }
     } else if (tool === 'light') {
@@ -309,21 +311,26 @@ export function GeometryLayer() {
         );
       })}
 
-      {/* draft wall / door preview */}
-      {draft.length > 0 && (
-        <>
-          <polyline
-            points={[...draft, ...(cursor ? [cursor] : [])].map((p) => `${p.x},${p.y}`).join(' ')}
-            fill="none"
-            stroke="#e8d27b"
-            strokeWidth={3}
-            strokeDasharray="6 4"
-          />
-          {draft.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r={5} fill="#e8d27b" />
-          ))}
-        </>
-      )}
+      {/* draft wall / door preview -- colored by the variant about to be
+          placed (matches the final render's colors) so it's clear which
+          kind you're drawing before you commit it, not just after. */}
+      {draft.length > 0 && (() => {
+        const draftColor = tool === 'door' ? DOOR_STROKE[doorType] : WALL_STROKE[wallType];
+        return (
+          <>
+            <polyline
+              points={[...draft, ...(cursor ? [cursor] : [])].map((p) => `${p.x},${p.y}`).join(' ')}
+              fill="none"
+              stroke={draftColor}
+              strokeWidth={3}
+              strokeDasharray="6 4"
+            />
+            {draft.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r={5} fill={draftColor} />
+            ))}
+          </>
+        );
+      })()}
 
     </svg>
   );

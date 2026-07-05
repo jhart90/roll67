@@ -946,6 +946,16 @@ button.link:hover { text-decoration: underline; }
 .draw-options .swatch.active { border-color: #fff; }
 .draw-options select { margin: 0; width: auto; padding: 3px 6px; font-size: 12px; }
 .draw-options button { font-size: 12px; }
+/* Which wall/door variant (Solid/Window/One-way, Door/Gate) is currently
+   selected must be unambiguous while the tool is active, not just after a
+   shape is placed -- a plain background/border fill, not just a link-style
+   text change, since these buttons otherwise look identical either state. */
+.draw-options button.active {
+  background: var(--accent);
+  color: #10131a;
+  border-color: var(--accent);
+  font-weight: 600;
+}
 
 /* ---------- presence pills ---------- */
 

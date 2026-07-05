@@ -106,8 +106,8 @@ export function AoeTemplateLayer() {
             {shapeNode(t.shape, originPx, aimPx, sizePx, widthPx, t.color)}
             <text
               x={aimPx.x} y={aimPx.y - grid.hexSize * 0.6}
-              textAnchor="middle" fontSize={13} fontWeight={700}
-              fill={t.color} stroke="#10131a" strokeWidth={3} paintOrder="stroke"
+              textAnchor="middle" fontSize={9} fontWeight={600}
+              fill={t.color} stroke="#10131a" strokeWidth={2} paintOrder="stroke"
             >
               {t.byName} · {t.shape} {t.sizeFt}ft{t.key === 'mine' ? ' · click to cast' : ''}
             </text>

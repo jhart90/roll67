@@ -3,8 +3,8 @@ import type { DieRoll } from 'shared';
 import { useGameStore } from '../store/game';
 import { buildSims, drawFrame, simsSettleTime } from './dice3d';
 
-function DiceCanvas({ dice, byName, total, expression, color }: {
-  dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null;
+function DiceCanvas({ dice, byName, total, expression, color, textColor }: {
+  dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [settled, setSettled] = useState(false);
@@ -23,7 +23,7 @@ function DiceCanvas({ dice, byName, total, expression, color }: {
     canvas.style.height = `${h}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const sims = buildSims(dice, w, h, color);
+    const sims = buildSims(dice, w, h, color, textColor);
     const settleAt = simsSettleTime(sims);
     const t0 = performance.now();
     let raf = 0;
@@ -56,9 +56,9 @@ export function DiceOverlay() {
   const anim = useGameStore((s) => s.diceAnim);
   const members = useGameStore((s) => s.members);
   if (!anim) return null;
-  const color = anim.byUserId
-    ? members.find((m) => m.userId === anim.byUserId)?.diceColor ?? null
-    : null;
+  const member = anim.byUserId ? members.find((m) => m.userId === anim.byUserId) : undefined;
+  const color = member?.diceColor ?? null;
+  const textColor = member?.diceTextColor ?? null;
   return (
     <DiceCanvas
       key={anim.id}
@@ -67,6 +67,7 @@ export function DiceOverlay() {
       total={anim.total}
       expression={anim.expression}
       color={color}
+      textColor={textColor}
     />
   );
 }

@@ -1,8 +1,14 @@
 import { hexToPixel } from 'shared';
 import { useGameStore } from '../store/game';
 import { mapPixelSize } from '../util/stage';
+import { ImpactAnimation, impactColor } from './impactFx';
 
-/** Floating +/-HP combat text that rises and fades over damaged/healed tokens. */
+/**
+ * Floating +/-HP text plus a short (1-2s) impact animation over damaged/healed
+ * tokens — both keyed off the same `kind`/`damageType` hint the server sends
+ * once a roll's dice have settled, so a fireball, an arrow, and a sword swing
+ * each land with their own look, colored by damage type.
+ */
 export function CombatTextLayer() {
   const map = useGameStore((s) => s.map)!;
   const tokens = useGameStore((s) => s.tokens);
@@ -23,20 +29,26 @@ export function CombatTextLayer() {
         const radius = map.grid.hexSize * 0.72 * t.size;
         const heal = f.delta > 0;
         const fontSize = Math.max(16, map.grid.hexSize * 0.85);
+        const color = impactColor(f.kind, f.damageType);
         return (
-          <g key={f.id} transform={`translate(${p.x}, ${p.y - radius - 6})`}>
-            <g className="hp-float">
-              <text
-                textAnchor="middle"
-                fontSize={fontSize}
-                fontWeight={800}
-                fill={heal ? '#7ee89a' : '#ff6b6b'}
-                stroke="#10131a"
-                strokeWidth={fontSize * 0.14}
-                paintOrder="stroke"
-              >
-                {heal ? `+${f.delta}` : f.delta}
-              </text>
+          <g key={f.id}>
+            <g transform={`translate(${p.x}, ${p.y})`}>
+              <ImpactAnimation kind={f.kind} radius={radius} color={color} />
+            </g>
+            <g transform={`translate(${p.x}, ${p.y - radius - 6})`}>
+              <g className="hp-float">
+                <text
+                  textAnchor="middle"
+                  fontSize={fontSize}
+                  fontWeight={800}
+                  fill={color}
+                  stroke="#10131a"
+                  strokeWidth={fontSize * 0.14}
+                  paintOrder="stroke"
+                >
+                  {heal ? `+${f.delta}` : f.delta}
+                </text>
+              </g>
             </g>
           </g>
         );

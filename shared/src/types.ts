@@ -28,7 +28,15 @@ export interface MemberInfo {
   mapId: string | null;
   /** Custom 3D-dice color ("#rrggbb"); null = the per-die-type defaults. */
   diceColor: string | null;
+  /** Custom color for the pips/numbers painted on this member's dice ("#rrggbb"); null = automatic contrast. */
+  diceTextColor: string | null;
 }
+
+/**
+ * Visual flavor for the impact animation played over a token once a
+ * damage/heal roll's dice have settled — see client/src/table/impactFx.tsx.
+ */
+export type ImpactKind = 'melee' | 'ranged' | 'aoe' | 'heal';
 
 // ---------- Map geometry ----------
 

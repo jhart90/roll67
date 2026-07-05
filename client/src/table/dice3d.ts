@@ -287,7 +287,7 @@ interface DieSim {
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
 export function buildSims(
-  dice: DieRoll[], w: number, h: number, customColor: string | null,
+  dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
 ): DieSim[] {
   const n = dice.length;
   const cols = Math.min(n, 6);
@@ -313,7 +313,7 @@ export function buildSims(
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
-      textColor: luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb',
+      textColor: customTextColor ?? (luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb'),
       size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
       start, target,
       delay: i * 110,

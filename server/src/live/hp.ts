@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { S2C, conditionsOf, hasConcentrationAdvantage, num, roll, str, systemFor, type Character, type SheetData } from 'shared';
+import { S2C, conditionsOf, hasConcentrationAdvantage, num, roll, str, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, tokens } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { syncMapVision } from './visionService.js';
@@ -134,7 +134,14 @@ export function applyHpDelta(
   return { character: updated, note };
 }
 
-/** Broadcast a floating +/-HP animation over a token to everyone in the campaign. */
-export function floatHp(io: Server, campaignId: string, mapId: string, tokenId: string, delta: number): void {
-  io.to(campaignRoom(campaignId)).emit(S2C.HP_FLOAT, { mapId, tokenId, delta });
+/**
+ * Broadcast a floating +/-HP number over a token, plus (when known) what kind
+ * of hit landed and its damage type — the client picks a matching impact
+ * animation and color from those two hints (see client/src/table/impactFx.tsx).
+ */
+export function floatHp(
+  io: Server, campaignId: string, mapId: string, tokenId: string, delta: number,
+  kind?: ImpactKind, damageType?: string,
+): void {
+  io.to(campaignRoom(campaignId)).emit(S2C.HP_FLOAT, { mapId, tokenId, delta, kind, damageType });
 }

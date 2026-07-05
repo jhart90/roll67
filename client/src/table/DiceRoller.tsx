@@ -9,6 +9,8 @@ const DICE_PALETTE = [
   '#6c9bd2', '#b06cd2', '#d26cb0', '#c9cfdd', '#3a3f4d',
 ];
 
+const TEXT_PALETTE = ['#10131a', '#f4f6fb', '#ffe08a', '#ff6b6b', '#7ee89a', '#6cd2c8'];
+
 /** Pick the color everyone sees when your 3D dice roll across the table. */
 function DiceColorPicker() {
   const you = useGameStore((s) => s.you);
@@ -41,6 +43,43 @@ function DiceColorPicker() {
         value={current ?? '#6c9bd2'}
         title="Custom color"
         onChange={(e) => intents.setDiceColor(e.target.value)}
+      />
+    </div>
+  );
+}
+
+/** Pick the color of the pips/numbers painted on your own dice. */
+function DiceTextColorPicker() {
+  const you = useGameStore((s) => s.you);
+  const members = useGameStore((s) => s.members);
+  const current = you ? members.find((m) => m.userId === you.userId)?.diceTextColor ?? null : null;
+
+  return (
+    <div className="dice-color-row">
+      <span className="dim" style={{ fontSize: 11 }}>Your dice text:</span>
+      <button
+        className={`link ${current === null ? 'active' : ''}`}
+        style={{ fontSize: 11 }}
+        title="Automatic (dark on light dice, light on dark dice)"
+        onClick={() => intents.setDiceTextColor(null)}
+      >
+        auto
+      </button>
+      {TEXT_PALETTE.map((c) => (
+        <button
+          key={c}
+          className={`dice-color-swatch ${current === c ? 'active' : ''}`}
+          style={{ background: c }}
+          title={c}
+          onClick={() => intents.setDiceTextColor(c)}
+        />
+      ))}
+      <input
+        type="color"
+        className="dice-color-custom"
+        value={current ?? '#10131a'}
+        title="Custom color"
+        onChange={(e) => intents.setDiceTextColor(e.target.value)}
       />
     </div>
   );
@@ -84,6 +123,7 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
         </tbody>
       </table>
       <DiceColorPicker />
+      <DiceTextColorPicker />
       <p className="dim" style={{ fontSize: 11, margin: '6px 0 0' }}>
         Rolls go to chat for everyone. Use /r in chat for modifiers (e.g. /r 2d6+3).
       </p>

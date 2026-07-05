@@ -3,7 +3,7 @@ import {
   C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe,
-  type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type InitAddPayload,
+  type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type ImpactKind, type InitAddPayload,
   type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
   type SheetData, type Token, type UndoEntry, type UsePowerPayload,
 } from 'shared';
@@ -120,7 +120,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
             io.to(dmRoom(spec.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
           }
         }
-        floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt);
+        floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt, 'aoe', spec.damageType);
       });
     }
     const msg = chat.add(spec.campaignId, {
@@ -367,9 +367,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }
       const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
       const delta = action.effect === 'heal' ? applied : -applied;
+      const impactKind: ImpactKind = action.effect === 'heal' ? 'heal' : action.aoe ? 'aoe' : action.ranged ? 'ranged' : 'melee';
 
       // Work out the outcome now, for the chat card's text — but don't touch
-      // the target's HP yet. That (and the floating number over their token)
+      // the target's HP yet. That (and the impact animation over their token)
       // is deferred to fire only once this roll's own dice have visibly
       // settled, so the token never reacts before the player sees why.
       let hpNote = '';
@@ -386,7 +387,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             // patched this same sheet (when the actor heals themself).
             const fresh = characters.byId(targetId);
             if (fresh) applyHpDelta(io, d.campaignId, fresh, delta);
-            floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
+            floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType);
           };
         } else if (tgt.bar) {
           const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
@@ -398,7 +399,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             tokens.update(tgt.id, { bar: { hp: nh, maxHp } });
             io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tgt.id)! });
             syncMapVision(io, d.campaignId, src.mapId);
-            floatHp(io, d.campaignId, src.mapId, tgt.id, delta);
+            floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType);
           };
         }
       }
@@ -586,7 +587,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
           }
         }
-        floatHp(io, d.campaignId, tok.mapId, tok.id, -amt);
+        floatHp(io, d.campaignId, tok.mapId, tok.id, -amt, 'aoe', action.damageType);
       });
     }
     const msg = chat.add(d.campaignId, {
@@ -663,6 +664,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (!fresh) return;
         applyHpDelta(io, d.campaignId, fresh, 1); // clears unconscious
         persistSheet(io, d.campaignId, characters.byId(characterId)!, { deathSuccesses: 0, deathFailures: 0 });
+        for (const t of tokens.forCharacter(characterId)) floatHp(io, d.campaignId, t.mapId, t.id, 1, 'heal');
       }, diceSettleDelayMs(br.dice.length));
       return;
     }

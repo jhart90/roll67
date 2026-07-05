@@ -4,7 +4,7 @@
 import type {
   AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, Door, Drawing, DrawingLayerName,
-  GameSystem, GridConfig, Handout, Hex, InitiativeState, LocationNode, Light, Macro,
+  GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
   RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WorldFolder,
 } from './types.js';
@@ -77,6 +77,7 @@ export const C2S = {
   DELETE_MACRO: 'deleteMacro',
   REORDER_MACROS: 'reorderMacros',
   SET_DICE_COLOR: 'setDiceColor',
+  SET_DICE_TEXT_COLOR: 'setDiceTextColor',
   // rollable tables
   CREATE_TABLE: 'createTable',
   UPDATE_TABLE: 'updateTable',
@@ -536,7 +537,7 @@ export interface DoorStatePayload { mapId: string; doorId: string; open: boolean
 export interface CharacterUpsertedPayload { character: Character }
 export interface CharacterRemovedPayload { characterId: string }
 /** Floating combat text over a token: negative = damage, positive = heal. */
-export interface HpFloatPayload { mapId: string; tokenId: string; delta: number }
+export interface HpFloatPayload { mapId: string; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }
 /** A rollable-table result to flash on-screen (same text as the chat card). */
 export interface TableResultPayload { text: string; color: string }
 
@@ -572,9 +573,11 @@ export interface DirectoryPayload {
   spells: string[];
   items: string[];
 }
-export interface MemberPresencePayload { userId: string; online: boolean; mapId: string | null; diceColor: string | null }
+export interface MemberPresencePayload { userId: string; online: boolean; mapId: string | null; diceColor: string | null; diceTextColor: string | null }
 /** Set your own 3D-dice color ("#rrggbb", or null for the defaults). */
 export interface SetDiceColorPayload { color: string | null }
+/** Set the color of the pips/numbers painted on your own dice ("#rrggbb", or null for automatic contrast). */
+export interface SetDiceTextColorPayload { color: string | null }
 /** The campaign's party (default) map changed. */
 export interface ActiveMapPayload { mapId: string | null }
 export interface ErrorMsgPayload { message: string }

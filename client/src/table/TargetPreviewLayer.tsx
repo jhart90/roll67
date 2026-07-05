@@ -52,8 +52,8 @@ export function TargetPreviewLayer() {
             })}
             <text
               x={srcPos.x} y={srcPos.y - srcRadius - 12}
-              textAnchor="middle" fontSize={13} fontWeight={700}
-              fill={p.color} stroke="#10131a" strokeWidth={3} paintOrder="stroke"
+              textAnchor="middle" fontSize={9} fontWeight={600}
+              fill={p.color} stroke="#10131a" strokeWidth={2} paintOrder="stroke"
             >
               {p.byName} · {p.label}
             </text>

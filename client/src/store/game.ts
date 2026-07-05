@@ -2,12 +2,12 @@ import { create } from 'zustand';
 import {
   C2S, S2C, castableLevels, combatActions, systemFor,
   type AoePreviewShownPayload, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
-  type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload,
+  type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
   type Door, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type MemberInfo, type PingShownPayload, type RollableTable, type Shop,
+  type MemberInfo, type MemberPresencePayload, type PingShownPayload, type RollableTable, type Shop,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
 } from 'shared';
@@ -78,7 +78,7 @@ interface GameState {
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
   aoeTargeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; originHex: Hex; aimHex: Hex } | null;
   /** Floating +/-HP combat text over tokens. */
-  floats: Array<{ id: number; tokenId: string; delta: number }>;
+  floats: Array<{ id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }>;
   /** On-screen rollable-table result pills (fade out after ~3s). */
   tableToasts: Array<{ id: number; text: string; color: string }>;
   beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
@@ -486,7 +486,7 @@ export function wireSocket(): void {
     // Only float over tokens we can actually see (secrecy preserved).
     if (s.map?.id !== p.mapId || !s.tokens[p.tokenId]) return;
     const id = ++pingCounter;
-    useGameStore.setState({ floats: [...s.floats, { id, tokenId: p.tokenId, delta: p.delta }] });
+    useGameStore.setState({ floats: [...s.floats, { id, tokenId: p.tokenId, delta: p.delta, kind: p.kind, damageType: p.damageType }] });
     setTimeout(() => {
       const cur = useGameStore.getState();
       useGameStore.setState({ floats: cur.floats.filter((f) => f.id !== id) });
@@ -634,10 +634,10 @@ export function wireSocket(): void {
     useGameStore.setState({ targetPreviews });
   });
 
-  socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId, diceColor }: { userId: string; online: boolean; mapId: string | null; diceColor: string | null }) => {
+  socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId, diceColor, diceTextColor }: MemberPresencePayload) => {
     const s = useGameStore.getState();
     useGameStore.setState({
-      members: s.members.map((m) => (m.userId === userId ? { ...m, online, mapId, diceColor } : m)),
+      members: s.members.map((m) => (m.userId === userId ? { ...m, online, mapId, diceColor, diceTextColor } : m)),
     });
   });
 
@@ -713,6 +713,7 @@ export const intents = {
 
   chat: (text: string) => socket.emit(C2S.CHAT, { text }),
   setDiceColor: (color: string | null) => socket.emit(C2S.SET_DICE_COLOR, { color }),
+  setDiceTextColor: (color: string | null) => socket.emit(C2S.SET_DICE_TEXT_COLOR, { color }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),
   reorderMacros: (macroIds: string[]) => socket.emit(C2S.REORDER_MACROS, { macroIds }),

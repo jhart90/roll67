@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
-  type JoinCampaignPayload, type SetDiceColorPayload, type SwitchActiveMapPayload, type ViewMapPayload,
+  type JoinCampaignPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import {
@@ -84,6 +84,7 @@ export function broadcastPresence(io: Server, campaignId: string): void {
       online: online.has(m.userId),
       mapId: campaigns.viewMapIdFor(campaignId, m.userId),
       diceColor: m.diceColor,
+      diceTextColor: m.diceTextColor,
     });
   }
 }
@@ -142,6 +143,15 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     if (!d.campaignId) return;
     const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
     users.setDiceColor(d.userId, clean);
+    broadcastPresence(io, d.campaignId);
+  }));
+
+  // Same, for the color of the pips/numbers painted on your dice.
+  socket.on(C2S.SET_DICE_TEXT_COLOR, safe(socket, ({ color }: SetDiceTextColorPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
+    users.setDiceTextColor(d.userId, clean);
     broadcastPresence(io, d.campaignId);
   }));
 

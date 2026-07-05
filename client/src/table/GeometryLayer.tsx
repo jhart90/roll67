@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Light, Point } from 'shared';
+import type { Door, Light, Point, Wall } from 'shared';
 import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
@@ -118,7 +118,37 @@ export function GeometryLayer() {
     return () => window.removeEventListener('keydown', onKey);
   }, [tool, draft, map.id]);
 
+  // How close (in map pixels) a new wall/door point must land to an existing
+  // wall/door endpoint before it snaps there instead of sitting just beside
+  // it -- otherwise a hairline crack between two segments meant to meet (a
+  // corner, a door frame) would let sight/light straight through it.
+  const ENDPOINT_SNAP_DIST = 15;
+
+  function nearbyEndpoint(p: Point, existingWalls: Wall[], existingDoors: Door[]): Point | null {
+    let best: Point | null = null;
+    let bestD = ENDPOINT_SNAP_DIST;
+    const consider = (q: Point) => {
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d < bestD) { bestD = d; best = q; }
+    };
+    for (const w of existingWalls) {
+      if (w.points.length === 0) continue;
+      consider(w.points[0]);
+      consider(w.points[w.points.length - 1]);
+    }
+    for (const d of existingDoors) {
+      consider(d.a);
+      consider(d.b);
+    }
+    return best;
+  }
+
   function snap(p: Point, shift: boolean): Point {
+    // Closing a gap against an existing endpoint always wins over hex-grid
+    // snapping -- the point here is sealing the geometry exactly, not
+    // aligning it to the grid.
+    const endpoint = nearbyEndpoint(p, walls, doors);
+    if (endpoint) return endpoint;
     if (!shift) return p;
     const hex = pixelToHex(p, grid);
     let best = p;

@@ -4,8 +4,8 @@
 
 import type { Server, Socket } from 'socket.io';
 import {
-  computeUnionFovBands, hexDistance, hexToPixel, packHex, pixelToHex, systemFor,
-  S2C, type Door, type Hex, type Light, type MapStatePayload, type Token, type TokenView,
+  computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, packHex, pixelToHex, systemFor,
+  S2C, type Door, type Hex, type Light, type MapStatePayload, type Point, type Token, type TokenView,
   type VisionStats, type VisionUpdatePayload,
 } from 'shared';
 import { campaigns, characters, fog, maps, tokens } from '../db/repos.js';
@@ -93,6 +93,8 @@ function knownDoors(map: MapRecord, explored: Set<number>, visible: Set<number>)
 export interface UserMapView {
   visible: Set<number>;
   fade: Set<number>;
+  visiblePolygons: Point[][] | null;
+  fadePolygons: Point[][] | null;
   newlyExplored: number[];
   explored: Set<number>;
   tokens: TokenView[];
@@ -120,11 +122,11 @@ export function computeUserMapView(userId: string, map: MapRecord, mapTokens?: T
       return { id: `tl-${t.id}`, x: px.x, y: px.y, brightRadius: t.light!.bright, dimRadius: t.light!.dim };
     });
   const lights = tokenLights.length > 0 ? [...map.lights, ...tokenLights] : map.lights;
+  const fovInput = { grid: map.grid, walls: map.walls, doors: map.doors, lights };
   const bands = viewers.length === 0
     ? { full: new Set<number>(), fade: new Set<number>() }
-    : computeUnionFovBands(viewers, {
-        grid: map.grid, walls: map.walls, doors: map.doors, lights,
-      });
+    : computeUnionFovBands(viewers, fovInput);
+  const polyBands = viewers.length === 0 ? null : computeUnionVisibilityPolygons(viewers, fovInput);
   const { full: visible, fade } = bands;
   const newlyExplored: number[] = [];
   for (const h of [...visible, ...fade]) {
@@ -140,6 +142,8 @@ export function computeUserMapView(userId: string, map: MapRecord, mapTokens?: T
   return {
     visible,
     fade,
+    visiblePolygons: polyBands?.full ?? null,
+    fadePolygons: polyBands?.fade ?? null,
     newlyExplored,
     explored: cache.explored,
     tokens: visibleTokens(userId, allTokens, seen),
@@ -173,6 +177,8 @@ export function buildMapState(
       drawings,
       visible: null,
       fade: null,
+      visiblePolygons: null,
+      fadePolygons: null,
       explored: null,
       knownDoors: [],
       viewingAs: null,
@@ -189,6 +195,8 @@ export function buildMapState(
     drawings: drawings.filter((d) => viewer.isDm || d.layer !== 'gm'),
     visible: [...view.visible],
     fade: [...view.fade],
+    visiblePolygons: view.visiblePolygons,
+    fadePolygons: view.fadePolygons,
     explored: [...view.explored],
     knownDoors: view.knownDoors,
     viewingAs: viewer.viewingAs ?? null,
@@ -224,6 +232,8 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
           mapId,
           visible: [...view.visible],
           fade: [...view.fade],
+          visiblePolygons: view.visiblePolygons,
+          fadePolygons: view.fadePolygons,
           newlyExplored: view.newlyExplored,
           tokens: view.tokens,
           knownDoors: view.knownDoors,
@@ -240,6 +250,8 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
       mapId,
       visible: [...view.visible],
       fade: [...view.fade],
+      visiblePolygons: view.visiblePolygons,
+      fadePolygons: view.fadePolygons,
       newlyExplored: view.newlyExplored,
       tokens: view.tokens,
       knownDoors: view.knownDoors,

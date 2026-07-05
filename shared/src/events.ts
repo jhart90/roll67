@@ -495,6 +495,13 @@ export interface MapStatePayload {
   fade: number[] | null;
   /** Packed hex keys ever explored (players; null for god-mode DM). */
   explored: number[] | null;
+  /**
+   * Smooth, wall-accurate fog edge (one polygon per viewer token), in map
+   * pixel space -- null under 'dark'/'dim' lighting or DM god mode, where the
+   * client falls back to punching out the `visible`/`fade` hex sets instead.
+   */
+  visiblePolygons: Point[][] | null;
+  fadePolygons: Point[][] | null;
   /** Doors within the viewer's explored region (players only). */
   knownDoors: Door[];
   /** Non-null when this payload is a DM "view as" preview. */
@@ -519,6 +526,9 @@ export interface VisionUpdatePayload {
   visible: number[];
   /** Fading rim one hex past vision range. */
   fade: number[];
+  /** See MapStatePayload.visiblePolygons/fadePolygons. */
+  visiblePolygons: Point[][] | null;
+  fadePolygons: Point[][] | null;
   newlyExplored: number[];
   /** Full list of tokens currently visible to this viewer. */
   tokens: TokenView[];

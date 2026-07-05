@@ -7,7 +7,7 @@ import {
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type MemberInfo, type MemberPresencePayload, type PingShownPayload, type RollableTable, type Shop,
+  type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type RollableTable, type Shop,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
 } from 'shared';
@@ -60,6 +60,9 @@ interface GameState {
   visible: Set<number> | null;
   /** Fading rim one hex past vision range. */
   fade: Set<number> | null;
+  /** Smooth wall-accurate fog edge, one polygon per viewer token; null falls back to hex punching. */
+  visiblePolygons: Point[][] | null;
+  fadePolygons: Point[][] | null;
   explored: Set<number> | null;
   knownDoors: Door[];
   viewingAs: string | null;
@@ -158,6 +161,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   drawingList: [],
   visible: null,
   fade: null,
+  visiblePolygons: null,
+  fadePolygons: null,
   explored: null,
   knownDoors: [],
   viewingAs: null,
@@ -293,7 +298,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       you: null, campaign: null, members: [], characters: [], mapsMeta: [],
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
-      tokens: {}, drawingList: [], visible: null, fade: null, explored: null, knownDoors: [],
+      tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], castPrompt: null,
     });
@@ -373,6 +378,8 @@ export function wireSocket(): void {
       drawingList: p.drawings,
       visible: p.visible ? new Set(p.visible) : null,
       fade: p.fade ? new Set(p.fade) : null,
+      visiblePolygons: p.visiblePolygons,
+      fadePolygons: p.fadePolygons,
       explored: p.explored ? new Set(p.explored) : null,
       knownDoors: p.knownDoors,
       viewingAs: p.viewingAs,
@@ -418,6 +425,8 @@ export function wireSocket(): void {
     useGameStore.setState({
       visible: new Set(p.visible),
       fade: new Set(p.fade),
+      visiblePolygons: p.visiblePolygons,
+      fadePolygons: p.fadePolygons,
       explored,
       tokens: tokensById(p.tokens),
       knownDoors: p.knownDoors,

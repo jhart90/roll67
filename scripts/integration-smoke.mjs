@@ -286,8 +286,19 @@ async function main() {
     mapId,
     wall: { points: [{ x: wallX, y: px(6, 0).y - 100 }, { x: wallX, y: px(6, 12).y + 100 }] },
   });
-  await wallGone;
+  const wallUpdate = await wallGone;
   ok(true, 'wall hides the monster from the player');
+  // Light-mode maps also get a smooth, wall-accurate polygon for the fog
+  // edge alongside the hex sets -- not tested for exact shape here (that's
+  // shared/test/visibilityPolygon.test.ts's job), just that the wiring
+  // actually delivers a real point list to the player.
+  ok(
+    Array.isArray(wallUpdate.visiblePolygons) && wallUpdate.visiblePolygons.length > 0
+      && wallUpdate.visiblePolygons[0].length > 0
+      && typeof wallUpdate.visiblePolygons[0][0].x === 'number'
+      && typeof wallUpdate.visiblePolygons[0][0].y === 'number',
+    'smooth visibility polygon reaches the player on a light-mode map',
+  );
   const wallId = ((await wallEdit).walls ?? []).at(-1)?.id;
 
   // Replace a middle chunk of wall with a closed door: build the stubs and
@@ -429,8 +440,9 @@ async function main() {
   // Switch to dark lighting -> player vision limited to darkvision (0) + lights.
   const darkUpdate = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
   dmSock.emit('setGridConfig', { mapId, grid: { lighting: 'dark' } });
-  await darkUpdate;
+  const darkPayload = await darkUpdate;
   ok(true, 'darkness hides the monster (no lights, no darkvision)');
+  ok(darkPayload.visiblePolygons === null, 'no smooth polygon under dark lighting -- client falls back to hex fog');
 
   // Torch on the monster's hex lights it up.
   const beastPx = px(12, 5);

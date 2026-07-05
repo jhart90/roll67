@@ -2,11 +2,14 @@
 // combined with the lighting model (bright/dim lights, darkvision,
 // global illumination). Pure — fully unit-testable.
 
-import type { Door, GridConfig, Hex, Light, VisionStats, Wall } from '../types.js';
+import type { Door, GridConfig, Hex, Light, Point, VisionStats, Wall } from '../types.js';
 import { hexDistance, hexRange, hexRing } from '../hex/coords.js';
 import { hexToPixel, pixelToHex } from '../hex/pixel.js';
 import { packHex } from '../hex/pack.js';
 import { rayBlocked, sightSegments, type Segment } from './raycast.js';
+import { computeVisibilityPolygon } from './visibilityPolygon.js';
+
+const SQRT3 = Math.sqrt(3);
 
 /** Hard cap on vision radius, to bound raycasting cost. */
 export const MAX_VISION_RADIUS = 40;
@@ -165,6 +168,45 @@ export function computeUnionFovBands(
   const fade = new Set<number>();
   for (const key of expanded) {
     if (!full.has(key)) fade.add(key);
+  }
+  return { full, fade };
+}
+
+export interface VisibilityPolygonBands {
+  /** One polygon per viewer, out to their vision radius. */
+  full: Point[][];
+  /** One polygon per viewer, out to the +1 hex fade radius. */
+  fade: Point[][];
+}
+
+/**
+ * The smooth, continuous analog of computeUnionFovBands: a wall-accurate
+ * visibility polygon per viewer instead of a set of whole hexes, for
+ * rendering a fog edge that cuts through hexes rather than stair-stepping
+ * along their boundaries. Only meaningful under global daylight ('light'
+ * lighting) -- 'dark'/'dim' need per-light-source shadow polygons and their
+ * own intersection-with-viewer-sight math, which this doesn't attempt yet;
+ * callers should fall back to the hex-based bands in that case.
+ */
+export function computeUnionVisibilityPolygons(
+  viewers: Array<{ hex: Hex; stats: VisionStats }>,
+  input: FovInput,
+): VisibilityPolygonBands | null {
+  if (input.grid.lighting !== 'light') return null;
+  const full: Point[][] = [];
+  const fade: Point[][] = [];
+  // One hex step's worst-case pixel reach (a viewer moving purely along an
+  // axial axis) -- a slightly generous stand-in for the true hex-distance
+  // disk, which isn't a circle; the mismatch only matters at the outer rim,
+  // far from the wall-shadow edges this is actually meant to fix.
+  const pxPerHex = input.grid.hexSize * SQRT3;
+  for (const v of viewers) {
+    const radius = Math.min(Math.max(v.stats.visionRange, v.stats.darkvision, 0), MAX_VISION_RADIUS);
+    if (radius <= 0) continue;
+    const originPx = hexToPixel(v.hex, input.grid);
+    const segs = sightSegments(input.walls, input.doors, originPx);
+    full.push(computeVisibilityPolygon(originPx, radius * pxPerHex, segs));
+    fade.push(computeVisibilityPolygon(originPx, (radius + 1) * pxPerHex, segs));
   }
   return { full, fade };
 }

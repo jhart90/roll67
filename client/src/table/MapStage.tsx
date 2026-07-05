@@ -27,6 +27,8 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
   const visible = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.visible));
   const fade = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.fade));
   const explored = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.explored));
+  const visiblePolygons = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.visiblePolygons));
+  const fadePolygons = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.fadePolygons));
 
   const containerRef = useRef<HTMLDivElement>(null);
   const panState = useRef<{ startX: number; startY: number; camX: number; camY: number } | null>(null);
@@ -266,7 +268,10 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <BackgroundCanvas map={map} />
           <DrawingLayer />
           <TokenLayer />
-          <FogCanvas map={map} visible={visible} fade={fade} explored={explored} />
+          <FogCanvas
+            map={map} visible={visible} fade={fade} explored={explored}
+            visiblePolygons={visiblePolygons} fadePolygons={fadePolygons}
+          />
           <GeometryLayer />
           <PingMeasureLayer />
           <AoeTemplateLayer />

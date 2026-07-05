@@ -76,7 +76,7 @@ interface DieGeometry {
   valueFaces: number[];
 }
 
-function makeFace(verts: Vec3[], label: string | null, textSize: number): Face {
+function makeFace(verts: Vec3[], label: string | null, textSize: number, edgeAlignedBasis = false): Face {
   const center = scale(verts.reduce(add, v3(0, 0, 0)), 1 / verts.length);
   // Newell's method: a well-defined average normal even for the slightly
   // non-planar kite faces of the d10 trapezohedron.
@@ -94,15 +94,22 @@ function makeFace(verts: Vec3[], label: string | null, textSize: number): Face {
     normal = scale(normal, -1);
   }
   // Text basis, orthogonalized against the normal so the label sits flat in
-  // the face plane (matters for the non-planar kites).
-  const uRaw = sub(ordered[0], center);
+  // the face plane (matters for the non-planar kites). For a square face
+  // (the cube), center-to-vertex points at a corner, and settling with that
+  // aligned to screen-right leaves the square rotated 45° -- a "diamond"
+  // resting on a pointy corner instead of a flat edge. Center-to-edge-midpoint
+  // is axis-aligned with the square's own sides, so the settled face reads as
+  // a plain, flat-sided square instead.
+  const uRaw = edgeAlignedBasis
+    ? sub(scale(add(ordered[0], ordered[1]), 0.5), center)
+    : sub(ordered[0], center);
   const u = norm(sub(uRaw, scale(normal, dot(uRaw, normal))));
   const v = norm(cross(normal, u));
   return { verts: ordered, label, normal, center, u, v, textSize };
 }
 
-function buildDie(rawFaces: Vec3[][], labelled: number, textSize: number): DieGeometry {
-  const faces = rawFaces.map((verts, i) => makeFace(verts, i < labelled ? String(i + 1) : null, textSize));
+function buildDie(rawFaces: Vec3[][], labelled: number, textSize: number, edgeAlignedBasis = false): DieGeometry {
+  const faces = rawFaces.map((verts, i) => makeFace(verts, i < labelled ? String(i + 1) : null, textSize, edgeAlignedBasis));
   return { faces, valueFaces: faces.map((_, i) => i).filter((i) => faces[i].label !== null) };
 }
 
@@ -137,7 +144,7 @@ function cube(): DieGeometry {
     [c(-1, -1, -1), c(1, -1, -1), c(1, -1, 1), c(-1, -1, 1)],
     [c(-1, -1, 1), c(1, -1, 1), c(1, 1, 1), c(-1, 1, 1)],
     [c(-1, -1, -1), c(-1, 1, -1), c(1, 1, -1), c(1, -1, -1)],
-  ], 6, 0.62);
+  ], 6, 0.62, true);
 }
 
 function octahedron(): DieGeometry {
@@ -334,6 +341,30 @@ export function simsSettleTime(sims: DieSim[]): number {
 
 const LIGHT = norm(v3(0.35, -0.55, 0.75));
 
+// Traditional d6 pip layout (dot positions in units of the 24px-font-scaled
+// face-local grid drawDie's affine transform sets up), rather than a painted
+// numeral -- a d6 face is a plain square, so there's no orientation to get
+// wrong the way a numeral could render upside down.
+const PIP_LAYOUT: Record<number, Array<[number, number]>> = {
+  1: [[0, 0]],
+  2: [[-1, -1], [1, 1]],
+  3: [[-1, -1], [0, 0], [1, 1]],
+  4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+  5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+  6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+};
+const PIP_SPACING = 8;
+const PIP_RADIUS = 3.6;
+
+function drawPips(ctx: CanvasRenderingContext2D, value: number, color: string): void {
+  ctx.fillStyle = color;
+  for (const [px, py] of PIP_LAYOUT[value] ?? []) {
+    ctx.beginPath();
+    ctx.arc(px * PIP_SPACING, py * PIP_SPACING, PIP_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void {
   const te = Math.max(0, Math.min(1, (tMs - sim.delay) / sim.dur));
   if (tMs < sim.delay - 1) return;
@@ -400,17 +431,21 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
       ctx.save();
       // Post-multiply so the canvas's own DPR scaling stays in effect.
       ctx.transform(u3.x * k, u3.y * k, v3r.x * k, v3r.y * k, c2.x, c2.y);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      // A d100 reads as a percentile die (00–90) while tumbling; only the
-      // landing face carries the exact rolled value.
-      let label = f.label;
-      if (sim.die.sides === 100) {
-        label = f === sim.targetFace ? String(sim.die.value) : String((Number(f.label) % 10) * 10).padStart(2, '0');
+      if (sim.die.sides === 6) {
+        drawPips(ctx, Number(f.label), sim.textColor);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // A d100 reads as a percentile die (00–90) while tumbling; only the
+        // landing face carries the exact rolled value.
+        let label = f.label;
+        if (sim.die.sides === 100) {
+          label = f === sim.targetFace ? String(sim.die.value) : String((Number(f.label) % 10) * 10).padStart(2, '0');
+        }
+        ctx.font = `800 ${label.length >= 3 ? 18 : 24}px system-ui, sans-serif`;
+        ctx.fillStyle = sim.textColor;
+        ctx.fillText(label, 0, 1.5);
       }
-      ctx.font = `800 ${label.length >= 3 ? 18 : 24}px system-ui, sans-serif`;
-      ctx.fillStyle = sim.textColor;
-      ctx.fillText(label, 0, 1.5);
       ctx.restore();
     }
   }

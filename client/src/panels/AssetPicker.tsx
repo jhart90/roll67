@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetInfo } from 'shared';
-import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
+import { UploadProgressBar } from '../util/UploadProgressBar';
+import { useUploadProgress } from '../util/useUploadProgress';
 
 /**
  * In-game image picker: browse the campaign's uploaded art, or upload a new
@@ -16,6 +17,7 @@ export function AssetPicker({ title = 'Choose an image', onPick, onClose }: {
   const campaign = useGameStore((s) => s.campaign);
   const assets = useGameStore((s) => s.assetList).filter((a) => a.kind === 'token' || a.kind === 'map' || a.kind === 'handout');
   const [uploading, setUploading] = useState(false);
+  const { progress, upload } = useUploadProgress();
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -27,7 +29,7 @@ export function AssetPicker({ title = 'Choose an image', onPick, onClose }: {
     setUploading(true);
     setError(null);
     try {
-      const up = await uploadFile(file, campaign.id, 'token');
+      const up = await upload(file, campaign.id, 'token');
       intents.requestAssets();
       // Auto-select the freshly uploaded image.
       onPick({ id: up.assetId, kind: 'token', url: up.url, title: file.name, folderId: null, width: up.width, height: up.height, mime: file.type });
@@ -50,6 +52,7 @@ export function AssetPicker({ title = 'Choose an image', onPick, onClose }: {
           </label>
           <span className="dim" style={{ fontSize: 12 }}>or pick from the asset library:</span>
         </div>
+        <UploadProgressBar progress={progress} />
         {error && <p className="error">{error}</p>}
         <div className="asset-picker-grid">
           {assets.map((a) => (

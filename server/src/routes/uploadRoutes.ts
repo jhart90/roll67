@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { imageSize } from 'image-size';
 import { UPLOADS_DIR, UPLOAD_LIMIT_BYTES } from '../config.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
@@ -33,9 +34,40 @@ const upload = multer({
   limits: { fileSize: Math.max(UPLOAD_LIMIT_BYTES, AUDIO_LIMIT_BYTES) },
 });
 
+// Longest-side cap per use, in pixels -- backgrounds are viewed zoomed-in so
+// get the most headroom, tokens are small on-screen so need far less.
+const MAX_DIMENSION: Record<string, number> = { map: 4096, handout: 2560, token: 1024 };
+
+/**
+ * Re-encode an uploaded image to cut upload/transfer size and load time,
+ * without visibly softening it: downscale only if it exceeds the kind's cap,
+ * and recompress at a quality/setting that's effectively indistinguishable
+ * from the source (PNG stays lossless; JPEG/WebP quality is kept high).
+ * Animated GIFs are passed through untouched -- sharp would flatten them to
+ * a single frame.
+ */
+async function processImage(buffer: Buffer, mimetype: string, kind: string): Promise<{ buffer: Buffer; width: number; height: number }> {
+  if (mimetype === 'image/gif') {
+    const dims = imageSize(buffer);
+    return { buffer, width: dims.width ?? 0, height: dims.height ?? 0 };
+  }
+  const maxSide = MAX_DIMENSION[kind] ?? MAX_DIMENSION.handout;
+  let pipeline = sharp(buffer).rotate().resize({
+    width: maxSide,
+    height: maxSide,
+    fit: 'inside',
+    withoutEnlargement: true,
+  });
+  if (mimetype === 'image/jpeg') pipeline = pipeline.jpeg({ quality: 88, mozjpeg: true });
+  else if (mimetype === 'image/webp') pipeline = pipeline.webp({ quality: 88 });
+  else pipeline = pipeline.png({ compressionLevel: 9 });
+  const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
+  return { buffer: data, width: info.width, height: info.height };
+}
+
 export const uploadRouter = Router();
 
-uploadRouter.post('/upload', requireAuth, upload.single('file'), (req: AuthedRequest, res) => {
+uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: AuthedRequest, res) => {
   const file = req.file;
   const { campaignId, kind, title, folderId } = req.body ?? {};
   if (!file) {
@@ -64,13 +96,15 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), (req: AuthedReq
 
   let width = 0;
   let height = 0;
+  let outBuffer = file.buffer;
   if (!isAudio) {
     try {
-      const dims = imageSize(file.buffer);
-      width = dims.width ?? 0;
-      height = dims.height ?? 0;
+      const processed = await processImage(file.buffer, file.mimetype, kind);
+      outBuffer = processed.buffer;
+      width = processed.width;
+      height = processed.height;
     } catch {
-      res.status(400).json({ error: 'Could not read image dimensions.' });
+      res.status(400).json({ error: 'Could not process image.' });
       return;
     }
   }
@@ -82,12 +116,12 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), (req: AuthedReq
     filename: file.originalname,
     ext,
     mime: file.mimetype,
-    bytes: file.size,
+    bytes: outBuffer.length,
     width,
     height,
     title: typeof title === 'string' && title.trim() ? title.trim() : null,
     folderId: typeof folderId === 'string' && folderId ? folderId : null,
   });
-  fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${ext}`), file.buffer);
+  fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${ext}`), outBuffer);
   res.json({ assetId: asset.id, url: `/uploads/${asset.id}.${ext}`, width, height });
 });

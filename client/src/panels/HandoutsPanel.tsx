@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import type { Handout } from 'shared';
-import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
+import { UploadProgressBar } from '../util/UploadProgressBar';
+import { useUploadProgress } from '../util/useUploadProgress';
 
 export function HandoutEditor({ handout, onDone }: { handout: Handout | null; onDone: () => void }) {
   const campaign = useGameStore((s) => s.campaign)!;
   const [title, setTitle] = useState(handout?.title ?? '');
   const [body, setBody] = useState(handout?.bodyMd ?? '');
   const [uploading, setUploading] = useState(false);
+  const { progress, upload } = useUploadProgress();
   const [assetId, setAssetId] = useState<string | null>(null);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -15,7 +17,7 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
     if (!file) return;
     setUploading(true);
     try {
-      const res = await uploadFile(file, campaign.id, 'handout');
+      const res = await upload(file, campaign.id, 'handout');
       setAssetId(res.assetId);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Upload failed');
@@ -48,6 +50,7 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
       <label className="upload-label">
         Image
         <input type="file" accept="image/*" onChange={onUpload} disabled={uploading} />
+        <UploadProgressBar progress={progress} />
       </label>
       <div className="row">
         <button type="submit" className="primary" style={{ width: 'auto' }}>Save</button>
@@ -66,6 +69,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
   const [title, setTitle] = useState(handout?.title ?? '');
   const [body, setBody] = useState(handout?.bodyMd ?? '');
   const [uploading, setUploading] = useState(false);
+  const { progress, upload } = useUploadProgress();
   const [assetId, setAssetId] = useState<string | null>(null);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -73,7 +77,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
     if (!file) return;
     setUploading(true);
     try {
-      const res = await uploadFile(file, campaign.id, 'handout');
+      const res = await upload(file, campaign.id, 'handout');
       setAssetId(res.assetId);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Upload failed');
@@ -106,6 +110,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
         <label className="upload-label">
           Image
           <input type="file" accept="image/*" onChange={onUpload} disabled={uploading} />
+          <UploadProgressBar progress={progress} />
         </label>
         {handout?.imageUrl && !assetId && <img className="handout-img" src={handout.imageUrl} alt={handout.title} />}
 

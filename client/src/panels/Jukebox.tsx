@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
+import { UploadProgressBar } from '../util/UploadProgressBar';
+import { useUploadProgress } from '../util/useUploadProgress';
 
 /** DM jukebox controls; players see now-playing + a local mute. */
 export function Jukebox({ onClose }: { onClose: () => void }) {
@@ -11,6 +12,7 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
   const assets = useGameStore((s) => s.assetList);
   const clientMuted = useGameStore((s) => s.clientMuted);
   const [uploading, setUploading] = useState(false);
+  const { progress, upload } = useUploadProgress();
   const fileRef = useRef<HTMLInputElement>(null);
   const isDm = you?.role === 'dm';
 
@@ -26,7 +28,7 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
     setUploading(true);
     try {
       for (const f of files) {
-        const { assetId } = await uploadFile(f, campaign.id, 'audio', { title: f.name });
+        const { assetId } = await upload(f, campaign.id, 'audio', { title: f.name });
         intents.addAudio(assetId, f.name.replace(/\.[^.]+$/, ''));
       }
     } catch (err) {
@@ -88,6 +90,7 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
           <label className="asset-upload">
             <input ref={fileRef} type="file" accept="audio/*" multiple onChange={onUpload} disabled={uploading} />
             {uploading ? 'uploading…' : 'Upload audio (mp3, ogg, wav)'}
+            <UploadProgressBar progress={progress} />
           </label>
 
           {audioAssets.length > tracks.length && (

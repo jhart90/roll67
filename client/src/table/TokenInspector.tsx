@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
 import type { TokenShape } from 'shared';
 import { systemFor } from 'shared';
-import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
+import { UploadProgressBar } from '../util/UploadProgressBar';
+import { useUploadProgress } from '../util/useUploadProgress';
 
 const SHAPES: Array<{ id: TokenShape; label: string }> = [
   { id: 'circle', label: 'Circle' },
@@ -22,6 +23,7 @@ export function TokenInspector() {
   const character = useGameStore((s) => s.characters.find((c) => c.id === token?.characterId));
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const { progress, upload } = useUploadProgress();
 
   if (!token || you?.role !== 'dm' || !campaign) return null;
 
@@ -35,7 +37,7 @@ export function TokenInspector() {
     if (!file || !token || !campaign) return;
     setUploading(true);
     try {
-      const { assetId } = await uploadFile(file, campaign.id, 'token');
+      const { assetId } = await upload(file, campaign.id, 'token');
       intents.updateToken(token.id, { artAssetId: assetId });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Upload failed');
@@ -127,6 +129,7 @@ export function TokenInspector() {
         <label>
           Art
           <input ref={fileRef} type="file" accept="image/*" onChange={onArt} disabled={uploading} />
+          <UploadProgressBar progress={progress} />
         </label>
         <label>
           HP

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetInfo } from 'shared';
-import { uploadFile } from '../api';
 import { intents, useGameStore } from '../store/game';
+import { UploadProgressBar } from '../util/UploadProgressBar';
+import { useUploadProgress } from '../util/useUploadProgress';
 
 /** DM art asset manager: upload, organize into folders, use as map bg / token. */
 export function AssetLibrary({ onClose }: { onClose: () => void }) {
@@ -14,6 +15,7 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
   const map = useGameStore((s) => s.map);
   const [folderId, setFolderId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const { progress, upload } = useUploadProgress();
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { intents.requestAssets(); }, []);
@@ -26,7 +28,7 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
     if (!files.length || !campaign) return;
     setUploading(true);
     try {
-      for (const f of files) await uploadFile(f, campaign.id, 'token', { folderId });
+      for (const f of files) await upload(f, campaign.id, 'token', { folderId });
       intents.requestAssets();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Upload failed');
@@ -71,6 +73,7 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
             <label className="asset-upload">
               <input ref={fileRef} type="file" accept="image/*" multiple onChange={onUpload} disabled={uploading} />
               {uploading ? 'uploading…' : `Upload images${folderId ? ' to this folder' : ''}`}
+              <UploadProgressBar progress={progress} />
             </label>
             <div className="asset-grid">
               {assets.map((a) => (

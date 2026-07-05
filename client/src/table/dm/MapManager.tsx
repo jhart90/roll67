@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GridConfig } from 'shared';
-import { uploadFile } from '../../api';
 import { intents, useGameStore } from '../../store/game';
 import { openWindow } from '../../store/windowManager';
+import { UploadProgressBar } from '../../util/UploadProgressBar';
+import { useUploadProgress } from '../../util/useUploadProgress';
 
 function GridField({
   label, value, onCommit, step = 1, min,
@@ -41,6 +42,7 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
   const map = useGameStore((s) => s.map);
   const [newName, setNewName] = useState('');
   const [uploading, setUploading] = useState(false);
+  const { progress, upload } = useUploadProgress();
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Load the target map so its grid/details are available to edit.
@@ -61,7 +63,7 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
     if (!file || !loaded || !campaign) return;
     setUploading(true);
     try {
-      const { assetId } = await uploadFile(file, campaign.id, 'map');
+      const { assetId } = await upload(file, campaign.id, 'map');
       intents.updateMap(loaded.id, { bgAssetId: assetId });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Upload failed');
@@ -110,6 +112,7 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
               Background image
               <input ref={fileRef} type="file" accept="image/*" onChange={onUpload} disabled={uploading} />
               {uploading && <span className="dim">uploading…</span>}
+              <UploadProgressBar progress={progress} />
             </label>
             {loaded.bgUrl && <img className="handout-img" src={loaded.bgUrl} alt={loaded.name} />}
 

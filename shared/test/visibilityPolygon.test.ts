@@ -81,7 +81,7 @@ describe('computeUnionVisibilityPolygons', () => {
   };
   const EYES: VisionStats = { visionRange: 10, darkvision: 0 };
 
-  it('under "light", reach has no lit-mask (the whole reach counts as visible)', () => {
+  it('under "light", reach has no lit-mask and ignores EYES\' modest visionRange entirely (no fade rim -- sight is unlimited)', () => {
     const bands = computeUnionVisibilityPolygons(
       [{ hex: { q: 0, r: 0 }, stats: EYES }],
       { grid: GRID, walls: [], doors: [], lights: [] },
@@ -92,7 +92,10 @@ describe('computeUnionVisibilityPolygons', () => {
     expect(bands.fade.reach).toHaveLength(1);
     const fullReach = Math.max(...bands.full.reach[0].map((p) => Math.hypot(p.x, p.y)));
     const fadeReach = Math.max(...bands.fade.reach[0].map((p) => Math.hypot(p.x, p.y)));
-    expect(fadeReach).toBeGreaterThan(fullReach);
+    // No separate fade rim under light -- full already reaches as far as sight
+    // can carry, well past EYES' own (irrelevant, under daylight) visionRange.
+    expect(fadeReach).toBeCloseTo(fullReach, 5);
+    expect(fullReach).toBeGreaterThan(EYES.visionRange * GRID.hexSize);
   });
 
   it('a wall shortens the reach polygon in its direction, mirroring hex-based FOV blocking', () => {

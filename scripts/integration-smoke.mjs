@@ -106,6 +106,7 @@ async function main() {
   const dmSock = await connect(dm.token);
   const dmState = waitFor(dmSock, 'campaignState');
   const dmMap = waitFor(dmSock, 'mapState');
+  const dmShopsOnJoin = waitFor(dmSock, 'shops'); // the server auto-pushes the current list on join
   dmSock.emit('joinCampaign', { campaignId: camp.id });
   const dmCampaign = await dmState;
   ok(dmCampaign.campaign.id === camp.id, 'DM got campaign state');
@@ -116,10 +117,23 @@ async function main() {
 
   // Delete stale smoke maps from crashed runs (a crash can even leave one
   // as the active map), then create a fresh one and identify it by id.
+  // Includes "Smoke Door Memory": a crash partway through that sub-test
+  // would otherwise leave it (and its throwaway character) orphaned forever,
+  // quietly bloating the campaign a little more with every failed run.
   const staleIds = new Set(
-    dmCampaign.maps.filter((x) => x.name === 'Smoke Test Map' || x.name === 'Smoke Annex').map((x) => x.id),
+    dmCampaign.maps.filter((x) => x.name === 'Smoke Test Map' || x.name === 'Smoke Annex' || x.name === 'Smoke Door Memory').map((x) => x.id),
   );
   for (const id of staleIds) dmSock.emit('deleteMap', { mapId: id });
+  for (const c of dmCampaign.characters.filter((x) => x.name === 'Smoke PC (door memory)')) {
+    dmSock.emit('deleteCharacter', { characterId: c.id });
+  }
+  // Shops have no such crash-survivor cleanup at all today, unlike
+  // maps/characters -- a run that crashes anywhere before its own final
+  // `deleteShop` calls (near the very end of the script) leaves "Smoke
+  // Store"/"Hidden Stall" behind forever. Confirmed by direct DB inspection:
+  // dozens had piled up in the dev campaign from historical crashed runs.
+  const staleShops = (await dmShopsOnJoin).shops.filter((s) => s.name === 'Smoke Store' || s.name === 'Hidden Stall');
+  for (const s of staleShops) dmSock.emit('deleteShop', { shopId: s.id });
   await new Promise((r) => setTimeout(r, 500));
 
   // The map to restore afterwards: the pre-test active map unless it was a
@@ -437,72 +451,90 @@ async function main() {
 
   // ---------- discovered doors stay known after losing sight of them ----------
   console.log('door memory:');
-  // The check above doesn't prove much on its own -- the player's normal
-  // (visionRange 24) sight easily still reaches that door from (6,5). Zero
-  // out their vision so the ONLY way they can ever learn about a new door is
-  // the "close enough to touch it" rule (never the raycast-based visible/fade
-  // set), which isolates exactly the path this feature depends on.
-  dmSock.emit('updateToken', { tokenId: pcToken.id, patch: { vision: { visionRange: 0, darkvision: 0 } } });
-  await new Promise((r) => setTimeout(r, 300));
+  // Isolated on its own brand-new map: `explored`/door-memory are cached per
+  // (user, map), so a fresh map guarantees zero pre-existing exploration --
+  // including from 'light' mode's own unbounded reach, tested above, which
+  // would otherwise make it hard to find any spot the player hasn't already
+  // raycast-explored simply by having stood somewhere on the party map.
+  // Dark lighting + a zero-vision token means the ONLY way this player can
+  // ever learn about a door here is the "close enough to touch it" rule
+  // (never the raycast-based visible/fade set), isolating exactly the path
+  // this feature depends on.
+  const memMapReady = waitFor(dmSock, 'mapList', 5000, (p) => p.maps.some((m) => m.name === 'Smoke Door Memory'));
+  dmSock.emit('createMap', { name: 'Smoke Door Memory' });
+  const memMapId = (await memMapReady).maps.find((m) => m.name === 'Smoke Door Memory').id;
+  dmSock.emit('setGridConfig', { mapId: memMapId, grid: { lighting: 'dark' } });
 
-  // Far corner (well beyond the 24-hex vision the player had before it was
-  // zeroed above), so this door's hex can never already be in `explored`
-  // from earlier in the test. The approach spot is exactly 2 hexes from the
-  // door itself -- not on it, not 1 away -- so the player's own-hex-visible
-  // and fade-rim rules (radius 1 at these zeroed stats) can't be what puts
-  // the door's hex into `explored`; only the dedicated 2-hex proximity rule
-  // this feature relies on can.
-  const memDoorSpot = px(15, 27);
-  const memApproachSpot = { q: 15, r: 25 };
-  const memAwaySpot = { q: 15, r: 5 };
-  // Moved by the DM (not the player) -- these jumps cross the earlier wall's
-  // x, and only the DM's moves skip the straight-line wall-collision check;
-  // it's the resulting vision recompute being tested here, not pathing.
-  const memMoved = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === memApproachSpot.q && p.r === memApproachSpot.r);
-  dmSock.emit('moveToken', { tokenId: pcToken.id, q: memApproachSpot.q, r: memApproachSpot.r });
-  await memMoved;
+  const memApproachSpot = { q: 5, r: 5 };
+  const memDoorSpot = px(5, 7); // 2 hexes from the approach spot -- not on it, not 1 away
+  const memAwaySpot = { q: 5, r: 20 };
 
-  const memDoorEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.doors);
-  dmSock.emit('upsertDoor', {
-    mapId, door: { a: { x: memDoorSpot.x, y: memDoorSpot.y - 20 }, b: { x: memDoorSpot.x, y: memDoorSpot.y + 20 }, open: false },
+  // A dedicated throwaway character/token -- not the shared `pc` the rest of
+  // this script uses for shops/directory/initiative/etc. below -- so this
+  // detour can't leave any trace on state those later checks depend on.
+  const memCharUpsert = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.name === 'Smoke PC (door memory)');
+  dmSock.emit('createCharacter', { name: 'Smoke PC (door memory)', system: camp.system ?? 'dnd5e', ownerUserId: player.user.id });
+  const memChar = (await memCharUpsert).character;
+
+  const memTokenReady = waitFor(dmSock, 'tokenUpserted', 5000, (p) => p.token.name === 'Smoke PC (door memory)');
+  dmSock.emit('createToken', {
+    mapId: memMapId, name: 'Smoke PC (door memory)', characterId: memChar.id, layer: 'token',
+    q: memApproachSpot.q, r: memApproachSpot.r, vision: { visionRange: 0, darkvision: 0 },
   });
-  const memDoor = (await memDoorEdit).doors.at(-1);
+  const memToken = (await memTokenReady).token;
 
-  const memDiscovered = await waitFor(playerSock, 'visionUpdate', 5000, (p) => p.knownDoors.some((x) => x.id === memDoor.id));
+  const memAssigned = waitFor(playerSock, 'mapState', 5000, (p) => p.map.id === memMapId);
+  dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: memMapId });
+  await memAssigned;
+
+  // Both waiters registered before the single emit: mapEdited (to the DM)
+  // and visionUpdate (to the player, via syncMapVision) go out back to back
+  // in the same server tick, so registering the player-side listener only
+  // after awaiting the DM's confirmation risks missing an event that
+  // already arrived.
+  const memDoorEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.doors);
+  const memDiscoveredWait = waitFor(playerSock, 'visionUpdate', 5000, () => true);
+  dmSock.emit('upsertDoor', {
+    mapId: memMapId, door: { a: { x: memDoorSpot.x, y: memDoorSpot.y - 20 }, b: { x: memDoorSpot.x, y: memDoorSpot.y + 20 }, open: false },
+  });
+  const [memDoorEditResult, memDiscovered] = await Promise.all([memDoorEdit, memDiscoveredWait]);
+  const memDoor = memDoorEditResult.doors.at(-1);
   const memEntry = memDiscovered.knownDoors.find((x) => x.id === memDoor.id);
   ok(!!memEntry && memEntry.open === false, 'a door only reachable via proximity (never real sight) is still discovered, closed');
 
-  const memAway = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === memAwaySpot.q && p.r === memAwaySpot.r);
-  dmSock.emit('moveToken', { tokenId: pcToken.id, q: memAwaySpot.q, r: memAwaySpot.r });
-  await memAway;
-  const memStillKnown = await waitFor(playerSock, 'visionUpdate', 5000, () => true);
+  const memAway = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === memToken.id && p.q === memAwaySpot.q && p.r === memAwaySpot.r);
+  const memStillKnownWait = waitFor(playerSock, 'visionUpdate', 5000, () => true);
+  dmSock.emit('moveToken', { tokenId: memToken.id, q: memAwaySpot.q, r: memAwaySpot.r });
+  const [, memStillKnown] = await Promise.all([memAway, memStillKnownWait]);
   const memAwayEntry = memStillKnown.knownDoors.find((x) => x.id === memDoor.id);
   ok(!!memAwayEntry && memAwayEntry.open === false, 'door remains known after walking far out of range, in its last-seen (closed) state');
 
   // DM opens it while the player is far away -- memory should NOT live-update
   // to reflect a state the player never actually observed.
   const dmToggled = waitFor(dmSock, 'doorState', 3000, (p) => p.doorId === memDoor.id);
-  dmSock.emit('toggleDoor', { mapId, doorId: memDoor.id });
+  const memFrozenWait = waitFor(playerSock, 'visionUpdate', 5000, () => true);
+  dmSock.emit('toggleDoor', { mapId: memMapId, doorId: memDoor.id });
   await dmToggled;
-  const memFrozenUpdate = await waitFor(playerSock, 'visionUpdate', 5000, () => true);
+  const memFrozenUpdate = await memFrozenWait;
   const memFrozenEntry = memFrozenUpdate.knownDoors.find((x) => x.id === memDoor.id);
   ok(!!memFrozenEntry && memFrozenEntry.open === false, "memory stays frozen at last-seen state -- doesn't silently track live changes the player can't see");
 
   // Walking back within range refreshes the remembered snapshot.
-  const memBack = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === memApproachSpot.q && p.r === memApproachSpot.r);
-  dmSock.emit('moveToken', { tokenId: pcToken.id, q: memApproachSpot.q, r: memApproachSpot.r });
-  await memBack;
-  const memRefreshed = await waitFor(playerSock, 'visionUpdate', 5000, (p) =>
+  const memBack = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === memToken.id && p.q === memApproachSpot.q && p.r === memApproachSpot.r);
+  const memRefreshedWait = waitFor(playerSock, 'visionUpdate', 5000, (p) =>
     p.knownDoors.find((x) => x.id === memDoor.id)?.open === true);
+  dmSock.emit('moveToken', { tokenId: memToken.id, q: memApproachSpot.q, r: memApproachSpot.r });
+  const [, memRefreshed] = await Promise.all([memBack, memRefreshedWait]);
   ok(memRefreshed.knownDoors.find((x) => x.id === memDoor.id).open === true, 'rediscovering the door refreshes memory to its current (open) state');
 
-  dmSock.emit('deleteDoor', { mapId, doorId: memDoor.id });
-
-  // Restore normal vision and position for the tests that follow.
-  dmSock.emit('updateToken', { tokenId: pcToken.id, patch: { vision: null } });
-  const memRestored = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === 6 && p.r === 5);
-  dmSock.emit('moveToken', { tokenId: pcToken.id, q: 6, r: 5 });
+  // Cleanup: back to the party map, drop the temp character/token/map entirely.
+  const memRestored = waitFor(playerSock, 'mapState', 5000, (p) => p.map.id === mapId);
+  dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: null });
   await memRestored;
+  dmSock.emit('deleteToken', { tokenId: memToken.id });
+  dmSock.emit('deleteCharacter', { characterId: memChar.id });
+  dmSock.emit('deleteMap', { mapId: memMapId });
+  await new Promise((r) => setTimeout(r, 300));
 
   // ---------- gate (always see-through, still blocks movement) ----------
   console.log('gate:');
@@ -859,8 +891,17 @@ async function main() {
   const pShop = (await playerShops).shops.find((s) => s.id === shop.id);
   ok(pShop && pShop.items.length === 2, 'player sees the open shop with items');
   // give the PC gold, then buy
+  //
+  // Every 'updateCharacter' / 'buyItem' broadcasts characterUpserted to BOTH
+  // the DM room and the owning player's room. Whichever side's copy isn't
+  // explicitly awaited is left dangling; if a later step registers a fresh
+  // dmSock/playerSock listener for the same event before that stale echo has
+  // been delivered, it can win the race and get consumed instead of the
+  // event the new step actually triggered. Filtering on the value we expect
+  // (not just the character id, which every echo matches) makes a stale
+  // echo simply fail the filter and get skipped rather than misread.
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 100 } });
-  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Number(p.character.sheet.gp) === 100);
   const bought = waitFor(playerSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Torch'));
   playerSock.emit('buyItem', { shopId: shop.id, itemIndex: 0, characterId: pc.id });
   const afterBuy = (await bought).character;
@@ -868,7 +909,7 @@ async function main() {
   ok(Number(afterBuy.sheet.gp) === 99, `gold deducted (100 -> ${afterBuy.sheet.gp})`);
   // insufficient funds is refused
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 0 } });
-  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Number(p.character.sheet.gp) === 0);
   const buyDenied = waitFor(playerSock, 'errorMsg');
   playerSock.emit('buyItem', { shopId: shop.id, itemIndex: 1, characterId: pc.id });
   ok(!!(await buyDenied).message, 'buying without funds is refused');
@@ -892,7 +933,7 @@ async function main() {
   ok(true, 'players receive the storefront pop signal');
   // Player can buy from the presented (otherwise closed) shop.
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 20 } });
-  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Number(p.character.sheet.gp) === 20);
   const boughtPresented = waitFor(playerSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Charm'));
   playerSock.emit('buyItem', { shopId: stall.id, itemIndex: 0, characterId: pc.id });
   await boughtPresented;

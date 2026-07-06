@@ -18,6 +18,19 @@ export const MAX_VISION_RADIUS = 40;
  *  themselves without needing a light source or darkvision. */
 export const DIM_AMBIENT_RADIUS = 2;
 
+/**
+ * Under global daylight ('light'), sight isn't limited by a character's own
+ * vision stat at all -- only by obstructions (walls/doors) and the hard
+ * MAX_VISION_RADIUS cost cap, which comfortably covers any normal map. A
+ * character's visionRange/darkvision only matter once something short of
+ * full daylight is in play ('dim'/'dark'), where they define how far into
+ * the gloom that character personally sees.
+ */
+function effectiveStats(stats: VisionStats, lighting: GridConfig['lighting']): VisionStats {
+  if (lighting !== 'light') return stats;
+  return { visionRange: MAX_VISION_RADIUS, darkvision: MAX_VISION_RADIUS };
+}
+
 /** Is a hex inside the map's rectangular bounds (odd-r offset layout)? */
 export function inBounds(h: Hex, grid: Pick<GridConfig, 'cols' | 'rows'>): boolean {
   const row = h.r;
@@ -80,10 +93,11 @@ export function litHexes(input: FovInput): Set<number> {
  */
 export function computeFov(
   viewer: Hex,
-  stats: VisionStats,
+  rawStats: VisionStats,
   input: FovInput,
   precomputed?: { lit?: Set<number> },
 ): Set<number> {
+  const stats = effectiveStats(rawStats, input.grid.lighting);
   const radius = Math.min(Math.max(stats.visionRange, stats.darkvision, 0), MAX_VISION_RADIUS);
   const visible = new Set<number>();
   if (radius <= 0) {
@@ -158,8 +172,9 @@ function fadeStats(stats: VisionStats): VisionStats {
  * it) twice per viewer.
  */
 function computeFovBands(
-  viewer: Hex, stats: VisionStats, input: FovInput, precomputed?: { lit?: Set<number> },
+  viewer: Hex, rawStats: VisionStats, input: FovInput, precomputed?: { lit?: Set<number> },
 ): FovBands {
+  const stats = effectiveStats(rawStats, input.grid.lighting);
   const fs = fadeStats(stats);
   const fadeRadius = Math.min(Math.max(fs.visionRange, fs.darkvision, 0), MAX_VISION_RADIUS);
   const full = new Set<number>();
@@ -311,12 +326,13 @@ export function computeUnionVisibilityPolygons(
   const fadeCircles: Array<{ x: number; y: number; r: number }> = [];
 
   for (const v of viewers) {
-    const radius = Math.min(Math.max(v.stats.visionRange, v.stats.darkvision, 0), MAX_VISION_RADIUS);
+    const stats = effectiveStats(v.stats, input.grid.lighting);
+    const radius = Math.min(Math.max(stats.visionRange, stats.darkvision, 0), MAX_VISION_RADIUS);
     if (radius <= 0) continue;
     const originPx = hexToPixel(v.hex, input.grid);
     const segs = sightSegments(input.walls, input.doors, originPx);
 
-    const fs = fadeStats(v.stats);
+    const fs = fadeStats(stats);
     const fadeRadius = Math.min(Math.max(fs.visionRange, fs.darkvision, 0), MAX_VISION_RADIUS);
     const bands = computeVisibilityPolygonBands(originPx, radius * pxPerHex, fadeRadius * pxPerHex, segs);
     full.push(bands.full);

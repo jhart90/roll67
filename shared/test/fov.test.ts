@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Door, GridConfig, Hex, Light, VisionStats, Wall } from '../src/types.js';
-import { computeFov, computeUnionFovBands, inBounds, litHexes } from '../src/vision/fov.js';
+import { computeFov, computeUnionFovBands, inBounds, litHexes, MAX_VISION_RADIUS } from '../src/vision/fov.js';
 import { packHex } from '../src/hex/pack.js';
 import { hexToPixel } from '../src/hex/pixel.js';
 import { hexDistance, hexRange } from '../src/hex/coords.js';
@@ -38,10 +38,19 @@ describe('inBounds (odd-r offset)', () => {
 });
 
 describe('open-field FOV', () => {
-  it('sees every in-bounds hex within visionRange, none beyond', () => {
-    const visible = fov({});
-    for (const h of hexRange(VIEWER, 12)) {
+  it('under global daylight, sight ignores visionRange entirely -- bounded only by MAX_VISION_RADIUS', () => {
+    const visible = fov({}); // EYES has visionRange 10, but the grid is lit
+    for (const h of hexRange(VIEWER, MAX_VISION_RADIUS + 2)) {
       if (!inBounds(h, GRID)) continue;
+      const d = hexDistance(VIEWER, h);
+      expect(visible.has(packHex(h)), `hex ${h.q},${h.r} dist ${d}`).toBe(d <= MAX_VISION_RADIUS);
+    }
+  });
+
+  it('a personal visionRange still applies once lighting is anything other than full daylight', () => {
+    const visible = fov({ grid: DARK_GRID, stats: { visionRange: 10, darkvision: 10 } });
+    for (const h of hexRange(VIEWER, 12)) {
+      if (!inBounds(h, DARK_GRID)) continue;
       const d = hexDistance(VIEWER, h);
       expect(visible.has(packHex(h)), `hex ${h.q},${h.r} dist ${d}`).toBe(d <= 10);
     }
@@ -111,13 +120,17 @@ describe('doors', () => {
 });
 
 describe('fov bands (fade rim)', () => {
+  // These bands are a function of a viewer's own personal vision reach, so
+  // they're only meaningful once lighting is less than full daylight (under
+  // 'light' there's no personal limit at all -- see the "open-field FOV"
+  // block above). Darkvision under 'dark' still has a real per-viewer edge.
   it('full covers the vision radius, fade is exactly the +1 rim, nothing past +2', () => {
     const { full, fade } = computeUnionFovBands(
-      [{ hex: VIEWER, stats: { visionRange: 6, darkvision: 0 } }],
-      { grid: GRID, walls: [], doors: [], lights: [] },
+      [{ hex: VIEWER, stats: { visionRange: 0, darkvision: 6 } }],
+      { grid: DARK_GRID, walls: [], doors: [], lights: [] },
     );
     for (const h of hexRange(VIEWER, 9)) {
-      if (!inBounds(h, GRID)) continue;
+      if (!inBounds(h, DARK_GRID)) continue;
       const d = hexDistance(VIEWER, h);
       expect(full.has(packHex(h)), `full ${h.q},${h.r} d${d}`).toBe(d <= 6);
       expect(fade.has(packHex(h)), `fade ${h.q},${h.r} d${d}`).toBe(d === 7);
@@ -125,21 +138,21 @@ describe('fov bands (fade rim)', () => {
   });
 
   it('a hex fully visible to one viewer counts as full even if another viewer only reaches it at fade range', () => {
-    const near: Hex = { q: 4, r: 10 }; // full range 6 reaches (4,16) at distance 6
-    const far: Hex = { q: 4, r: 23 }; // full range 6 only reaches (4,16) at distance 7 (fade)
+    const near: Hex = { q: 4, r: 10 }; // darkvision 6 reaches (4,16) at distance 6
+    const far: Hex = { q: 4, r: 23 }; // darkvision 6 only reaches (4,16) at distance 7 (fade)
     const target = packHex({ q: 4, r: 16 });
     const { full, fade } = computeUnionFovBands(
       [
-        { hex: near, stats: { visionRange: 6, darkvision: 0 } },
-        { hex: far, stats: { visionRange: 6, darkvision: 0 } },
+        { hex: near, stats: { visionRange: 0, darkvision: 6 } },
+        { hex: far, stats: { visionRange: 0, darkvision: 6 } },
       ],
-      { grid: GRID, walls: [], doors: [], lights: [] },
+      { grid: DARK_GRID, walls: [], doors: [], lights: [] },
     );
     expect(full.has(target)).toBe(true);
     expect(fade.has(target)).toBe(false);
   });
 
-  it('walls also block the fade rim', () => {
+  it('walls still block sight under global daylight, despite the unlimited range', () => {
     const wall: Wall = { id: 'w', points: [{ x: 190, y: 100 }, { x: 190, y: 200 }] };
     const { full, fade } = computeUnionFovBands(
       [{ hex: VIEWER, stats: EYES }],
@@ -148,6 +161,19 @@ describe('fov bands (fade rim)', () => {
     const behind = packHex({ q: 8, r: 10 });
     expect(full.has(behind)).toBe(false);
     expect(fade.has(behind)).toBe(false);
+  });
+
+  it('there is no fade rim under global daylight -- full already reaches MAX_VISION_RADIUS regardless of EYES', () => {
+    const { full, fade } = computeUnionFovBands(
+      [{ hex: VIEWER, stats: EYES }],
+      { grid: GRID, walls: [], doors: [], lights: [] },
+    );
+    for (const h of hexRange(VIEWER, MAX_VISION_RADIUS + 2)) {
+      if (!inBounds(h, GRID)) continue;
+      const d = hexDistance(VIEWER, h);
+      expect(full.has(packHex(h)), `full ${h.q},${h.r} d${d}`).toBe(d <= MAX_VISION_RADIUS);
+    }
+    expect(fade.size).toBe(0);
   });
 });
 

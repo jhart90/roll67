@@ -198,16 +198,34 @@ function activatePsychicPower(
   if (isPsychicMishap(d6s)) {
     const mishap = rollMishap();
     if (mishap.systemStrain) actorPatch.systemStrain = num(actor.sheet, 'systemStrain', 0) + mishap.systemStrain;
-    let updated = persistSheet(io, campaignId, actor, actorPatch);
-    if (mishap.selfDamage) {
-      updated = applyHpDelta(io, campaignId, updated, -Math.max(0, roll(mishap.selfDamage).total)).character;
-    }
+    const updated = persistSheet(io, campaignId, actor, actorPatch);
     const mishapMsg = chat.add(campaignId, {
       userId: d.userId, fromName: d.username, kind: 'system',
       text: `⚡ Mishap! ${updated.name}'s ${label} check (${checkRoll.total}) snake-eyes — ${mishap.text}.${mishap.torched ? ' 🔥 Torched.' : ''}`,
       roll: checkRoll, recipients: null,
     });
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg: mishapMsg });
+    if (mishap.selfDamage) {
+      // The backlash damage is its own roll (1d6, distinct from the 2d6
+      // activation check above) -- gets its own card, posted only once the
+      // activation check's own dice have had time to settle, same pacing as
+      // any other roll-then-roll sequence.
+      setTimeout(() => {
+        const fresh = characters.byId(updated.id);
+        if (!fresh) return;
+        const dmgRoll = roll(mishap.selfDamage);
+        const dmg = Math.max(0, dmgRoll.total);
+        const { character: afterChar, note } = applyHpDelta(io, campaignId, fresh, -dmg);
+        const { hp, maxHp } = systemFor(afterChar.system).hp(afterChar.sheet);
+        const dmgMsg = chat.add(campaignId, {
+          userId: d.userId, fromName: d.username, kind: 'roll',
+          text: `${afterChar.name} takes ${dmg} backlash damage (${afterChar.name} ${hp}/${maxHp})${note}`.replace(/\s+/g, ' ').trim(),
+          roll: dmgRoll, recipients: null,
+        });
+        io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg: dmgMsg });
+        for (const t of tokens.forCharacter(afterChar.id)) floatHp(io, campaignId, t.mapId, t.id, -dmg);
+      }, diceSettleDelayMs(checkRoll.dice.length));
+    }
     return { actor: updated, undo };
   }
   return { actor: persistSheet(io, campaignId, actor, actorPatch), undo };

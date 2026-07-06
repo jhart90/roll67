@@ -14,6 +14,13 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
     ? CLASS_LIST_5E.map((c) => ({ id: c.id, name: c.name }))
     : SWN_CLASS_LIST.map((c) => ({ id: c.id, name: c.name }));
 
+  // The same search box also narrows the "quick add" rows above the main
+  // compendium table -- otherwise typing e.g. "goblin" still leaves the
+  // blank-sheet/class rows cluttering the top of an otherwise-filtered list.
+  const q = search.trim().toLowerCase();
+  const showBlank = !q || 'blank character sheet'.includes(q);
+  const filteredClassRows = classRows.filter((c) => !q || c.name.toLowerCase().includes(q));
+
   function add(entry: NpcEntry) {
     intents.createNpc(entry.id);
     setAdded((prev) => ({ ...prev, [entry.id]: true }));
@@ -60,32 +67,40 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
 
         <div className="npc-list">
           <div className="npc-quickadd">
-            <div className="npc-quickadd-hint">New character</div>
-            <table>
-              <tbody>
-                <tr>
-                  <td className="npc-name">Blank character sheet</td>
-                  <td className="dim" colSpan={3}>Start from a fresh, empty sheet</td>
-                  <td><button className="link" disabled={!!added.__blank} onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
-                </tr>
-              </tbody>
-            </table>
-            <div className="npc-quickadd-hint">New player character</div>
-            <table>
-              <tbody>
-                {classRows.map((c) => (
-                  <tr key={c.id}>
-                    <td className="npc-name">{c.name}</td>
-                    <td className="dim" colSpan={3}>A blank sheet with class pre-filled</td>
-                    <td>
-                      <button className="link" disabled={!!added[`class:${c.id}`]} onClick={() => createClass(c.name, c.id)}>
-                        {added[`class:${c.id}`] ? 'created ✓' : '+ create'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {showBlank && (
+              <>
+                <div className="npc-quickadd-hint">New character</div>
+                <table>
+                  <tbody>
+                    <tr>
+                      <td className="npc-name">Blank character sheet</td>
+                      <td className="dim" colSpan={3}>Start from a fresh, empty sheet</td>
+                      <td><button className="link" disabled={!!added.__blank} onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+            {filteredClassRows.length > 0 && (
+              <>
+                <div className="npc-quickadd-hint">New player character</div>
+                <table>
+                  <tbody>
+                    {filteredClassRows.map((c) => (
+                      <tr key={c.id}>
+                        <td className="npc-name">{c.name}</td>
+                        <td className="dim" colSpan={3}>A blank sheet with class pre-filled</td>
+                        <td>
+                          <button className="link" disabled={!!added[`class:${c.id}`]} onClick={() => createClass(c.name, c.id)}>
+                            {added[`class:${c.id}`] ? 'created ✓' : '+ create'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
 
           <table>

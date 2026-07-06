@@ -1319,9 +1319,10 @@ button.link:hover { text-decoration: underline; }
   100% { opacity: 0; transform: scale(1.15) translateY(-10px); }
 }
 
-/* Ranged shot: a comet-like streak flying in a straight line from shooter to
-   target. The caller places its wrapper <g> at the shooter's position via a
-   plain (unanimated) transform attribute; this animation only ever moves
+/* Ranged shot: an arrow/bolt/orb (shape varies by damage type -- see
+   projectileShape() in impactFx.tsx) flying in a straight line from shooter
+   to target. The caller places its wrapper <g> at the shooter's position via
+   a plain (unanimated) transform attribute; this animation only ever moves
    *this* element by (--proj-dx, --proj-dy) relative to that, landing exactly
    on the target -- mirrors the impact shapes' static-wrapper/animated-inner
    split so the two transforms never fight each other. */
@@ -1330,8 +1331,20 @@ button.link:hover { text-decoration: underline; }
   from { transform: translate(0, 0); }
   to { transform: translate(var(--proj-dx), var(--proj-dy)); }
 }
-.projectile-trail { stroke: var(--impact-color); stroke-width: 3; stroke-linecap: round; opacity: 0.55; }
+/* Shared by all three shapes. */
 .projectile-head { fill: var(--impact-color); filter: drop-shadow(0 0 3px var(--impact-color)); }
+/* Orb (force/radiant/necrotic/psychic/unspecified): a soft trailing streak. */
+.projectile-trail { stroke: var(--impact-color); stroke-width: 3; stroke-linecap: round; opacity: 0.55; }
+/* Arrow (piercing/slashing/bludgeoning weapon damage): a solid shaft and
+   fletching, not a fading tail -- it's a physical object, not a comet. */
+.projectile-shaft { stroke: var(--impact-color); stroke-width: 3; stroke-linecap: round; }
+.projectile-fletch { stroke: var(--impact-color); stroke-width: 2; stroke-linecap: round; opacity: 0.75; }
+/* Bolt (fire/cold/lightning/thunder/acid/poison): a jagged energy zigzag. */
+.projectile-zigzag {
+  fill: none; stroke: var(--impact-color); stroke-width: 3;
+  stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px var(--impact-color));
+}
 
 /* ---------- asset library ---------- */
 

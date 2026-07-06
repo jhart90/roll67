@@ -88,16 +88,85 @@ export function ImpactAnimation({ kind, radius, color }: { kind: ImpactKind | un
   return <Shape radius={radius} color={color} />;
 }
 
+export type ProjectileShape = 'arrow' | 'bolt' | 'orb';
+
+const PHYSICAL_DAMAGE_TYPES = new Set(['piercing', 'slashing', 'bludgeoning']);
+const ELEMENTAL_DAMAGE_TYPES = new Set(['fire', 'cold', 'lightning', 'thunder', 'acid', 'poison']);
+
 /**
- * A ranged shot's travel: a short comet-like streak that crosses from the
- * shooter to the target in a straight line over `flightMs`, timed by the
- * server to land right as the matching ImpactAnimation/HP float appears.
- * Caller positions this at the shooter (`from`) via a plain (unanimated)
- * wrapper `<g transform="translate(...)">` -- same two-layer split as
- * ImpactAnimation, so the CSS travel animation only ever touches this
- * component's own transform, never the caller's static placement.
+ * Which shot shape best matches a hit's damage type: a fletched arrow for
+ * mundane weapon damage (piercing/slashing/bludgeoning -- a longbow, a
+ * thrown axe), a jagged bolt for elemental blasts (fire/cold/lightning/
+ * thunder/acid/poison -- a fire bolt, a lightning-charged shot), and a
+ * smooth glowing orb for everything else (force, radiant, necrotic,
+ * psychic, or no damage type at all -- e.g. Magic Missile, or a plain
+ * "Attack" row with no dtype set). Keyed off damage type rather than
+ * weapon-vs-spell so a fire-damage weapon and a fire-damage spell both
+ * read as "fire", matching how impactColor() already works.
  */
-export function Projectile({ dx, dy, color, flightMs }: { dx: number; dy: number; color: string; flightMs: number }) {
+export function projectileShape(damageType: string | undefined): ProjectileShape {
+  const key = damageType?.toLowerCase().trim();
+  if (key && PHYSICAL_DAMAGE_TYPES.has(key)) return 'arrow';
+  if (key && ELEMENTAL_DAMAGE_TYPES.has(key)) return 'bolt';
+  return 'orb';
+}
+
+interface ProjectileShapeProps { color: string; trailLen: number }
+
+/** A mundane weapon shot: shaft, arrowhead, and fletching, pointing along
+ *  the direction of travel (+x; the caller rotates the whole group to aim
+ *  it) -- a solid physical object, not a trailing streak. */
+function ProjectileArrow({ color }: ProjectileShapeProps) {
+  return (
+    <g style={colorVar(color)}>
+      <line x1={-20} y1={0} x2={6} y2={0} className="projectile-shaft" />
+      <path d="M 11 0 L -1 -4.5 L -1 4.5 Z" className="projectile-head" />
+      <line x1={-20} y1={0} x2={-13} y2={-5} className="projectile-fletch" />
+      <line x1={-20} y1={0} x2={-13} y2={5} className="projectile-fletch" />
+    </g>
+  );
+}
+
+/** An elemental blast: a jagged zigzag trail ending in a small glowing head. */
+function ProjectileBolt({ color, trailLen }: ProjectileShapeProps) {
+  const a = trailLen;
+  return (
+    <g style={colorVar(color)}>
+      <polyline
+        points={`${-a},0 ${-a * 0.55},${-a * 0.3} ${-a * 0.25},${a * 0.25} ${-a * 0.05},${-a * 0.22} 6,0`}
+        className="projectile-zigzag"
+      />
+      <circle cx={6} r={3.5} className="projectile-head" />
+    </g>
+  );
+}
+
+/** A smooth magical shot: a glowing orb with a soft comet tail. */
+function ProjectileOrb({ color, trailLen }: ProjectileShapeProps) {
+  return (
+    <g style={colorVar(color)}>
+      <line x1={-trailLen} y1={0} x2={0} y2={0} className="projectile-trail" />
+      <circle r={4.5} className="projectile-head" />
+    </g>
+  );
+}
+
+const PROJECTILE_SHAPES: Record<ProjectileShape, (props: ProjectileShapeProps) => JSX.Element> = {
+  arrow: ProjectileArrow, bolt: ProjectileBolt, orb: ProjectileOrb,
+};
+
+/**
+ * A ranged shot's travel: crosses from the shooter to the target in a
+ * straight line over `flightMs`, timed by the server to land right as the
+ * matching ImpactAnimation/HP float appears (see server's emitProjectile
+ * scheduling). Caller positions this at the shooter (`from`) via a plain
+ * (unanimated) wrapper `<g transform="translate(...)">` -- same two-layer
+ * split as ImpactAnimation, so the CSS travel animation only ever touches
+ * this component's own transform, never the caller's static placement.
+ */
+export function Projectile({ dx, dy, color, flightMs, shape }: {
+  dx: number; dy: number; color: string; flightMs: number; shape: ProjectileShape;
+}) {
   const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
   const dist = Math.hypot(dx, dy);
   const trailLen = Math.min(dist * 0.4, 36);
@@ -105,13 +174,12 @@ export function Projectile({ dx, dy, color, flightMs }: { dx: number; dy: number
     ['--proj-dx' as unknown as string]: `${dx}px`,
     ['--proj-dy' as unknown as string]: `${dy}px`,
     ['--projectile-duration' as unknown as string]: `${flightMs}ms`,
-    ['--impact-color' as unknown as string]: color,
   } as CSSProperties;
+  const Shape = PROJECTILE_SHAPES[shape];
   return (
     <g className="projectile-fx" style={style}>
       <g transform={`rotate(${angleDeg})`}>
-        <line x1={-trailLen} y1={0} x2={0} y2={0} className="projectile-trail" />
-        <circle r={4.5} className="projectile-head" />
+        <Shape color={color} trailLen={trailLen} />
       </g>
     </g>
   );

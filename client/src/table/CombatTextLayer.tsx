@@ -1,7 +1,7 @@
 import { hexToPixel } from 'shared';
 import { useGameStore } from '../store/game';
 import { mapPixelSize } from '../util/stage';
-import { ImpactAnimation, impactColor, Projectile } from './impactFx';
+import { ImpactAnimation, impactColor, Projectile, projectileShape } from './impactFx';
 
 /**
  * Floating +/-HP text plus a short (1-2s) impact animation over damaged/healed
@@ -32,9 +32,10 @@ export function CombatTextLayer() {
         const a = hexToPixel({ q: from.q, r: from.r }, map.grid);
         const b = hexToPixel({ q: to.q, r: to.r }, map.grid);
         const color = impactColor('ranged', proj.damageType);
+        const shape = projectileShape(proj.damageType);
         return (
           <g key={proj.id} transform={`translate(${a.x}, ${a.y})`}>
-            <Projectile dx={b.x - a.x} dy={b.y - a.y} color={color} flightMs={proj.flightMs} />
+            <Projectile dx={b.x - a.x} dy={b.y - a.y} color={color} flightMs={proj.flightMs} shape={shape} />
           </g>
         );
       })}

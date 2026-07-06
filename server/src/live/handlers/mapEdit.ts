@@ -6,7 +6,7 @@ import {
   type SetGridConfigPayload, type SetSpawnPayload, type ToggleDoorPayload, type UpdateMapPayload,
   type UpsertDoorPayload, type UpsertLightPayload, type UpsertWallPayload,
 } from 'shared';
-import { assets, campaigns, fog, maps } from '../../db/repos.js';
+import { assets, campaigns, doorMemory, fog, maps } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata } from '../hub.js';
 import { canReachDoor, dropMapVisionCaches, syncMapVision } from '../visionService.js';
@@ -45,6 +45,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     const campaign = campaigns.byId(d.campaignId!)!;
     maps.delete(mapId);
     fog.clearMap(mapId);
+    doorMemory.clearMap(mapId);
     dropMapVisionCaches(mapId);
     // Anyone assigned to this map falls back to the party map.
     campaigns.clearMapAssignments(mapId);

@@ -17,7 +17,7 @@ import { registerCombatHandlers } from './live/handlers/combat.js';
 import { registerTableHandlers } from './live/handlers/table.js';
 import { registerLibraryHandlers } from './live/handlers/library.js';
 import { registerWorldHandlers } from './live/handlers/world.js';
-import { flushAllFog } from './live/visionService.js';
+import { flushAllVisionMemory } from './live/visionService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -74,7 +74,7 @@ httpServer.listen(PORT, () => {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    flushAllFog();
+    flushAllVisionMemory();
     process.exit(0);
   });
 }

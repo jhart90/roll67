@@ -720,6 +720,36 @@ export const fog = {
   },
 };
 
+// ---------- door memory ----------
+
+export const doorMemory = {
+  get(userId: string, mapId: string): Record<string, Door> {
+    const row = db.prepare('SELECT doors_json FROM door_memory WHERE user_id = ? AND map_id = ?')
+      .get(userId, mapId) as { doors_json: string } | undefined;
+    if (!row) return {};
+    try {
+      return JSON.parse(row.doors_json) as Record<string, Door>;
+    } catch {
+      return {};
+    }
+  },
+  set(userId: string, mapId: string, memory: Record<string, Door>): void {
+    // Mirrors fog.set: the map (or user) may be gone by flush time.
+    if (!db.prepare('SELECT 1 FROM maps WHERE id = ?').get(mapId)) return;
+    try {
+      db.prepare(
+        `INSERT INTO door_memory (user_id, map_id, doors_json) VALUES (?, ?, ?)
+         ON CONFLICT(user_id, map_id) DO UPDATE SET doors_json = excluded.doors_json`,
+      ).run(userId, mapId, JSON.stringify(memory));
+    } catch (err) {
+      console.warn('door memory flush skipped:', err instanceof Error ? err.message : err);
+    }
+  },
+  clearMap(mapId: string): void {
+    db.prepare('DELETE FROM door_memory WHERE map_id = ?').run(mapId);
+  },
+};
+
 // ---------- handouts ----------
 
 interface HandoutRow {

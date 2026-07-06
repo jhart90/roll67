@@ -9,7 +9,7 @@ import {
   S2C, type Door, type FovInput, type Hex, type Light, type MapStatePayload, type Point, type Token, type TokenView,
   type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
-import { campaigns, characters, fog, maps, tokens } from '../db/repos.js';
+import { campaigns, characters, doorMemory, fog, maps, tokens } from '../db/repos.js';
 import { campaignSockets, sdata, userRoom } from './hub.js';
 
 type MapRecord = NonNullable<ReturnType<typeof maps.byId>>;
@@ -20,11 +20,15 @@ interface VisionCache {
   mapId: string;
   visible: Set<number>;
   explored: Set<number>;
+  /** Doors this player has discovered, snapshotted as last observed -- kept
+   *  visible (in that last-seen state) even once they're out of sight again. */
+  doorMemory: Map<string, Door>;
 }
 
 // Keyed `${userId}:${mapId}` — survives map switches per user.
 const visionCache = new Map<string, VisionCache>();
 const fogFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const doorMemoryFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function cacheKey(userId: string, mapId: string): string {
   return `${userId}:${mapId}`;
@@ -53,6 +57,10 @@ function loadExplored(userId: string, mapId: string): Set<number> {
   return new Set(fog.get(userId, mapId));
 }
 
+function loadDoorMemory(userId: string, mapId: string): Map<string, Door> {
+  return new Map(Object.entries(doorMemory.get(userId, mapId)));
+}
+
 function scheduleFogFlush(userId: string, mapId: string, explored: Set<number>): void {
   const key = cacheKey(userId, mapId);
   const existing = fogFlushTimers.get(key);
@@ -63,7 +71,17 @@ function scheduleFogFlush(userId: string, mapId: string, explored: Set<number>):
   }, 3000));
 }
 
-export function flushAllFog(): void {
+function scheduleDoorMemoryFlush(userId: string, mapId: string, memory: Map<string, Door>): void {
+  const key = cacheKey(userId, mapId);
+  const existing = doorMemoryFlushTimers.get(key);
+  if (existing) clearTimeout(existing);
+  doorMemoryFlushTimers.set(key, setTimeout(() => {
+    doorMemoryFlushTimers.delete(key);
+    doorMemory.set(userId, mapId, Object.fromEntries(memory));
+  }, 3000));
+}
+
+export function flushAllVisionMemory(): void {
   for (const [key, timer] of fogFlushTimers) {
     clearTimeout(timer);
     const [userId, mapId] = key.split(':');
@@ -71,6 +89,13 @@ export function flushAllFog(): void {
     if (cache) fog.set(userId, mapId, Int32Array.from(cache.explored));
   }
   fogFlushTimers.clear();
+  for (const [key, timer] of doorMemoryFlushTimers) {
+    clearTimeout(timer);
+    const [userId, mapId] = key.split(':');
+    const cache = visionCache.get(key);
+    if (cache) doorMemory.set(userId, mapId, Object.fromEntries(cache.doorMemory));
+  }
+  doorMemoryFlushTimers.clear();
 }
 
 /** Tokens a player may see: token-layer tokens on visible hexes, plus their own. */
@@ -83,20 +108,41 @@ function visibleTokens(userId: string, mapTokens: Token[], visible: Set<number>)
 }
 
 /**
- * Doors the player knows about: midpoint inside explored (or visible) hexes,
- * plus any door within 2 hexes of one of their own tokens regardless of fog
- * -- otherwise a door right next to you could be missed by FOV (e.g. it sits
- * across a diagonal the raycast grazes) even though you're standing close
- * enough to see and use it in person.
+ * Doors the player knows about: currently observable ones (midpoint inside
+ * explored/visible hexes, or within 2 hexes of one of their own tokens --
+ * otherwise a door right next to you could be missed by FOV, e.g. it sits
+ * across a diagonal the raycast grazes, even though you're standing close
+ * enough to see and use it in person) get a fresh snapshot into `memory`;
+ * anything already in `memory` from an earlier discovery is included too, so
+ * a door stays visible -- in whatever state it was last actually observed in
+ * -- even after the player walks back out of sight of it. Mutates `memory`
+ * in place; returns whether it changed (so the caller knows to persist it).
  */
-function knownDoors(map: MapRecord, explored: Set<number>, visible: Set<number>, viewerHexes: Hex[]): Door[] {
-  return map.doors.filter((d) => {
+function knownDoors(
+  map: MapRecord, explored: Set<number>, visible: Set<number>, viewerHexes: Hex[], memory: Map<string, Door>,
+): { doors: Door[]; changed: boolean } {
+  let changed = false;
+  const liveIds = new Set<string>();
+  for (const d of map.doors) {
     const mid = { x: (d.a.x + d.b.x) / 2, y: (d.a.y + d.b.y) / 2 };
     const doorHex = pixelToHex(mid, map.grid);
     const key = packHex(doorHex);
-    if (explored.has(key) || visible.has(key)) return true;
-    return viewerHexes.some((h) => hexDistance(h, doorHex) <= 2);
-  });
+    const observable = explored.has(key) || visible.has(key) || viewerHexes.some((h) => hexDistance(h, doorHex) <= 2);
+    if (!observable) continue;
+    liveIds.add(d.id);
+    const remembered = memory.get(d.id);
+    const samePoint = (p: Point, q: Point) => p.x === q.x && p.y === q.y;
+    if (!remembered || remembered.open !== d.open || remembered.type !== d.type
+      || !samePoint(remembered.a, d.a) || !samePoint(remembered.b, d.b)) {
+      memory.set(d.id, d);
+      changed = true;
+    }
+  }
+  const doors: Door[] = [];
+  for (const [id, snapshot] of memory) {
+    doors.push(liveIds.has(id) ? map.doors.find((d) => d.id === id)! : snapshot);
+  }
+  return { doors, changed };
 }
 
 export interface UserMapView {
@@ -155,7 +201,10 @@ export function computeUserMapView(
   const key = cacheKey(userId, map.id);
   let cache = visionCache.get(key);
   if (!cache || cache.mapId !== map.id) {
-    cache = { mapId: map.id, visible: new Set(), explored: loadExplored(userId, map.id) };
+    cache = {
+      mapId: map.id, visible: new Set(), explored: loadExplored(userId, map.id),
+      doorMemory: loadDoorMemory(userId, map.id),
+    };
     visionCache.set(key, cache);
   }
   const viewers = viewerTokensFor(userId, allTokens).map((t) => ({
@@ -179,6 +228,8 @@ export function computeUserMapView(
   if (newlyExplored.length > 0) scheduleFogFlush(userId, map.id, cache.explored);
   // Tokens in the fade rim are still (dimly) seen.
   const seen = new Set([...visible, ...fade]);
+  const doors = knownDoors(map, cache.explored, seen, viewers.map((v) => v.hex), cache.doorMemory);
+  if (doors.changed) scheduleDoorMemoryFlush(userId, map.id, cache.doorMemory);
   return {
     visible,
     fade,
@@ -189,7 +240,7 @@ export function computeUserMapView(
     newlyExplored,
     explored: cache.explored,
     tokens: visibleTokens(userId, allTokens, seen),
-    knownDoors: knownDoors(map, cache.explored, seen, viewers.map((v) => v.hex)),
+    knownDoors: doors.doors,
   };
 }
 
@@ -353,12 +404,13 @@ export function dropVisionCache(userId: string): void {
       const cache = visionCache.get(key)!;
       const [, mapId] = key.split(':');
       fog.set(userId, mapId, Int32Array.from(cache.explored));
+      doorMemory.set(userId, mapId, Object.fromEntries(cache.doorMemory));
       visionCache.delete(key);
     }
   }
 }
 
-/** Forget all cached vision and pending fog flushes for a deleted map. */
+/** Forget all cached vision and pending fog/door-memory flushes for a deleted map. */
 export function dropMapVisionCaches(mapId: string): void {
   for (const key of [...visionCache.keys()]) {
     if (key.endsWith(`:${mapId}`)) {
@@ -367,6 +419,11 @@ export function dropMapVisionCaches(mapId: string): void {
       if (timer) {
         clearTimeout(timer);
         fogFlushTimers.delete(key);
+      }
+      const doorTimer = doorMemoryFlushTimers.get(key);
+      if (doorTimer) {
+        clearTimeout(doorTimer);
+        doorMemoryFlushTimers.delete(key);
       }
     }
   }

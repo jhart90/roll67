@@ -433,7 +433,76 @@ async function main() {
   // Player got doorState + knows the door now.
   const playerDoorKnown = await waitFor(playerSock, 'visionUpdate', 5000, (p) =>
     p.knownDoors.some((x) => x.id === door.id)).catch(() => null);
-  ok(playerDoorKnown !== null || true, 'door is in player knownDoors once seen');
+  ok(playerDoorKnown !== null, 'door is in player knownDoors once seen');
+
+  // ---------- discovered doors stay known after losing sight of them ----------
+  console.log('door memory:');
+  // The check above doesn't prove much on its own -- the player's normal
+  // (visionRange 24) sight easily still reaches that door from (6,5). Zero
+  // out their vision so the ONLY way they can ever learn about a new door is
+  // the "close enough to touch it" rule (never the raycast-based visible/fade
+  // set), which isolates exactly the path this feature depends on.
+  dmSock.emit('updateToken', { tokenId: pcToken.id, patch: { vision: { visionRange: 0, darkvision: 0 } } });
+  await new Promise((r) => setTimeout(r, 300));
+
+  // Far corner (well beyond the 24-hex vision the player had before it was
+  // zeroed above), so this door's hex can never already be in `explored`
+  // from earlier in the test. The approach spot is exactly 2 hexes from the
+  // door itself -- not on it, not 1 away -- so the player's own-hex-visible
+  // and fade-rim rules (radius 1 at these zeroed stats) can't be what puts
+  // the door's hex into `explored`; only the dedicated 2-hex proximity rule
+  // this feature relies on can.
+  const memDoorSpot = px(15, 27);
+  const memApproachSpot = { q: 15, r: 25 };
+  const memAwaySpot = { q: 15, r: 5 };
+  // Moved by the DM (not the player) -- these jumps cross the earlier wall's
+  // x, and only the DM's moves skip the straight-line wall-collision check;
+  // it's the resulting vision recompute being tested here, not pathing.
+  const memMoved = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === memApproachSpot.q && p.r === memApproachSpot.r);
+  dmSock.emit('moveToken', { tokenId: pcToken.id, q: memApproachSpot.q, r: memApproachSpot.r });
+  await memMoved;
+
+  const memDoorEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.doors);
+  dmSock.emit('upsertDoor', {
+    mapId, door: { a: { x: memDoorSpot.x, y: memDoorSpot.y - 20 }, b: { x: memDoorSpot.x, y: memDoorSpot.y + 20 }, open: false },
+  });
+  const memDoor = (await memDoorEdit).doors.at(-1);
+
+  const memDiscovered = await waitFor(playerSock, 'visionUpdate', 5000, (p) => p.knownDoors.some((x) => x.id === memDoor.id));
+  const memEntry = memDiscovered.knownDoors.find((x) => x.id === memDoor.id);
+  ok(!!memEntry && memEntry.open === false, 'a door only reachable via proximity (never real sight) is still discovered, closed');
+
+  const memAway = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === memAwaySpot.q && p.r === memAwaySpot.r);
+  dmSock.emit('moveToken', { tokenId: pcToken.id, q: memAwaySpot.q, r: memAwaySpot.r });
+  await memAway;
+  const memStillKnown = await waitFor(playerSock, 'visionUpdate', 5000, () => true);
+  const memAwayEntry = memStillKnown.knownDoors.find((x) => x.id === memDoor.id);
+  ok(!!memAwayEntry && memAwayEntry.open === false, 'door remains known after walking far out of range, in its last-seen (closed) state');
+
+  // DM opens it while the player is far away -- memory should NOT live-update
+  // to reflect a state the player never actually observed.
+  const dmToggled = waitFor(dmSock, 'doorState', 3000, (p) => p.doorId === memDoor.id);
+  dmSock.emit('toggleDoor', { mapId, doorId: memDoor.id });
+  await dmToggled;
+  const memFrozenUpdate = await waitFor(playerSock, 'visionUpdate', 5000, () => true);
+  const memFrozenEntry = memFrozenUpdate.knownDoors.find((x) => x.id === memDoor.id);
+  ok(!!memFrozenEntry && memFrozenEntry.open === false, "memory stays frozen at last-seen state -- doesn't silently track live changes the player can't see");
+
+  // Walking back within range refreshes the remembered snapshot.
+  const memBack = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === memApproachSpot.q && p.r === memApproachSpot.r);
+  dmSock.emit('moveToken', { tokenId: pcToken.id, q: memApproachSpot.q, r: memApproachSpot.r });
+  await memBack;
+  const memRefreshed = await waitFor(playerSock, 'visionUpdate', 5000, (p) =>
+    p.knownDoors.find((x) => x.id === memDoor.id)?.open === true);
+  ok(memRefreshed.knownDoors.find((x) => x.id === memDoor.id).open === true, 'rediscovering the door refreshes memory to its current (open) state');
+
+  dmSock.emit('deleteDoor', { mapId, doorId: memDoor.id });
+
+  // Restore normal vision and position for the tests that follow.
+  dmSock.emit('updateToken', { tokenId: pcToken.id, patch: { vision: null } });
+  const memRestored = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === 6 && p.r === 5);
+  dmSock.emit('moveToken', { tokenId: pcToken.id, q: 6, r: 5 });
+  await memRestored;
 
   // ---------- gate (always see-through, still blocks movement) ----------
   console.log('gate:');

@@ -100,6 +100,17 @@ CREATE TABLE IF NOT EXISTS fog_explored (
   PRIMARY KEY (user_id, map_id)
 );
 
+-- Per-player memory of doors they've discovered: a snapshot of each door as
+-- last observed (open/closed, position), so a door a player has seen once
+-- stays visible to them -- in its last-seen state -- even after they walk
+-- out of line of sight, instead of vanishing until rediscovered.
+CREATE TABLE IF NOT EXISTS door_memory (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  doors_json TEXT NOT NULL,
+  PRIMARY KEY (user_id, map_id)
+);
+
 CREATE TABLE IF NOT EXISTS handouts (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,

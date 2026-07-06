@@ -2,7 +2,22 @@
 // Rows: [name, category, class, hitDice, ac, hp, attackBonus, attacks, skills, note]
 
 import { swn } from '../systems/swn.js';
-import { attackRows, slug, type AttackRow, type NpcEntry } from './npcTypes.js';
+import { weaponRangeFtSwn } from './compendiumTypes.js';
+import { CONTENT_SWN } from './contentSwn.js';
+import { attackRows, slug, type AttackRow, type NpcEntry, type WeaponLookup } from './npcTypes.js';
+
+// Named-weapon lookup so a prebuilt NPC's plain attacks ("Rifle", "Laser
+// Pistol", ...) get the same real range a player gets from adding that
+// weapon via the compendium, instead of falling back to melee.
+const WEAPONS_BY_NAME_SWN = new Map(
+  CONTENT_SWN
+    .filter((c) => c.kind === 'weapon' && c.weapon)
+    .map((c) => [c.name.toLowerCase(), c.weapon!]),
+);
+const lookupWeaponSwn: WeaponLookup = (name) => {
+  const w = WEAPONS_BY_NAME_SWN.get(name.toLowerCase().trim());
+  return w ? { range: weaponRangeFtSwn(w.props), dtype: w.damageType } : null;
+};
 
 type SkillRow = [string, number, string?]; // name, level, attr
 type Row = [
@@ -122,7 +137,7 @@ export const NPCS_SWN: NpcEntry[] = ROWS.map((row) => {
     attackBonus: ab,
     visionRange: 24,
     darkvision: 0,
-    attacks: attackRows(attacks),
+    attacks: attackRows(attacks, lookupWeaponSwn),
     skills: skills.map(([n, lvl, attr]) => ({ name: n, level: lvl, attr: attr ?? 'dex', notes: '' })),
     notes: note,
   };

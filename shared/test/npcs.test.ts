@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_NPCS, npcById, npcCategories, npcsForSystem } from '../src/data/npcLibrary.js';
+import { weaponRangeFt5e, weaponRangeFtSwn } from '../src/data/compendiumTypes.js';
+import { ITEMS_5E } from '../src/data/items5e.js';
+import { CONTENT_SWN } from '../src/data/contentSwn.js';
 import { combatActions } from '../src/systems/combat.js';
 import { systemFor } from '../src/systems/index.js';
 import type { Character } from '../src/types.js';
@@ -40,6 +43,32 @@ describe('pre-built NPC library', () => {
       const rolls = systemFor(n.system).rollables(n.sheet);
       expect(rolls.some((r) => r.id.startsWith('attack_')), n.id).toBe(true);
     }
+  });
+
+  it('a named attack matching a real ranged compendium weapon gets its actual range, not the melee default', () => {
+    // Regression test: attackRows() used to build every prebuilt NPC's
+    // attacks with no compendium lookup at all, so a named weapon like
+    // "Longbow" silently fell back to the schema's 5-ft melee default —
+    // making every ranged NPC attack unusable beyond one hex.
+    const rangedWeaponsByName = new Map<string, number>();
+    for (const c of ITEMS_5E) {
+      if (c.kind === 'weapon' && c.weapon) rangedWeaponsByName.set(c.name.toLowerCase(), weaponRangeFt5e(c.weapon.props));
+    }
+    for (const c of CONTENT_SWN) {
+      if (c.kind === 'weapon' && c.weapon) rangedWeaponsByName.set(c.name.toLowerCase(), weaponRangeFtSwn(c.weapon.props));
+    }
+    let checked = 0;
+    for (const n of ALL_NPCS) {
+      const attacks = n.sheet.attacks as Array<Record<string, unknown>> | undefined;
+      if (!attacks) continue;
+      for (const atk of attacks) {
+        const expected = rangedWeaponsByName.get(String(atk.name).toLowerCase());
+        if (expected === undefined || expected <= 5) continue; // only a real ranged weapon proves the bug
+        checked++;
+        expect(atk.range, `${n.id}: ${atk.name}`).toBe(expected);
+      }
+    }
+    expect(checked).toBeGreaterThan(10); // sanity: the library actually contains ranged weapons to check
   });
 
   it('categories are non-empty and stable per system', () => {

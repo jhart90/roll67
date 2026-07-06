@@ -2,7 +2,22 @@
 // Compact rows: [name, category, cr, ac, hp, speed, [STR,DEX,CON,INT,WIS,CHA], attacks, darkvisionFt, note]
 
 import { dnd5e } from '../systems/dnd5e.js';
-import { attackRows, crToNumber, slug, type AttackRow, type NpcEntry } from './npcTypes.js';
+import { weaponRangeFt5e } from './compendiumTypes.js';
+import { ITEMS_5E } from './items5e.js';
+import { attackRows, crToNumber, slug, type AttackRow, type NpcEntry, type WeaponLookup } from './npcTypes.js';
+
+// Named-weapon lookup so a prebuilt NPC's plain attacks ("Longbow", "Light
+// Crossbow", ...) get the same real range/damage type a player gets from
+// adding that weapon via the compendium, instead of falling back to melee.
+const WEAPONS_BY_NAME_5E = new Map(
+  ITEMS_5E
+    .filter((c) => c.kind === 'weapon' && c.weapon)
+    .map((c) => [c.name.toLowerCase(), c.weapon!]),
+);
+const lookupWeapon5e: WeaponLookup = (name) => {
+  const w = WEAPONS_BY_NAME_5E.get(name.toLowerCase().trim());
+  return w ? { range: weaponRangeFt5e(w.props), dtype: w.damageType } : null;
+};
 
 type Row = [
   string, string, string, number, number, number,
@@ -268,7 +283,7 @@ export const NPCS_5E: NpcEntry[] = ROWS.map((row) => {
     int: scores[3], wis: scores[4], cha: scores[5],
     visionRange: 24,
     darkvision: Math.round(dvFt / 5),
-    attacks: attackRows(attacks),
+    attacks: attackRows(attacks, lookupWeapon5e),
     notes: note,
   };
   return {

@@ -137,7 +137,7 @@ function parseSpellSave(save: string | undefined): { ability: string; onSave: 'h
  * or "ammunition (80/320)" use the short-range number; "reach" melee weapons
  * get 10 ft; everything else is plain 5-ft melee.
  */
-function weaponRangeFt5e(props: string[]): number {
+export function weaponRangeFt5e(props: string[]): number {
   const ranged = props.find((p) => /^(thrown|ammunition)\b/i.test(p));
   if (ranged) {
     const m = ranged.match(/\((\d+)/);
@@ -150,7 +150,7 @@ function weaponRangeFt5e(props: string[]): number {
  * A SWN weapon's range in feet, from a "range 30/100" property tag. Thrown
  * items with no explicit number (grenades) default to a short throw.
  */
-function weaponRangeFtSwn(props: string[]): number {
+export function weaponRangeFtSwn(props: string[]): number {
   const tag = props.find((p) => /^range\b/i.test(p));
   if (tag) {
     const m = tag.match(/(\d+)/);

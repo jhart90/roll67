@@ -16,6 +16,12 @@ type MapRecord = NonNullable<ReturnType<typeof maps.byId>>;
 
 const DEFAULT_VISION: VisionStats = { visionRange: 24, darkvision: 0 };
 
+/** How close (in hexes) a player's own token must be to a door to discover
+ *  it even without direct line of sight -- e.g. it sits across a diagonal
+ *  the raycast grazes, even though you're standing close enough to see and
+ *  use it in person. */
+const DOOR_DISCOVERY_RADIUS = 5;
+
 interface VisionCache {
   mapId: string;
   visible: Set<number>;
@@ -109,14 +115,12 @@ function visibleTokens(userId: string, mapTokens: Token[], visible: Set<number>)
 
 /**
  * Doors the player knows about: currently observable ones (midpoint inside
- * explored/visible hexes, or within 2 hexes of one of their own tokens --
- * otherwise a door right next to you could be missed by FOV, e.g. it sits
- * across a diagonal the raycast grazes, even though you're standing close
- * enough to see and use it in person) get a fresh snapshot into `memory`;
- * anything already in `memory` from an earlier discovery is included too, so
- * a door stays visible -- in whatever state it was last actually observed in
- * -- even after the player walks back out of sight of it. Mutates `memory`
- * in place; returns whether it changed (so the caller knows to persist it).
+ * explored/visible hexes, or within DOOR_DISCOVERY_RADIUS hexes of one of
+ * their own tokens) get a fresh snapshot into `memory`; anything already in
+ * `memory` from an earlier discovery is included too, so a door stays
+ * visible -- in whatever state it was last actually observed in -- even
+ * after the player walks back out of sight of it. Mutates `memory` in
+ * place; returns whether it changed (so the caller knows to persist it).
  */
 function knownDoors(
   map: MapRecord, explored: Set<number>, visible: Set<number>, viewerHexes: Hex[], memory: Map<string, Door>,
@@ -127,7 +131,7 @@ function knownDoors(
     const mid = { x: (d.a.x + d.b.x) / 2, y: (d.a.y + d.b.y) / 2 };
     const doorHex = pixelToHex(mid, map.grid);
     const key = packHex(doorHex);
-    const observable = explored.has(key) || visible.has(key) || viewerHexes.some((h) => hexDistance(h, doorHex) <= 2);
+    const observable = explored.has(key) || visible.has(key) || viewerHexes.some((h) => hexDistance(h, doorHex) <= DOOR_DISCOVERY_RADIUS);
     if (!observable) continue;
     liveIds.add(d.id);
     const remembered = memory.get(d.id);

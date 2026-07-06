@@ -305,10 +305,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
 
     // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;
-    // otherwise compare to the target's AC. Save-based spells skip the to-hit:
-    // the target rolls a save vs the caster's DC first, posted as its own
-    // chat card, and (unless it fully negates) the damage roll follows as a
-    // separate card once that save's dice animation has had time to settle.
+    // otherwise compare to the target's AC. Every attack roll -- to-hit or
+    // save -- posts its own chat card immediately, and (on a hit, or a save
+    // that doesn't fully negate) the damage roll follows as a separate card
+    // only once that first roll's own dice animation has had time to settle.
     let hit = true;
     let crit = false;
     let saveScale = 1;
@@ -349,8 +349,47 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
     }
 
+    // Consume a used item (decrement the actor's inventory row) and/or ammo
+    // on an attack that tracks it. Runs whether the attack hits or misses --
+    // a missed shot still spends the arrow -- so a miss (which now skips
+    // resolveDamage entirely, see below) calls this directly instead.
+    const consumeAmmoAndItem = (): void => {
+      if (action.consumesItem && action.source === 'item') {
+        const fresh = characters.byId(actor.id) ?? actor;
+        const inv = Array.isArray(fresh.sheet.inventory) ? [...(fresh.sheet.inventory as SheetData[])] : [];
+        const row = inv[action.index];
+        if (row) {
+          inv[action.index] = { ...row, qty: Math.max(0, num(row, 'qty', 1) - 1) };
+          const sheet = { ...fresh.sheet, inventory: inv };
+          characters.update(actor.id, undefined, sheet);
+          const updatedActor = characters.byId(actor.id)!;
+          io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          undo.push({ t: 'item', characterId: actor.id, index: action.index });
+        }
+      }
+
+      if (action.source === 'attack') {
+        const fresh = characters.byId(actor.id) ?? actor;
+        const atks = Array.isArray(fresh.sheet.attacks) ? [...(fresh.sheet.attacks as SheetData[])] : [];
+        const row = atks[action.index];
+        const ammo = row ? num(row, 'ammo', -1) : -1;
+        if (row && ammo > 0) {
+          const before = atks.map((r) => ({ ...r }));
+          atks[action.index] = { ...row, ammo: ammo - 1 };
+          const sheet = { ...fresh.sheet, attacks: atks };
+          characters.update(actor.id, undefined, sheet);
+          const updatedActor = characters.byId(actor.id)!;
+          io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
+          undo.push({ t: 'field', characterId: actor.id, key: 'attacks', value: before });
+        }
+      }
+    };
+
     // Damage/heal resolution + chat post, run either immediately (plain
-    // attacks) or after the save card's dice have settled (save-based spells).
+    // attacks/heals with no roll of their own) or after the attack/save
+    // card's dice have settled.
     const resolveDamage = (): void => {
       // A crit doubles the dice. Resistance/vulnerability/immunity from the
       // target's sheet then scales the total.
@@ -416,55 +455,22 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           };
         }
       }
-      if (resistTag) hitLabel += resistTag;
-
-      // Consume a used item (decrement the actor's inventory row). Re-read the
-      // character first in case something else already patched its sheet.
-      if (action.consumesItem && action.source === 'item') {
-        const fresh = characters.byId(actor.id) ?? actor;
-        const inv = Array.isArray(fresh.sheet.inventory) ? [...(fresh.sheet.inventory as SheetData[])] : [];
-        const row = inv[action.index];
-        if (row) {
-          inv[action.index] = { ...row, qty: Math.max(0, num(row, 'qty', 1) - 1) };
-          const sheet = { ...fresh.sheet, inventory: inv };
-          characters.update(actor.id, undefined, sheet);
-          const updatedActor = characters.byId(actor.id)!;
-          io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-          if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-          undo.push({ t: 'item', characterId: actor.id, index: action.index });
-        }
-      }
-
-      // Decrement ammo on a weapon that tracks it (leave untouched if the
-      // "Ammo left" field was never set — that means this weapon isn't tracked).
-      if (action.source === 'attack') {
-        const fresh = characters.byId(actor.id) ?? actor;
-        const atks = Array.isArray(fresh.sheet.attacks) ? [...(fresh.sheet.attacks as SheetData[])] : [];
-        const row = atks[action.index];
-        const ammo = row ? num(row, 'ammo', -1) : -1;
-        if (row && ammo > 0) {
-          const before = atks.map((r) => ({ ...r }));
-          atks[action.index] = { ...row, ammo: ammo - 1 };
-          const sheet = { ...fresh.sheet, attacks: atks };
-          characters.update(actor.id, undefined, sheet);
-          const updatedActor = characters.byId(actor.id)!;
-          io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-          if (updatedActor.ownerUserId) io.to(userRoom(updatedActor.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedActor });
-          undo.push({ t: 'field', characterId: actor.id, key: 'attacks', value: before });
-        }
-      }
+      // Re-read the character first in case something else already patched
+      // its sheet (e.g. the Savage Attacker reroll above).
+      consumeAmmoAndItem();
 
       const verb = action.effect === 'heal' ? 'uses' : 'attacks';
       const outcome = action.effect === 'heal'
         ? `heals ${applied}`
-        : hit ? `${applied} damage` : 'no damage';
-      // A save-based action already posted its own card for the save roll —
-      // this card is damage-only, not a restatement of the attack/target line.
-      const text = deferredSave
+        : hit ? `${applied} damage${resistTag}` : 'no damage';
+      // A to-hit or save roll already posted its own card above (see the
+      // dispatch below) — this card is damage-only, not a restatement of
+      // the attack/target line. Only a no-roll action (e.g. a plain heal)
+      // reaches this function with neither, so it still needs the full line.
+      const text = (deferredSave || attackBreakdown)
         ? `${actor.name}'s ${action.label} — ${tgt.name}: ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim()
         : `${actor.name} ${verb} ${action.effect === 'heal' ? action.label + ' on' : ''} ${tgt.name}${action.effect === 'heal' ? '' : ': ' + action.label}${hitLabel} · ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim();
-      // Show the damage/heal dice as the card, unless it was a clean miss.
-      const cardRoll = attackBreakdown && !hit && !deferredSave ? attackBreakdown : amountRoll;
+      const cardRoll = amountRoll;
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
       }, undo.length > 0 ? undo : undefined);
@@ -495,6 +501,25 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: saveMsg });
       if (noDamage) return;
       setTimeout(resolveDamage, SAVE_STEP_DELAY_MS);
+      return;
+    }
+    if (attackBreakdown) {
+      // A to-hit roll always gets its own card first -- the target only
+      // finds out whether (and how much) damage lands once that roll's own
+      // dice have visibly settled, same pacing as the save roll above.
+      const attackText = `${actor.name} attacks ${tgt.name}: ${action.label}${hitLabel}`.replace(/\s+/g, ' ').trim();
+      const attackMsg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'roll', text: attackText,
+        roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
+      }, !hit && undo.length > 0 ? undo : undefined);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });
+      if (!hit) {
+        // A miss still spends ammo/an item, but there's no damage to roll or
+        // report -- the miss was already fully said above.
+        consumeAmmoAndItem();
+        return;
+      }
+      setTimeout(resolveDamage, diceSettleDelayMs(attackBreakdown.dice.length));
       return;
     }
     resolveDamage();

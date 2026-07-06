@@ -271,8 +271,11 @@ export function GeometryLayer() {
     }
   }
 
-  // Right-click exits the wall/door builder: any completed segments are built,
-  // the in-progress segment ending at the cursor is discarded.
+  // Right-click ends the in-progress wall/door, not the tool itself: any
+  // completed segments are built, the in-progress segment ending at the
+  // cursor is discarded, and the next click starts a fresh wall/door --
+  // the wall/door tool stays selected so a DM tracing several separate
+  // walls doesn't need to reselect the tool after every one.
   function onOverlayContextMenu(e: React.MouseEvent<SVGRectElement>) {
     e.preventDefault();
     e.stopPropagation();
@@ -282,7 +285,6 @@ export function GeometryLayer() {
     if (tool === 'wall' || tool === 'door') {
       setDraft([]);
       setCursor(null);
-      useGameStore.getState().setTool('select');
     }
   }
 

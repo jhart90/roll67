@@ -267,11 +267,12 @@ async function main() {
   ok(!!beastSave, 'cone caught the monster in its area');
   ok(selfSave === null, "caster is NOT included in their own cone's save (PHB: point of origin excluded)");
 
-  // ---------- damage/heal application waits for its own dice to settle ----------
-  console.log('damage timing (waits for the dice roll animation):');
+  // ---------- attack roll posts first; damage is a separate, later card ----------
+  console.log('attack/damage timing (to-hit card, then a paced damage card):');
   // A bare token with a tracked HP bar, adjacent to the player, well within
-  // range and line of sight -- isolates the timing behavior from any to-hit
-  // or save mechanics.
+  // range and line of sight -- isolates the timing behavior from any
+  // to-hit-vs-AC or line-of-sight mechanics that could otherwise turn this
+  // into a miss (no damage card at all) or a rejection.
   const dummyReady = waitFor(dmSock, 'tokenUpserted', 5000, (p) => p.token.name === 'Timing Dummy');
   dmSock.emit('createToken', { mapId, name: 'Timing Dummy', q: 7, r: 5, layer: 'token', bar: { hp: 20, maxHp: 20 } });
   const dummy = (await dummyReady).token;
@@ -281,17 +282,23 @@ async function main() {
   ] } });
   await timingReady;
 
+  // All listeners for this whole exchange registered up front, before the
+  // single emit -- the attack card, the (much later) damage card, and the
+  // "nothing happened yet" checks all key off the same combatAction.
   const attackCardP = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg?.text?.includes('Timing Bow'));
+  const damageCardP = waitFor(playerSock, 'chatMsg', 8000, (p) => p.msg?.text?.includes('Timing Dummy') && /damage/.test(p.msg.text));
   const tooSoonUpsert = expectSilence(dmSock, 'tokenUpserted', 1500, (p) => p.token.id === dummy.id);
   const tooSoonFloat = expectSilence(playerSock, 'hpFloat', 1500, (p) => p.tokenId === dummy.id);
   playerSock.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id, targetTokenId: dummy.id, adv: null });
   await attackCardP;
-  ok(true, 'the damage roll card posts immediately (the dice can start animating)');
+  ok(true, 'the attack (to-hit) roll posts its own chat card immediately');
   const [su, sf] = await Promise.all([tooSoonUpsert, tooSoonFloat]);
-  ok(su === null, "target HP does not change while its damage roll is still animating");
-  ok(sf === null, "no floating damage number appears while its damage roll is still animating");
+  ok(su === null, 'target HP does not change while the attack roll is still animating');
+  ok(sf === null, 'no floating damage number appears while the attack roll is still animating');
+  const damageCard = await damageCardP;
+  ok(!damageCard.msg.text.includes('HIT'), "the damage roll is its own later card, not a restatement of the attack roll's HIT/MISS line");
   const applied = await waitFor(dmSock, 'tokenUpserted', 3500, (p) => p.token.id === dummy.id && p.token.bar.hp < 20).catch(() => null);
-  ok(!!applied, "target HP changes once the damage roll's dice have settled (+1s pause)");
+  ok(!!applied, "target HP changes once the damage roll's own dice have settled (+1s pause)");
 
   // Drop a long wall between player and monster.
   const wallGone = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
@@ -434,6 +441,13 @@ async function main() {
   playerSock.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id, targetTokenId: beast.id, adv: null });
   const [openRoll, openErr] = await Promise.all([losOpenRoll, losOpenErr]);
   ok(!!openRoll && !openErr, 'the same attack resolves once the door is open (line of sight restored)');
+  // Drain this attack's own (now-delayed) damage card too, if a hit produces
+  // one -- otherwise it could linger and be mistaken by a later, more
+  // loosely-filtered chatMsg listener (e.g. the plain "any roll" check
+  // further down). Registered after the fact is safe here: the damage card
+  // (if any) always lands well after this attack's own roll card, never
+  // before it, so there's no risk of it having already arrived unheard.
+  await waitFor(playerSock, 'chatMsg', 8000, (p) => p.msg?.text?.includes('Sniper Bow') && /damage/.test(p.msg.text)).catch(() => null);
 
   // With the door open the same move is legal.
   const moveThrough = waitFor(playerSock, 'tokenMoved', 5000, (p) => p.tokenId === pcToken.id && p.q === 10);
@@ -466,7 +480,7 @@ async function main() {
   dmSock.emit('setGridConfig', { mapId: memMapId, grid: { lighting: 'dark' } });
 
   const memApproachSpot = { q: 5, r: 5 };
-  const memDoorSpot = px(5, 7); // 2 hexes from the approach spot -- not on it, not 1 away
+  const memDoorSpot = px(5, 10); // 5 hexes from the approach spot -- right at DOOR_DISCOVERY_RADIUS
   const memAwaySpot = { q: 5, r: 20 };
 
   // A dedicated throwaway character/token -- not the shared `pc` the rest of

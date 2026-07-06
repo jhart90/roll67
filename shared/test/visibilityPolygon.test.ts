@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeVisibilityPolygon } from '../src/vision/visibilityPolygon.js';
+import { computeVisibilityPolygon, computeVisibilityPolygonBands } from '../src/vision/visibilityPolygon.js';
 import { computeUnionVisibilityPolygons } from '../src/vision/fov.js';
 import type { GridConfig, VisionStats, Wall } from '../src/types.js';
 
@@ -50,6 +50,27 @@ describe('computeVisibilityPolygon', () => {
 
   it('returns [] for a non-positive max distance', () => {
     expect(computeVisibilityPolygon(ORIGIN, 0, [])).toEqual([]);
+  });
+});
+
+describe('computeVisibilityPolygonBands', () => {
+  it('matches two separate computeVisibilityPolygon calls, in the open and against a wall', () => {
+    const wall = { a: { x: 30, y: -10 }, b: { x: 30, y: 10 } };
+    for (const segments of [[], [wall]]) {
+      const { full, fade } = computeVisibilityPolygonBands(ORIGIN, 60, 70, segments);
+      expect(full).toEqual(computeVisibilityPolygon(ORIGIN, 60, segments));
+      expect(fade).toEqual(computeVisibilityPolygon(ORIGIN, 70, segments));
+    }
+  });
+
+  it('returns two empty rings when the wider (fade) distance is non-positive', () => {
+    expect(computeVisibilityPolygonBands(ORIGIN, 0, 0, [])).toEqual({ full: [], fade: [] });
+  });
+
+  it('full stays empty (not just capped to a point) when only the tighter distance is non-positive', () => {
+    const { full, fade } = computeVisibilityPolygonBands(ORIGIN, 0, 50, []);
+    expect(full).toEqual([]);
+    expect(fade.length).toBeGreaterThan(0);
   });
 });
 

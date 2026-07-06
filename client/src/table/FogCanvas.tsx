@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { MapView, Point, VisibilityLitMask } from 'shared';
+import type { GridConfig, MapView, Point, VisibilityLitMask } from 'shared';
 import { hexCorners, unpackHex } from 'shared';
 import { mapPixelSize } from '../util/stage';
 
@@ -78,6 +78,14 @@ export function FogCanvas({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const { width, height } = mapPixelSize(map);
+  // The explored set only ever grows and is usually untouched between moves
+  // (the store now keeps its reference stable when nothing new is explored)
+  // -- caching its render lets a token move that doesn't reveal new territory
+  // skip re-filling what can be thousands of previously-explored hexes and
+  // just re-blit the cached mask instead.
+  const exploredMaskRef = useRef<{
+    explored: Set<number>; grid: GridConfig; width: number; height: number; canvas: HTMLCanvasElement;
+  } | null>(null);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -111,7 +119,22 @@ export function FogCanvas({
     const hexPolys = (keys: Set<number>): Point[][] => [...keys].map((key) => hexCorners(unpackHex(key), map.grid));
 
     // Explored memory is dimmest, the fade rim brighter, current vision clear.
-    if (explored) punch(hexPolys(explored), 0.55);
+    if (explored) {
+      const cached = exploredMaskRef.current;
+      let mask: HTMLCanvasElement;
+      if (cached && cached.explored === explored && cached.grid === map.grid && cached.width === width && cached.height === height) {
+        mask = cached.canvas;
+      } else {
+        const { canvas: exploredCanvas, ctx: exCtx } = maskCanvas(width, height);
+        exCtx.fillStyle = '#fff';
+        fillPolygons(exCtx, hexPolys(explored));
+        mask = exploredCanvas;
+        exploredMaskRef.current = { explored, grid: map.grid, width, height, canvas: mask };
+      }
+      punchMask(mask, 0.55);
+    } else {
+      exploredMaskRef.current = null;
+    }
     if (fadePolygons) punchMask(buildVisibilityMask(width, height, fadePolygons, fadeLitMask), 0.75);
     else if (fade) punch(hexPolys(fade), 0.75);
     if (visiblePolygons) punchMask(buildVisibilityMask(width, height, visiblePolygons, visibleLitMask), 1);

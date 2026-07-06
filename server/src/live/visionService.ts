@@ -4,8 +4,9 @@
 
 import type { Server, Socket } from 'socket.io';
 import {
-  computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, packHex, pixelToHex, systemFor,
-  S2C, type Door, type Hex, type Light, type MapStatePayload, type Point, type Token, type TokenView,
+  computeLightPolygons, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, litHexes,
+  packHex, pixelToHex, systemFor,
+  S2C, type Door, type FovInput, type Hex, type Light, type MapStatePayload, type Point, type Token, type TokenView,
   type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
 import { campaigns, characters, fog, maps, tokens } from '../db/repos.js';
@@ -111,8 +112,45 @@ export interface UserMapView {
   knownDoors: Door[];
 }
 
+/**
+ * The parts of a map's vision picture that don't depend on which user is
+ * looking: the FOV input (walls/doors/lights, with token-light sources
+ * merged in) plus the lit-hexes set and light-source polygons derived from
+ * it. `syncMapVision` computes this once per map change and shares it across
+ * every online viewer instead of each of them redoing identical light
+ * raycasts.
+ */
+export interface MapVisionShared {
+  fovInput: FovInput;
+  lit: Set<number> | undefined;
+  lightPolygons: Point[][] | undefined;
+}
+
+const SQRT3 = Math.sqrt(3);
+
+export function buildMapVisionShared(map: MapRecord, mapTokens?: Token[]): MapVisionShared {
+  const allTokens = mapTokens ?? tokens.forMap(map.id);
+  // Tokens flagged as light sources contribute lights at their hex position.
+  const tokenLights: Light[] = allTokens
+    .filter((t) => t.light && (t.light.bright > 0 || t.light.dim > 0))
+    .map((t) => {
+      const px = hexToPixel({ q: t.q, r: t.r }, map.grid);
+      return { id: `tl-${t.id}`, x: px.x, y: px.y, brightRadius: t.light!.bright, dimRadius: t.light!.dim };
+    });
+  const lights = tokenLights.length > 0 ? [...map.lights, ...tokenLights] : map.lights;
+  const fovInput: FovInput = { grid: map.grid, walls: map.walls, doors: map.doors, lights };
+  const isLight = map.grid.lighting === 'light';
+  return {
+    fovInput,
+    lit: isLight ? undefined : litHexes(fovInput),
+    lightPolygons: isLight ? undefined : computeLightPolygons(fovInput, map.grid.hexSize * SQRT3),
+  };
+}
+
 /** Compute (and cache) a player's current view of a map. */
-export function computeUserMapView(userId: string, map: MapRecord, mapTokens?: Token[]): UserMapView {
+export function computeUserMapView(
+  userId: string, map: MapRecord, mapTokens?: Token[], shared?: MapVisionShared,
+): UserMapView {
   const allTokens = mapTokens ?? tokens.forMap(map.id);
   const key = cacheKey(userId, map.id);
   let cache = visionCache.get(key);
@@ -124,19 +162,11 @@ export function computeUserMapView(userId: string, map: MapRecord, mapTokens?: T
     hex: { q: t.q, r: t.r },
     stats: tokenVision(t),
   }));
-  // Tokens flagged as light sources contribute lights at their hex position.
-  const tokenLights: Light[] = allTokens
-    .filter((t) => t.light && (t.light.bright > 0 || t.light.dim > 0))
-    .map((t) => {
-      const px = hexToPixel({ q: t.q, r: t.r }, map.grid);
-      return { id: `tl-${t.id}`, x: px.x, y: px.y, brightRadius: t.light!.bright, dimRadius: t.light!.dim };
-    });
-  const lights = tokenLights.length > 0 ? [...map.lights, ...tokenLights] : map.lights;
-  const fovInput = { grid: map.grid, walls: map.walls, doors: map.doors, lights };
+  const { fovInput, lit, lightPolygons } = shared ?? buildMapVisionShared(map, allTokens);
   const bands = viewers.length === 0
     ? { full: new Set<number>(), fade: new Set<number>() }
-    : computeUnionFovBands(viewers, fovInput);
-  const polyBands = viewers.length === 0 ? null : computeUnionVisibilityPolygons(viewers, fovInput);
+    : computeUnionFovBands(viewers, fovInput, lit);
+  const polyBands = viewers.length === 0 ? null : computeUnionVisibilityPolygons(viewers, fovInput, { lightPolygons });
   const { full: visible, fade } = bands;
   const newlyExplored: number[] = [];
   for (const h of [...visible, ...fade]) {
@@ -233,6 +263,11 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
 
   const sockets = campaignSockets(io, campaignId);
   const sentToUser = new Set<string>();
+  // Lit hexes and light polygons don't depend on who's looking, only on the
+  // map's own geometry -- computed once here (lazily, only if someone online
+  // actually needs a recompute) and shared across every viewer below instead
+  // of each of them re-running identical light raycasts.
+  let shared: MapVisionShared | undefined;
 
   for (const socket of sockets) {
     const d = sdata(socket);
@@ -243,7 +278,8 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
       // God mode: DM already receives raw token/map events; only a view-as
       // preview needs a vision update.
       if (d.viewingAs) {
-        const view = computeUserMapView(d.viewingAs, map, allTokens);
+        shared ??= buildMapVisionShared(map, allTokens);
+        const view = computeUserMapView(d.viewingAs, map, allTokens, shared);
         const payload: VisionUpdatePayload = {
           mapId,
           visible: [...view.visible],
@@ -263,7 +299,8 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
     }
     if (sentToUser.has(d.userId)) continue;
     sentToUser.add(d.userId);
-    const view = computeUserMapView(d.userId, map, allTokens);
+    shared ??= buildMapVisionShared(map, allTokens);
+    const view = computeUserMapView(d.userId, map, allTokens, shared);
     const payload: VisionUpdatePayload = {
       mapId,
       visible: [...view.visible],

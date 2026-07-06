@@ -7,7 +7,7 @@ import { hexDistance, hexRange, hexRing } from '../hex/coords.js';
 import { hexToPixel, pixelToHex } from '../hex/pixel.js';
 import { packHex } from '../hex/pack.js';
 import { rayBlocked, sightSegments, type Segment } from './raycast.js';
-import { computeVisibilityPolygon } from './visibilityPolygon.js';
+import { computeVisibilityPolygon, computeVisibilityPolygonBands } from './visibilityPolygon.js';
 
 const SQRT3 = Math.sqrt(3);
 
@@ -150,25 +150,90 @@ function fadeStats(stats: VisionStats): VisionStats {
 }
 
 /**
+ * `full` and `fade` bands for one viewer in a single pass over the wider
+ * (fade) radius: `rayBlocked` doesn't depend on vision stats, only on the
+ * viewer/target geometry, so a hex's blocked-or-not result is identical for
+ * both bands -- raycasting each hex once and testing it against both stats
+ * afterward avoids running computeFov's whole hex loop (and every raycast in
+ * it) twice per viewer.
+ */
+function computeFovBands(
+  viewer: Hex, stats: VisionStats, input: FovInput, precomputed?: { lit?: Set<number> },
+): FovBands {
+  const fs = fadeStats(stats);
+  const fadeRadius = Math.min(Math.max(fs.visionRange, fs.darkvision, 0), MAX_VISION_RADIUS);
+  const full = new Set<number>();
+  const fade = new Set<number>();
+  if (fadeRadius <= 0) {
+    if (inBounds(viewer, input.grid)) full.add(packHex(viewer));
+    return { full, fade };
+  }
+  const lighting = input.grid.lighting;
+  const needLightCheck = lighting !== 'light';
+  const lit = needLightCheck ? (precomputed?.lit ?? litHexes(input)) : undefined;
+  const viewerPx = hexToPixel(viewer, input.grid);
+  const segs = sightSegments(input.walls, input.doors, viewerPx);
+
+  for (const h of hexRange(viewer, fadeRadius)) {
+    if (!inBounds(h, input.grid)) continue;
+    const dist = hexDistance(viewer, h);
+    const key = packHex(h);
+    if (dist === 0) { full.add(key); continue; }
+    if (dist > fs.visionRange && dist > fs.darkvision) continue;
+    let reachable = true;
+    if (needLightCheck) {
+      const isLit = lit!.has(key);
+      const inDarkvisionWide = dist <= fs.darkvision;
+      const inDimAmbient = lighting === 'dim' && dist <= DIM_AMBIENT_RADIUS;
+      if (!isLit && !inDarkvisionWide && !inDimAmbient) reachable = false;
+      else if ((isLit || inDimAmbient) && dist > fs.visionRange && !inDarkvisionWide) reachable = false;
+    }
+    if (!reachable) continue;
+    const target = hexToPixel(h, input.grid);
+    if (rayBlocked(viewerPx, target, segs)) continue;
+
+    // Visible under the wider (fade) stats, and the raycast proving it is
+    // already paid for -- reuse it to test the tighter (full) stats instead
+    // of raycasting this same hex a second time.
+    let isFull = dist <= stats.visionRange || dist <= stats.darkvision;
+    if (isFull && needLightCheck) {
+      const isLit = lit!.has(key);
+      const inDarkvision = dist <= stats.darkvision;
+      const inDimAmbient = lighting === 'dim' && dist <= DIM_AMBIENT_RADIUS;
+      if (!isLit && !inDarkvision && !inDimAmbient) isFull = false;
+      else if ((isLit || inDimAmbient) && dist > stats.visionRange && !inDarkvision) isFull = false;
+    }
+    if (isFull) full.add(key); else fade.add(key);
+  }
+  return { full, fade };
+}
+
+/**
  * Union FOV split into bands: `full` out to each viewer's vision radius,
  * `fade` for the extra +1 hex where sight trails off. Everything past the
  * fade rim stays fogged (fully black if unexplored).
+ *
+ * `precomputedLit` lets a caller re-share one map's lit-hexes set across
+ * several viewers/users in the same moment (e.g. every online player after a
+ * single token move) instead of recomputing the identical light raycasts
+ * once per union call.
  */
 export function computeUnionFovBands(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
+  precomputedLit?: Set<number>,
 ): FovBands {
-  const lit = input.grid.lighting === 'light' ? undefined : litHexes(input);
+  const lit = input.grid.lighting === 'light' ? undefined : (precomputedLit ?? litHexes(input));
   const full = new Set<number>();
-  const expanded = new Set<number>();
-  for (const v of viewers) {
-    for (const key of computeFov(v.hex, v.stats, input, { lit })) full.add(key);
-    for (const key of computeFov(v.hex, fadeStats(v.stats), input, { lit })) expanded.add(key);
-  }
   const fade = new Set<number>();
-  for (const key of expanded) {
-    if (!full.has(key)) fade.add(key);
+  for (const v of viewers) {
+    const bands = computeFovBands(v.hex, v.stats, input, { lit });
+    for (const key of bands.full) full.add(key);
+    for (const key of bands.fade) fade.add(key);
   }
+  // Union semantics: a hex fully visible to ANY viewer counts as full even
+  // if another viewer only reaches it at fade range.
+  for (const key of full) fade.delete(key);
   return { full, fade };
 }
 
@@ -200,7 +265,7 @@ export interface VisibilityPolygonBands {
 }
 
 /** Each light's own wall-aware illumination shape (an eye standing at the light, per litHexes' hex analog). */
-function computeLightPolygons(input: FovInput, pxPerHex: number): Point[][] {
+export function computeLightPolygons(input: FovInput, pxPerHex: number): Point[][] {
   const out: Point[][] = [];
   for (const light of input.lights) {
     const pos = { x: light.x, y: light.y };
@@ -227,10 +292,15 @@ function computeLightPolygons(input: FovInput, pxPerHex: number): Point[][] {
  * whenever darkvision <= visionRange, which covers every normal case; they
  * only diverge for the unusual darkvision > visionRange build, where this
  * version is very slightly more generous at the fringe.
+ *
+ * `precomputed` lets a caller re-share one map's lit-hexes set and light
+ * polygons across several viewers/users in the same moment instead of
+ * recomputing those (viewer-independent) shapes once per call.
  */
 export function computeUnionVisibilityPolygons(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
+  precomputed?: { lightPolygons?: Point[][] },
 ): VisibilityPolygonBands {
   const isLight = input.grid.lighting === 'light';
   const isDim = input.grid.lighting === 'dim';
@@ -245,11 +315,12 @@ export function computeUnionVisibilityPolygons(
     if (radius <= 0) continue;
     const originPx = hexToPixel(v.hex, input.grid);
     const segs = sightSegments(input.walls, input.doors, originPx);
-    full.push(computeVisibilityPolygon(originPx, radius * pxPerHex, segs));
 
     const fs = fadeStats(v.stats);
     const fadeRadius = Math.min(Math.max(fs.visionRange, fs.darkvision, 0), MAX_VISION_RADIUS);
-    fade.push(computeVisibilityPolygon(originPx, fadeRadius * pxPerHex, segs));
+    const bands = computeVisibilityPolygonBands(originPx, radius * pxPerHex, fadeRadius * pxPerHex, segs);
+    full.push(bands.full);
+    fade.push(bands.fade);
 
     if (!isLight) {
       // computeFov always treats a viewer's own hex as visible (dist === 0
@@ -273,7 +344,7 @@ export function computeUnionVisibilityPolygons(
   if (isLight) {
     return { full: { reach: full, lit: null }, fade: { reach: fade, lit: null } };
   }
-  const lightPolygons = computeLightPolygons(input, pxPerHex);
+  const lightPolygons = precomputed?.lightPolygons ?? computeLightPolygons(input, pxPerHex);
   return {
     full: { reach: full, lit: { circles: fullCircles, lightPolygons } },
     fade: { reach: fade, lit: { circles: fadeCircles, lightPolygons } },

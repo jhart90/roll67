@@ -433,8 +433,16 @@ export function wireSocket(): void {
     // In god mode the DM ignores vision packets unless previewing a player.
     if (s.you?.role === 'dm' && !s.viewingAs && !p.viewingAs) return;
     if (s.you?.role === 'dm' && s.viewingAs !== p.viewingAs) return;
-    const explored = new Set(s.explored ?? []);
-    for (const h of p.newlyExplored) explored.add(h);
+    // Most moves reveal nothing new -- skip cloning the (potentially huge,
+    // ever-growing) explored set on every single vision update. FogCanvas
+    // caches its explored-hex render keyed on this reference, so leaving it
+    // untouched here also lets it skip re-filling every explored hex when
+    // only the live visible/fade bands actually changed.
+    let explored = s.explored;
+    if (p.newlyExplored.length > 0) {
+      explored = new Set(s.explored ?? []);
+      for (const h of p.newlyExplored) explored.add(h);
+    }
     useGameStore.setState({
       visible: new Set(p.visible),
       fade: new Set(p.fade),

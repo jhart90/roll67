@@ -124,6 +124,21 @@ describe('fov bands (fade rim)', () => {
     }
   });
 
+  it('a hex fully visible to one viewer counts as full even if another viewer only reaches it at fade range', () => {
+    const near: Hex = { q: 4, r: 10 }; // full range 6 reaches (4,16) at distance 6
+    const far: Hex = { q: 4, r: 23 }; // full range 6 only reaches (4,16) at distance 7 (fade)
+    const target = packHex({ q: 4, r: 16 });
+    const { full, fade } = computeUnionFovBands(
+      [
+        { hex: near, stats: { visionRange: 6, darkvision: 0 } },
+        { hex: far, stats: { visionRange: 6, darkvision: 0 } },
+      ],
+      { grid: GRID, walls: [], doors: [], lights: [] },
+    );
+    expect(full.has(target)).toBe(true);
+    expect(fade.has(target)).toBe(false);
+  });
+
   it('walls also block the fade rim', () => {
     const wall: Wall = { id: 'w', points: [{ x: 190, y: 100 }, { x: 190, y: 200 }] };
     const { full, fade } = computeUnionFovBands(

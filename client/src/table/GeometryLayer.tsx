@@ -119,18 +119,40 @@ export function GeometryLayer() {
     return () => window.removeEventListener('keydown', onKey);
   }, [tool, draft, map.id]);
 
-  // How close a new wall/door point must land to an existing wall/door
-  // endpoint before it snaps there instead of sitting just beside it --
-  // otherwise a hairline crack between two segments meant to meet (a corner,
-  // a door frame) would let sight/light straight through it. The tolerance
-  // is defined in screen pixels and converted to map-space using the current
-  // zoom, so it's equally easy to hit whether zoomed in or out -- a fixed
-  // map-pixel radius would feel razor-thin when zoomed in and comically loose
-  // when zoomed out.
+  // How close a new wall/door point must land to an existing vertex before it
+  // snaps there instead of sitting just beside it -- otherwise a hairline
+  // crack between two segments meant to meet (a corner, a door frame) would
+  // let sight/light straight through it. The tolerance is defined in screen
+  // pixels and converted to map-space using the current zoom, so it's
+  // equally easy to hit whether zoomed in or out -- a fixed map-pixel radius
+  // would feel razor-thin when zoomed in and comically loose when zoomed out.
   const ENDPOINT_SNAP_SCREEN_PX = 28;
   const ENDPOINT_SNAP_DIST = ENDPOINT_SNAP_SCREEN_PX / cameraScale;
+  // A segment-interior snap (below) only kicks in this far past either of
+  // its own endpoints, so it never competes with the vertex snap right at a
+  // corner -- vertex snap always owns that zone.
+  const SEGMENT_SNAP_VERTEX_BUFFER = ENDPOINT_SNAP_DIST;
 
-  function nearbyEndpoint(p: Point, existingWalls: Wall[], existingDoors: Door[]): Point | null {
+  /** The point on segment a-b closest to p, plus how far along the segment
+   *  (in map units) that landed from each end -- lets callers exclude the
+   *  zone right next to either endpoint. */
+  function closestPointOnSegment(p: Point, a: Point, b: Point): { point: Point; distFromA: number; distFromB: number } {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return { point: a, distFromA: 0, distFromB: 0 };
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (len * len)));
+    return { point: { x: a.x + t * dx, y: a.y + t * dy }, distFromA: t * len, distFromB: (1 - t) * len };
+  }
+
+  /** Where a new wall/door point should snap: onto any vertex of an existing
+   *  wall/door, onto a vertex already placed earlier in the polyline
+   *  currently being drawn (so a closing point can land exactly back on an
+   *  earlier point of the same segment), or -- a buffer clear of any
+   *  vertex -- onto the interior of an existing straight run, which is what
+   *  lets a new wall's point land exactly on an existing wall/door's line to
+   *  form a T junction instead of stopping just short of it. */
+  function nearbySnapPoint(p: Point, existingWalls: Wall[], existingDoors: Door[], draftPoints: Point[]): Point | null {
     let best: Point | null = null;
     let bestD = ENDPOINT_SNAP_DIST;
     const consider = (q: Point) => {
@@ -138,23 +160,34 @@ export function GeometryLayer() {
       if (d < bestD) { bestD = d; best = q; }
     };
     for (const w of existingWalls) {
-      if (w.points.length === 0) continue;
-      consider(w.points[0]);
-      consider(w.points[w.points.length - 1]);
+      for (const pt of w.points) consider(pt);
     }
     for (const d of existingDoors) {
       consider(d.a);
       consider(d.b);
     }
+    for (const pt of draftPoints) consider(pt);
+
+    const considerSegment = (a: Point, b: Point) => {
+      const { point: q, distFromA, distFromB } = closestPointOnSegment(p, a, b);
+      if (distFromA < SEGMENT_SNAP_VERTEX_BUFFER || distFromB < SEGMENT_SNAP_VERTEX_BUFFER) return;
+      consider(q);
+    };
+    for (const w of existingWalls) {
+      for (let i = 0; i + 1 < w.points.length; i++) considerSegment(w.points[i], w.points[i + 1]);
+    }
+    for (const d of existingDoors) considerSegment(d.a, d.b);
+    for (let i = 0; i + 1 < draftPoints.length; i++) considerSegment(draftPoints[i], draftPoints[i + 1]);
+
     return best;
   }
 
   function snap(p: Point, shift: boolean): Point {
-    // Closing a gap against an existing endpoint always wins over hex-grid
-    // snapping -- the point here is sealing the geometry exactly, not
-    // aligning it to the grid.
-    const endpoint = nearbyEndpoint(p, walls, doors);
-    if (endpoint) return endpoint;
+    // Closing a gap against an existing vertex or line always wins over
+    // hex-grid snapping -- the point here is sealing the geometry exactly,
+    // not aligning it to the grid.
+    const geometrySnap = nearbySnapPoint(p, walls, doors, draft);
+    if (geometrySnap) return geometrySnap;
     if (!shift) return p;
     const hex = pixelToHex(p, grid);
     let best = p;

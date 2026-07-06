@@ -38,6 +38,19 @@ function diceSettleDelayMs(diceCount: number): number {
   return (n - 1) * 110 + 1700 + 1000;
 }
 
+// How long a ranged shot's travel animation takes on screen (see
+// client/src/table/impactFx.tsx's Projectile). Scheduled to land exactly
+// when the matching HP_FLOAT fires -- see emitProjectile's call site.
+const PROJECTILE_FLIGHT_MS = 500;
+
+/** A ranged attack's shot, timed to arrive right as its damage/heal lands
+ *  (see the setTimeout math around this function's call site). */
+function emitProjectile(
+  io: Server, campaignId: string, mapId: string, fromTokenId: string, toTokenId: string, damageType?: string,
+): void {
+  io.to(campaignRoom(campaignId)).emit(S2C.PROJECTILE, { mapId, fromTokenId, toTokenId, damageType, flightMs: PROJECTILE_FLIGHT_MS });
+}
+
 /** Players never receive hidden entries; the DM sees everything. */
 export function initiativeViewFor(state: InitiativeState, isDm: boolean): InitiativeState {
   if (isDm) return state;
@@ -457,7 +470,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }, undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
 
-      if (applyToTarget) setTimeout(applyToTarget, diceSettleDelayMs(cardRoll.dice.length));
+      if (applyToTarget) {
+        const settleMs = diceSettleDelayMs(cardRoll.dice.length);
+        // A single-target ranged hit gets a shot flying across the map,
+        // launched so its flight lands exactly when the damage does -- melee
+        // (no travel to show) and AoE (its own shockwave, no single target
+        // to aim at) skip this.
+        if (impactKind === 'ranged') {
+          const launchDelay = Math.max(0, settleMs - PROJECTILE_FLIGHT_MS);
+          setTimeout(() => emitProjectile(io, d.campaignId, src.mapId, src.id, tgt.id, action.damageType), launchDelay);
+        }
+        setTimeout(applyToTarget, settleMs);
+      }
     };
 
     if (deferredSave) {

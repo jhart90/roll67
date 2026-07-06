@@ -1319,6 +1319,20 @@ button.link:hover { text-decoration: underline; }
   100% { opacity: 0; transform: scale(1.15) translateY(-10px); }
 }
 
+/* Ranged shot: a comet-like streak flying in a straight line from shooter to
+   target. The caller places its wrapper <g> at the shooter's position via a
+   plain (unanimated) transform attribute; this animation only ever moves
+   *this* element by (--proj-dx, --proj-dy) relative to that, landing exactly
+   on the target -- mirrors the impact shapes' static-wrapper/animated-inner
+   split so the two transforms never fight each other. */
+.projectile-fx { animation: projectileFly var(--projectile-duration, 500ms) linear forwards; pointer-events: none; }
+@keyframes projectileFly {
+  from { transform: translate(0, 0); }
+  to { transform: translate(var(--proj-dx), var(--proj-dy)); }
+}
+.projectile-trail { stroke: var(--impact-color); stroke-width: 3; stroke-linecap: round; opacity: 0.55; }
+.projectile-head { fill: var(--impact-color); filter: drop-shadow(0 0 3px var(--impact-color)); }
+
 /* ---------- asset library ---------- */
 
 .asset-body { display: flex; flex: 1; min-height: 0; }

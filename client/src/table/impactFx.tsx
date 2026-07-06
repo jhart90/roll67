@@ -87,3 +87,32 @@ export function ImpactAnimation({ kind, radius, color }: { kind: ImpactKind | un
   const Shape = IMPACT_SHAPES[kind ?? 'melee'];
   return <Shape radius={radius} color={color} />;
 }
+
+/**
+ * A ranged shot's travel: a short comet-like streak that crosses from the
+ * shooter to the target in a straight line over `flightMs`, timed by the
+ * server to land right as the matching ImpactAnimation/HP float appears.
+ * Caller positions this at the shooter (`from`) via a plain (unanimated)
+ * wrapper `<g transform="translate(...)">` -- same two-layer split as
+ * ImpactAnimation, so the CSS travel animation only ever touches this
+ * component's own transform, never the caller's static placement.
+ */
+export function Projectile({ dx, dy, color, flightMs }: { dx: number; dy: number; color: string; flightMs: number }) {
+  const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const dist = Math.hypot(dx, dy);
+  const trailLen = Math.min(dist * 0.4, 36);
+  const style = {
+    ['--proj-dx' as unknown as string]: `${dx}px`,
+    ['--proj-dy' as unknown as string]: `${dy}px`,
+    ['--projectile-duration' as unknown as string]: `${flightMs}ms`,
+    ['--impact-color' as unknown as string]: color,
+  } as CSSProperties;
+  return (
+    <g className="projectile-fx" style={style}>
+      <g transform={`rotate(${angleDeg})`}>
+        <line x1={-trailLen} y1={0} x2={0} y2={0} className="projectile-trail" />
+        <circle r={4.5} className="projectile-head" />
+      </g>
+    </g>
+  );
+}

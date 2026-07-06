@@ -436,6 +436,7 @@ export const S2C = {
   CHARACTER_UPSERTED: 'characterUpserted',
   CHARACTER_REMOVED: 'characterRemoved',
   HP_FLOAT: 'hpFloat',
+  PROJECTILE: 'projectile',
   CHAT: 'chatMsg',
   MACROS: 'macros',
   INITIATIVE: 'initiativeState',
@@ -559,6 +560,10 @@ export interface CharacterUpsertedPayload { character: Character }
 export interface CharacterRemovedPayload { characterId: string }
 /** Floating combat text over a token: negative = damage, positive = heal. */
 export interface HpFloatPayload { mapId: string; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }
+/** A ranged attack's shot flying from shooter to target — sent far enough
+ *  ahead of the matching HpFloatPayload that, timed with flightMs, it lands
+ *  on-screen right as the damage/heal float appears. */
+export interface ProjectilePayload { mapId: string; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }
 /** A rollable-table result to flash on-screen (same text as the chat card). */
 export interface TableResultPayload { text: string; color: string }
 

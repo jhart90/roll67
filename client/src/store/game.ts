@@ -7,7 +7,7 @@ import {
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type RollableTable, type Shop,
+  type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type Shop,
   type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -86,6 +86,8 @@ interface GameState {
   aoeTargeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; originHex: Hex; aimHex: Hex } | null;
   /** Floating +/-HP combat text over tokens. */
   floats: Array<{ id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }>;
+  /** In-flight ranged shots (arrow/bolt/etc.), timed to land as their matching float appears. */
+  projectiles: Array<{ id: number; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }>;
   /** On-screen rollable-table result pills (fade out after ~3s). */
   tableToasts: Array<{ id: number; text: string; color: string }>;
   beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
@@ -184,6 +186,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   targeting: null,
   aoeTargeting: null,
   floats: [],
+  projectiles: [],
   tableToasts: [],
   beginTargeting(characterId, sourceTokenId, action, adv) {
     // Character sheets are movable windows now (not a full-screen modal), so
@@ -311,7 +314,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
       visibleLitMask: null, fadeLitMask: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
-      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], castPrompt: null,
+      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], castPrompt: null,
     });
   },
 
@@ -523,6 +526,22 @@ export function wireSocket(): void {
       const cur = useGameStore.getState();
       useGameStore.setState({ floats: cur.floats.filter((f) => f.id !== id) });
     }, 1600);
+  });
+
+  socket.on(S2C.PROJECTILE, (p: ProjectilePayload) => {
+    const s = useGameStore.getState();
+    // Only show the shot if both ends are actually visible to us -- same
+    // secrecy rule as HP_FLOAT, but checked at both endpoints since this
+    // needs to draw a line between them, not just sit on one token.
+    if (s.map?.id !== p.mapId || !s.tokens[p.fromTokenId] || !s.tokens[p.toTokenId]) return;
+    const id = ++pingCounter;
+    useGameStore.setState({
+      projectiles: [...s.projectiles, { id, fromTokenId: p.fromTokenId, toTokenId: p.toTokenId, damageType: p.damageType, flightMs: p.flightMs }],
+    });
+    setTimeout(() => {
+      const cur = useGameStore.getState();
+      useGameStore.setState({ projectiles: cur.projectiles.filter((x) => x.id !== id) });
+    }, p.flightMs);
   });
 
   socket.on(S2C.CHARACTER_REMOVED, ({ characterId }: { characterId: string }) => {

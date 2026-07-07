@@ -536,7 +536,11 @@ export const dnd5e: SystemSchema = {
   },
 
   initiativeExpr(sheet: SheetData): string {
-    return `1d20${fmtMod(abilityMod(num(sheet, 'dex', 10)))}`;
+    // Must match the sheet's own Initiative rollable (see rollables()): DEX
+    // mod plus Remarkable Athlete and feat bonuses (Alert's +5) -- the
+    // tracker's group-roll and the sheet button must agree.
+    const bonus = abilityMod(num(sheet, 'dex', 10)) + remarkableAthleteBonus(sheet) + featBonuses(sheet).initiative;
+    return `1d20${fmtMod(bonus)}`;
   },
 
   hp(sheet: SheetData): { hp: number; maxHp: number } {

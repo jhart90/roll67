@@ -68,10 +68,12 @@ export interface ConditionDef {
   icon: string;
   /** Which systems offer this condition in their picker. */
   systems: Array<'dnd5e' | 'swn'>;
-  /** Attackers targeting this creature roll with advantage. */
-  grantsAttackAdv?: boolean;
-  /** Attackers targeting this creature roll with disadvantage. */
-  grantsAttackDis?: boolean;
+  /** Attackers targeting this creature roll with advantage ('melee' = only melee attackers, e.g. prone). */
+  grantsAttackAdv?: boolean | 'melee';
+  /** Attackers targeting this creature roll with disadvantage ('ranged' = only ranged attackers, e.g. prone). */
+  grantsAttackDis?: boolean | 'ranged';
+  /** This creature makes its own attack rolls with advantage (e.g. invisible). */
+  selfAttackAdv?: boolean;
   /** This creature makes its own attack rolls with disadvantage. */
   selfAttackDis?: boolean;
   /** This creature can take no actions/reactions. */
@@ -86,11 +88,11 @@ export const CONDITIONS: ConditionDef[] = [
   { id: 'frightened', label: 'Frightened', icon: '😱', systems: ['dnd5e', 'swn'], selfAttackDis: true, desc: 'Disadvantage on attacks/checks while the source is in sight; can’t move closer.' },
   { id: 'grappled', label: 'Grappled', icon: '✊', systems: ['dnd5e', 'swn'], desc: 'Speed 0; ends if the grappler is incapacitated.' },
   { id: 'incapacitated', label: 'Incapacitated', icon: '💫', systems: ['dnd5e', 'swn'], incapacitated: true, desc: "Can't take actions or reactions." },
-  { id: 'invisible', label: 'Invisible', icon: '👻', systems: ['dnd5e'], grantsAttackDis: true, desc: 'Attacks against have disadvantage; its attacks have advantage.' },
+  { id: 'invisible', label: 'Invisible', icon: '👻', systems: ['dnd5e'], grantsAttackDis: true, selfAttackAdv: true, desc: 'Attacks against have disadvantage; its attacks have advantage.' },
   { id: 'paralyzed', label: 'Paralyzed', icon: '🧊', systems: ['dnd5e'], grantsAttackAdv: true, incapacitated: true, desc: "Incapacitated, can't move/speak; melee hits crit; auto-fails STR/DEX saves." },
   { id: 'petrified', label: 'Petrified', icon: '🗿', systems: ['dnd5e'], grantsAttackAdv: true, incapacitated: true, desc: 'Turned to stone; resistant to all damage; incapacitated.' },
   { id: 'poisoned', label: 'Poisoned', icon: '🤢', systems: ['dnd5e', 'swn'], selfAttackDis: true, desc: 'Disadvantage on attack rolls and ability checks.' },
-  { id: 'prone', label: 'Prone', icon: '⬇️', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, grantsAttackDis: true, selfAttackDis: true, desc: 'Melee attackers have advantage, ranged have disadvantage; its attacks have disadvantage.' },
+  { id: 'prone', label: 'Prone', icon: '⬇️', systems: ['dnd5e', 'swn'], grantsAttackAdv: 'melee', grantsAttackDis: 'ranged', selfAttackDis: true, desc: 'Melee attackers have advantage, ranged have disadvantage; its attacks have disadvantage.' },
   { id: 'restrained', label: 'Restrained', icon: '🕸️', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, selfAttackDis: true, desc: 'Speed 0; attacks against have advantage; its attacks have disadvantage; disadvantage on DEX saves.' },
   { id: 'stunned', label: 'Stunned', icon: '⭐', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated; attacks against have advantage; auto-fails STR/DEX saves.' },
   { id: 'unconscious', label: 'Unconscious', icon: '💤', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated and prone; melee hits crit; auto-fails STR/DEX saves.' },
@@ -137,19 +139,34 @@ export function conditionCombat(conditionIds: string[]): ConditionCombat {
 /**
  * Net advantage state for an attack, combining the roller's chosen adv/dis with
  * the attacker's and target's conditions. Advantage and disadvantage cancel
- * (5e rules): any of each → normal. `ranged` selects prone's split effect.
+ * (5e rules): any of each → normal.
+ *
+ * Takes the raw condition-id lists (not pre-folded ConditionCombat flags):
+ * each condition's contribution has to be judged individually against the
+ * attack's range — folding first conflated e.g. restrained (always grants
+ * advantage) + prone (grants ranged attackers disadvantage) into one
+ * ambiguous adv+dis pair that got misread as prone's own melee/ranged split.
  */
 export function attackAdvantage(
   chosen: 'adv' | 'dis' | null,
-  attacker: ConditionCombat,
-  target: ConditionCombat,
+  attackerConditions: string[],
+  targetConditions: string[],
   ranged: boolean,
 ): 'adv' | 'dis' | null {
   let adv = chosen === 'adv';
-  let dis = chosen === 'dis' || attacker.selfAttackDis;
-  // Prone grants advantage to melee attackers, disadvantage to ranged.
-  if (target.grantsAttackAdv && !(ranged && target.grantsAttackDis)) adv = true;
-  if (target.grantsAttackDis && (ranged || !target.grantsAttackAdv)) dis = true;
+  let dis = chosen === 'dis';
+  for (const id of attackerConditions) {
+    const c = CONDITION_MAP.get(id);
+    if (!c) continue;
+    if (c.selfAttackAdv) adv = true;
+    if (c.selfAttackDis) dis = true;
+  }
+  for (const id of targetConditions) {
+    const c = CONDITION_MAP.get(id);
+    if (!c) continue;
+    if (c.grantsAttackAdv === true || (c.grantsAttackAdv === 'melee' && !ranged)) adv = true;
+    if (c.grantsAttackDis === true || (c.grantsAttackDis === 'ranged' && ranged)) dis = true;
+  }
   if (adv && dis) return null;
   return adv ? 'adv' : dis ? 'dis' : null;
 }

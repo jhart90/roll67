@@ -3,7 +3,7 @@ import { num, rows, str } from './types.js';
 import {
   getClass5e, profBonusForLevel, spellSlotsForClass, type ClassFeature,
 } from './classes5e.js';
-import { featEffects, takenFeatIds } from './feats5e.js';
+import { featEffects, takenFeatIds, takenFeats } from './feats5e.js';
 import { subclassFeatureAt } from './subclassFeatures5e.js';
 
 export interface LevelUpPlan {
@@ -86,7 +86,11 @@ export function applyLevelUp(sheet: SheetData, classId: string, toLevel: number,
   const patch: SheetData = { level: toLevel, class: cls.name };
 
   // HP: level 1 sets max to the rolled/max value; later levels add and heal.
-  const gain = Math.max(1, Math.floor(choices.hpGained));
+  // The Tough feat's "+2 HP per level" applies to every level gained AFTER
+  // taking it too, not just the levels held at take-time (featEffects covers
+  // those retroactively when the feat is added).
+  const toughBonus = takenFeats(sheet).reduce((a, f) => a + (f.hpPerLevel ?? 0), 0);
+  const gain = Math.max(1, Math.floor(choices.hpGained)) + toughBonus;
   if (first) {
     patch.maxHp = gain;
     patch.hp = gain;

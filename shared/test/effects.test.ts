@@ -65,24 +65,40 @@ describe('conditions', () => {
 });
 
 describe('attack advantage resolution', () => {
-  const none = conditionCombat([]);
   it('advantage and disadvantage cancel out', () => {
-    const prone = conditionCombat(['prone']);
     // melee vs prone: advantage from prone
-    expect(attackAdvantage(null, none, prone, false)).toBe('adv');
+    expect(attackAdvantage(null, [], ['prone'], false)).toBe('adv');
     // ranged vs prone: disadvantage from prone
-    expect(attackAdvantage(null, none, prone, true)).toBe('dis');
+    expect(attackAdvantage(null, [], ['prone'], true)).toBe('dis');
   });
 
   it("attacker's own poisoned gives disadvantage; target restrained gives advantage → cancel", () => {
-    const poisoned = conditionCombat(['poisoned']);
-    const restrained = conditionCombat(['restrained']);
-    expect(attackAdvantage(null, poisoned, restrained, false)).toBe(null);
+    expect(attackAdvantage(null, ['poisoned'], ['restrained'], false)).toBe(null);
   });
 
   it('honors the chosen adv/dis when no conditions apply', () => {
-    expect(attackAdvantage('adv', none, none, false)).toBe('adv');
-    expect(attackAdvantage('dis', none, none, false)).toBe('dis');
-    expect(attackAdvantage(null, none, none, false)).toBe(null);
+    expect(attackAdvantage('adv', [], [], false)).toBe('adv');
+    expect(attackAdvantage('dis', [], [], false)).toBe('dis');
+    expect(attackAdvantage(null, [], [], false)).toBe(null);
+  });
+
+  it('judges each target condition against range individually (restrained + prone)', () => {
+    // RAW: restrained always grants advantage; prone grants ranged attackers
+    // disadvantage → the two cancel to a normal ranged attack (the old fold
+    // misread the pair as prone's own split and returned flat disadvantage).
+    expect(attackAdvantage(null, [], ['restrained', 'prone'], true)).toBe(null);
+    // Melee: both grant advantage → advantage.
+    expect(attackAdvantage(null, [], ['restrained', 'prone'], false)).toBe('adv');
+  });
+
+  it('restrained + invisible target vs melee cancels to normal', () => {
+    // Restrained grants advantage, invisible grants disadvantage → normal.
+    expect(attackAdvantage(null, [], ['restrained', 'invisible'], false)).toBe(null);
+  });
+
+  it('an invisible attacker rolls with advantage', () => {
+    expect(attackAdvantage(null, ['invisible'], [], false)).toBe('adv');
+    // ...and a blinded invisible attacker cancels back to normal.
+    expect(attackAdvantage(null, ['invisible', 'blinded'], [], false)).toBe(null);
   });
 });

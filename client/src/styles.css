@@ -986,7 +986,12 @@ button.link:hover { text-decoration: underline; }
   font-size: 12px;
   user-select: none;
 }
-.presence-pill.offline { opacity: 0.45; }
+/* Dim only the pill's own content (see .presence-body in PresenceBar.tsx):
+ * opacity on the whole pill composited the child "move to..." popover
+ * translucent with it, leaving the menu unreadable over the toolbar. */
+.presence-body { display: inline-flex; align-items: center; gap: 6px; }
+.presence-pill.offline .presence-body { opacity: 0.45; }
+.presence-pill.offline { border-color: rgba(54, 60, 75, 0.6); }
 .presence-pill.you { border-color: var(--accent); }
 .presence-pill.clickable { cursor: pointer; }
 .presence-pill.clickable:hover { border-color: var(--accent-2); }

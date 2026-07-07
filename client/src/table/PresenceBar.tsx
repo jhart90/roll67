@@ -55,12 +55,17 @@ export function PresenceBar() {
               (clickable ? ' · click to move to another map' : '')
             }
           >
-            <span className="presence-dot" style={{ background: m.online ? colorFor(m.userId) : 'var(--border)' }} />
-            {m.username}
-            {m.role === 'dm' && <span className="presence-role">DM</span>}
-            {isDm && m.online && m.mapId !== campaign.activeMapId && m.role === 'player' && (
-              <span className="presence-map">· {mapName(m.mapId)}</span>
-            )}
+            {/* The pill's own content is wrapped so the offline dimming can
+                apply to IT alone -- opacity on the pill itself would composite
+                the child "move to..." menu translucent too (unreadable). */}
+            <span className="presence-body">
+              <span className="presence-dot" style={{ background: m.online ? colorFor(m.userId) : 'var(--border)' }} />
+              {m.username}
+              {m.role === 'dm' && <span className="presence-role">DM</span>}
+              {isDm && m.online && m.mapId !== campaign.activeMapId && m.role === 'player' && (
+                <span className="presence-map">· {mapName(m.mapId)}</span>
+              )}
+            </span>
             {menuFor === m.userId && (
               <span className="presence-menu" onPointerDown={(e) => e.stopPropagation()}>
                 <span className="presence-menu-title">Move {m.username} to…</span>

@@ -966,7 +966,12 @@ button.link:hover { text-decoration: underline; }
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  z-index: 15;
+  /* Above .toolbar (16): a wrapped toolbar (many pinned pills) can grow tall
+   * enough to overlap this row, and the "move to..." popover below must
+   * render on top of it, not tucked underneath -- a z-index on the popover
+   * alone isn't enough, since it's capped by this element's own stacking
+   * context. */
+  z-index: 17;
   max-width: calc(100% - 400px);
 }
 .presence-pill {

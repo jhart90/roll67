@@ -124,9 +124,14 @@ function parseSpellRangeFt(range: string): number {
   return 5;
 }
 
-/** A spell's save text ("DEX half", "WIS negates") into ability + effect on a save. */
+/** A spell's save text ("DEX half", "WIS negates") into ability + effect on a
+ *  save. The special marker 'attack' (a spell-ATTACK spell like Fire Bolt or
+ *  Scorching Ray, no save at all) passes through as-is -- combatActions()
+ *  turns that into a to-hit roll; dropping it here made those spells resolve
+ *  as auto-applied damage that could never miss. */
 function parseSpellSave(save: string | undefined): { ability: string; onSave: 'half' | 'negate' } | null {
   if (!save) return null;
+  if (/^\s*attack\s*$/i.test(save)) return { ability: 'attack', onSave: 'negate' };
   const ability = save.match(/\b(STR|DEX|CON|INT|WIS|CHA)\b/i);
   if (!ability) return null;
   return { ability: ability[1].toLowerCase(), onSave: /half/i.test(save) ? 'half' : 'negate' };

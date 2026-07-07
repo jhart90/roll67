@@ -366,6 +366,43 @@ async function main() {
   const healed = await healedP.catch(() => null);
   ok(!!healed, "the flat heal's HP auto-applies to the damaged target (bar restored to full, capped at max)");
 
+  // ---------- condition-inflicting spells + concentration linkage ----------
+  console.log('condition spells:');
+  // Deterministic setup: caster spell DC 24 (INT 30, level 17 => 8+6+10),
+  // target WIS 1 (1d20-5 <= 15) -- the save can never pass. The NPC token
+  // must be on the token layer so the player can target it.
+  const npcVisibleAgain = waitFor(playerSock, 'visionUpdate', 5000, (p) => p.tokens.some((t) => t.id === npcToken.id));
+  dmSock.emit('updateToken', { tokenId: npcToken.id, patch: { layer: 'token' } });
+  await npcVisibleAgain;
+  const npcWeak = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === npc.id && p.character.sheet.wis === 1);
+  dmSock.emit('updateCharacter', { characterId: npc.id, patch: { wis: 1 } });
+  await npcWeak;
+  const casterReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && p.character.sheet.int === 30);
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: {
+    int: 30, level: 17, spellAbility: 'int',
+    spells: [{ name: 'Test Hold', level: 2, save: 'wis', onSave: 'negate', condition: 'paralyzed', conc: true, range: 60 }],
+    slots2: 2, slotsUsed2: 0,
+  } });
+  await casterReady;
+
+  // Cast: expect the (guaranteed-failed) save card, then the paralyzed
+  // condition landing on the NPC's sheet once the save die settles.
+  const holdSaveP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text?.includes('Test Hold') && p.msg.text.includes('FAIL'));
+  const paralyzedP = waitFor(dmSock, 'characterUpserted', 10000, (p) => p.character.id === npc.id && (p.character.sheet.conditions ?? []).includes('paralyzed'));
+  const statusLineP = waitFor(playerSock, 'chatMsg', 10000, (p) => p.msg?.text?.includes('Paralyzed') && p.msg.text.includes('Test Hold'));
+  playerSock.emit('combatAction', { characterId: pc.id, actionId: 'spell:0', sourceTokenId: pcToken.id, targetTokenId: npcToken.id, adv: null });
+  ok(!!(await holdSaveP), 'a condition-only spell resolves as a targeted save (no damage roll needed)');
+  ok(!!(await paralyzedP), "the failed save inflicts the spell's condition on the target's sheet");
+  ok(!!(await statusLineP), 'the inflicted condition posts a status chat line naming the spell');
+
+  // Concentration linkage: the caster clearing their concentration lifts the
+  // condition from the target automatically.
+  const unparalyzedP = waitFor(dmSock, 'characterUpserted', 6000, (p) => p.character.id === npc.id && !(p.character.sheet.conditions ?? []).includes('paralyzed'));
+  const releaseLineP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text?.includes('no longer') && p.msg.text.includes('Paralyzed'));
+  playerSock.emit('updateCharacter', { characterId: pc.id, patch: { concentration: '' } });
+  ok(!!(await unparalyzedP), "ending the caster's concentration removes the condition it was maintaining");
+  ok(!!(await releaseLineP), 'the release posts its own status chat line');
+
   // ---------- token bar <-> character sheet HP write-through ----------
   console.log('token bar / sheet HP sync:');
   // A DM editing a linked token's HP bar (the token inspector) must land on

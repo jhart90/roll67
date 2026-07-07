@@ -32,6 +32,13 @@ export function combatActions(character: Character): CombatAction[] {
     const aoeShape = str(atk, 'aoeShape', '');
     const aoeSize = num(atk, 'aoeSize', 0);
     const aoeWidth = num(atk, 'aoeWidth', 0);
+    // Condition rider: on a save-based attack it lands with the failed main
+    // save; on a to-hit attack it triggers after a hit, gated by its own
+    // rider save when set (ghoul claws: DC 10 CON or paralyzed) or applying
+    // automatically when not (a crocodile's bite just grapples).
+    const condition = str(atk, 'condition', '');
+    const conditionSave = str(atk, 'conditionSave', '');
+    const conditionDc = num(atk, 'conditionDc', 0);
     out.push({
       id: `attack:${i}`,
       label: name,
@@ -48,6 +55,9 @@ export function combatActions(character: Character): CombatAction[] {
       ...(aoeShape && aoeSize > 0
         ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
         : {}),
+      ...(condition ? { appliesCondition: condition } : {}),
+      ...(condition && !save && conditionSave && conditionDc > 0
+        ? { conditionSaveId: conditionSave, conditionDc } : {}),
     });
   });
 
@@ -58,10 +68,19 @@ export function combatActions(character: Character): CombatAction[] {
   const spellAction = (listId: string, prefix: string, leveled: boolean) => {
     rows(sheet, listId).forEach((sp, i) => {
       const amount = str(sp, 'damage', '').trim();
-      if (!amount || !usableAmount(amount)) return;
+      const condition = str(sp, 'condition', '');
+      const hasAmount = !!amount && usableAmount(amount);
+      // A spell with no rollable amount still becomes a targeted action when
+      // it inflicts a condition (Hold Person, Web, Invisibility) -- targeting
+      // and range come from the normal flow; the "damage" is just 0.
+      if (!hasAmount && !condition) return;
       const name = str(sp, 'name', '').trim() || `${prefix} ${i + 1}`;
-      const effect = str(sp, 'effect', 'damage') === 'heal' ? 'heal' : 'damage';
       const save = str(sp, 'save', '');
+      // Condition-only spells: hostile when the target gets a save (Hold
+      // Person -- self-targeting blocked, red ring), a buff when it doesn't
+      // (Invisibility -- self/ally targeting allowed, green ring).
+      const effect = str(sp, 'effect', 'damage') === 'heal' || (!hasAmount && !save)
+        ? 'heal' as const : 'damage' as const;
       const onSave = str(sp, 'onSave', 'half') === 'negate' ? 'negate' as const : 'half' as const;
       const rangeFt = Math.max(0, num(sp, 'range', 0));
       const aoeShape = str(sp, 'aoeShape', '');
@@ -72,7 +91,7 @@ export function combatActions(character: Character): CombatAction[] {
         label: name,
         effect,
         attackExpr: save === 'attack' && effect === 'damage' ? spellAttackExpr : null,
-        amountExpr: amount,
+        amountExpr: hasAmount ? amount : '0',
         rangeFt,
         damageType: str(sp, 'dtype', ''),
         ranged: rangeFt > 5,
@@ -85,6 +104,7 @@ export function combatActions(character: Character): CombatAction[] {
         ...(aoeShape && aoeSize > 0
           ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
           : {}),
+        ...(condition ? { appliesCondition: condition } : {}),
       });
     });
   };

@@ -106,6 +106,16 @@ export interface CombatAction {
    *  than derived from the caster's ability/proficiency (PC spells). Wins
    *  over the derived spellDc when resolving a saveId action. */
   fixedDc?: number;
+  /** Status condition (by id, see effects.ts CONDITIONS) inflicted on the
+   *  target: on a FAILED save for save-based actions, on a HIT for attack-
+   *  roll actions (optionally gated by its own rider save below), or
+   *  unconditionally for actions with neither roll (e.g. Invisibility). */
+  appliesCondition?: string;
+  /** A to-hit attack's condition rider rolls this save vs `conditionDc`
+   *  AFTER the hit lands (ghoul claws: hit, then CON save or be paralyzed).
+   *  Absent = the condition applies automatically on a hit (grapples). */
+  conditionSaveId?: string;
+  conditionDc?: number;
 }
 
 export interface SystemSchema {

@@ -25,6 +25,13 @@ const DAMAGE_TYPES_5E = [
 
 const AOE_SHAPES_5E = ['sphere', 'cone', 'line', 'cube', 'cylinder'];
 
+// Status conditions an action can inflict (ids from effects.ts CONDITIONS).
+const CONDITIONS_5E = [
+  'blinded', 'charmed', 'deafened', 'frightened', 'grappled', 'incapacitated',
+  'invisible', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained',
+  'stunned', 'unconscious',
+];
+
 export const SKILLS_5E = [
   { id: 'acrobatics', label: 'Acrobatics', ability: 'dex' },
   { id: 'animalHandling', label: 'Animal Handling', ability: 'wis' },
@@ -246,6 +253,12 @@ const coreTab: SheetTab = {
         { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', ...AOE_SHAPES_5E] },
         { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'aoeWidth', label: 'Area width ft', type: 'number', width: 'sixth', default: 0 },
+        // On-hit condition rider (ghoul claws, wolf trip): the target rolls
+        // 'Rider save' vs 'Rider DC' AFTER a hit; failing gains the condition.
+        // No rider save = the condition applies automatically on a hit (grabs).
+        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', ...CONDITIONS_5E] },
+        { id: 'conditionSave', label: 'Rider save', type: 'select', width: 'sixth', default: '', options: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'] },
+        { id: 'conditionDc', label: 'Rider DC', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -391,6 +404,7 @@ const spellsTab: SheetTab = {
         { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', ...AOE_SHAPES_5E] },
         { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'aoeWidth', label: 'Area width ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', ...CONDITIONS_5E] },
         { id: 'conc', label: 'Conc.', type: 'checkbox', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],

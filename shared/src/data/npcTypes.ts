@@ -41,6 +41,13 @@ export interface SpecialAttackMeta {
   aoeShape?: AoeShape;
   aoeSize?: number;
   aoeWidth?: number;
+  /** Condition rider (status id from effects.ts CONDITIONS): inflicted on a
+   *  hit — gated by conditionSave/conditionDc when set (ghoul claws: hit,
+   *  then DC 10 CON save or paralyzed), automatic when not (a bite that just
+   *  grapples). On save-based attacks it lands with the failed main save. */
+  condition?: string;
+  conditionSave?: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+  conditionDc?: number;
 }
 
 /** [name, toHitBonus, damageExpr, notes?, special?] */
@@ -76,6 +83,10 @@ export function attackRows(attacks: AttackRow[], lookupWeapon?: WeaponLookup): A
       ...(special?.dtype ? { dtype: special.dtype } : weapon ? { dtype: weapon.dtype } : {}),
       ...(special?.save ? { save: special.save, onSave: special.onSave ?? 'half', saveDc: special.dc ?? 13 } : {}),
       ...(special?.aoeShape ? { aoeShape: special.aoeShape, aoeSize: special.aoeSize ?? 0, aoeWidth: special.aoeWidth ?? 0 } : {}),
+      ...(special?.condition ? {
+        condition: special.condition,
+        ...(special.conditionSave ? { conditionSave: special.conditionSave, conditionDc: special.conditionDc ?? 10 } : {}),
+      } : {}),
     };
   });
 }

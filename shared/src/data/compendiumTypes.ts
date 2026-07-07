@@ -35,6 +35,10 @@ export interface SpellData {
   heal?: boolean;
   /** Area shape/size, for spells that hit a zone rather than one target. */
   aoe?: { shape: AoeShape; sizeFt: number; widthFt?: number };
+  /** Status condition (id from effects.ts CONDITIONS) the spell inflicts on
+   *  its target — on a failed save when `save` is set, else automatically
+   *  (e.g. Invisibility). Duration/expiry stays manual (no turn clock). */
+  condition?: string;
 }
 
 export interface PowerData {
@@ -272,6 +276,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       range: parseSpellRangeFt(s.range),
       notes: note,
       ...(s.aoe ? { aoeShape: s.aoe.shape, aoeSize: s.aoe.sizeFt, aoeWidth: s.aoe.widthFt ?? 0 } : {}),
+      ...(s.condition ? { condition: s.condition } : {}),
     };
     if (s.level === 0) {
       return {

@@ -8,6 +8,10 @@ import {
 import { campaigns, characters, chat, macros, redactChat } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { applyUndo } from '../undo.js';
+// NOTE: hp.ts also imports applyAdv from this file -- a deliberate, safe
+// circular import (both sides are hoisted function declarations used only at
+// call time, never during module evaluation).
+import { clearConcentrationEffects } from '../hp.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -92,7 +96,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
 
   socket.on(C2S.CAST_SPELL, safe(socket, ({ characterId, rollableId, slotLevel }: CastSpellPayload) => {
     const d = requireCampaign(socket);
-    const character = characters.byId(characterId);
+    let character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
     if (d.role !== 'dm' && character.ownerUserId !== d.userId) {
       emitError(socket, 'You can only cast from your own sheet.');
@@ -107,7 +111,8 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       return;
     }
     // Spend the slot. A concentration spell also becomes the active
-    // concentration, ending any prior one.
+    // concentration, ending any prior one -- including any conditions the
+    // prior spell was maintaining on its targets.
     const patch: SheetData = { [`slotsUsed${level}`]: num(character.sheet, `slotsUsed${level}`, 0) + 1 };
     const undo: UndoEntry[] = [{ t: 'slot', characterId, level }];
     let concNote = '';
@@ -117,6 +122,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       if (row && row.conc === true) {
         const name = str(row, 'name', 'a spell');
         const prev = str(character.sheet, 'concentration', '');
+        if (prev && prev !== name) character = clearConcentrationEffects(io, d.campaignId, character);
         patch.concentration = name;
         undo.push({ t: 'field', characterId, key: 'concentration', value: prev });
         if (prev && prev !== name) concNote = ` (concentration on ${prev} ends)`;

@@ -83,4 +83,48 @@ describe('spells as targeted combat actions', () => {
     expect(zap.attackExpr).toBe(null);
     expect(zap.saveId).toBeUndefined();
   });
+
+  it('a condition-only save spell (Hold Person) is a targeted hostile action', () => {
+    const actions = combatActions(char({
+      spells: [{ name: 'Hold Person', level: 2, save: 'wis', onSave: 'negate', condition: 'paralyzed', conc: true, range: 60 }],
+    }));
+    const hold = actions.find((a) => a.id === 'spell:0')!;
+    expect(hold).toBeDefined();
+    expect(hold.effect).toBe('damage'); // hostile: self-targeting blocked
+    expect(hold.saveId).toBe('wis');
+    expect(hold.onSave).toBe('negate');
+    expect(hold.appliesCondition).toBe('paralyzed');
+    expect(hold.amountExpr).toBe('0');
+    expect(hold.rangeFt).toBe(60);
+    expect(hold.concentration).toBe(true);
+  });
+
+  it('a condition-only no-save spell (Invisibility) targets like a buff', () => {
+    const actions = combatActions(char({
+      spells: [{ name: 'Invisibility', level: 2, condition: 'invisible', conc: true, range: 5 }],
+    }));
+    const inv = actions.find((a) => a.id === 'spell:0')!;
+    expect(inv).toBeDefined();
+    expect(inv.effect).toBe('heal'); // buff: self/ally targeting allowed
+    expect(inv.saveId).toBeUndefined();
+    expect(inv.appliesCondition).toBe('invisible');
+  });
+
+  it('an attack with an on-hit condition rider carries the rider save', () => {
+    const actions = combatActions(char({
+      attacks: [{ name: 'Ghoul Claws', bonus: 4, damage: '2d4+2', range: 5, condition: 'paralyzed', conditionSave: 'con', conditionDc: 10 }],
+    }));
+    const claws = actions.find((a) => a.id === 'attack:0')!;
+    expect(claws.attackExpr).toMatch(/^1d20/);
+    expect(claws.appliesCondition).toBe('paralyzed');
+    expect(claws.conditionSaveId).toBe('con');
+    expect(claws.conditionDc).toBe(10);
+
+    // Without a rider save, the condition applies automatically on a hit.
+    const grab = combatActions(char({
+      attacks: [{ name: 'Constrict', bonus: 4, damage: '1d8+2', range: 5, condition: 'grappled' }],
+    })).find((a) => a.id === 'attack:0')!;
+    expect(grab.appliesCondition).toBe('grappled');
+    expect(grab.conditionSaveId).toBeUndefined();
+  });
 });

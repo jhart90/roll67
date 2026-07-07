@@ -3,7 +3,8 @@
 import { contentSlug, type ContentEntry } from './compendiumTypes.js';
 
 // [name, level, school, castTime, range, components, duration, concentration,
-//  damage, save, damageType, aoe ("shape:sizeFt" or "shape:sizeFt:widthFt"), heal]
+//  damage, save, damageType, aoe ("shape:sizeFt" or "shape:sizeFt:widthFt"),
+//  heal, condition (status id inflicted on a failed save / automatically)]
 //
 // `aoe` is only set for spells whose area cleanly maps to one template shape
 // (sphere/cylinder/cone/line/cube); spells with irregular or multi-burst
@@ -12,7 +13,7 @@ import { contentSlug, type ContentEntry } from './compendiumTypes.js';
 // they still work as single-target actions, same as before this existed.
 type S = [
   string, number, string, string, string, string, string, boolean,
-  string?, string?, string?, string?, boolean?,
+  string?, string?, string?, string?, boolean?, string?,
 ];
 
 const SPELLS: S[] = [
@@ -40,7 +41,7 @@ const SPELLS: S[] = [
   ['Vicious Mockery', 0, 'Enchantment', '1 action', '60 ft', 'V', 'Instant', false, '1d4', 'WIS negates', 'psychic'],
   // Level 1
   ['Burning Hands', 1, 'Evocation', '1 action', 'Self (15-ft cone)', 'V,S', 'Instant', false, '3d6', 'DEX half', 'fire', 'cone:15'],
-  ['Charm Person', 1, 'Enchantment', '1 action', '30 ft', 'V,S', '1 hr', false, undefined, 'WIS negates'],
+  ['Charm Person', 1, 'Enchantment', '1 action', '30 ft', 'V,S', '1 hr', false, undefined, 'WIS negates', undefined, undefined, undefined, 'charmed'],
   ['Cure Wounds', 1, 'Evocation', '1 action', 'Touch', 'V,S', 'Instant', false, '1d8', undefined, undefined, undefined, true],
   ['Detect Magic', 1, 'Divination', '1 action', 'Self', 'V,S', '10 min', true],
   ['Disguise Self', 1, 'Illusion', '1 action', 'Self', 'V,S', '1 hr', false],
@@ -61,15 +62,15 @@ const SPELLS: S[] = [
   ['Blur', 2, 'Illusion', '1 action', 'Self', 'V', '1 min', true],
   ['Darkness', 2, 'Evocation', '1 action', '60 ft', 'V,M', '10 min', true],
   ['Flaming Sphere', 2, 'Conjuration', '1 action', '60 ft', 'V,S,M', '1 min', true, '2d6', 'DEX half', 'fire'],
-  ['Hold Person', 2, 'Enchantment', '1 action', '60 ft', 'V,S,M', '1 min', true, undefined, 'WIS negates'],
-  ['Invisibility', 2, 'Illusion', '1 action', 'Touch', 'V,S,M', '1 hr', true],
+  ['Hold Person', 2, 'Enchantment', '1 action', '60 ft', 'V,S,M', '1 min', true, undefined, 'WIS negates', undefined, undefined, undefined, 'paralyzed'],
+  ['Invisibility', 2, 'Illusion', '1 action', 'Touch', 'V,S,M', '1 hr', true, undefined, undefined, undefined, undefined, undefined, 'invisible'],
   ['Lesser Restoration', 2, 'Abjuration', '1 action', 'Touch', 'V,S', 'Instant', false],
   ['Melfs Acid Arrow', 2, 'Evocation', '1 action', '90 ft', 'V,S,M', 'Instant', false, '4d4', 'attack', 'acid'],
   ['Mirror Image', 2, 'Illusion', '1 action', 'Self', 'V,S', '1 min', false],
   ['Misty Step', 2, 'Conjuration', '1 bonus', 'Self', 'V', 'Instant', false],
   ['Scorching Ray', 2, 'Evocation', '1 action', '120 ft', 'V,S', 'Instant', false, '2d6', 'attack', 'fire'],
   ['Spiritual Weapon', 2, 'Evocation', '1 bonus', '60 ft', 'V,S', '1 min', false, '1d8', 'attack', 'force'],
-  ['Web', 2, 'Conjuration', '1 action', '60 ft', 'V,S,M', '1 hr', true, undefined, 'DEX negates'],
+  ['Web', 2, 'Conjuration', '1 action', '60 ft', 'V,S,M', '1 hr', true, undefined, 'DEX negates', undefined, undefined, undefined, 'restrained'],
   // Level 3
   ['Counterspell', 3, 'Abjuration', '1 reaction', '60 ft', 'S', 'Instant', false],
   ['Dispel Magic', 3, 'Abjuration', '1 action', '120 ft', 'V,S', 'Instant', false],
@@ -84,10 +85,10 @@ const SPELLS: S[] = [
   ['Vampiric Touch', 3, 'Necromancy', '1 action', 'Self', 'V,S', '1 min', true, '3d6', 'attack', 'necrotic'],
   ['Water Breathing', 3, 'Transmutation', '1 action', '30 ft', 'V,S,M', '24 hr', false],
   // Level 4
-  ['Banishment', 4, 'Abjuration', '1 action', '60 ft', 'V,S,M', '1 min', true, undefined, 'CHA negates'],
+  ['Banishment', 4, 'Abjuration', '1 action', '60 ft', 'V,S,M', '1 min', true, undefined, 'CHA negates', undefined, undefined, undefined, 'incapacitated'],
   ['Blight', 4, 'Necromancy', '1 action', '30 ft', 'V,S', 'Instant', false, '8d8', 'CON half', 'necrotic'],
   ['Dimension Door', 4, 'Conjuration', '1 action', '500 ft', 'V', 'Instant', false],
-  ['Greater Invisibility', 4, 'Illusion', '1 action', 'Touch', 'V,S', '1 min', true],
+  ['Greater Invisibility', 4, 'Illusion', '1 action', 'Touch', 'V,S', '1 min', true, undefined, undefined, undefined, undefined, undefined, 'invisible'],
   ['Ice Storm', 4, 'Evocation', '1 action', '300 ft', 'V,S,M', 'Instant', false, '4d6', 'DEX half', 'cold', 'cylinder:20'],
   ['Polymorph', 4, 'Transmutation', '1 action', '60 ft', 'V,S,M', '1 hr', true, undefined, 'WIS negates'],
   ['Stoneskin', 4, 'Abjuration', '1 action', 'Touch', 'V,S,M', '1 hr', true],
@@ -96,7 +97,7 @@ const SPELLS: S[] = [
   ['Cone of Cold', 5, 'Evocation', '1 action', 'Self (60-ft cone)', 'V,S,M', 'Instant', false, '8d8', 'CON half', 'cold', 'cone:60'],
   ['Flame Strike', 5, 'Evocation', '1 action', '60 ft', 'V,S,M', 'Instant', false, '8d6', 'DEX half', 'fire', 'cylinder:10'],
   ['Greater Restoration', 5, 'Abjuration', '1 action', 'Touch', 'V,S,M', 'Instant', false],
-  ['Hold Monster', 5, 'Enchantment', '1 action', '90 ft', 'V,S,M', '1 min', true, undefined, 'WIS negates'],
+  ['Hold Monster', 5, 'Enchantment', '1 action', '90 ft', 'V,S,M', '1 min', true, undefined, 'WIS negates', undefined, undefined, undefined, 'paralyzed'],
   ['Mass Cure Wounds', 5, 'Evocation', '1 action', '60 ft', 'V,S', 'Instant', false, '3d8', undefined, undefined, undefined, true],
   ['Raise Dead', 5, 'Necromancy', '1 hr', 'Touch', 'V,S,M', 'Instant', false],
   ['Scrying', 5, 'Divination', '10 min', 'Self', 'V,S,M', '10 min', true],
@@ -113,8 +114,8 @@ const SPELLS: S[] = [
   ['Plane Shift', 7, 'Conjuration', '1 action', 'Touch', 'V,S,M', 'Instant', false],
   ['Teleport', 7, 'Conjuration', '1 action', '10 ft', 'V', 'Instant', false],
   // Level 8
-  ['Dominate Monster', 8, 'Enchantment', '1 action', '60 ft', 'V,S', '1 hr', true, undefined, 'WIS negates'],
-  ['Power Word Stun', 8, 'Enchantment', '1 action', '60 ft', 'V', 'Instant', false],
+  ['Dominate Monster', 8, 'Enchantment', '1 action', '60 ft', 'V,S', '1 hr', true, undefined, 'WIS negates', undefined, undefined, undefined, 'charmed'],
+  ['Power Word Stun', 8, 'Enchantment', '1 action', '60 ft', 'V', 'Instant', false, undefined, undefined, undefined, undefined, undefined, 'stunned'],
   ['Sunburst', 8, 'Evocation', '1 action', '150 ft', 'V,S,M', 'Instant', false, '12d6', 'CON half', 'radiant', 'sphere:60'],
   // Level 9
   ['Meteor Swarm', 9, 'Evocation', '1 action', '1 mile', 'V,S', 'Instant', false, '40d6', 'DEX half', 'fire'],
@@ -134,13 +135,13 @@ function parseAoe(tag: string | undefined): { shape: 'sphere' | 'cone' | 'line' 
 }
 
 export const SPELLS_5E: ContentEntry[] = SPELLS.map(
-  ([name, level, school, castTime, range, components, duration, concentration, damage, save, damageType, aoe, heal]): ContentEntry => ({
+  ([name, level, school, castTime, range, components, duration, concentration, damage, save, damageType, aoe, heal, condition]): ContentEntry => ({
     id: contentSlug('dnd5e', 'spell', name),
     system: 'dnd5e', kind: 'spell', name,
     category: level === 0 ? 'Cantrip' : `Level ${level}`,
     order: level,
-    subtitle: `${school}${damage ? ' · ' + damage : ''}${save ? ' · ' + save : ''} · ${range}`,
+    subtitle: `${school}${damage ? ' · ' + damage : ''}${save ? ' · ' + save : ''}${condition ? ' · ' + condition : ''} · ${range}`,
     detail: `${castTime} · ${components} · ${duration}${concentration ? ' (concentration)' : ''}`,
-    spell: { level, school, castTime, range, components, duration, concentration, damage, save, damageType, heal, aoe: parseAoe(aoe) },
+    spell: { level, school, castTime, range, components, duration, concentration, damage, save, damageType, heal, aoe: parseAoe(aoe), condition },
   }),
 );

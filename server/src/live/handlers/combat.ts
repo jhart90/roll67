@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
-  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe,
+  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
@@ -10,7 +10,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyHpDelta, computeHpDelta, floatHp, persistSheet } from '../hp.js';
+import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, floatHp, persistSheet } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 
@@ -92,6 +92,11 @@ interface GroupSaveSpec {
   // DM's manual "call for save" tool) -- lets postDamage broadcast the
   // burst/ripple animation once the damage roll settles.
   aoeVisual?: { mapId: string; shape: AoeShape; sizeFt: number; widthFt?: number; originHex: Hex; aimHex: Hex };
+  /** Condition inflicted on each character target that FAILS its save. */
+  appliesCondition?: string;
+  /** When the source spell is concentration: the caster to record the
+   *  inflicted conditions on, so ending concentration lifts them. */
+  concentrationCasterId?: string;
 }
 
 /**
@@ -115,8 +120,25 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
   }
   if (targets.length === 0) return false;
 
-  const hasDamage = !!spec.damageExpr && /\d*d\d/i.test(spec.damageExpr);
+  const hasDamage = !!spec.damageExpr && usableAmount(spec.damageExpr);
   const results: { tok: Token; ch: Character | undefined; passed: boolean }[] = [];
+
+  // Inflict the spec's condition on every character target that failed its
+  // save (skipped for bare tokens: no sheet to carry a condition). Runs at
+  // damage-apply time for damaging saves, or after the final save card for
+  // condition-only ones.
+  const applyConditions = (): void => {
+    if (!spec.appliesCondition) return;
+    for (const { ch, passed } of results) {
+      if (passed || !ch) continue;
+      const fresh = characters.byId(ch.id);
+      if (!fresh) continue;
+      applyConditionTo(
+        io, spec.campaignId, fresh, spec.appliesCondition, spec.label ?? 'a spell',
+        spec.concentrationCasterId ? characters.byId(spec.concentrationCasterId) : undefined,
+      );
+    }
+  };
 
   const finish = (): void => {
     if (touchedMap) syncMapVision(io, spec.campaignId, touchedMap);
@@ -160,6 +182,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const settleMs = diceSettleDelayMs(dmg.dice.length);
     setTimeout(() => {
       for (const apply of applications) apply();
+      applyConditions();
       finish();
     }, settleMs);
     if (spec.aoeVisual) {
@@ -184,7 +207,14 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
 
     if (i + 1 < targets.length) setTimeout(() => postSave(i + 1), SAVE_STEP_DELAY_MS);
     else if (hasDamage) setTimeout(postDamage, SAVE_STEP_DELAY_MS);
-    else finish();
+    else {
+      // Condition-only save (no damage roll follows): let the last save's
+      // die settle, then inflict conditions on the failures and wrap up.
+      setTimeout(() => {
+        applyConditions();
+        finish();
+      }, diceSettleDelayMs(1));
+    }
   };
 
   postSave(0);
@@ -334,6 +364,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }
       if (action.concentration && action.spellName) {
         undo.push({ t: 'field', characterId: actor.id, key: 'concentration', value: actor.sheet.concentration ?? '' });
+        // Starting new concentration ends the old spell -- including any
+        // conditions it was maintaining on its targets.
+        actor = clearConcentrationEffects(io, d.campaignId, actor);
         actorPatch.concentration = action.spellName;
       }
       if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
@@ -429,6 +462,40 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           undo.push({ t: 'field', characterId: actor.id, key: 'attacks', value: before });
         }
       }
+    };
+
+    // Status-condition rider: inflicted on the target character (bare tokens
+    // have no sheet to carry a condition) once the causal roll has settled.
+    // Save-based spells apply it on a FAILED save; to-hit attacks on a hit
+    // (optionally gated by the rider's own save, e.g. ghoul claws' DC 10
+    // CON); roll-less spells (Invisibility) apply it unconditionally.
+    const conditionId = targetChar ? action.appliesCondition : undefined;
+    const applyCondition = (): void => {
+      if (!conditionId || !targetChar) return;
+      const fresh = characters.byId(targetChar.id);
+      if (!fresh) return;
+      const casterAfter = applyConditionTo(
+        io, d.campaignId, fresh, conditionId, action.spellName ?? action.label,
+        action.concentration ? (characters.byId(actor.id) ?? actor) : undefined,
+      );
+      if (casterAfter) actor = casterAfter;
+    };
+    const scheduleRiderSave = (delayMs: number): void => {
+      if (!conditionId || !targetChar || !action.conditionSaveId || !action.conditionDc) return;
+      setTimeout(() => {
+        const fresh = characters.byId(targetChar.id);
+        if (!fresh) return;
+        const sc = systemFor(fresh.system).saveCheck(fresh.sheet, action.conditionSaveId!, action.conditionDc!);
+        const br = roll(sc.expr);
+        const passed = br.total >= sc.threshold;
+        const msg = chat.add(d.campaignId, {
+          userId: d.userId, fromName: d.username, kind: 'roll',
+          text: `${tgt.name} — ${sc.label} vs ${action.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+          roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
+        });
+        io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+        if (!passed) setTimeout(applyCondition, diceSettleDelayMs(br.dice.length));
+      }, delayMs);
     };
 
     // Damage/heal resolution + chat post, run either immediately (plain
@@ -539,6 +606,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         }
         setTimeout(applyToTarget, settleMs);
       }
+
+      // Condition rider, timed with the damage it rode in on: a hit's rider
+      // rolls its own save first (when it has one); a failed spell save's
+      // rider applies outright; a roll-less action's applies with its amount.
+      if (conditionId) {
+        const settleMs = diceSettleDelayMs(cardRoll.dice.length);
+        if (attackBreakdown && hit && action.conditionSaveId && action.conditionDc) scheduleRiderSave(settleMs);
+        else if ((attackBreakdown && hit)
+          || (deferredSave && !deferredSave.passed)
+          || (!attackBreakdown && !deferredSave)) setTimeout(applyCondition, settleMs);
+      }
     };
 
     if (deferredSave) {
@@ -555,7 +633,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       }, noDamage && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: saveMsg });
-      if (noDamage) return;
+      if (noDamage) return; // save passed & negates: no damage, no condition
+      // A condition-only spell (Hold Person: no damage dice at all) has
+      // nothing left to roll -- the failed save above IS the whole
+      // resolution; apply the condition once its die settles.
+      if (conditionId && !usableAmount(action.amountExpr)) {
+        if (!passed) setTimeout(applyCondition, SAVE_STEP_DELAY_MS);
+        return;
+      }
       setTimeout(resolveDamage, SAVE_STEP_DELAY_MS);
       return;
     }
@@ -576,6 +661,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });
       if (!hit) return;
       setTimeout(resolveDamage, diceSettleDelayMs(attackBreakdown.dice.length));
+      return;
+    }
+    // No roll at all AND nothing to roll for: a pure-condition cast like
+    // Invisibility. Post the cast line and apply the condition directly --
+    // resolveDamage would only produce a meaningless "heals 0" card.
+    if (conditionId && !usableAmount(action.amountExpr)) {
+      const castMsg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'system',
+        text: `${actor.name} casts ${action.label} on ${tgt.name}.`, roll: null, recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: castMsg });
+      applyCondition();
       return;
     }
     resolveDamage();
@@ -654,7 +751,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }
       actorPatch[`slotsUsed${castLevel}`] = num(actor.sheet, `slotsUsed${castLevel}`, 0) + 1;
     }
-    if (action.concentration && action.spellName) actorPatch.concentration = action.spellName;
+    if (action.concentration && action.spellName) {
+      // Starting new concentration ends the old spell -- including any
+      // conditions it was maintaining on its targets.
+      actor = clearConcentrationEffects(io, d.campaignId, actor);
+      actorPatch.concentration = action.spellName;
+    }
     if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
     const castLabel = castLevel && action.slotLevel && castLevel > action.slotLevel
       ? `${action.label} (cast at level ${castLevel})` : action.label;
@@ -675,6 +777,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         tokenIds: hitIds, saveId: action.saveId, dc: casterDc,
         damageExpr: action.amountExpr, onSave: action.onSave ?? 'half',
         damageType: action.damageType, label: castLabel,
+        ...(action.appliesCondition ? {
+          appliesCondition: action.appliesCondition,
+          ...(action.concentration ? { concentrationCasterId: actor.id } : {}),
+        } : {}),
         aoeVisual: {
           mapId: src.mapId, shape: action.aoe.shape, sizeFt: action.aoe.sizeFt, widthFt: action.aoe.widthFt,
           originHex, aimHex: p.aimHex,

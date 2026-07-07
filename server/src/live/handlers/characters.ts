@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canEditCharacter, num, roll, systemFor,
+  C2S, S2C, canEditCharacter, num, roll, str, systemFor,
   type CreateCharacterPayload, type DeleteCharacterPayload, type LevelUpRollPayload,
   type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
@@ -8,6 +8,7 @@ import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared
 import { generateNpc, generateNpcFromModel, npcById } from 'shared';
 import { campaigns, characters, chat, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
+import { clearConcentrationEffects } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -172,6 +173,13 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
 
 /** Persist a sheet patch, mirror HP/art to tokens, resync vision + directory. */
 function applyCharacterPatch(io: Server, campaignId: string, character: Character, patch: SheetData, name?: string): void {
+  // A manual concentration change (clearing the field on the sheet, or
+  // typing a different spell) ends the old spell -- lift any conditions it
+  // was maintaining on its targets before the new value lands.
+  const prevConc = str(character.sheet, 'concentration', '');
+  if (typeof patch.concentration === 'string' && patch.concentration !== prevConc && prevConc) {
+    character = clearConcentrationEffects(io, campaignId, character);
+  }
   const sheet = { ...character.sheet, ...scrubNonFinite(patch) };
   characters.update(character.id, name, sheet);
   const updated = characters.byId(character.id)!;

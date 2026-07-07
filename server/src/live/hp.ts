@@ -1,9 +1,75 @@
 import type { Server } from 'socket.io';
-import { S2C, conditionsOf, hasConcentrationAdvantage, num, roll, str, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
+import { S2C, conditionsOf, getCondition, hasConcentrationAdvantage, num, roll, str, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, tokens } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { syncMapVision } from './visionService.js';
 import { applyAdv } from './handlers/chat.js';
+
+/** A condition a concentration spell inflicted, recorded on the CASTER's
+ *  sheet (`concEffects`) so ending concentration can undo it on the target. */
+export interface ConcEffect {
+  characterId: string;
+  condition: string;
+}
+
+function concEffectsOf(sheet: SheetData): ConcEffect[] {
+  const v = sheet.concEffects;
+  return Array.isArray(v) ? (v as ConcEffect[]) : [];
+}
+
+function postStatusLine(io: Server, campaignId: string, text: string): void {
+  const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'system', text, roll: null, recipients: null });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+}
+
+/**
+ * Inflict a status condition on a character (no-op if already active), post
+ * the status chat line, and — when the source is a concentration spell —
+ * record the link on the caster so ending concentration removes it again.
+ * Returns the (possibly re-persisted) caster.
+ */
+export function applyConditionTo(
+  io: Server, campaignId: string, target: Character, conditionId: string, sourceLabel: string,
+  concentrationCaster?: Character,
+): Character | undefined {
+  const label = getCondition(conditionId)?.label ?? conditionId;
+  let caster = concentrationCaster;
+  if (!conditionsOf(target.sheet).includes(conditionId)) {
+    persistSheet(io, campaignId, target, { conditions: [...conditionsOf(target.sheet), conditionId] });
+    postStatusLine(io, campaignId, `${target.name} is ${label} (${sourceLabel})!`);
+  }
+  if (caster) {
+    const fresh = characters.byId(caster.id) ?? caster;
+    const cur = concEffectsOf(fresh.sheet);
+    if (!cur.some((e) => e.characterId === target.id && e.condition === conditionId)) {
+      caster = persistSheet(io, campaignId, fresh, { concEffects: [...cur, { characterId: target.id, condition: conditionId }] });
+    } else {
+      caster = fresh;
+    }
+  }
+  return caster;
+}
+
+/**
+ * A caster's concentration is ending: remove every condition it inflicted
+ * from its targets (posting the status lines) and clear the recorded links.
+ * Does NOT itself clear the `concentration` field — callers fold that into
+ * whatever patch ends it. Returns the re-read caster.
+ */
+export function clearConcentrationEffects(io: Server, campaignId: string, caster: Character): Character {
+  const effects = concEffectsOf(caster.sheet);
+  if (effects.length === 0) return caster;
+  const spell = str(caster.sheet, 'concentration', '') || 'concentration';
+  for (const e of effects) {
+    const target = characters.byId(e.characterId);
+    if (!target) continue;
+    if (!conditionsOf(target.sheet).includes(e.condition)) continue;
+    persistSheet(io, campaignId, target, { conditions: conditionsOf(target.sheet).filter((c) => c !== e.condition) });
+    const label = getCondition(e.condition)?.label ?? e.condition;
+    postStatusLine(io, campaignId, `${target.name} is no longer ${label} (${spell} ended).`);
+  }
+  return persistSheet(io, campaignId, characters.byId(caster.id) ?? caster, { concEffects: [] });
+}
 
 /**
  * Persist a sheet patch, emit the private character upsert (DM + owner), mirror
@@ -121,6 +187,13 @@ export function applyHpDelta(
   const { patch, note, status, concCheck } = computeHpDelta(character, delta);
   let updated = persistSheet(io, campaignId, character, patch);
 
+  // Dropping to 0 ends concentration (the patch cleared the field); any
+  // conditions that spell was maintaining end with it. Passed the ORIGINAL
+  // character, whose in-memory sheet still holds the spell name + links.
+  if (status === 'downed' && str(character.sheet, 'concentration', '')) {
+    updated = clearConcentrationEffects(io, campaignId, { ...character, sheet: { ...character.sheet, ...patch, concentration: character.sheet.concentration } });
+  }
+
   // A downed/revived status is its own game event -- post it as a separate
   // chat line (after the roll that caused it, since callers only ever apply
   // this once that roll's own dice have settled) instead of folding it into
@@ -139,7 +212,11 @@ export function applyHpDelta(
     const expr = hasConcentrationAdvantage(updated.sheet) ? applyAdv(sc.expr, 'adv') : sc.expr;
     const br = roll(expr);
     const passed = br.total >= dc;
-    if (!passed) updated = persistSheet(io, campaignId, updated, { concentration: '' });
+    if (!passed) {
+      // Broken concentration releases whatever conditions it was maintaining.
+      updated = clearConcentrationEffects(io, campaignId, updated);
+      updated = persistSheet(io, campaignId, updated, { concentration: '' });
+    }
     const text = `${updated.name} concentration (${concCheck.spell}) — CON save ${br.total} vs DC ${dc}: ${passed ? 'holds' : 'BROKEN'}`;
     const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'roll', text, roll: br, recipients: null });
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });

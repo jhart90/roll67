@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS assets (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   uploader_id TEXT NOT NULL REFERENCES users(id),
-  kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'handout')),
+  kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'handout', 'audio')),
   filename TEXT NOT NULL,
   ext TEXT NOT NULL,
   mime TEXT NOT NULL,

@@ -16,6 +16,39 @@ db.pragma('foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
 db.exec(schema);
 
+// SQLite can't ALTER a CHECK constraint, so databases created before 'audio'
+// was a valid asset kind need their `assets` table rebuilt from scratch.
+function migrateAssetsAudioKind(): void {
+  const table = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'assets'`).get() as
+    | { sql: string }
+    | undefined;
+  if (!table || table.sql.includes("'audio'")) return;
+  const oldCols = (db.prepare(`PRAGMA table_info(assets)`).all() as Array<{ name: string }>).map((c) => c.name);
+  const baseCols = ['id', 'campaign_id', 'uploader_id', 'kind', 'filename', 'ext', 'mime', 'bytes', 'width', 'height', 'created_at'];
+  const extraCols = ['folder_id', 'title'].filter((c) => oldCols.includes(c));
+  db.exec('ALTER TABLE assets RENAME TO assets_pre_audio_migration');
+  db.exec(`
+    CREATE TABLE assets (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      uploader_id TEXT NOT NULL REFERENCES users(id),
+      kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'handout', 'audio')),
+      filename TEXT NOT NULL,
+      ext TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      bytes INTEGER NOT NULL,
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    )
+  `);
+  for (const c of extraCols) db.exec(`ALTER TABLE assets ADD COLUMN ${c} TEXT`);
+  const allCols = [...baseCols, ...extraCols].join(', ');
+  db.exec(`INSERT INTO assets (${allCols}) SELECT ${allCols} FROM assets_pre_audio_migration`);
+  db.exec('DROP TABLE assets_pre_audio_migration');
+}
+migrateAssetsAudioKind();
+
 // Additive migrations for databases created before a column existed.
 function ensureColumn(table: string, column: string, ddl: string): void {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;

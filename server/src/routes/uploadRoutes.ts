@@ -109,19 +109,24 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: Aut
     }
   }
 
-  const asset = assets.create({
-    campaign_id: campaignId,
-    uploaderId: req.user!.id,
-    kind,
-    filename: file.originalname,
-    ext,
-    mime: file.mimetype,
-    bytes: outBuffer.length,
-    width,
-    height,
-    title: typeof title === 'string' && title.trim() ? title.trim() : null,
-    folderId: typeof folderId === 'string' && folderId ? folderId : null,
-  });
-  fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${ext}`), outBuffer);
-  res.json({ assetId: asset.id, url: `/uploads/${asset.id}.${ext}`, width, height });
+  try {
+    const asset = assets.create({
+      campaign_id: campaignId,
+      uploaderId: req.user!.id,
+      kind,
+      filename: file.originalname,
+      ext,
+      mime: file.mimetype,
+      bytes: outBuffer.length,
+      width,
+      height,
+      title: typeof title === 'string' && title.trim() ? title.trim() : null,
+      folderId: typeof folderId === 'string' && folderId ? folderId : null,
+    });
+    fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${ext}`), outBuffer);
+    res.json({ assetId: asset.id, url: `/uploads/${asset.id}.${ext}`, width, height });
+  } catch (err) {
+    console.error('Upload failed:', err);
+    res.status(500).json({ error: 'Upload failed. Please try again.' });
+  }
 });

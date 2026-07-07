@@ -308,12 +308,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const targetChar = tgt.characterId ? characters.byId(tgt.characterId) : undefined;
 
     // Conditions gate the action and shift advantage.
-    const attackerC = conditionCombat(conditionsOf(actor.sheet));
-    if (attackerC.incapacitated) {
+    const attackerConditions = conditionsOf(actor.sheet);
+    if (conditionCombat(attackerConditions).incapacitated) {
       emitError(socket, `${actor.name} is incapacitated and can't act.`);
       return;
     }
-    const targetC = targetChar ? conditionCombat(conditionsOf(targetChar.sheet)) : conditionCombat([]);
+    const targetConditions = targetChar ? conditionsOf(targetChar.sheet) : [];
 
     // Casting a spell spends a slot (leveled) and sets concentration on the
     // caster before resolving the effect.
@@ -376,7 +376,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     } else if (action.attackExpr) {
       // Net advantage folds the roller's choice with attacker/target conditions.
       const netAdv = action.attackExpr.toLowerCase().startsWith('1d20')
-        ? attackAdvantage(p.adv ?? null, attackerC, targetC, action.ranged)
+        ? attackAdvantage(p.adv ?? null, attackerConditions, targetConditions, action.ranged)
         : null;
       const expr = applyAdv(action.attackExpr, netAdv);
       attackBreakdown = roll(expr);
@@ -488,11 +488,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         } else if (tgt.bar) {
           const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
           const nh = Math.max(0, Math.min(cap, tgt.bar.hp + delta));
-          const maxHp = tgt.bar.maxHp;
-          hpNote = ` (${tgt.name} ${nh}/${maxHp})`;
+          hpNote = ` (${tgt.name} ${nh}/${tgt.bar.maxHp})`;
           undo.push({ t: 'hp', tokenId: tgt.id, delta });
           applyToTarget = () => {
-            tokens.update(tgt.id, { bar: { hp: nh, maxHp } });
+            // Re-read live and apply the DELTA, never a precomputed absolute:
+            // another player's hit can land (and apply) during this roll's own
+            // dice-settle delay, and writing a stale absolute HP would silently
+            // erase their damage.
+            const live = tokens.byId(tgt.id);
+            if (!live?.bar) return;
+            const liveCap = live.bar.maxHp > 0 ? live.bar.maxHp : live.bar.hp + delta;
+            const liveHp = Math.max(0, Math.min(liveCap, live.bar.hp + delta));
+            tokens.update(tgt.id, { bar: { hp: liveHp, maxHp: live.bar.maxHp } });
             io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tgt.id)! });
             syncMapVision(io, d.campaignId, src.mapId);
             floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType);
@@ -537,6 +544,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (deferredSave) {
       const { total, threshold, label, passed } = deferredSave;
       const noDamage = saveScale === 0;
+      // A fully-negated save still spends the ammo/item that was used --
+      // and it must be consumed BEFORE the card is posted, since chat.add
+      // serializes the undo entries right then (a late consume's refund
+      // entry would silently miss the stored undo).
+      if (noDamage) consumeAmmoAndItem();
       const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${threshold} · ${passed ? 'SAVE' : 'FAIL'}${noDamage ? ' · no damage' : ''}`;
       const saveMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'roll', text: saveText,
@@ -551,18 +563,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // A to-hit roll always gets its own card first -- the target only
       // finds out whether (and how much) damage lands once that roll's own
       // dice have visibly settled, same pacing as the save roll above.
+      // A miss still spends ammo/an item -- consumed BEFORE the card is
+      // posted so the refund lands in its serialized undo (see above); a
+      // hit consumes inside resolveDamage's own flow instead, before its
+      // damage card.
+      if (!hit) consumeAmmoAndItem();
       const attackText = `${actor.name} attacks ${tgt.name}: ${action.label}${hitLabel}`.replace(/\s+/g, ' ').trim();
       const attackMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'roll', text: attackText,
         roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
       }, !hit && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });
-      if (!hit) {
-        // A miss still spends ammo/an item, but there's no damage to roll or
-        // report -- the miss was already fully said above.
-        consumeAmmoAndItem();
-        return;
-      }
+      if (!hit) return;
       setTimeout(resolveDamage, diceSettleDelayMs(attackBreakdown.dice.length));
       return;
     }

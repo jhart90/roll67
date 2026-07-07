@@ -8,7 +8,7 @@ import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared
 import { generateNpc, generateNpcFromModel, npcById } from 'shared';
 import { campaigns, characters, chat, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
-import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
+import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
 
@@ -146,7 +146,10 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const cm = Math.floor(conMod) || 0;
     const breakdown = roll(`1d${dice}${cm >= 0 ? `+${cm}` : cm}`);
     const rolled = Math.max(1, breakdown.total);
-    const delta = rolled - Math.floor(avgHp);
+    // `|| 0` NaN-guards avgHp like hitDie/conMod above -- an unguarded NaN
+    // here would flow into maxHp/hp below and persist NaN onto the sheet
+    // (and from there onto every token bar broadcast).
+    const delta = rolled - (Math.floor(avgHp) || 0);
     const adjusted: SheetData = {
       ...patch,
       maxHp: num(patch as SheetData, 'maxHp', 0) + delta,
@@ -169,7 +172,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
 
 /** Persist a sheet patch, mirror HP/art to tokens, resync vision + directory. */
 function applyCharacterPatch(io: Server, campaignId: string, character: Character, patch: SheetData, name?: string): void {
-  const sheet = { ...character.sheet, ...patch };
+  const sheet = { ...character.sheet, ...scrubNonFinite(patch) };
   characters.update(character.id, name, sheet);
   const updated = characters.byId(character.id)!;
   emitCharacter(io, campaignId, updated);

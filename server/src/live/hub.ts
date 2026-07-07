@@ -64,3 +64,21 @@ export function safe<T>(socket: Socket, fn: (payload: T) => void): (payload: T) 
     }
   };
 }
+
+/**
+ * Recursively replace non-finite numbers (NaN/Infinity) in a client-supplied
+ * patch with 0, in place of trusting the client's arithmetic. A NaN that
+ * reaches a persisted sheet or token bar poisons every derived stat and
+ * broadcast built from it until the value is manually re-typed -- cheaper to
+ * scrub once at the write choke points than to guard every downstream read.
+ */
+export function scrubNonFinite<T>(value: T): T {
+  if (typeof value === 'number') return (Number.isFinite(value) ? value : 0) as T;
+  if (Array.isArray(value)) return value.map(scrubNonFinite) as T;
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = scrubNonFinite(v);
+    return out as T;
+  }
+  return value;
+}

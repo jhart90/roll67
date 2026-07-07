@@ -5,7 +5,8 @@ import {
   type GridConfig, type Hex, type MoveTokenPayload, type UpdateTokenPayload,
 } from 'shared';
 import { campaigns, characters, maps, tokens } from '../../db/repos.js';
-import { dmRoom, emitError, safe, sdata } from '../hub.js';
+import { db } from '../../db/db.js';
+import { dmRoom, emitError, safe, scrubNonFinite, sdata } from '../hub.js';
 import { persistSheet } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -65,12 +66,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     broadcastDirectory(io, d.campaignId);
   }));
 
-  socket.on(C2S.UPDATE_TOKEN, safe(socket, ({ tokenId, patch }: UpdateTokenPayload) => {
+  socket.on(C2S.UPDATE_TOKEN, safe(socket, ({ tokenId, patch: rawPatch }: UpdateTokenPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') {
       emitError(socket, 'Only the DM can edit tokens.');
       return;
     }
+    const patch = scrubNonFinite(rawPatch);
     const token = tokens.byId(tokenId);
     if (!token) return;
     const map = maps.byId(token.mapId);
@@ -100,8 +102,12 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     broadcastDirectory(io, d.campaignId);
   }));
 
-  socket.on(C2S.MOVE_TOKEN, safe(socket, ({ tokenId, q, r }: MoveTokenPayload) => {
+  socket.on(C2S.MOVE_TOKEN, safe(socket, ({ tokenId, q: rawQ, r: rawR }: MoveTokenPayload) => {
     const d = requireCampaign(socket);
+    // Hex coordinates are integers by definition; a fractional/garbage value
+    // (inBounds already rejects NaN) would otherwise persist verbatim.
+    const q = Math.round(rawQ);
+    const r = Math.round(rawR);
     const token = tokens.byId(tokenId);
     if (!token) return;
     const map = maps.byId(token.mapId);
@@ -193,38 +199,49 @@ export function placeCharacterToken(
   if (!map || map.campaignId !== campaignId) return;
   if (dropHex && !inBounds(dropHex, map.grid)) dropHex = null;
 
+  // All DB mutations in ONE transaction (a crash between the old tokens'
+  // deletes and the new token's create would strand the character with no
+  // token anywhere); the socket broadcasts happen after the commit, so
+  // clients never hear about a change that then rolled back.
   const touchedMaps = new Set<string>();
-  let existingOnTarget: string | null = null;
-  for (const t of tokens.forCharacter(character.id)) {
-    if (t.mapId === mapId) { existingOnTarget = t.id; continue; }
-    tokens.delete(t.id);
-    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId: t.id });
-    touchedMaps.add(t.mapId);
-  }
-
-  if (existingOnTarget && dropHex) {
-    tokens.move(existingOnTarget, dropHex.q, dropHex.r);
-    const moved = tokens.byId(existingOnTarget)!;
-    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: moved });
-    touchedMaps.add(mapId);
-  } else if (!existingOnTarget) {
-    let hex = dropHex;
-    if (!hex) {
-      const spawn = map.spawn ?? centerHex(map.grid);
-      const occupied = new Set(tokens.forMap(mapId).map((t) => packHex({ q: t.q, r: t.r })));
-      hex = firstFreeHex(spawn, occupied, map.grid);
+  const { removedIds, upserted } = db.transaction(() => {
+    const removed: string[] = [];
+    let existingOnTarget: string | null = null;
+    for (const t of tokens.forCharacter(character.id)) {
+      if (t.mapId === mapId) { existingOnTarget = t.id; continue; }
+      tokens.delete(t.id);
+      removed.push(t.id);
+      touchedMaps.add(t.mapId);
     }
-    const artAssetId = typeof character.sheet.tokenImageAssetId === 'string' ? character.sheet.tokenImageAssetId : null;
-    const hp = systemFor(character.system).hp(character.sheet);
-    const created = tokens.create({
-      mapId, characterId: character.id, name: character.name, artAssetId,
-      q: hex.q, r: hex.r, layer: character.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
-      color: TOKEN_COLORS[Math.abs(hashStr(character.id)) % TOKEN_COLORS.length],
-      vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
-    });
-    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: created });
-    touchedMaps.add(mapId);
-  }
+
+    if (existingOnTarget && dropHex) {
+      tokens.move(existingOnTarget, dropHex.q, dropHex.r);
+      touchedMaps.add(mapId);
+      return { removedIds: removed, upserted: tokens.byId(existingOnTarget)! };
+    }
+    if (!existingOnTarget) {
+      let hex = dropHex;
+      if (!hex) {
+        const spawn = map.spawn ?? centerHex(map.grid);
+        const occupied = new Set(tokens.forMap(mapId).map((t) => packHex({ q: t.q, r: t.r })));
+        hex = firstFreeHex(spawn, occupied, map.grid);
+      }
+      const artAssetId = typeof character.sheet.tokenImageAssetId === 'string' ? character.sheet.tokenImageAssetId : null;
+      const hp = systemFor(character.system).hp(character.sheet);
+      const created = tokens.create({
+        mapId, characterId: character.id, name: character.name, artAssetId,
+        q: hex.q, r: hex.r, layer: character.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
+        color: TOKEN_COLORS[Math.abs(hashStr(character.id)) % TOKEN_COLORS.length],
+        vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
+      });
+      touchedMaps.add(mapId);
+      return { removedIds: removed, upserted: created };
+    }
+    return { removedIds: removed, upserted: null };
+  })();
+
+  for (const id of removedIds) io.to(dmRoom(campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId: id });
+  if (upserted) io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: upserted });
 
   // A player's own token landing on a map they're not currently viewing
   // (e.g. the DM dragged their character onto a new map) pulls that player

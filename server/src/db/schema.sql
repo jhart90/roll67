@@ -223,3 +223,14 @@ CREATE TABLE IF NOT EXISTS drawings (
   shape_json TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+
+-- Hot-path lookup indexes. tokens(map_id) matters most: it's scanned on every
+-- vision pass (every token move); the rest back the per-campaign list queries
+-- that run on every join/broadcast. (chat_messages already has its own above.)
+CREATE INDEX IF NOT EXISTS idx_tokens_map ON tokens(map_id);
+CREATE INDEX IF NOT EXISTS idx_tokens_character ON tokens(character_id);
+CREATE INDEX IF NOT EXISTS idx_characters_campaign ON characters(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_assets_campaign ON assets(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_handouts_campaign ON handouts(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_maps_campaign ON maps(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_drawings_map ON drawings(map_id);

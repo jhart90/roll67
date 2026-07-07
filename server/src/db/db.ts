@@ -78,6 +78,20 @@ ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 
+// better-sqlite3 does NOT cache prepared statements: every db.prepare()
+// recompiles the SQL. Repo methods run on hot paths (every token move
+// prepares several statements), so memoize by SQL text -- all repo SQL is
+// static strings, making the cache small and bounded.
+const stmtCache = new Map<string, Database.Statement<unknown[]>>();
+export function stmt(sql: string): Database.Statement<unknown[]> {
+  let s = stmtCache.get(sql);
+  if (!s) {
+    s = db.prepare<unknown[]>(sql);
+    stmtCache.set(sql, s);
+  }
+  return s;
+}
+
 export function newId(): string {
   return crypto.randomBytes(9).toString('hex');
 }

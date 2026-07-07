@@ -109,6 +109,7 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: Aut
     }
   }
 
+  let assetId: string | null = null;
   try {
     const asset = assets.create({
       campaign_id: campaignId,
@@ -123,10 +124,16 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: Aut
       title: typeof title === 'string' && title.trim() ? title.trim() : null,
       folderId: typeof folderId === 'string' && folderId ? folderId : null,
     });
+    assetId = asset.id;
     fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${ext}`), outBuffer);
     res.json({ assetId: asset.id, url: `/uploads/${asset.id}.${ext}`, width, height });
   } catch (err) {
     console.error('Upload failed:', err);
+    // A failed disk write must not leave a row pointing at a file that never
+    // landed -- every later read of that asset would 404.
+    if (assetId) {
+      try { assets.delete(assetId); } catch { /* best effort */ }
+    }
     res.status(500).json({ error: 'Upload failed. Please try again.' });
   }
 });

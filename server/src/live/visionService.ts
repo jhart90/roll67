@@ -40,11 +40,35 @@ function cacheKey(userId: string, mapId: string): string {
   return `${userId}:${mapId}`;
 }
 
+// A vision pass looks up the same characters over and over: per token, per
+// viewer, per online user (ownership, vision stats, visibility). Each lookup
+// was a separate SELECT + sheet-JSON parse. The pass is fully synchronous, so
+// a memo scoped to the enclosing withCharCache() call is safe -- it can never
+// outlive the pass and serve a stale character across events.
+type CharacterRecord = NonNullable<ReturnType<typeof characters.byId>>;
+let charCache: Map<string, CharacterRecord | undefined> | null = null;
+
+function charById(id: string): CharacterRecord | undefined {
+  if (!charCache) return characters.byId(id);
+  if (!charCache.has(id)) charCache.set(id, characters.byId(id));
+  return charCache.get(id);
+}
+
+function withCharCache<T>(fn: () => T): T {
+  const mine = charCache === null; // nested calls share the outermost cache
+  if (mine) charCache = new Map();
+  try {
+    return fn();
+  } finally {
+    if (mine) charCache = null;
+  }
+}
+
 /** Vision stats for a token: explicit override, else its character's sheet. */
 export function tokenVision(token: Token): VisionStats {
   if (token.vision) return token.vision;
   if (token.characterId) {
-    const ch = characters.byId(token.characterId);
+    const ch = charById(token.characterId);
     if (ch) return systemFor(ch.system).vision(ch.sheet);
   }
   return DEFAULT_VISION;
@@ -54,7 +78,7 @@ export function tokenVision(token: Token): VisionStats {
 function viewerTokensFor(userId: string, mapTokens: Token[]): Token[] {
   return mapTokens.filter((t) => {
     if (t.layer !== 'token' || !t.characterId) return false;
-    const ch = characters.byId(t.characterId);
+    const ch = charById(t.characterId);
     return ch?.ownerUserId === userId;
   });
 }
@@ -150,7 +174,7 @@ export function flushAllVisionMemory(): void {
 function visibleTokens(userId: string, mapTokens: Token[], visible: Set<number>): TokenView[] {
   return mapTokens.filter((t) => {
     if (t.layer === 'gm') return false;
-    if (t.characterId && characters.byId(t.characterId)?.ownerUserId === userId) return true;
+    if (t.characterId && charById(t.characterId)?.ownerUserId === userId) return true;
     return visible.has(packHex({ q: t.q, r: t.r }));
   });
 }
@@ -241,6 +265,12 @@ export function buildMapVisionShared(map: MapRecord, mapTokens?: Token[]): MapVi
 
 /** Compute (and cache) a player's current view of a map. */
 export function computeUserMapView(
+  userId: string, map: MapRecord, mapTokens?: Token[], shared?: MapVisionShared,
+): UserMapView {
+  return withCharCache(() => computeUserMapViewInner(userId, map, mapTokens, shared));
+}
+
+function computeUserMapViewInner(
   userId: string, map: MapRecord, mapTokens?: Token[], shared?: MapVisionShared,
 ): UserMapView {
   const allTokens = mapTokens ?? tokens.forMap(map.id);
@@ -364,6 +394,10 @@ export function buildMapState(
  * still safely recompute for every online viewer, unchanged from before.
  */
 export function syncMapVision(io: Server, campaignId: string, mapId: string, hint?: SyncVisionHint): void {
+  withCharCache(() => syncMapVisionInner(io, campaignId, mapId, hint));
+}
+
+function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?: SyncVisionHint): void {
   const campaign = campaigns.byId(campaignId);
   if (!campaign) return;
   const map = maps.byId(mapId);
@@ -443,7 +477,7 @@ export function socketsSeeingToken(io: Server, campaignId: string, token: Token)
     if (campaigns.viewMapIdFor(campaignId, d.userId) !== token.mapId) continue;
     const cache = visionCache.get(cacheKey(d.userId, token.mapId));
     if (cache?.visible.has(tokenKey)) out.push(socket);
-    else if (token.characterId && characters.byId(token.characterId)?.ownerUserId === d.userId) out.push(socket);
+    else if (token.characterId && charById(token.characterId)?.ownerUserId === d.userId) out.push(socket);
   }
   return out;
 }

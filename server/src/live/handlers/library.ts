@@ -92,8 +92,18 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     const d = requireDm(socket);
     const a = assets.byId(assetId);
     if (!a || a.campaign_id !== d.campaignId) return;
+    // DB row first, file second: if the row is still referenced (a map
+    // background or token art holds an FK to it), the delete THROWS -- and
+    // deleting the file beforehand would leave that map/token pointing at a
+    // dead URL with a row that can never be deleted. A file-unlink failure
+    // after a successful row delete just strands a harmless orphan file.
+    try {
+      assets.delete(assetId);
+    } catch {
+      emitError(socket, 'That asset is still in use (as a map background or token art).');
+      return;
+    }
     try { fs.unlinkSync(path.join(UPLOADS_DIR, `${a.id}.${a.ext}`)); } catch { /* already gone */ }
-    assets.delete(assetId);
     broadcastAssets(io, d.campaignId);
   }));
 

@@ -282,6 +282,36 @@ async function main() {
   ok(!!staleBeastSave, 'cone still catches the monster even with a bogus client-reported origin');
   ok(staleSelfSave === null, 'a wrong client-reported originHex cannot put the caster inside their own cone (server derives origin from the real token position, not the client)');
 
+  // ---------- spell slot upcasting ----------
+  console.log('spell slot upcasting:');
+  // A 3rd-level spell with no 3rd-level slots left, but a 5th-level slot
+  // open -- regression test for a bug where the exact-level-only check
+  // rejected the cast outright instead of falling back to a higher slot
+  // (5e lets any higher slot cover a lower-level spell).
+  const upcastReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: {
+    spells: [{ name: 'Test Fireball', level: 3, damage: '8d6', save: 'dex', dtype: 'fire', range: 150, aoeShape: 'sphere', aoeSize: 20 }],
+    slots3: 1, slotsUsed3: 1, // no 3rd-level slots remaining
+    slots5: 1, slotsUsed5: 0, // a 5th-level slot is open
+  } });
+  await upcastReady;
+  // Registered before the emit, not after -- the slot spend broadcasts
+  // (characterUpserted) almost immediately, well before the save/damage
+  // sequence's chat cards land.
+  const upcastSlotsP = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Number(p.character.sheet.slotsUsed5) === 1).catch(() => null);
+  const upcastDamageP = waitFor(playerSock, 'chatMsg', 8000, (p) => p.msg?.text?.includes('Test Fireball') && p.msg.text.includes('damage'));
+  const upcastNoErrP = expectSilence(playerSock, 'errorMsg', 2000);
+  playerSock.emit('castAoe', {
+    characterId: pc.id, actionId: 'spell:0', sourceTokenId: pcToken.id,
+    originHex: { q: 6, r: 5 }, aimHex: { q: 12, r: 5 }, adv: null,
+  });
+  const [upcastSlots, upcastDamage, upcastNoErr] = await Promise.all([upcastSlotsP, upcastDamageP, upcastNoErrP]);
+  ok(!!upcastDamage, 'a level-3 spell casts successfully off a higher (5th-level) slot when no 3rd-level slots remain');
+  ok(upcastNoErr === null, 'no "no spell slot available" rejection when a higher slot could cover it');
+  ok(upcastDamage.msg.text.includes('cast at level 5'), 'the cast is labeled with the slot level actually spent');
+  ok(!!upcastSlots, 'the 5th-level slot (not the already-empty 3rd) is the one actually consumed');
+  ok(!!upcastSlots && Number(upcastSlots.character.sheet.slotsUsed3) === 1, 'the 3rd-level slot count is untouched, not double-spent');
+
   // ---------- attack roll posts first; damage is a separate, later card ----------
   console.log('attack/damage timing (to-hit card, then a paced damage card):');
   // A bare token with a tracked HP bar, adjacent to the player, well within

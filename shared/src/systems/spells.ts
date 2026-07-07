@@ -26,3 +26,15 @@ export function spellSlots(sheet: SheetData): SlotLevel[] {
 export function castableLevels(sheet: SheetData, minLevel: number): number[] {
   return spellSlots(sheet).filter((s) => s.level >= minLevel && s.remaining > 0).map((s) => s.level);
 }
+
+/**
+ * Which slot level to actually spend when casting a spell of `minLevel`: the
+ * lowest available slot at or above it (5e lets a spell be "upcast" using any
+ * higher-level slot when the exact level is empty) -- e.g. a 3rd-level
+ * Fireball with no 3rd-level slots left but a 5th-level slot open still casts,
+ * spending the 5th-level slot. Null if nothing at or above `minLevel` remains.
+ */
+export function bestCastLevel(sheet: SheetData, minLevel: number): number | null {
+  const levels = castableLevels(sheet, minLevel);
+  return levels.length > 0 ? Math.min(...levels) : null;
+}

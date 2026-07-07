@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
+  C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe,
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -321,13 +321,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (action.source === 'spell') {
       const actorPatch: SheetData = {};
       if (action.slotLevel) {
-        const lvl = action.slotLevel;
-        if (!castableLevels(actor.sheet, lvl).includes(lvl)) {
-          emitError(socket, `No level-${lvl} spell slot available.`);
+        // Upcast: spend the lowest available slot AT OR ABOVE the spell's own
+        // level, not just an exact-level slot -- a 3rd-level spell can still
+        // be cast off a 4th/5th-level slot once 3rd-level slots run dry.
+        const castLevel = bestCastLevel(actor.sheet, action.slotLevel);
+        if (castLevel === null) {
+          emitError(socket, `No level-${action.slotLevel}+ spell slot available.`);
           return;
         }
-        actorPatch[`slotsUsed${lvl}`] = num(actor.sheet, `slotsUsed${lvl}`, 0) + 1;
-        undo.push({ t: 'slot', characterId: actor.id, level: lvl });
+        actorPatch[`slotsUsed${castLevel}`] = num(actor.sheet, `slotsUsed${castLevel}`, 0) + 1;
+        undo.push({ t: 'slot', characterId: actor.id, level: castLevel });
       }
       if (action.concentration && action.spellName) {
         undo.push({ t: 'field', characterId: actor.id, key: 'concentration', value: actor.sheet.concentration ?? '' });
@@ -628,16 +631,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // Casting a spell spends a slot (leveled) and sets concentration on the
     // caster before resolving the effect — mirrors C2S.COMBAT_ACTION.
     const actorPatch: SheetData = {};
+    let castLevel: number | null = null;
     if (action.slotLevel) {
-      const lvl = action.slotLevel;
-      if (!castableLevels(actor.sheet, lvl).includes(lvl)) {
-        emitError(socket, `No level-${lvl} spell slot available.`);
+      // Upcast: spend the lowest available slot at or above the spell's own
+      // level (see the matching comment in C2S.COMBAT_ACTION above).
+      castLevel = bestCastLevel(actor.sheet, action.slotLevel);
+      if (castLevel === null) {
+        emitError(socket, `No level-${action.slotLevel}+ spell slot available.`);
         return;
       }
-      actorPatch[`slotsUsed${lvl}`] = num(actor.sheet, `slotsUsed${lvl}`, 0) + 1;
+      actorPatch[`slotsUsed${castLevel}`] = num(actor.sheet, `slotsUsed${castLevel}`, 0) + 1;
     }
     if (action.concentration && action.spellName) actorPatch.concentration = action.spellName;
     if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
+    const castLabel = castLevel && action.slotLevel && castLevel > action.slotLevel
+      ? `${action.label} (cast at level ${castLevel})` : action.label;
 
     const geometricHitIds = tokensInAoe(action.aoe, originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
     const hitIds = geometricHitIds.filter((tid) => {
@@ -654,7 +662,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         campaignId: d.campaignId, userId: d.userId, username: d.username,
         tokenIds: hitIds, saveId: action.saveId, dc: casterDc,
         damageExpr: action.amountExpr, onSave: action.onSave ?? 'half',
-        damageType: action.damageType, label: action.label,
+        damageType: action.damageType, label: castLabel,
         aoeVisual: {
           mapId: src.mapId, shape: action.aoe.shape, sizeFt: action.aoe.sizeFt, widthFt: action.aoe.widthFt,
           originHex, aimHex: p.aimHex,
@@ -695,7 +703,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       });
     }
     const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, kind: 'roll', text: `${actor.name} casts ${action.label}`, roll: dmg, recipients: null,
+      userId: d.userId, fromName: d.username, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     const noSaveSettleMs = diceSettleDelayMs(dmg.dice.length);

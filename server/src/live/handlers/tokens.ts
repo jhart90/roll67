@@ -6,6 +6,7 @@ import {
 } from 'shared';
 import { campaigns, characters, maps, tokens } from '../../db/repos.js';
 import { dmRoom, emitError, safe, sdata } from '../hub.js';
+import { persistSheet } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
@@ -74,7 +75,25 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     if (!token) return;
     const map = maps.byId(token.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown token.');
-    tokens.update(tokenId, patch);
+    // For a character-linked token the SHEET is authoritative for HP: a bar
+    // edit writes through to the sheet (persistSheet then mirrors the new HP
+    // back onto every one of that character's token bars), so the sheet and
+    // the token can never drift apart. Only unlinked tokens keep a bar of
+    // their own.
+    let tokenPatch = patch;
+    if (patch.bar && token.characterId) {
+      const ch = characters.byId(token.characterId);
+      if (ch) {
+        persistSheet(io, d.campaignId, ch, { hp: patch.bar.hp, maxHp: patch.bar.maxHp });
+        const { bar: _bar, ...rest } = patch;
+        tokenPatch = rest;
+        if (Object.keys(tokenPatch).length === 0) {
+          broadcastDirectory(io, d.campaignId);
+          return;
+        }
+      }
+    }
+    tokens.update(tokenId, tokenPatch);
     const updated = tokens.byId(tokenId)!;
     io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: updated });
     syncMapVision(io, d.campaignId, token.mapId);

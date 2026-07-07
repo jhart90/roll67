@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { TokenShape } from 'shared';
-import { systemFor } from 'shared';
+import { num, systemFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
@@ -133,19 +133,22 @@ export function TokenInspector() {
         </label>
       </div>
 
-      <h4>Health</h4>
+      <h4>Health {character ? '(from character sheet)' : ''}</h4>
       <div className="inspector-grid">
         <label>
           HP
           <input
             type="number"
-            value={token.bar?.hp ?? ''}
+            value={character ? num(character.sheet, 'hp', 0) : token.bar?.hp ?? ''}
             placeholder="—"
             onChange={(e) => {
               const hp = Number(e.target.value);
-              if (!Number.isNaN(hp)) {
-                intents.updateToken(token.id, { bar: { hp, maxHp: token.bar?.maxHp ?? hp } });
-              }
+              if (Number.isNaN(hp)) return;
+              // Linked to a character: the sheet is authoritative — write it
+              // there (the server mirrors sheet HP back onto every token bar),
+              // so the sheet and this panel can never drift apart.
+              if (character) intents.updateCharacter(character.id, { hp });
+              else intents.updateToken(token.id, { bar: { hp, maxHp: token.bar?.maxHp ?? hp } });
             }}
           />
         </label>
@@ -153,16 +156,21 @@ export function TokenInspector() {
           Max HP
           <input
             type="number"
-            value={token.bar?.maxHp ?? ''}
+            value={character ? num(character.sheet, 'maxHp', 0) : token.bar?.maxHp ?? ''}
             placeholder="—"
             onChange={(e) => {
               const maxHp = Number(e.target.value);
-              if (!Number.isNaN(maxHp)) {
-                intents.updateToken(token.id, { bar: { hp: token.bar?.hp ?? maxHp, maxHp } });
-              }
+              if (Number.isNaN(maxHp)) return;
+              if (character) intents.updateCharacter(character.id, { maxHp });
+              else intents.updateToken(token.id, { bar: { hp: token.bar?.hp ?? maxHp, maxHp } });
             }}
           />
         </label>
+        {character && (
+          <span className="dim" style={{ fontSize: 11, gridColumn: '1 / -1' }}>
+            Editing {character.name}&rsquo;s sheet.
+          </span>
+        )}
       </div>
 
       <h4>Vision {sheetVision ? '(from character sheet)' : '(override)'}</h4>

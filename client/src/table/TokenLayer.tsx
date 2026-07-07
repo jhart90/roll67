@@ -119,6 +119,12 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
 
   const bar = token.bar;
   const hpFrac = bar && bar.maxHp > 0 ? Math.max(0, Math.min(1, bar.hp / bar.maxHp)) : null;
+  // Beefier creatures get a visibly wider HP bar: the base width (2×radius,
+  // same as always) covers up to 20 max HP, scaling linearly to 3× that width
+  // at 100+ max HP — so a bandit's sliver and a giant's slab read differently
+  // at a glance.
+  const barScale = bar && bar.maxHp > 20 ? Math.min(3, 1 + (2 * (bar.maxHp - 20)) / 80) : 1;
+  const barW = radius * 2 * barScale;
   // Condition badges (from the linked character we're allowed to see).
   const conditionIcons = character
     ? conditionsOf(character.sheet).map((id) => getCondition(id)?.icon).filter(Boolean) as string[]
@@ -184,10 +190,10 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </text>
       )}
       {hpFrac !== null && (
-        <g transform={`translate(${-radius}, ${radius + 4})`}>
-          <rect width={radius * 2} height={5} rx={2} fill="#10131a" />
+        <g transform={`translate(${-barW / 2}, ${radius + 4})`}>
+          <rect width={barW} height={5} rx={2} fill="#10131a" />
           <rect
-            width={radius * 2 * hpFrac}
+            width={barW * hpFrac}
             height={5}
             rx={2}
             fill={hpFrac > 0.5 ? '#7ed28a' : hpFrac > 0.25 ? '#e8d27b' : '#d26c6c'}

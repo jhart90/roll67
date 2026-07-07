@@ -315,6 +315,22 @@ async function main() {
   const applied = await waitFor(dmSock, 'tokenUpserted', 3500, (p) => p.token.id === dummy.id && p.token.bar.hp < 20).catch(() => null);
   ok(!!applied, "target HP changes once the damage roll's own dice have settled (+1s pause)");
 
+  // ---------- token bar <-> character sheet HP write-through ----------
+  console.log('token bar / sheet HP sync:');
+  // A DM editing a linked token's HP bar (the token inspector) must land on
+  // the character SHEET (the authoritative record), which then mirrors back
+  // onto the bar — regression test for the two silently drifting apart.
+  const sheetHpP = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && p.character.sheet.hp === 7 && p.character.sheet.maxHp === 55);
+  const barMirrorP = waitFor(dmSock, 'tokenUpserted', 5000, (p) => p.token.id === pcToken.id && p.token.bar?.hp === 7 && p.token.bar?.maxHp === 55);
+  dmSock.emit('updateToken', { tokenId: pcToken.id, patch: { bar: { hp: 7, maxHp: 55 } } });
+  await Promise.all([sheetHpP, barMirrorP]);
+  ok(true, "editing a linked token's HP bar writes through to the character sheet and mirrors back to the bar");
+  // And the reverse: a sheet HP edit mirrors onto the token bar (existing path).
+  const barFromSheetP = waitFor(dmSock, 'tokenUpserted', 5000, (p) => p.token.id === pcToken.id && p.token.bar?.hp === 20);
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { hp: 20 } });
+  await barFromSheetP;
+  ok(true, 'a sheet HP edit mirrors onto the token bar');
+
   // Drop a long wall between player and monster.
   const wallGone = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
   const wallEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.walls);

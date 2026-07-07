@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import type { Door, Light, Point, Wall } from 'shared';
 import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
+const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b' };
+
 /** A light marker: selectable, draggable, and right-clickable (DM), in both the
  *  light tool and the normal select cursor. */
-function LightPiece({ light, selected, interactive, hexPx, mapId }: {
+const LightPiece = memo(function LightPiece({ light, selected, interactive, hexPx, mapId }: {
   light: Light; selected: boolean; interactive: boolean; hexPx: number; mapId: string;
 }) {
   const stage = useStage();
@@ -55,7 +57,60 @@ function LightPiece({ light, selected, interactive, hexPx, mapId }: {
       <text x={pos.x} y={pos.y + 4} textAnchor="middle" fontSize={12} pointerEvents="none">💡</text>
     </g>
   );
-}
+});
+
+/** One wall polyline, colored + dashed by type. Memoized so an unrelated
+ *  geometry change (a different wall, a door toggle, a light drag) doesn't
+ *  force every other wall to re-render. */
+const WallPiece = memo(function WallPiece({ wall }: { wall: Wall }) {
+  const type = wall.type ?? 'solid';
+  return (
+    <polyline
+      points={wall.points.map((p) => `${p.x},${p.y}`).join(' ')}
+      fill="none"
+      stroke={WALL_STROKE[type]}
+      strokeWidth={4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeDasharray={type === 'window' ? '2 8' : type === 'oneway' ? '12 6' : undefined}
+      opacity={0.9}
+    />
+  );
+});
+
+/** One door marker + toggle hotspot. Memoized per finding above; only
+ *  re-renders when this specific door, the map, or the active tool changes. */
+const DoorPiece = memo(function DoorPiece({ door, mapId, tool }: { door: Door; mapId: string; tool: string }) {
+  const mid = { x: (door.a.x + door.b.x) / 2, y: (door.a.y + door.b.y) / 2 };
+  const isGate = door.type === 'gate';
+  // Gates get a blue palette (always see-through) instead of the normal
+  // door's green/orange (blocks sight too, when closed).
+  const color = isGate ? (door.open ? '#8ad2e8' : '#4b8fc9') : (door.open ? '#7ed28a' : '#c98d4b');
+  return (
+    <g>
+      <line
+        x1={door.a.x} y1={door.a.y} x2={door.b.x} y2={door.b.y}
+        stroke={color}
+        strokeWidth={5}
+        strokeLinecap="round"
+        strokeDasharray={door.open ? '4 8' : undefined}
+      />
+      <circle
+        cx={mid.x} cy={mid.y} r={9}
+        fill={color}
+        stroke="#10131a"
+        strokeWidth={2}
+        style={{ pointerEvents: tool === 'select' ? 'auto' : 'none', cursor: 'pointer' }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          intents.toggleDoor(mapId, door.id);
+        }}
+      >
+        <title>{`${door.open ? 'Close' : 'Open'}${isGate ? ' gate (always see-through)' : ' door'}`}</title>
+      </circle>
+    </g>
+  );
+});
 
 /** Distance from point to segment, for erase hit-testing. */
 function distToSegment(p: Point, a: Point, b: Point): number {
@@ -98,7 +153,6 @@ export function GeometryLayer() {
   const wallFlip = useGameStore((s) => s.wallFlip);
   const doorType = useGameStore((s) => s.doorType);
 
-  const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b' };
   const DOOR_STROKE: Record<string, string> = { door: '#c98d4b', gate: '#4b8fc9' };
 
   // Cancel drafts when the tool changes.
@@ -332,55 +386,10 @@ export function GeometryLayer() {
       })()}
 
       {/* walls (DM only) — colored + dashed by type */}
-      {walls.map((w) => {
-        const type = w.type ?? 'solid';
-        return (
-          <polyline
-            key={w.id}
-            points={w.points.map((p) => `${p.x},${p.y}`).join(' ')}
-            fill="none"
-            stroke={WALL_STROKE[type]}
-            strokeWidth={4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray={type === 'window' ? '2 8' : type === 'oneway' ? '12 6' : undefined}
-            opacity={0.9}
-          />
-        );
-      })}
+      {walls.map((w) => <WallPiece key={w.id} wall={w} />)}
 
       {/* doors (DM: all; players: known) */}
-      {doors.map((d) => {
-        const mid = { x: (d.a.x + d.b.x) / 2, y: (d.a.y + d.b.y) / 2 };
-        const isGate = d.type === 'gate';
-        // Gates get a blue palette (always see-through) instead of the
-        // normal door's green/orange (blocks sight too, when closed).
-        const color = isGate ? (d.open ? '#8ad2e8' : '#4b8fc9') : (d.open ? '#7ed28a' : '#c98d4b');
-        return (
-          <g key={d.id}>
-            <line
-              x1={d.a.x} y1={d.a.y} x2={d.b.x} y2={d.b.y}
-              stroke={color}
-              strokeWidth={5}
-              strokeLinecap="round"
-              strokeDasharray={d.open ? '4 8' : undefined}
-            />
-            <circle
-              cx={mid.x} cy={mid.y} r={9}
-              fill={color}
-              stroke="#10131a"
-              strokeWidth={2}
-              style={{ pointerEvents: tool === 'select' ? 'auto' : 'none', cursor: 'pointer' }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                intents.toggleDoor(map.id, d.id);
-              }}
-            >
-              <title>{`${d.open ? 'Close' : 'Open'}${isGate ? ' gate (always see-through)' : ' door'}`}</title>
-            </circle>
-          </g>
-        );
-      })}
+      {doors.map((d) => <DoorPiece key={d.id} door={d} mapId={map.id} tool={tool} />)}
 
       {/* draft wall / door preview -- colored by the variant about to be
           placed (matches the final render's colors) so it's clear which

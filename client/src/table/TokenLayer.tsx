@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
 import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, pointInAoe, pxPerFoot } from 'shared';
@@ -37,18 +37,16 @@ function shapeNode(shape: TokenShape, r: number, extra: SVGProps<SVGElement>) {
   }
 }
 
-function TokenPiece({ token, targetState }: { token: TokenView; targetState: TargetState }) {
+const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: TokenView; targetState: TargetState }) {
   const stage = useStage();
   const map = useGameStore((s) => s.map)!;
   const you = useGameStore((s) => s.you);
-  const characters = useGameStore((s) => s.characters);
+  const character = useGameStore((s) => s.characters.find((c) => c.id === token.characterId));
   const selected = useGameStore((s) => s.selectedTokenId === token.id);
   const tool = useGameStore((s) => s.tool);
   const targetEffect = useGameStore((s) => s.targeting?.action.effect ?? null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const lastSent = useRef(0);
-
-  const character = characters.find((c) => c.id === token.characterId);
   const movable = !!you && tool === 'select' && targetState === 'off' &&
     canMoveToken(you.role, you.userId, token, character);
 
@@ -220,9 +218,9 @@ function TokenPiece({ token, targetState }: { token: TokenView; targetState: Tar
       </text>
     </g>
   );
-}
+});
 
-function DragGhost({ tokenId, x, y }: { tokenId: string; x: number; y: number }) {
+const DragGhost = memo(function DragGhost({ tokenId, x, y }: { tokenId: string; x: number; y: number }) {
   const map = useGameStore((s) => s.map)!;
   const token = useGameStore((s) => s.tokens[tokenId]);
   if (!token) return null;
@@ -230,7 +228,7 @@ function DragGhost({ tokenId, x, y }: { tokenId: string; x: number; y: number })
   return (
     <circle cx={x} cy={y} r={radius} fill={token.color} opacity={0.45} pointerEvents="none" />
   );
-}
+});
 
 export function TokenLayer() {
   const map = useGameStore((s) => s.map)!;

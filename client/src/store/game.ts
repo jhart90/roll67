@@ -17,6 +17,9 @@ import { closeWindow, openWindow } from './windowManager';
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn';
 
+export interface HpFloat { id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }
+export interface Projectile { id: number; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }
+
 interface Camera {
   x: number;
   y: number;
@@ -68,6 +71,13 @@ interface GameState {
   visibleLitMask: VisibilityLitMask | null;
   fadeLitMask: VisibilityLitMask | null;
   explored: Set<number> | null;
+  /** Append-only log of every explored hex key in arrival order — same content
+   *  as `explored`, but growable in place (reference stays stable), so
+   *  FogCanvas can draw ONLY the newly-revealed hexes into its cached mask
+   *  instead of re-issuing a path command for every hex ever explored (which
+   *  measured ~600ms per reveal at ~10k explored hexes). Replaced wholesale
+   *  (fresh reference) only on map switch/join — FogCanvas's full-rebuild cue. */
+  exploredLog: number[] | null;
   knownDoors: Door[];
   viewingAs: string | null;
   dragGhosts: Record<string, { x: number; y: number }>;
@@ -85,9 +95,9 @@ interface GameState {
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
   aoeTargeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; originHex: Hex; aimHex: Hex } | null;
   /** Floating +/-HP combat text over tokens. */
-  floats: Array<{ id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }>;
+  floats: HpFloat[];
   /** In-flight ranged shots (arrow/bolt/etc.), timed to land as their matching float appears. */
-  projectiles: Array<{ id: number; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }>;
+  projectiles: Projectile[];
   /** An AoE spell's detonation (projectile + burst for sphere/cylinder, a
    *  ripple for cone), timed to play once its damage roll settles. */
   aoeBursts: Array<{
@@ -185,6 +195,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   visibleLitMask: null,
   fadeLitMask: null,
   explored: null,
+  exploredLog: null,
   knownDoors: [],
   viewingAs: null,
   dragGhosts: {},
@@ -324,7 +335,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       you: null, campaign: null, members: [], characters: [], mapsMeta: [],
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
-      visibleLitMask: null, fadeLitMask: null, explored: null, knownDoors: [],
+      visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null,
     });
@@ -409,6 +420,7 @@ export function wireSocket(): void {
       visibleLitMask: p.visibleLitMask,
       fadeLitMask: p.fadeLitMask,
       explored: p.explored ? new Set(p.explored) : null,
+      exploredLog: p.explored ? [...p.explored] : null,
       knownDoors: p.knownDoors,
       viewingAs: p.viewingAs,
       dragGhosts: {},
@@ -454,9 +466,14 @@ export function wireSocket(): void {
     // untouched here also lets it skip re-filling every explored hex when
     // only the live visible/fade bands actually changed.
     let explored = s.explored;
+    let exploredLog = s.exploredLog;
     if (p.newlyExplored.length > 0) {
       explored = new Set(s.explored ?? []);
       for (const h of p.newlyExplored) explored.add(h);
+      // Appended in place, on purpose: FogCanvas keys its full-rebuild on this
+      // array's IDENTITY changing (map switch), and consumes growth by index.
+      if (exploredLog) exploredLog.push(...p.newlyExplored);
+      else exploredLog = [...p.newlyExplored];
     }
     useGameStore.setState({
       visible: new Set(p.visible),
@@ -466,6 +483,7 @@ export function wireSocket(): void {
       visibleLitMask: p.visibleLitMask,
       fadeLitMask: p.fadeLitMask,
       explored,
+      exploredLog,
       tokens: tokensById(p.tokens),
       knownDoors: p.knownDoors,
       dragGhosts: {},

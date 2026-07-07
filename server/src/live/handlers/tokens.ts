@@ -109,6 +109,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       if (stop.q === token.q && stop.r === token.r) return; // held up — no move
       dest = stop;
     }
+    const fromHex = { q: token.q, r: token.r };
     tokens.move(tokenId, dest.q, dest.r);
     const moved = tokens.byId(tokenId)!;
     // Tell everyone who could already see it where it went; vision sync
@@ -116,7 +117,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     for (const s of socketsSeeingToken(io, d.campaignId, moved)) {
       s.emit(S2C.TOKEN_MOVED, { tokenId, q: dest.q, r: dest.r });
     }
-    syncMapVision(io, d.campaignId, token.mapId);
+    // A single move can only possibly change what's visible near its old or
+    // new hex (plus, if it carries a light, that light's own glow radius) --
+    // viewers nowhere near either spot can skip the recompute entirely. This
+    // is the hot path (fired on every step of every token's movement), so
+    // it's the one call site worth hinting; other, far less frequent vision
+    // triggers (wall/door/light edits, etc.) keep the always-safe full sync.
+    syncMapVision(io, d.campaignId, token.mapId, {
+      hexes: [fromHex, dest],
+      extraRadius: token.light ? Math.max(token.light.bright, token.light.dim) : 0,
+    });
   }));
 
   socket.on(C2S.DRAG_TOKEN, safe(socket, ({ tokenId, x, y, done }: DragTokenPayload) => {

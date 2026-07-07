@@ -5,14 +5,12 @@ import { SavePrompt } from './SavePrompt';
 export function InitiativePanel() {
   const you = useGameStore((s) => s.you);
   const state = useGameStore((s) => s.initiativeState);
-  const selectedTokenId = useGameStore((s) => s.selectedTokenId);
-  const tokens = useGameStore((s) => s.tokens);
+  const selected = useGameStore((s) => (s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined));
   const map = useGameStore((s) => s.map);
   const [saving, setSaving] = useState(false);
 
   if (!you) return null;
   const isDm = you.role === 'dm';
-  const selected = selectedTokenId ? tokens[selectedTokenId] : undefined;
 
   return (
     <div className="dock-panel">

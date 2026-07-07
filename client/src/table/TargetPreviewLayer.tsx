@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { hexDistance, hexToPixel } from 'shared';
 import { useGameStore } from '../store/game';
 import { mapPixelSize } from '../util/stage';
@@ -19,8 +20,29 @@ export function TargetPreviewLayer() {
   const { width, height } = mapPixelSize(map);
   const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
 
-  const others = Object.entries(previews).filter(([userId]) => userId !== you?.userId);
-  if (others.length === 0) return null;
+  // Precompute each preview's in-range token set once per (tokens, previews)
+  // change, instead of redoing an O(tokens) distance scan per preview inline
+  // during render.
+  const previewRings = useMemo(() => {
+    const others = Object.entries(previews).filter(([userId]) => userId !== you?.userId);
+    const allTokens = Object.values(tokens);
+    return others.flatMap(([userId, p]) => {
+      const src = tokens[p.sourceTokenId];
+      if (!src) return [];
+      const rangeHexes = p.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(p.rangeFt / feetPerHex));
+      const srcPos = hexToPixel({ q: src.q, r: src.r }, map.grid);
+      const srcRadius = map.grid.hexSize * 0.72 * src.size;
+      const inRangeTokens = allTokens.filter((t) => {
+        const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes;
+        const selfBlocked = p.effect === 'damage' && t.id === src.id;
+        return inRange && !selfBlocked;
+      });
+      return [{ userId, p, srcPos, srcRadius, inRangeTokens }];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokens, previews, you?.userId, map.grid, feetPerHex]);
+
+  if (previewRings.length === 0) return null;
 
   return (
     <svg
@@ -29,37 +51,27 @@ export function TargetPreviewLayer() {
       viewBox={`0 0 ${width} ${height}`}
       style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}
     >
-      {others.map(([userId, p]) => {
-        const src = tokens[p.sourceTokenId];
-        if (!src) return null;
-        const rangeHexes = p.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(p.rangeFt / feetPerHex));
-        const srcPos = hexToPixel({ q: src.q, r: src.r }, map.grid);
-        const srcRadius = map.grid.hexSize * 0.72 * src.size;
-        return (
-          <g key={userId}>
-            {Object.values(tokens).map((t) => {
-              const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes;
-              const selfBlocked = p.effect === 'damage' && t.id === src.id;
-              if (!inRange || selfBlocked) return null;
-              const pos = hexToPixel({ q: t.q, r: t.r }, map.grid);
-              const radius = map.grid.hexSize * 0.72 * t.size;
-              return (
-                <circle
-                  key={t.id} cx={pos.x} cy={pos.y} r={radius + 6}
-                  fill="none" stroke={p.color} strokeWidth={2.5} strokeDasharray="5 4"
-                />
-              );
-            })}
-            <text
-              x={srcPos.x} y={srcPos.y - srcRadius - 12}
-              textAnchor="middle" fontSize={9} fontWeight={600}
-              fill={p.color} stroke="#10131a" strokeWidth={2} paintOrder="stroke"
-            >
-              {p.byName} · {p.label}
-            </text>
-          </g>
-        );
-      })}
+      {previewRings.map(({ userId, p, srcPos, srcRadius, inRangeTokens }) => (
+        <g key={userId}>
+          {inRangeTokens.map((t) => {
+            const pos = hexToPixel({ q: t.q, r: t.r }, map.grid);
+            const radius = map.grid.hexSize * 0.72 * t.size;
+            return (
+              <circle
+                key={t.id} cx={pos.x} cy={pos.y} r={radius + 6}
+                fill="none" stroke={p.color} strokeWidth={2.5} strokeDasharray="5 4"
+              />
+            );
+          })}
+          <text
+            x={srcPos.x} y={srcPos.y - srcRadius - 12}
+            textAnchor="middle" fontSize={9} fontWeight={600}
+            fill={p.color} stroke="#10131a" strokeWidth={2} paintOrder="stroke"
+          >
+            {p.byName} · {p.label}
+          </text>
+        </g>
+      ))}
     </svg>
   );
 }

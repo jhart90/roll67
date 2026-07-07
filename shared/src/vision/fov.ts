@@ -172,7 +172,7 @@ function fadeStats(stats: VisionStats): VisionStats {
  * it) twice per viewer.
  */
 function computeFovBands(
-  viewer: Hex, rawStats: VisionStats, input: FovInput, precomputed?: { lit?: Set<number> },
+  viewer: Hex, rawStats: VisionStats, input: FovInput, precomputed?: { lit?: Set<number>; segs?: Segment[] },
 ): FovBands {
   const stats = effectiveStats(rawStats, input.grid.lighting);
   const fs = fadeStats(stats);
@@ -187,7 +187,7 @@ function computeFovBands(
   const needLightCheck = lighting !== 'light';
   const lit = needLightCheck ? (precomputed?.lit ?? litHexes(input)) : undefined;
   const viewerPx = hexToPixel(viewer, input.grid);
-  const segs = sightSegments(input.walls, input.doors, viewerPx);
+  const segs = precomputed?.segs ?? sightSegments(input.walls, input.doors, viewerPx);
 
   for (const h of hexRange(viewer, fadeRadius)) {
     if (!inBounds(h, input.grid)) continue;
@@ -231,18 +231,23 @@ function computeFovBands(
  * `precomputedLit` lets a caller re-share one map's lit-hexes set across
  * several viewers/users in the same moment (e.g. every online player after a
  * single token move) instead of recomputing the identical light raycasts
- * once per union call.
+ * once per union call. `segsByViewer`, similarly, lets a caller reuse
+ * per-viewer sight-blocking segments already built for the same viewer
+ * elsewhere (e.g. by `computeUnionVisibilityPolygons` in the same moment)
+ * instead of rebuilding them here too.
  */
 export function computeUnionFovBands(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
   precomputedLit?: Set<number>,
+  segsByViewer?: Map<number, Segment[]>,
 ): FovBands {
   const lit = input.grid.lighting === 'light' ? undefined : (precomputedLit ?? litHexes(input));
   const full = new Set<number>();
   const fade = new Set<number>();
   for (const v of viewers) {
-    const bands = computeFovBands(v.hex, v.stats, input, { lit });
+    const segs = segsByViewer?.get(packHex(v.hex));
+    const bands = computeFovBands(v.hex, v.stats, input, { lit, segs });
     for (const key of bands.full) full.add(key);
     for (const key of bands.fade) fade.add(key);
   }
@@ -310,12 +315,15 @@ export function computeLightPolygons(input: FovInput, pxPerHex: number): Point[]
  *
  * `precomputed` lets a caller re-share one map's lit-hexes set and light
  * polygons across several viewers/users in the same moment instead of
- * recomputing those (viewer-independent) shapes once per call.
+ * recomputing those (viewer-independent) shapes once per call. `segsByViewer`
+ * likewise lets a caller reuse per-viewer sight-blocking segments already
+ * built for the same viewer elsewhere (e.g. by `computeUnionFovBands` in the
+ * same moment) instead of rebuilding them here too.
  */
 export function computeUnionVisibilityPolygons(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
-  precomputed?: { lightPolygons?: Point[][] },
+  precomputed?: { lightPolygons?: Point[][]; segsByViewer?: Map<number, Segment[]> },
 ): VisibilityPolygonBands {
   const isLight = input.grid.lighting === 'light';
   const isDim = input.grid.lighting === 'dim';
@@ -330,7 +338,7 @@ export function computeUnionVisibilityPolygons(
     const radius = Math.min(Math.max(stats.visionRange, stats.darkvision, 0), MAX_VISION_RADIUS);
     if (radius <= 0) continue;
     const originPx = hexToPixel(v.hex, input.grid);
-    const segs = sightSegments(input.walls, input.doors, originPx);
+    const segs = precomputed?.segsByViewer?.get(packHex(v.hex)) ?? sightSegments(input.walls, input.doors, originPx);
 
     const fs = fadeStats(stats);
     const fadeRadius = Math.min(Math.max(fs.visionRange, fs.darkvision, 0), MAX_VISION_RADIUS);

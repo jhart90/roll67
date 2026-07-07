@@ -5,9 +5,9 @@
 import type { Server, Socket } from 'socket.io';
 import {
   computeLightPolygons, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, litHexes,
-  packHex, pixelToHex, systemFor,
-  S2C, type Door, type FovInput, type Hex, type Light, type MapStatePayload, type Point, type Token, type TokenView,
-  type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
+  packHex, pixelToHex, sightSegments, systemFor,
+  S2C, type Door, type FovInput, type Hex, type Light, type MapStatePayload, type Point, type Segment, type Token,
+  type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
 import { campaigns, characters, doorMemory, fog, maps, tokens } from '../db/repos.js';
 import { campaignSockets, sdata, userRoom } from './hub.js';
@@ -57,6 +57,48 @@ function viewerTokensFor(userId: string, mapTokens: Token[]): Token[] {
     const ch = characters.byId(t.characterId);
     return ch?.ownerUserId === userId;
   });
+}
+
+/**
+ * A narrow, opt-in hint that a change can only possibly matter within a
+ * bounded area — e.g. a single token's move from one hex to another. When
+ * supplied to `syncMapVision`, viewers whose own tokens couldn't possibly
+ * perceive anything in that area are skipped entirely (no FOV recompute, no
+ * emit), instead of every online viewer of the map re-running a full FOV
+ * pass on every single move. Omit it (the default) to keep the always-safe
+ * "recompute for everyone" behavior, appropriate for map-wide edits (walls,
+ * doors, lights, grid) where the affected area isn't a small, known region.
+ */
+export interface SyncVisionHint {
+  /** Hexes definitely relevant to the change (e.g. a moved token's old and new hex). */
+  hexes: Hex[];
+  /** How far beyond `hexes` the change's effect can reach (e.g. a moving
+   *  light's own dim radius) -- 0 for a plain token move with no light. */
+  extraRadius?: number;
+}
+
+/** The furthest hex distance from a single viewer token that anything could
+ *  ever register in its owner's FOV -- the FOV engine's own hard cutoff
+ *  (`max(visionRange, darkvision)`) plus the one-hex fade rim it extends
+ *  bands out to. Anything strictly beyond this, from every one of a user's
+ *  viewer tokens, cannot possibly change what that user sees. */
+function viewerMaxReach(stats: VisionStats): number {
+  return Math.max(stats.visionRange, stats.darkvision, 0) + 1;
+}
+
+/** Conservative check: could this user's view possibly change because of a
+ *  change confined to `hint`? False only when EVERY one of the user's own
+ *  viewer tokens is farther than its reach (plus the hint's extra radius,
+ *  e.g. a moving light's glow) from EVERY hinted hex. */
+function mightAffectUser(userId: string, mapTokens: Token[], hint: SyncVisionHint): boolean {
+  const extra = hint.extraRadius ?? 0;
+  for (const v of viewerTokensFor(userId, mapTokens)) {
+    const reach = viewerMaxReach(tokenVision(v)) + extra;
+    for (const h of hint.hexes) {
+      if (hexDistance({ q: v.q, r: v.r }, h) <= reach) return true;
+    }
+  }
+  return false;
 }
 
 function loadExplored(userId: string, mapId: string): Set<number> {
@@ -216,10 +258,17 @@ export function computeUserMapView(
     stats: tokenVision(t),
   }));
   const { fovInput, lit, lightPolygons } = shared ?? buildMapVisionShared(map, allTokens);
+  // Both the hex-band and polygon computations below need each viewer's own
+  // sight-blocking segments (one-way walls depend on which side the viewer
+  // stands on) -- built once here and handed to both instead of each of them
+  // rebuilding the identical O(walls) segment list for the same viewer.
+  const segsByViewer = new Map<number, Segment[]>(
+    viewers.map((v) => [packHex(v.hex), sightSegments(fovInput.walls, fovInput.doors, hexToPixel(v.hex, fovInput.grid))]),
+  );
   const bands = viewers.length === 0
     ? { full: new Set<number>(), fade: new Set<number>() }
-    : computeUnionFovBands(viewers, fovInput, lit);
-  const polyBands = viewers.length === 0 ? null : computeUnionVisibilityPolygons(viewers, fovInput, { lightPolygons });
+    : computeUnionFovBands(viewers, fovInput, lit, segsByViewer);
+  const polyBands = viewers.length === 0 ? null : computeUnionVisibilityPolygons(viewers, fovInput, { lightPolygons, segsByViewer });
   const { full: visible, fade } = bands;
   const newlyExplored: number[] = [];
   for (const h of [...visible, ...fade]) {
@@ -308,8 +357,13 @@ export function buildMapState(
  * Recompute vision for every online viewer of a map and push updates.
  * Call after anything that can change what someone sees: token move/create/
  * delete/layer change, door toggle, wall/light/grid edits, sheet vision edits.
+ *
+ * `hint`, when given, lets viewers who couldn't possibly be affected skip
+ * the recompute entirely -- see `SyncVisionHint`. Leave it out for changes
+ * whose reach isn't a small known area (wall/door/light/grid edits): those
+ * still safely recompute for every online viewer, unchanged from before.
  */
-export function syncMapVision(io: Server, campaignId: string, mapId: string): void {
+export function syncMapVision(io: Server, campaignId: string, mapId: string, hint?: SyncVisionHint): void {
   const campaign = campaigns.byId(campaignId);
   if (!campaign) return;
   const map = maps.byId(mapId);
@@ -329,6 +383,7 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string): vo
     // Members can be on different maps; only update viewers of THIS map.
     const effectiveUser = d.role === 'dm' ? d.viewingAs : d.userId;
     if (effectiveUser && campaigns.viewMapIdFor(campaignId, effectiveUser) !== mapId) continue;
+    if (hint && effectiveUser && !mightAffectUser(effectiveUser, allTokens, hint)) continue;
     if (d.role === 'dm') {
       // God mode: DM already receives raw token/map events; only a view-as
       // preview needs a vision update.

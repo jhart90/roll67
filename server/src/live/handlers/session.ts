@@ -2,14 +2,16 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
-  type JoinCampaignPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SwitchActiveMapPayload, type ViewMapPayload,
+  type JoinCampaignPayload, type SetDiceColorPayload, type SetDiceTextColorPayload,
+  type SetPlayerColorPayload, type SetUsernamePayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
+import { validUsername } from '../../auth.js';
 import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, drawings,
   handouts, initiative, locations, macros, maps, rollableTables, shops, users, worldFolders,
 } from '../../db/repos.js';
-import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata } from '../hub.js';
+import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
 import { initiativeViewFor } from './combat.js';
 import { buildDirectory } from '../directory.js';
@@ -81,10 +83,12 @@ export function broadcastPresence(io: Server, campaignId: string): void {
   for (const m of campaigns.members(campaignId)) {
     io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, {
       userId: m.userId,
+      username: m.username,
       online: online.has(m.userId),
       mapId: campaigns.viewMapIdFor(campaignId, m.userId),
       diceColor: m.diceColor,
       diceTextColor: m.diceTextColor,
+      playerColor: m.playerColor,
     });
   }
 }
@@ -152,6 +156,40 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     if (!d.campaignId) return;
     const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
     users.setDiceTextColor(d.userId, clean);
+    broadcastPresence(io, d.campaignId);
+  }));
+
+  // Your presence-dot color, and the color your player-controlled token
+  // names get bolded in in chat (client/src/panels/ChatPanel.tsx).
+  socket.on(C2S.SET_PLAYER_COLOR, safe(socket, ({ color }: SetPlayerColorPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
+    users.setPlayerColor(d.userId, clean);
+    broadcastPresence(io, d.campaignId);
+  }));
+
+  // Rename yourself. Username is the login key (UNIQUE COLLATE NOCASE) but
+  // otherwise purely cosmetic -- update the live socket's cached name too so
+  // this session's own chat/actions use it immediately, no reconnect needed.
+  socket.on(C2S.SET_USERNAME, safe(socket, ({ username }: SetUsernamePayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    const trimmed = String(username ?? '').trim();
+    if (!validUsername(trimmed)) {
+      emitError(socket, 'Name must be 2-24 characters: letters, numbers, underscore, or hyphen.');
+      return;
+    }
+    if (trimmed.toLowerCase() !== d.username.toLowerCase()) {
+      const existing = users.byUsername(trimmed);
+      if (existing && existing.id !== d.userId) {
+        emitError(socket, 'That name is already taken.');
+        return;
+      }
+    }
+    users.rename(d.userId, trimmed);
+    d.username = trimmed;
+    io.to(userRoom(d.userId)).emit(S2C.YOU_ARE, { userId: d.userId, username: trimmed, role: d.role ?? 'player' });
     broadcastPresence(io, d.campaignId);
   }));
 

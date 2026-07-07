@@ -1024,6 +1024,15 @@ button.link:hover { text-decoration: underline; }
 .presence-menu-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
 .presence-menu .link { text-align: left; padding: 3px 4px; }
 .presence-menu .link:hover { background: var(--panel-2); border-radius: 4px; text-decoration: none; }
+.presence-name-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 6px;
+  margin-bottom: 4px;
+}
 
 .map-badges { display: inline-flex; gap: 4px; }
 .party-tag { color: var(--accent-2); }

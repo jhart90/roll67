@@ -79,6 +79,8 @@ export const C2S = {
   REORDER_MACROS: 'reorderMacros',
   SET_DICE_COLOR: 'setDiceColor',
   SET_DICE_TEXT_COLOR: 'setDiceTextColor',
+  SET_PLAYER_COLOR: 'setPlayerColor',
+  SET_USERNAME: 'setUsername',
   // rollable tables
   CREATE_TABLE: 'createTable',
   UPDATE_TABLE: 'updateTable',
@@ -610,11 +612,18 @@ export interface DirectoryPayload {
   spells: string[];
   items: string[];
 }
-export interface MemberPresencePayload { userId: string; online: boolean; mapId: string | null; diceColor: string | null; diceTextColor: string | null }
+export interface MemberPresencePayload {
+  userId: string; username: string; online: boolean; mapId: string | null;
+  diceColor: string | null; diceTextColor: string | null; playerColor: string | null;
+}
 /** Set your own 3D-dice color ("#rrggbb", or null for the defaults). */
 export interface SetDiceColorPayload { color: string | null }
 /** Set the color of the pips/numbers painted on your own dice ("#rrggbb", or null for automatic contrast). */
 export interface SetDiceTextColorPayload { color: string | null }
+/** Set your own presence-dot / chat-name color ("#rrggbb", or null for the deterministic default). */
+export interface SetPlayerColorPayload { color: string | null }
+/** Rename yourself (2-24 chars, letters/digits/underscore/hyphen, must be unique). */
+export interface SetUsernamePayload { username: string }
 /** The campaign's party (default) map changed. */
 export interface ActiveMapPayload { mapId: string | null }
 export interface ErrorMsgPayload { message: string }

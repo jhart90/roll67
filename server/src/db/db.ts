@@ -77,6 +77,7 @@ ensureColumn('maps', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
+ensureColumn('users', 'player_color', 'player_color TEXT');
 
 // better-sqlite3 does NOT cache prepared statements: every db.prepare()
 // recompiles the SQL. Repo methods run on hot paths (every token move

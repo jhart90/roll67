@@ -1,8 +1,64 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ChatMessage } from 'shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Character, ChatMessage, MemberInfo, TokenView } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { playerColorFor } from '../util/playerColor';
 
-function RollCard({ msg }: { msg: ChatMessage }) {
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+interface NameHighlights {
+  regex: RegExp | null;
+  colors: Map<string, string | null>;
+}
+
+/** Every currently-known token name (from this viewer's already vision-filtered
+ * token list, so secrecy is preserved for free) mapped to the color of the
+ * player who controls it, if any. Longer names are matched first so e.g.
+ * "Lucky Piper Coldiron" isn't fragmented by a shorter "Piper" match. */
+function useNameHighlights(): NameHighlights {
+  const tokens = useGameStore((s) => s.tokens);
+  const characters = useGameStore((s) => s.characters);
+  const members = useGameStore((s) => s.members);
+  return useMemo(() => buildNameHighlights(tokens, characters, members), [tokens, characters, members]);
+}
+
+function buildNameHighlights(
+  tokens: Record<string, TokenView>,
+  characters: Character[],
+  members: MemberInfo[],
+): NameHighlights {
+  const colors = new Map<string, string | null>();
+  for (const t of Object.values(tokens)) {
+    if (!t.name?.trim()) continue;
+    let color: string | null = null;
+    if (t.characterId) {
+      const owner = characters.find((c) => c.id === t.characterId)?.ownerUserId;
+      const member = owner ? members.find((m) => m.userId === owner) : undefined;
+      if (member) color = playerColorFor(member);
+    }
+    if (!colors.has(t.name) || (color && !colors.get(t.name))) colors.set(t.name, color);
+  }
+  if (colors.size === 0) return { regex: null, colors };
+  const names = [...colors.keys()].sort((a, b) => b.length - a.length);
+  return { regex: new RegExp(`(${names.map(escapeRegExp).join('|')})`, 'g'), colors };
+}
+
+/** Bolds any mentioned token name, and colors it if that token is player-controlled. */
+function Highlighted({ text, hl }: { text: string; hl: NameHighlights }) {
+  if (!hl.regex || !text) return <>{text}</>;
+  return (
+    <>
+      {text.split(hl.regex).map((part, i) =>
+        hl.colors.has(part)
+          ? <b key={i} style={hl.colors.get(part) ? { color: hl.colors.get(part)! } : undefined}>{part}</b>
+          : part,
+      )}
+    </>
+  );
+}
+
+function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
   const r = msg.roll!;
   // A pass/fail roll (e.g. a saving throw) reuses the crit/fumble green/red
   // theme so it reads at a glance without inventing a separate color scheme.
@@ -10,7 +66,7 @@ function RollCard({ msg }: { msg: ChatMessage }) {
   const isFumble = r.outcome === 'failure' || r.dice.some((d) => d.sides === 20 && d.kept && d.value === 1);
   return (
     <div className={`roll-card ${isCrit ? 'crit' : ''} ${isFumble ? 'fumble' : ''}`}>
-      {msg.text && <div className="roll-label">{msg.text}</div>}
+      {msg.text && <div className="roll-label"><Highlighted text={msg.text} hl={hl} /></div>}
       <div className="roll-main">
         <span className="roll-expr">{r.expression}</span>
         <span className="roll-total">{r.total}</span>
@@ -20,8 +76,8 @@ function RollCard({ msg }: { msg: ChatMessage }) {
   );
 }
 
-function Message({ msg, isDm, onMenu }: {
-  msg: ChatMessage; isDm: boolean; onMenu: (id: number, x: number, y: number) => void;
+function Message({ msg, isDm, hl, onMenu }: {
+  msg: ChatMessage; isDm: boolean; hl: NameHighlights; onMenu: (id: number, x: number, y: number) => void;
 }) {
   const time = new Date(msg.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   // Players receive an already-redacted placeholder; the DM sees the original
@@ -44,7 +100,7 @@ function Message({ msg, isDm, onMenu }: {
       </div>
       {playerHidden
         ? <div className="chat-text hidden-text">The DM has hidden this message.</div>
-        : msg.roll ? <RollCard msg={msg} /> : <div className="chat-text">{msg.text}</div>}
+        : msg.roll ? <RollCard msg={msg} hl={hl} /> : <div className="chat-text"><Highlighted text={msg.text} hl={hl} /></div>}
     </div>
   );
 }
@@ -52,6 +108,7 @@ function Message({ msg, isDm, onMenu }: {
 export function ChatPanel() {
   const chatLog = useGameStore((s) => s.chatLog);
   const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const hl = useNameHighlights();
   const [text, setText] = useState('');
   const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -81,7 +138,7 @@ export function ChatPanel() {
   return (
     <div className="chat-panel">
       <div className="chat-log" ref={logRef}>
-        {chatLog.map((m) => <Message key={m.id} msg={m} isDm={!!isDm} onMenu={(id, x, y) => setMenu({ id, x, y })} />)}
+        {chatLog.map((m) => <Message key={m.id} msg={m} isDm={!!isDm} hl={hl} onMenu={(id, x, y) => setMenu({ id, x, y })} />)}
         {chatLog.length === 0 && <p className="dim">Say hi, or roll with /r 1d20+5</p>}
       </div>
 

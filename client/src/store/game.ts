@@ -782,10 +782,10 @@ export function wireSocket(): void {
     useGameStore.setState({ targetPreviews });
   });
 
-  socket.on(S2C.MEMBER_PRESENCE, ({ userId, online, mapId, diceColor, diceTextColor }: MemberPresencePayload) => {
+  socket.on(S2C.MEMBER_PRESENCE, ({ userId, username, online, mapId, diceColor, diceTextColor, playerColor }: MemberPresencePayload) => {
     const s = useGameStore.getState();
     useGameStore.setState({
-      members: s.members.map((m) => (m.userId === userId ? { ...m, online, mapId, diceColor, diceTextColor } : m)),
+      members: s.members.map((m) => (m.userId === userId ? { ...m, username, online, mapId, diceColor, diceTextColor, playerColor } : m)),
     });
   });
 
@@ -862,6 +862,8 @@ export const intents = {
   chat: (text: string) => socket.emit(C2S.CHAT, { text }),
   setDiceColor: (color: string | null) => socket.emit(C2S.SET_DICE_COLOR, { color }),
   setDiceTextColor: (color: string | null) => socket.emit(C2S.SET_DICE_TEXT_COLOR, { color }),
+  setPlayerColor: (color: string | null) => socket.emit(C2S.SET_PLAYER_COLOR, { color }),
+  setUsername: (username: string) => socket.emit(C2S.SET_USERNAME, { username }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),
   reorderMacros: (macroIds: string[]) => socket.emit(C2S.REORDER_MACROS, { macroIds }),

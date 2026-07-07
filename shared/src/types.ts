@@ -30,6 +30,9 @@ export interface MemberInfo {
   diceColor: string | null;
   /** Custom color for the pips/numbers painted on this member's dice ("#rrggbb"); null = automatic contrast. */
   diceTextColor: string | null;
+  /** Custom color for this member's presence dot + their player-controlled
+   *  token names in chat ("#rrggbb"); null = a deterministic per-user default. */
+  playerColor: string | null;
 }
 
 /**

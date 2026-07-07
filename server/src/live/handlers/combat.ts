@@ -587,10 +587,20 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const map = maps.byId(src.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
 
-    if (!inBounds(p.aimHex, map.grid) || !inBounds(p.originHex, map.grid)) {
+    if (!inBounds(p.aimHex, map.grid)) {
       emitError(socket, 'That is off the map.');
       return;
     }
+    // Self-origin shapes (cone/line/cube) always anchor on the caster's own
+    // current, server-authoritative position -- never the client-reported
+    // originHex. Trusting the client's origin let it drift from the caster's
+    // real hex (e.g. a stale snapshot from when aiming began, if the caster's
+    // token moved before confirming the cast), which broke the "a cone's
+    // point of origin doesn't hit its own caster" exclusion in pointInAoe:
+    // that check only excludes the exact geometric origin point, so an origin
+    // that no longer matches the caster's real hex left their own token
+    // sitting inside the template as just another ordinary hit.
+    const originHex: Hex = { q: src.q, r: src.r };
     // Range only constrains where a point-target shape (sphere/cylinder) can
     // be centered. Self-origin shapes (cone/line/cube) always anchor on the
     // caster — rangeFt is 0 for those, and `aimHex` is just a direction, so
@@ -629,7 +639,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (action.concentration && action.spellName) actorPatch.concentration = action.spellName;
     if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
 
-    const geometricHitIds = tokensInAoe(action.aoe, p.originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
+    const geometricHitIds = tokensInAoe(action.aoe, originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
     const hitIds = geometricHitIds.filter((tid) => {
       const t = tokens.byId(tid);
       return !!t && !rayBlocked(srcPx, hexToPixel({ q: t.q, r: t.r }, map.grid), sightSegs);
@@ -647,7 +657,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         damageType: action.damageType, label: action.label,
         aoeVisual: {
           mapId: src.mapId, shape: action.aoe.shape, sizeFt: action.aoe.sizeFt, widthFt: action.aoe.widthFt,
-          originHex: p.originHex, aimHex: p.aimHex,
+          originHex, aimHex: p.aimHex,
         },
       });
       return;
@@ -695,7 +705,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }, noSaveSettleMs);
     const noSaveFlightMs = action.aoe.shape === 'sphere' || action.aoe.shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
     setTimeout(
-      () => emitAoeBurst(io, d.campaignId, src.mapId, action.aoe!.shape, action.aoe!.sizeFt, action.aoe!.widthFt, p.originHex, p.aimHex, action.damageType),
+      () => emitAoeBurst(io, d.campaignId, src.mapId, action.aoe!.shape, action.aoe!.sizeFt, action.aoe!.widthFt, originHex, p.aimHex, action.damageType),
       Math.max(0, noSaveSettleMs - noSaveFlightMs),
     );
   }));

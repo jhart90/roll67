@@ -267,6 +267,21 @@ async function main() {
   ok(!!beastSave, 'cone caught the monster in its area');
   ok(selfSave === null, "caster is NOT included in their own cone's save (PHB: point of origin excluded)");
 
+  // A stale/wrong client-reported originHex (e.g. a snapshot from before the
+  // caster's token moved) must never let the cone actually originate
+  // anywhere but the caster's real, current token position -- regression
+  // test for a bug where trusting the client's origin left the caster's own
+  // hex sitting dead-center on the line to the target, inside the blast.
+  const staleBeastSaveP = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg?.text?.startsWith('Wall Beast')).catch(() => null);
+  const staleSelfSaveP = expectSilence(playerSock, 'chatMsg', 4000, (p) => p.msg?.text?.startsWith('Smoke PC'));
+  playerSock.emit('castAoe', {
+    characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id,
+    originHex: { q: 5, r: 5 }, aimHex: { q: 12, r: 5 }, adv: null,
+  });
+  const [staleBeastSave, staleSelfSave] = await Promise.all([staleBeastSaveP, staleSelfSaveP]);
+  ok(!!staleBeastSave, 'cone still catches the monster even with a bogus client-reported origin');
+  ok(staleSelfSave === null, 'a wrong client-reported originHex cannot put the caster inside their own cone (server derives origin from the real token position, not the client)');
+
   // ---------- attack roll posts first; damage is a separate, later card ----------
   console.log('attack/damage timing (to-hit card, then a paced damage card):');
   // A bare token with a tracked HP bar, adjacent to the player, well within

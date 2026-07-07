@@ -131,6 +131,10 @@ export function TokenInspector() {
           <input ref={fileRef} type="file" accept="image/*" onChange={onArt} disabled={uploading} />
           <UploadProgressBar progress={progress} />
         </label>
+      </div>
+
+      <h4>Health</h4>
+      <div className="inspector-grid">
         <label>
           HP
           <input

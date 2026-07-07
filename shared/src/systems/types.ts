@@ -156,3 +156,16 @@ export function rows(sheet: SheetData, id: string): SheetData[] {
 export function fmtMod(n: number): string {
   return n >= 0 ? `+${n}` : String(n);
 }
+
+/**
+ * Whether a damage/heal amount string is actually usable as a roll: a dice
+ * expression ("8d6", "1d8+3"), or a FLAT constant amount — Heal's fixed 70,
+ * a potion's fixed 10 — i.e. constant arithmetic with a nonzero digit (the
+ * dice roller evaluates plain constants fine; only the old dice-only gate
+ * kept such spells out of the action list). A bare "0" (a placeholder, e.g.
+ * a pure-condition spell like Hold Person) is NOT usable.
+ */
+export function usableAmount(expr: string): boolean {
+  if (/\d*d\d+/i.test(expr)) return true;
+  return /^[\d\s+*()-]+$/.test(expr) && /[1-9]/.test(expr);
+}

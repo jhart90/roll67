@@ -44,6 +44,14 @@ describe('dice roller', () => {
     expect(a).toEqual(b);
   });
 
+  it('evaluates a flat constant expression (no dice) to itself', () => {
+    // Flat-amount spells (Heal's 70) roll their amount through the same
+    // pipeline; a constant expression must just BE that constant.
+    const r = roll('70');
+    expect(r.total).toBe(70);
+    expect(r.dice).toHaveLength(0);
+  });
+
   it('totals stay in range over many rolls', () => {
     const rng = seededRng(7);
     for (let i = 0; i < 200; i++) {

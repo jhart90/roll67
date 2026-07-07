@@ -345,6 +345,27 @@ async function main() {
   const applied = await waitFor(dmSock, 'tokenUpserted', 3500, (p) => p.token.id === dummy.id && p.token.bar.hp < 20).catch(() => null);
   ok(!!applied, "target HP changes once the damage roll's own dice have settled (+1s pause)");
 
+  // ---------- flat-amount (no-dice) spells ----------
+  console.log('flat-amount spells:');
+  // Heal has a fixed 70 (no dice) -- it must still be a castable, targeted
+  // action whose amount auto-applies to the picked target, not silently
+  // vanish from the action list (the old dice-only filter dropped it).
+  const healReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: {
+    spells: [{ name: 'Test Heal', level: 6, effect: 'heal', damage: '70', range: 60 }],
+    slots6: 1, slotsUsed6: 0,
+  } });
+  await healReady;
+  const healCardP = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg?.text?.includes('Test Heal'));
+  const healErrP = expectSilence(playerSock, 'errorMsg', 2000);
+  const healedP = waitFor(dmSock, 'tokenUpserted', 8000, (p) => p.token.id === dummy.id && p.token.bar.hp === 20);
+  playerSock.emit('combatAction', { characterId: pc.id, actionId: 'spell:0', sourceTokenId: pcToken.id, targetTokenId: dummy.id, adv: null });
+  const [healCard, healErr] = await Promise.all([healCardP, healErrP]);
+  ok(!!healCard, 'a flat-70 heal spell resolves as a targeted action (no dice required)');
+  ok(healErr === null, 'the flat heal casts without error');
+  const healed = await healedP.catch(() => null);
+  ok(!!healed, "the flat heal's HP auto-applies to the damaged target (bar restored to full, capped at max)");
+
   // ---------- token bar <-> character sheet HP write-through ----------
   console.log('token bar / sheet HP sync:');
   // A DM editing a linked token's HP bar (the token inspector) must land on

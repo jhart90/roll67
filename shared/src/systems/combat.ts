@@ -1,9 +1,8 @@
 import type { AoeShape, Character } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
-import { num, rows, str, type CombatAction } from './types.js';
+import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
-const DICE_RE = /\d*d\d+/i;
 const SYSTEMS = { dnd5e, swn };
 
 /**
@@ -59,7 +58,7 @@ export function combatActions(character: Character): CombatAction[] {
   const spellAction = (listId: string, prefix: string, leveled: boolean) => {
     rows(sheet, listId).forEach((sp, i) => {
       const amount = str(sp, 'damage', '').trim();
-      if (!amount || !DICE_RE.test(amount)) return;
+      if (!amount || !usableAmount(amount)) return;
       const name = str(sp, 'name', '').trim() || `${prefix} ${i + 1}`;
       const effect = str(sp, 'effect', 'damage') === 'heal' ? 'heal' : 'damage';
       const save = str(sp, 'save', '');
@@ -99,7 +98,7 @@ export function combatActions(character: Character): CombatAction[] {
   // an explicit Effort column value is set.
   rows(sheet, 'powers').forEach((pw, i) => {
     const amount = str(pw, 'damage', '').trim();
-    if (!amount || !DICE_RE.test(amount)) return;
+    if (!amount || !usableAmount(amount)) return;
     const discipline = str(pw, 'discipline', '');
     if (!discipline || !hasDiscipline(sheet, discipline)) return;
     const name = str(pw, 'name', '').trim() || `Power ${i + 1}`;
@@ -130,7 +129,7 @@ export function combatActions(character: Character): CombatAction[] {
     const effect = str(it, 'effect', '').toLowerCase();
     if (effect !== 'heal' && effect !== 'damage') return;
     const amount = str(it, 'amount', '').trim();
-    if (!amount || !DICE_RE.test(amount)) return;
+    if (!amount || !usableAmount(amount)) return;
     const qty = num(it, 'qty', 1);
     if (qty <= 0) return;
     const name = str(it, 'name', '').trim() || `Item ${i + 1}`;

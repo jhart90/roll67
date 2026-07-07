@@ -1,6 +1,6 @@
 import type { SheetData, VisionStats } from '../types.js';
 import {
-  bool, fmtMod, num, rows, str,
+  bool, fmtMod, num, rows, str, usableAmount,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
 import {
@@ -514,7 +514,7 @@ export const dnd5e: SystemSchema = {
     const spellDamage = (rowsList: SheetData[], prefix: string, leveled: boolean) => {
       rowsList.forEach((sp, i) => {
         const dmg = str(sp, 'damage', '').trim();
-        if (!dmg || !/\d*d\d/i.test(dmg)) return;
+        if (!dmg || !usableAmount(dmg)) return;
         const name = str(sp, 'name', `${prefix} ${i + 1}`);
         const lvl = Math.max(1, num(sp, 'level', 1));
         out.push({

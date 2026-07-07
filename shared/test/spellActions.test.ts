@@ -47,7 +47,7 @@ describe('spells as targeted combat actions', () => {
     const actions = combatActions(char({
       spells: [{ name: 'Hold Person', level: 2, damage: '0', save: 'wis', conc: true, range: 60 }],
     }));
-    // "0" has no dice, so it is not exposed as an action; use a real amount.
+    // "0" is a placeholder (no dice, no real amount), so it is not an action.
     expect(actions.find((a) => a.id === 'spell:0')).toBeUndefined();
 
     const withDmg = combatActions(char({
@@ -56,5 +56,31 @@ describe('spells as targeted combat actions', () => {
     const fb = withDmg.find((a) => a.id === 'spell:0')!;
     expect(fb.concentration).toBe(true);
     expect(fb.spellName).toBe('Flame Blade');
+  });
+
+  it('a flat-amount heal spell (Heal, 70) is a targeted heal action with its range', () => {
+    const actions = combatActions(char({
+      spells: [{ name: 'Heal', level: 6, effect: 'heal', damage: '70', range: 60 }],
+    }));
+    const heal = actions.find((a) => a.id === 'spell:0')!;
+    expect(heal).toBeDefined();
+    expect(heal.effect).toBe('heal');
+    expect(heal.amountExpr).toBe('70');
+    expect(heal.rangeFt).toBe(60);
+    expect(heal.slotLevel).toBe(6);
+    expect(heal.attackExpr).toBe(null);
+    expect(heal.saveId).toBeUndefined(); // auto-applies, no roll gate
+  });
+
+  it('a flat-amount damage spell auto-applies (no attack roll, no save)', () => {
+    const actions = combatActions(char({
+      spells: [{ name: 'Static Zap', level: 1, damage: '12', dtype: 'lightning', range: 30 }],
+    }));
+    const zap = actions.find((a) => a.id === 'spell:0')!;
+    expect(zap).toBeDefined();
+    expect(zap.effect).toBe('damage');
+    expect(zap.amountExpr).toBe('12');
+    expect(zap.attackExpr).toBe(null);
+    expect(zap.saveId).toBeUndefined();
   });
 });

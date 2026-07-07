@@ -13,7 +13,7 @@ import {
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
-import { closeWindow, openWindow } from './windowManager';
+import { closeWindow, openWindow, useWindowManager } from './windowManager';
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn';
 
@@ -338,7 +338,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null,
+      // Transient slices that used to leak into the NEXT campaign: a live
+      // ruler from campaign A rendering over campaign B's map, a stale error
+      // toast, a presented shop, last session's initiative order.
+      measures: {}, pings: [], diceAnim: null, errorToast: null, presentedShopId: null,
+      initiativeState: { entries: [], turnIdx: 0, round: 1, active: false },
+      shopList: [], locationList: [], worldFolderList: [], tableList: [], assetFolders: [], assetList: [],
+      audioTracks: [], audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
+      directory: null,
     });
+    // Any windows still open (character sheets, handouts, shops) belong to
+    // the campaign being left; without this, their empty frames float over
+    // the campaign list and the next campaign joined.
+    useWindowManager.setState({ windows: [] });
   },
 
   setCamera(camera) { set({ camera }); },
@@ -375,6 +387,32 @@ function tokensById(list: TokenView[]): Record<string, TokenView> {
   return out;
 }
 
+/**
+ * tokensById, but unchanged tokens keep their PREVIOUS object identity: every
+ * vision update rebuilds all TokenViews from the wire, and those fresh
+ * references defeated React.memo on every TokenPiece even when only one token
+ * actually moved. Field-compares each incoming token against the previous
+ * record (nested bar/vision/light compared by value) and reuses the old
+ * object when nothing differs.
+ */
+function tokensByIdReusing(prev: Record<string, TokenView>, list: TokenView[]): Record<string, TokenView> {
+  const out: Record<string, TokenView> = {};
+  for (const t of list) {
+    const old = prev[t.id];
+    out[t.id] = old && sameToken(old, t) ? old : t;
+  }
+  return out;
+}
+
+function sameToken(a: TokenView, b: TokenView): boolean {
+  return a.id === b.id && a.mapId === b.mapId && a.characterId === b.characterId
+    && a.name === b.name && a.artUrl === b.artUrl && a.q === b.q && a.r === b.r
+    && a.layer === b.layer && a.size === b.size && a.shape === b.shape && a.color === b.color
+    && JSON.stringify(a.vision) === JSON.stringify(b.vision)
+    && JSON.stringify(a.bar) === JSON.stringify(b.bar)
+    && JSON.stringify(a.light) === JSON.stringify(b.light);
+}
+
 let wired = false;
 
 export function wireSocket(): void {
@@ -408,6 +446,15 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.MAP_STATE, (p: MapStatePayload) => {
+    const s = useGameStore.getState();
+    // A map switch invalidates anything anchored to the OLD map's tokens: an
+    // in-progress target pick (its source token id no longer resolves, which
+    // used to leave every token on the new map dimmed and unclickable until
+    // the player guessed Escape), the aimed AoE template, the open inspector,
+    // and everyone's live measure/preview overlays. The cancel functions also
+    // broadcast the active:false that clears our stale preview for others.
+    if (s.targeting) s.cancelTargeting();
+    if (s.aoeTargeting) s.cancelAoeTargeting();
     useGameStore.setState({
       map: p.map,
       dmGeometry: p.dmGeometry,
@@ -425,6 +472,10 @@ export function wireSocket(): void {
       viewingAs: p.viewingAs,
       dragGhosts: {},
       selectedTokenId: null,
+      inspectorTokenId: null,
+      measures: {},
+      aoePreviews: {},
+      targetPreviews: {},
     });
   });
 
@@ -484,7 +535,7 @@ export function wireSocket(): void {
       fadeLitMask: p.fadeLitMask,
       explored,
       exploredLog,
-      tokens: tokensById(p.tokens),
+      tokens: tokensByIdReusing(s.tokens, p.tokens),
       knownDoors: p.knownDoors,
       dragGhosts: {},
     });

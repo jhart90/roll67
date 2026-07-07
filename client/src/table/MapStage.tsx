@@ -26,7 +26,11 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
   const tool = useGameStore((s) => s.tool);
   const visible = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.visible));
   const fade = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.fade));
-  const explored = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.explored));
+  const exploredLog = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.exploredLog));
+  // The log grows IN PLACE (stable reference), so also subscribe to its length —
+  // that's what tells React a reveal happened and the fog needs a redraw.
+  const exploredCount = useGameStore((s) => (s.isDm() && !s.viewingAs ? 0 : s.exploredLog?.length ?? 0));
+  void exploredCount;
   const visiblePolygons = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.visiblePolygons));
   const fadePolygons = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.fadePolygons));
   const visibleLitMask = useGameStore((s) => (s.isDm() && !s.viewingAs ? null : s.visibleLitMask));
@@ -274,7 +278,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <DrawingLayer />
           <TokenLayer />
           <FogCanvas
-            map={map} visible={visible} fade={fade} explored={explored}
+            map={map} visible={visible} fade={fade} exploredLog={exploredLog}
             visiblePolygons={visiblePolygons} fadePolygons={fadePolygons}
             visibleLitMask={visibleLitMask} fadeLitMask={fadeLitMask}
           />

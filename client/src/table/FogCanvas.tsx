@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { MutableRefObject } from 'react';
 import type { GridConfig, MapView, Point, VisibilityLitMask } from 'shared';
 import { hexCorners, unpackHex } from 'shared';
 import { mapPixelSize } from '../util/stage';
@@ -14,42 +15,41 @@ function fillPolygons(ctx: CanvasRenderingContext2D, polygons: Point[][]): void 
   ctx.fill();
 }
 
-function maskCanvas(width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  return { canvas, ctx: canvas.getContext('2d')! };
+/** Fill hexes (by packed key) as white mask shapes onto a mask canvas. */
+function fillHexes(ctx: CanvasRenderingContext2D, keys: ArrayLike<number>, from: number, grid: GridConfig): void {
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  for (let i = from; i < keys.length; i++) {
+    const poly = hexCorners(unpackHex(keys[i]), grid);
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k].x, poly[k].y);
+    ctx.closePath();
+  }
+  ctx.fill();
 }
 
 /**
- * The final visible-area mask for one band, as an (offscreen, never
- * attached) canvas whose alpha channel IS the mask -- ready to punch onto
- * the fog layer via destination-out. Under 'light' (lit === null) the reach
- * polygons alone are the mask, same as before. Under 'dark'/'dim', only the
- * parts of the reach that are ALSO lit (darkvision/dim-ambient circles, or a
- * light source's own wall-aware illumination shape) count as visible --
- * computed via canvas compositing (fill the lit shapes, then
- * destination-in against the reach) rather than real polygon-clipping math,
- * which the browser already does correctly and fast.
+ * Get a scratch mask canvas ready for drawing: reuses the SAME canvas across
+ * updates (a full-map canvas backing store can run tens of MB -- allocating
+ * two fresh ones per vision update was pure churn), resizing only when the
+ * map's pixel size actually changes and clearing otherwise.
  */
-function buildVisibilityMask(width: number, height: number, reach: Point[][], lit: VisibilityLitMask | null): HTMLCanvasElement {
-  const { canvas: reachCanvas, ctx: reachCtx } = maskCanvas(width, height);
-  reachCtx.fillStyle = '#fff';
-  fillPolygons(reachCtx, reach);
-  if (!lit) return reachCanvas;
-
-  const { canvas: litCanvas, ctx: litCtx } = maskCanvas(width, height);
-  litCtx.fillStyle = '#fff';
-  for (const c of lit.circles) {
-    litCtx.beginPath();
-    litCtx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
-    litCtx.fill();
+function scratchCanvas(ref: MutableRefObject<HTMLCanvasElement | null>, width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  let canvas = ref.current;
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    ref.current = canvas;
   }
-  fillPolygons(litCtx, lit.lightPolygons);
-
-  reachCtx.globalCompositeOperation = 'destination-in';
-  reachCtx.drawImage(litCanvas, 0, 0);
-  return reachCanvas;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  } else {
+    const ctx = canvas.getContext('2d')!;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, width, height);
+  }
+  return { canvas, ctx: canvas.getContext('2d')! };
 }
 
 /**
@@ -65,12 +65,13 @@ function buildVisibilityMask(width: number, height: number, reach: Point[][], li
  * omits them (e.g. no owned viewer tokens on this map).
  */
 export function FogCanvas({
-  map, visible, fade, explored, visiblePolygons, fadePolygons, visibleLitMask, fadeLitMask,
+  map, visible, fade, exploredLog, visiblePolygons, fadePolygons, visibleLitMask, fadeLitMask,
 }: {
   map: MapView;
   visible: Set<number> | null;
   fade: Set<number> | null;
-  explored: Set<number> | null;
+  /** Append-only log of explored hex keys (see the store); null = no fog memory (DM god mode). */
+  exploredLog: number[] | null;
   visiblePolygons: Point[][] | null;
   fadePolygons: Point[][] | null;
   visibleLitMask: VisibilityLitMask | null;
@@ -78,14 +79,23 @@ export function FogCanvas({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const { width, height } = mapPixelSize(map);
-  // The explored set only ever grows and is usually untouched between moves
-  // (the store now keeps its reference stable when nothing new is explored)
-  // -- caching its render lets a token move that doesn't reveal new territory
-  // skip re-filling what can be thousands of previously-explored hexes and
-  // just re-blit the cached mask instead.
+  // The explored log only ever GROWS (fog memory never un-explores), and its
+  // identity only changes on map switch/join. So the mask persists across
+  // updates and each newly-revealed hex is drawn into it exactly once, by
+  // index: cost per reveal is O(hexes revealed just now), not O(every hex
+  // ever explored) -- the latter measured ~600ms per step at ~10k explored
+  // hexes, the dominant frame stall while exploring.
   const exploredMaskRef = useRef<{
-    explored: Set<number>; grid: GridConfig; width: number; height: number; canvas: HTMLCanvasElement;
+    log: number[]; drawnCount: number; grid: GridConfig; width: number; height: number; canvas: HTMLCanvasElement;
   } | null>(null);
+  // The visible/fade masks are rebuilt when their polygon/lit inputs change
+  // (reference identity), but always INTO the same reused scratch canvases --
+  // never a fresh allocation per update.
+  const visibleMaskRef = useRef<{ polygons: Point[][]; lit: VisibilityLitMask | null; width: number; height: number } | null>(null);
+  const fadeMaskRef = useRef<{ polygons: Point[][]; lit: VisibilityLitMask | null; width: number; height: number } | null>(null);
+  const visibleScratchRef = useRef<HTMLCanvasElement | null>(null);
+  const fadeScratchRef = useRef<HTMLCanvasElement | null>(null);
+  const litScratchRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -119,27 +129,73 @@ export function FogCanvas({
     const hexPolys = (keys: Set<number>): Point[][] => [...keys].map((key) => hexCorners(unpackHex(key), map.grid));
 
     // Explored memory is dimmest, the fade rim brighter, current vision clear.
-    if (explored) {
+    if (exploredLog) {
       const cached = exploredMaskRef.current;
       let mask: HTMLCanvasElement;
-      if (cached && cached.explored === explored && cached.grid === map.grid && cached.width === width && cached.height === height) {
+      if (cached && cached.log === exploredLog && cached.grid === map.grid && cached.width === width && cached.height === height) {
+        // Same map/grid/size: draw only the hexes appended since last time.
+        if (cached.drawnCount < exploredLog.length) {
+          fillHexes(cached.canvas.getContext('2d')!, exploredLog, cached.drawnCount, map.grid);
+          cached.drawnCount = exploredLog.length;
+        }
         mask = cached.canvas;
       } else {
-        const { canvas: exploredCanvas, ctx: exCtx } = maskCanvas(width, height);
-        exCtx.fillStyle = '#fff';
-        fillPolygons(exCtx, hexPolys(explored));
-        mask = exploredCanvas;
-        exploredMaskRef.current = { explored, grid: map.grid, width, height, canvas: mask };
+        // Map switch, grid edit, or first mount: rebuild the mask from scratch.
+        const fresh = document.createElement('canvas');
+        fresh.width = width;
+        fresh.height = height;
+        fillHexes(fresh.getContext('2d')!, exploredLog, 0, map.grid);
+        exploredMaskRef.current = { log: exploredLog, drawnCount: exploredLog.length, grid: map.grid, width, height, canvas: fresh };
+        mask = fresh;
       }
       punchMask(mask, 0.55);
     } else {
       exploredMaskRef.current = null;
     }
-    if (fadePolygons) punchMask(buildVisibilityMask(width, height, fadePolygons, fadeLitMask), 0.75);
-    else if (fade) punch(hexPolys(fade), 0.75);
-    if (visiblePolygons) punchMask(buildVisibilityMask(width, height, visiblePolygons, visibleLitMask), 1);
-    else punch(hexPolys(visible), 1);
-  }, [map.grid, visible, fade, explored, visiblePolygons, fadePolygons, visibleLitMask, fadeLitMask, width, height]);
+
+    /**
+     * One band's final visible-area mask, drawn into that band's persistent
+     * scratch canvas: the reach polygons alone under 'light' (lit === null);
+     * under 'dark'/'dim' only the parts of the reach that are ALSO lit
+     * (darkvision/dim-ambient circles, or a light source's own wall-aware
+     * illumination shape), via destination-in compositing. Skipped entirely
+     * when the polygon/lit references are unchanged since the last draw.
+     */
+    const bandMask = (
+      cacheRef: MutableRefObject<{ polygons: Point[][]; lit: VisibilityLitMask | null; width: number; height: number } | null>,
+      scratchRef: MutableRefObject<HTMLCanvasElement | null>,
+      polygons: Point[][],
+      lit: VisibilityLitMask | null,
+    ): HTMLCanvasElement => {
+      const cached = cacheRef.current;
+      if (cached && cached.polygons === polygons && cached.lit === lit && cached.width === width && cached.height === height && scratchRef.current) {
+        return scratchRef.current;
+      }
+      const { canvas: reachCanvas, ctx: reachCtx } = scratchCanvas(scratchRef, width, height);
+      reachCtx.fillStyle = '#fff';
+      fillPolygons(reachCtx, polygons);
+      if (lit) {
+        const { canvas: litCanvas, ctx: litCtx } = scratchCanvas(litScratchRef, width, height);
+        litCtx.fillStyle = '#fff';
+        for (const c of lit.circles) {
+          litCtx.beginPath();
+          litCtx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+          litCtx.fill();
+        }
+        fillPolygons(litCtx, lit.lightPolygons);
+        reachCtx.globalCompositeOperation = 'destination-in';
+        reachCtx.drawImage(litCanvas, 0, 0);
+        reachCtx.globalCompositeOperation = 'source-over';
+      }
+      cacheRef.current = { polygons, lit, width, height };
+      return reachCanvas;
+    };
+
+    if (fadePolygons) punchMask(bandMask(fadeMaskRef, fadeScratchRef, fadePolygons, fadeLitMask), 0.75);
+    else { fadeMaskRef.current = null; if (fade) punch(hexPolys(fade), 0.75); }
+    if (visiblePolygons) punchMask(bandMask(visibleMaskRef, visibleScratchRef, visiblePolygons, visibleLitMask), 1);
+    else { visibleMaskRef.current = null; punch(hexPolys(visible), 1); }
+  }, [map.grid, visible, fade, exploredLog, exploredLog?.length, visiblePolygons, fadePolygons, visibleLitMask, fadeLitMask, width, height]);
 
   return (
     <canvas

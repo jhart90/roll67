@@ -1,5 +1,5 @@
 import type { Character, SheetData } from 'shared';
-import { combatResources, conditionsFor, conditionsOf, resetsCleared, systemFor } from 'shared';
+import { bool, combatResources, conditionsFor, conditionsOf, resetsCleared } from 'shared';
 import { intents } from '../store/game';
 
 /** Shared "effect engine" panel on the Core tab: status conditions, the
@@ -9,9 +9,10 @@ export function CombatStatus({ character, editable }: { character: Character; ed
   const active = conditionsOf(sheet);
   const list = conditionsFor(character.system);
   const resources = combatResources(character.system, sheet);
-  const { hp } = systemFor(character.system).hp(sheet);
-  const downed = hp <= 0 && !active.includes('dead');
   const dead = active.includes('dead');
+  // Downed = actually tagged unconscious (not just "hp <= 0", which stays true
+  // forever once stabilized) and not already stable from 3 death-save successes.
+  const downed = active.includes('unconscious') && !dead && !bool(sheet, 'stable');
 
   function toggle(id: string) {
     const next = active.includes(id) ? active.filter((c) => c !== id) : [...active, id];

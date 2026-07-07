@@ -57,12 +57,13 @@ function withCondition(sheet: SheetData, add: string): string[] {
  */
 export function computeHpDelta(
   character: Character, delta: number,
-): { patch: SheetData; note: string; concCheck: { spell: string; damage: number } | null } {
+): { patch: SheetData; note: string; status: 'downed' | 'revived' | null; concCheck: { spell: string; damage: number } | null } {
   const schema = systemFor(character.system);
   const { hp, maxHp } = schema.hp(character.sheet);
   const cap = maxHp > 0 ? maxHp : Math.max(hp, hp + delta);
   const patch: SheetData = {};
   let note = '';
+  let status: 'downed' | 'revived' | null = null;
   let concCheck: { spell: string; damage: number } | null = null;
 
   if (delta < 0) {
@@ -82,8 +83,9 @@ export function computeHpDelta(
       patch.conditions = withCondition(character.sheet, 'unconscious');
       patch.deathSuccesses = 0;
       patch.deathFailures = 0;
+      patch.stable = false;
       if (str(character.sheet, 'concentration', '')) patch.concentration = '';
-      note += ' — downed!';
+      status = 'downed';
     } else if (-delta > 0 && str(character.sheet, 'concentration', '') && character.system === 'dnd5e') {
       // Concentration: DC = max(10, half the damage taken). Auto-roll a CON save;
       // on a failure the spell ends. (Posted after persist so chat is ordered.)
@@ -97,10 +99,11 @@ export function computeHpDelta(
       patch.conditions = withoutConditions(character.sheet, ['unconscious', 'dead']);
       patch.deathSuccesses = 0;
       patch.deathFailures = 0;
-      note += ' — revived';
+      patch.stable = false;
+      status = 'revived';
     }
   }
-  return { patch, note, concCheck };
+  return { patch, note, status, concCheck };
 }
 
 /**
@@ -108,14 +111,25 @@ export function computeHpDelta(
  * Damage first drains Temp HP, then real HP; reaching 0 HP knocks a character
  * unconscious (5e) and resets death saves. Healing above 0 clears the
  * unconscious/dead conditions and death saves. Returns the updated character
- * plus a short human note ("(12 temp absorbed)", "— downed!", "— revived").
+ * plus a short human note (currently only "(12 temp absorbed)" — condition
+ * changes like downed/revived are posted as their own chat message below,
+ * rather than folded into whatever roll's text the caller is building.
  */
 export function applyHpDelta(
   io: Server, campaignId: string, character: Character, delta: number,
 ): { character: Character; note: string } {
-  const { patch, note: baseNote, concCheck } = computeHpDelta(character, delta);
-  let note = baseNote;
+  const { patch, note, status, concCheck } = computeHpDelta(character, delta);
   let updated = persistSheet(io, campaignId, character, patch);
+
+  // A downed/revived status is its own game event -- post it as a separate
+  // chat line (after the roll that caused it, since callers only ever apply
+  // this once that roll's own dice have settled) instead of folding it into
+  // the causal roll's text.
+  if (status) {
+    const text = status === 'downed' ? `${updated.name} is downed!` : `${updated.name} is back up!`;
+    const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'system', text, roll: null, recipients: null });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  }
 
   // Concentration save, after the HP change is persisted so events stay ordered.
   if (concCheck) {
@@ -129,7 +143,6 @@ export function applyHpDelta(
     const text = `${updated.name} concentration (${concCheck.spell}) — CON save ${br.total} vs DC ${dc}: ${passed ? 'holds' : 'BROKEN'}`;
     const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'roll', text, roll: br, recipients: null });
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
-    if (!passed) note += ` — ${concCheck.spell} lost`;
   }
   return { character: updated, note };
 }

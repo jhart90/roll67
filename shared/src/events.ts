@@ -437,6 +437,7 @@ export const S2C = {
   CHARACTER_REMOVED: 'characterRemoved',
   HP_FLOAT: 'hpFloat',
   PROJECTILE: 'projectile',
+  AOE_BURST: 'aoeBurst',
   CHAT: 'chatMsg',
   MACROS: 'macros',
   INITIATIVE: 'initiativeState',
@@ -564,6 +565,16 @@ export interface HpFloatPayload { mapId: string; tokenId: string; delta: number;
  *  ahead of the matching HpFloatPayload that, timed with flightMs, it lands
  *  on-screen right as the damage/heal float appears. */
 export interface ProjectilePayload { mapId: string; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }
+/** An AoE spell's detonation, timed to play once its damage roll has settled.
+ *  For a point-target shape (sphere/cylinder) the client flies a projectile
+ *  from the caster to the aim point over flightMs, then radiates a circular
+ *  burst out to sizeFt; for a self-origin shape (cone) there's no projectile
+ *  (flightMs: 0) and the wave instead ripples from the caster outward along
+ *  the cone to its full length. */
+export interface AoeBurstPayload {
+  mapId: string; shape: AoeShape; sizeFt: number; widthFt?: number;
+  originHex: Hex; aimHex: Hex; damageType?: string; flightMs: number;
+}
 /** A rollable-table result to flash on-screen (same text as the chat card). */
 export interface TableResultPayload { text: string; color: string }
 

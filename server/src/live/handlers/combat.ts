@@ -3,9 +3,9 @@ import {
   C2S, S2C, roll, systemFor, castableLevels, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe,
-  type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type ImpactKind, type InitAddPayload,
-  type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState, type RequestSavePayload,
-  type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type InitAddPayload, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
+  type RequestSavePayload, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -51,6 +51,18 @@ function emitProjectile(
   io.to(campaignRoom(campaignId)).emit(S2C.PROJECTILE, { mapId, fromTokenId, toTokenId, damageType, flightMs: PROJECTILE_FLIGHT_MS });
 }
 
+/** An AoE spell's detonation, timed to play once its damage roll has settled
+ *  (see call sites' setTimeout math). Point-target shapes (sphere/cylinder)
+ *  get a projectile flight before the burst; self-origin shapes (cone) burst
+ *  immediately with no travel time. */
+function emitAoeBurst(
+  io: Server, campaignId: string, mapId: string, shape: AoeShape, sizeFt: number, widthFt: number | undefined,
+  originHex: Hex, aimHex: Hex, damageType?: string,
+): void {
+  const flightMs = shape === 'sphere' || shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
+  io.to(campaignRoom(campaignId)).emit(S2C.AOE_BURST, { mapId, shape, sizeFt, widthFt, originHex, aimHex, damageType, flightMs });
+}
+
 /** Players never receive hidden entries; the DM sees everything. */
 export function initiativeViewFor(state: InitiativeState, isDm: boolean): InitiativeState {
   if (isDm) return state;
@@ -76,6 +88,10 @@ interface GroupSaveSpec {
   onSave: 'half' | 'negate';
   damageType?: string;
   label?: string;
+  // Set only when this save was triggered by an AoE spell template (not the
+  // DM's manual "call for save" tool) -- lets postDamage broadcast the
+  // burst/ripple animation once the damage roll settles.
+  aoeVisual?: { mapId: string; shape: AoeShape; sizeFt: number; widthFt?: number; originHex: Hex; aimHex: Hex };
 }
 
 /**
@@ -141,10 +157,17 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       text: `${spec.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
+    const settleMs = diceSettleDelayMs(dmg.dice.length);
     setTimeout(() => {
       for (const apply of applications) apply();
       finish();
-    }, diceSettleDelayMs(dmg.dice.length));
+    }, settleMs);
+    if (spec.aoeVisual) {
+      const v = spec.aoeVisual;
+      const flightMs = v.shape === 'sphere' || v.shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
+      setTimeout(() => emitAoeBurst(io, spec.campaignId, v.mapId, v.shape, v.sizeFt, v.widthFt, v.originHex, v.aimHex, spec.damageType),
+        Math.max(0, settleMs - flightMs));
+    }
   };
 
   const postSave = (i: number): void => {
@@ -622,6 +645,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         tokenIds: hitIds, saveId: action.saveId, dc: casterDc,
         damageExpr: action.amountExpr, onSave: action.onSave ?? 'half',
         damageType: action.damageType, label: action.label,
+        aoeVisual: {
+          mapId: src.mapId, shape: action.aoe.shape, sizeFt: action.aoe.sizeFt, widthFt: action.aoe.widthFt,
+          originHex: p.originHex, aimHex: p.aimHex,
+        },
       });
       return;
     }
@@ -661,10 +688,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       userId: d.userId, fromName: d.username, kind: 'roll', text: `${actor.name} casts ${action.label}`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    const noSaveSettleMs = diceSettleDelayMs(dmg.dice.length);
     setTimeout(() => {
       for (const apply of applications) apply();
       syncMapVision(io, d.campaignId, src.mapId);
-    }, diceSettleDelayMs(dmg.dice.length));
+    }, noSaveSettleMs);
+    const noSaveFlightMs = action.aoe.shape === 'sphere' || action.aoe.shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
+    setTimeout(
+      () => emitAoeBurst(io, d.campaignId, src.mapId, action.aoe!.shape, action.aoe!.sizeFt, action.aoe!.widthFt, p.originHex, p.aimHex, action.damageType),
+      Math.max(0, noSaveSettleMs - noSaveFlightMs),
+    );
   }));
 
   // Activate a psychic power that has no target (utility/self powers, e.g.
@@ -716,20 +749,20 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const v = br.total;
     let succ = num(character.sheet, 'deathSuccesses', 0);
     let fail = num(character.sheet, 'deathFailures', 0);
-    let outcome: string;
     if (v === 20) {
       // Nat 20: regain 1 HP and wake up — deferred until the d20 has settled
       // on screen, same as any other roll that inflicts damage or healing.
-      outcome = 'NAT 20 — back up with 1 HP!';
+      // applyHpDelta posts its own "is back up!" status line once applied,
+      // so this roll's own message just reports the roll itself.
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'roll',
-        text: `${character.name} death save: ${outcome}`, roll: br, recipients: null,
+        text: `${character.name} death save: natural 20!`, roll: br, recipients: null,
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
       setTimeout(() => {
         const fresh = characters.byId(characterId);
         if (!fresh) return;
-        applyHpDelta(io, d.campaignId, fresh, 1); // clears unconscious
+        applyHpDelta(io, d.campaignId, fresh, 1); // clears unconscious, posts "is back up!"
         persistSheet(io, d.campaignId, characters.byId(characterId)!, { deathSuccesses: 0, deathFailures: 0 });
         for (const t of tokens.forCharacter(characterId)) floatHp(io, d.campaignId, t.mapId, t.id, 1, 'heal');
       }, diceSettleDelayMs(br.dice.length));
@@ -738,17 +771,36 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (v === 1) fail += 2;
     else if (v >= 10) succ += 1;
     else fail += 1;
+    succ = Math.min(3, succ);
+    fail = Math.min(3, fail);
 
-    const patch: SheetData = { deathSuccesses: Math.min(3, succ), deathFailures: Math.min(3, fail) };
-    if (fail >= 3) { patch.conditions = [...conditionsOf(character.sheet).filter((c) => c !== 'unconscious'), 'dead']; outcome = 'THIRD FAILURE — dead'; }
-    else if (succ >= 3) { patch.deathSuccesses = 0; patch.deathFailures = 0; outcome = 'stabilized'; }
-    else outcome = v >= 10 ? `success (${Math.min(3, succ)}/3)` : `failure (${Math.min(3, fail)}/3)`;
+    const patch: SheetData = { deathSuccesses: succ, deathFailures: fail };
+    // Terminal outcomes (die/stabilize) are game events in their own right —
+    // posted as a separate message below, after the roll's own message,
+    // rather than folded into the roll's text.
+    let statusText: string | null = null;
+    if (fail >= 3) {
+      patch.conditions = [...conditionsOf(character.sheet).filter((c) => c !== 'unconscious'), 'dead'];
+      statusText = `${character.name} has died.`;
+    } else if (succ >= 3) {
+      patch.deathSuccesses = 0;
+      patch.deathFailures = 0;
+      patch.stable = true;
+      statusText = `${character.name} is stable.`;
+    }
+    const outcome = v >= 10 ? `success (${succ}/3)` : `failure (${fail}/3)`;
     persistSheet(io, d.campaignId, characters.byId(characterId)!, patch);
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll',
       text: `${character.name} death save: ${v} — ${outcome}`, roll: br, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    if (statusText) {
+      const smsg = chat.add(d.campaignId, {
+        userId: null, fromName: 'System', kind: 'system', text: statusText, roll: null, recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: smsg });
+    }
   }));
 
   // DM "call for save": each listed token rolls its own save vs the DC, one

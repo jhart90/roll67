@@ -1,6 +1,7 @@
 import { hexToPixel } from 'shared';
 import { useGameStore } from '../store/game';
 import { mapPixelSize } from '../util/stage';
+import { AoeBurst } from './aoeBurstFx';
 import { ImpactAnimation, impactColor, Projectile, projectileShape } from './impactFx';
 
 /**
@@ -8,14 +9,16 @@ import { ImpactAnimation, impactColor, Projectile, projectileShape } from './imp
  * tokens — both keyed off the same `kind`/`damageType` hint the server sends
  * once a roll's dice have settled, so a fireball, an arrow, and a sword swing
  * each land with their own look, colored by damage type. Also renders
- * in-flight ranged shots, which the server times to land right as their
- * matching float/impact appears.
+ * in-flight ranged shots (timed to land right as their matching float/impact
+ * appears) and AoE detonations (a projectile-then-burst for sphere/cylinder
+ * spells, a ripple for cones), both server-timed the same way.
  */
 export function CombatTextLayer() {
   const map = useGameStore((s) => s.map)!;
   const tokens = useGameStore((s) => s.tokens);
   const floats = useGameStore((s) => s.floats);
   const projectiles = useGameStore((s) => s.projectiles);
+  const aoeBursts = useGameStore((s) => s.aoeBursts);
   const { width, height } = mapPixelSize(map);
 
   return (
@@ -39,6 +42,7 @@ export function CombatTextLayer() {
           </g>
         );
       })}
+      {aoeBursts.map((b) => <AoeBurst key={b.id} burst={b} grid={map.grid} />)}
       {floats.map((f) => {
         const t = tokens[f.tokenId];
         if (!t) return null;

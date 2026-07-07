@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import {
   C2S, S2C, castableLevels, combatActions, systemFor,
-  type AoePreviewShownPayload, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
+  type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
   type Door, type DoorType, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
@@ -88,6 +88,12 @@ interface GameState {
   floats: Array<{ id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }>;
   /** In-flight ranged shots (arrow/bolt/etc.), timed to land as their matching float appears. */
   projectiles: Array<{ id: number; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }>;
+  /** An AoE spell's detonation (projectile + burst for sphere/cylinder, a
+   *  ripple for cone), timed to play once its damage roll settles. */
+  aoeBursts: Array<{
+    id: number; shape: AoeShape; sizeFt: number; widthFt?: number; originHex: Hex; aimHex: Hex;
+    damageType?: string; flightMs: number;
+  }>;
   /** On-screen rollable-table result pills (fade out after ~3s). */
   tableToasts: Array<{ id: number; text: string; color: string }>;
   beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
@@ -140,6 +146,11 @@ interface GameState {
 
 let pingCounter = 0;
 
+// How long an AoE burst/ripple's own expansion-and-fade plays once it starts
+// (after any projectile flight for sphere/cylinder shapes) -- see
+// client/src/table/CombatTextLayer.tsx's aoe-burst CSS animation.
+const AOE_BURST_MS = 750;
+
 export const useGameStore = create<GameState>((set, get) => ({
   connected: false,
   you: null,
@@ -187,6 +198,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aoeTargeting: null,
   floats: [],
   projectiles: [],
+  aoeBursts: [],
   tableToasts: [],
   beginTargeting(characterId, sourceTokenId, action, adv) {
     // Character sheets are movable windows now (not a full-screen modal), so
@@ -314,7 +326,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
       visibleLitMask: null, fadeLitMask: null, explored: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
-      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], castPrompt: null,
+      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null,
     });
   },
 
@@ -542,6 +554,22 @@ export function wireSocket(): void {
       const cur = useGameStore.getState();
       useGameStore.setState({ projectiles: cur.projectiles.filter((x) => x.id !== id) });
     }, p.flightMs);
+  });
+
+  socket.on(S2C.AOE_BURST, (p: AoeBurstPayload) => {
+    const s = useGameStore.getState();
+    if (s.map?.id !== p.mapId) return;
+    const id = ++pingCounter;
+    useGameStore.setState({
+      aoeBursts: [...s.aoeBursts, {
+        id, shape: p.shape, sizeFt: p.sizeFt, widthFt: p.widthFt, originHex: p.originHex, aimHex: p.aimHex,
+        damageType: p.damageType, flightMs: p.flightMs,
+      }],
+    });
+    setTimeout(() => {
+      const cur = useGameStore.getState();
+      useGameStore.setState({ aoeBursts: cur.aoeBursts.filter((x) => x.id !== id) });
+    }, p.flightMs + AOE_BURST_MS);
   });
 
   socket.on(S2C.CHARACTER_REMOVED, ({ characterId }: { characterId: string }) => {
@@ -789,7 +817,8 @@ export const intents = {
       if (!action) { s.clearError(); useGameStore.setState({ errorToast: `${m.name} is not available right now.` }); return; }
       const src = Object.values(s.tokens).find((t) => t.characterId === char.id && t.mapId === s.map?.id);
       if (!src) { useGameStore.setState({ errorToast: `Place ${char.name}'s token on this map first.` }); return; }
-      s.beginTargeting(char.id, src.id, action, null);
+      if (action.aoe) s.beginAoeTargeting(char.id, src.id, action, null);
+      else s.beginTargeting(char.id, src.id, action, null);
       return;
     }
     // Spell-roll pill that costs a slot: run the cast flow.

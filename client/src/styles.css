@@ -1346,6 +1346,25 @@ button.link:hover { text-decoration: underline; }
   filter: drop-shadow(0 0 3px var(--impact-color));
 }
 
+/* AoE burst: a colored shockwave sized to the spell's true template extent
+   (not a per-token ring -- see impact-aoe for that), played once its damage
+   roll settles. Sphere/cylinder: a circle expanding from the aim point, held
+   invisible during --burst-delay (the preceding projectile's flight) via
+   fill-mode "both". Cone: a wedge growing from the caster (its transform-
+   origin sits at the apex) out along the cone's true angle, no delay needed. */
+.aoe-burst { pointer-events: none; fill: var(--burst-color); fill-opacity: 0.3; stroke: var(--burst-color); stroke-width: 3; }
+.aoe-burst-sphere {
+  animation: aoeBurst 0.75s ease-out var(--burst-delay, 0ms) forwards;
+  animation-fill-mode: both;
+  transform-origin: 0 0;
+}
+.aoe-burst-cone { animation: aoeBurst 0.75s ease-out forwards; transform-origin: 0 0; }
+@keyframes aoeBurst {
+  0% { opacity: 0; transform: scale(0); }
+  15% { opacity: 0.8; }
+  100% { opacity: 0; transform: scale(1); }
+}
+
 /* ---------- asset library ---------- */
 
 .asset-body { display: flex; flex: 1; min-height: 0; }

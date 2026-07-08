@@ -61,26 +61,54 @@ const LightPiece = memo(function LightPiece({ light, selected, interactive, hexP
 
 /** One wall polyline, colored + dashed by type. Memoized so an unrelated
  *  geometry change (a different wall, a door toggle, a light drag) doesn't
- *  force every other wall to re-render. */
-const WallPiece = memo(function WallPiece({ wall }: { wall: Wall }) {
+ *  force every other wall to re-render. A wide invisible polyline sits on top
+ *  to give the DM's select cursor a comfortable hit target (the visible
+ *  stroke alone would be razor-thin to click); left-click selects it, opening
+ *  WallInspector so its type/flip can be edited without redrawing it. */
+const WallPiece = memo(function WallPiece({ wall, selected, interactive }: { wall: Wall; selected: boolean; interactive: boolean }) {
   const type = wall.type ?? 'solid';
+  const pts = wall.points.map((p) => `${p.x},${p.y}`).join(' ');
   return (
-    <polyline
-      points={wall.points.map((p) => `${p.x},${p.y}`).join(' ')}
-      fill="none"
-      stroke={WALL_STROKE[type]}
-      strokeWidth={4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeDasharray={type === 'window' ? '2 8' : type === 'oneway' ? '12 6' : undefined}
-      opacity={0.9}
-    />
+    <g>
+      {selected && (
+        <polyline points={pts} fill="none" stroke="#fff" strokeWidth={9} strokeLinecap="round" strokeLinejoin="round" opacity={0.35} pointerEvents="none" />
+      )}
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={WALL_STROKE[type]}
+        strokeWidth={4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={type === 'window' ? '2 8' : type === 'oneway' ? '12 6' : undefined}
+        opacity={0.9}
+        pointerEvents="none"
+      />
+      <polyline
+        points={pts}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={16}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ pointerEvents: interactive ? 'auto' : 'none', cursor: interactive ? 'pointer' : 'default' }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          useGameStore.getState().selectWall(wall.id);
+        }}
+      />
+    </g>
   );
 });
 
 /** One door marker + toggle hotspot. Memoized per finding above; only
- *  re-renders when this specific door, the map, or the active tool changes. */
-const DoorPiece = memo(function DoorPiece({ door, mapId, tool }: { door: Door; mapId: string; tool: string }) {
+ *  re-renders when this specific door, the map, or the active tool changes.
+ *  Left-click keeps its existing open/close behavior (players rely on this
+ *  during play); right-click (DM only) selects it for DoorInspector instead,
+ *  so toggling and editing don't compete for the same click. */
+const DoorPiece = memo(function DoorPiece({ door, mapId, tool, selected, isDm }: {
+  door: Door; mapId: string; tool: string; selected: boolean; isDm: boolean;
+}) {
   const mid = { x: (door.a.x + door.b.x) / 2, y: (door.a.y + door.b.y) / 2 };
   const isGate = door.type === 'gate';
   // Gates get a blue palette (always see-through) instead of the normal
@@ -88,6 +116,7 @@ const DoorPiece = memo(function DoorPiece({ door, mapId, tool }: { door: Door; m
   const color = isGate ? (door.open ? '#8ad2e8' : '#4b8fc9') : (door.open ? '#7ed28a' : '#c98d4b');
   return (
     <g>
+      {selected && <circle cx={mid.x} cy={mid.y} r={15} fill="none" stroke="#fff" strokeWidth={2.5} opacity={0.7} pointerEvents="none" />}
       <line
         x1={door.a.x} y1={door.a.y} x2={door.b.x} y2={door.b.y}
         stroke={color}
@@ -95,6 +124,9 @@ const DoorPiece = memo(function DoorPiece({ door, mapId, tool }: { door: Door; m
         strokeLinecap="round"
         strokeDasharray={door.open ? '4 8' : undefined}
       />
+      {door.locked && (
+        <text x={mid.x} y={mid.y - 12} textAnchor="middle" fontSize={12} pointerEvents="none">🔒</text>
+      )}
       <circle
         cx={mid.x} cy={mid.y} r={9}
         fill={color}
@@ -105,8 +137,14 @@ const DoorPiece = memo(function DoorPiece({ door, mapId, tool }: { door: Door; m
           e.stopPropagation();
           intents.toggleDoor(mapId, door.id);
         }}
+        onContextMenu={(e) => {
+          if (!isDm) return;
+          e.preventDefault();
+          e.stopPropagation();
+          useGameStore.getState().selectDoor(door.id);
+        }}
       >
-        <title>{`${door.open ? 'Close' : 'Open'}${isGate ? ' gate (always see-through)' : ' door'}`}</title>
+        <title>{`${door.open ? 'Close' : 'Open'}${isGate ? ' gate (always see-through)' : ' door'}${isDm ? ' · right-click to edit' : ''}`}</title>
       </circle>
     </g>
   );
@@ -135,6 +173,8 @@ export function GeometryLayer() {
   const knownDoors = useGameStore((s) => s.knownDoors);
   const tool = useGameStore((s) => s.tool);
   const selectedLightId = useGameStore((s) => s.selectedLightId);
+  const selectedWallId = useGameStore((s) => s.selectedWallId);
+  const selectedDoorId = useGameStore((s) => s.selectedDoorId);
   const drawingList = useGameStore((s) => s.drawingList);
   const cameraScale = useGameStore((s) => s.camera.scale);
 
@@ -386,10 +426,14 @@ export function GeometryLayer() {
       })()}
 
       {/* walls (DM only) — colored + dashed by type */}
-      {walls.map((w) => <WallPiece key={w.id} wall={w} />)}
+      {walls.map((w) => (
+        <WallPiece key={w.id} wall={w} selected={w.id === selectedWallId} interactive={isDm && tool === 'select'} />
+      ))}
 
       {/* doors (DM: all; players: known) */}
-      {doors.map((d) => <DoorPiece key={d.id} door={d} mapId={map.id} tool={tool} />)}
+      {doors.map((d) => (
+        <DoorPiece key={d.id} door={d} mapId={map.id} tool={tool} selected={d.id === selectedDoorId} isDm={isDm} />
+      ))}
 
       {/* draft wall / door preview -- colored by the variant about to be
           placed (matches the final render's colors) so it's clear which

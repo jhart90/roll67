@@ -148,7 +148,10 @@ export interface UpsertWallPayload {
   wall: { id?: string; points: Point[]; type?: 'solid' | 'window' | 'oneway'; flip?: boolean };
 }
 export interface DeleteWallPayload { mapId: string; wallId: string }
-export interface UpsertDoorPayload { mapId: string; door: { id?: string; a: Point; b: Point; open?: boolean; type?: DoorType } }
+export interface UpsertDoorPayload {
+  mapId: string;
+  door: { id?: string; a: Point; b: Point; open?: boolean; type?: DoorType; locked?: boolean; keyName?: string | null };
+}
 export interface DeleteDoorPayload { mapId: string; doorId: string }
 export interface ToggleDoorPayload { mapId: string; doorId: string }
 export interface UpsertLightPayload {

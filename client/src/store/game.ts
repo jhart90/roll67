@@ -126,6 +126,8 @@ interface GameState {
   inspectorTokenId: string | null;
   openInspector(id: string | null): void;
   selectedLightId: string | null;
+  selectedWallId: string | null;
+  selectedDoorId: string | null;
   /** Local-only: mute audio on this device without affecting others. */
   clientMuted: boolean;
   setClientMuted(m: boolean): void;
@@ -147,6 +149,8 @@ interface GameState {
   setTool(t: Tool): void;
   selectToken(id: string | null): void;
   selectLight(id: string | null): void;
+  selectWall(id: string | null): void;
+  selectDoor(id: string | null): void;
   openSheet(characterId: string | null): void;
   clearError(): void;
 
@@ -311,6 +315,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   inspectorTokenId: null,
   openInspector(inspectorTokenId) { set({ inspectorTokenId }); },
   selectedLightId: null,
+  selectedWallId: null,
+  selectedDoorId: null,
   clientMuted: false,
   setClientMuted(clientMuted) { set({ clientMuted }); },
   drawColor: '#e8d27b',
@@ -360,10 +366,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       inspectorTokenId: null,
       selectedTokenId: tool === 'select' ? get().selectedTokenId : null,
       selectedLightId: tool === 'light' ? get().selectedLightId : null,
+      selectedWallId: tool === 'select' ? get().selectedWallId : null,
+      selectedDoorId: tool === 'select' ? get().selectedDoorId : null,
     });
   },
   selectToken(selectedTokenId) { set({ selectedTokenId }); },
   selectLight(selectedLightId) { set({ selectedLightId }); },
+  selectWall(selectedWallId) { set({ selectedWallId, selectedDoorId: null, selectedLightId: null }); },
+  selectDoor(selectedDoorId) { set({ selectedDoorId, selectedWallId: null, selectedLightId: null }); },
   openSheet(characterId) {
     if (!characterId) return; // legacy "close" signal — each sheet window now closes itself
     const char = get().characters.find((c) => c.id === characterId);
@@ -825,7 +835,7 @@ export const intents = {
   upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway'; flip?: boolean }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),
   deleteWall: (mapId: string, wallId: string) => socket.emit(C2S.DELETE_WALL, { mapId, wallId }),
-  upsertDoor: (mapId: string, door: { id?: string; a: { x: number; y: number }; b: { x: number; y: number }; open?: boolean; type?: DoorType }) =>
+  upsertDoor: (mapId: string, door: { id?: string; a: { x: number; y: number }; b: { x: number; y: number }; open?: boolean; type?: DoorType; locked?: boolean; keyName?: string | null }) =>
     socket.emit(C2S.UPSERT_DOOR, { mapId, door }),
   deleteDoor: (mapId: string, doorId: string) => socket.emit(C2S.DELETE_DOOR, { mapId, doorId }),
   toggleDoor: (mapId: string, doorId: string) => socket.emit(C2S.TOGGLE_DOOR, { mapId, doorId }),

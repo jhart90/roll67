@@ -5,6 +5,8 @@ import { MapStage } from '../table/MapStage';
 import { MapManager } from '../table/dm/MapManager';
 import { TokenInspector } from '../table/TokenInspector';
 import { LightInspector } from '../table/LightInspector';
+import { WallInspector } from '../table/WallInspector';
+import { DoorInspector } from '../table/DoorInspector';
 import { ChatPanel } from '../panels/ChatPanel';
 import { InitiativePanel } from '../panels/InitiativePanel';
 import { WorldTreePanel } from '../panels/WorldTreePanel';
@@ -225,6 +227,8 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         <TokenInspector />
         <LightInspector />
+        <WallInspector />
+        <DoorInspector />
         <WindowHost />
         <DiceOverlay />
         <Toolbar />

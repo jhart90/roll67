@@ -1,17 +1,28 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C,
+  C2S, S2C, rows, str,
   type CreateMapPayload, type DeleteMapPayload, type DeleteDoorPayload,
-  type DeleteLightPayload, type DeleteWallPayload, type MapEditedPayload,
+  type DeleteLightPayload, type DeleteWallPayload, type Door, type MapEditedPayload,
   type SetGridConfigPayload, type SetSpawnPayload, type ToggleDoorPayload, type UpdateMapPayload,
   type UpsertDoorPayload, type UpsertLightPayload, type UpsertWallPayload,
 } from 'shared';
-import { assets, campaigns, doorMemory, fog, maps } from '../../db/repos.js';
+import { assets, campaigns, characters, doorMemory, fog, maps } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata } from '../hub.js';
 import { canReachDoor, dropMapVisionCaches, syncMapVision } from '../visionService.js';
 import { broadcastPresence, sendMapState } from './session.js';
 import { broadcastDirectory } from '../directory.js';
+
+/** Does any character this user owns in the campaign carry an inventory item
+ *  named `keyName` (case-insensitive)? Possession alone unlocks -- the item
+ *  isn't consumed. */
+function hasKeyItem(userId: string, campaignId: string, keyName: string): boolean {
+  const wanted = keyName.trim().toLowerCase();
+  return characters.forCampaign(campaignId).some((c) => {
+    if (c.ownerUserId !== userId) return false;
+    return rows(c.sheet, 'inventory').some((item) => str(item, 'name', '').trim().toLowerCase() === wanted);
+  });
+}
 
 function requireDmMap(socket: Socket, mapId: string) {
   const d = sdata(socket);
@@ -126,7 +137,10 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     const doors = [...map.doors];
     const id = door.id ?? newId();
     const idx = doors.findIndex((x) => x.id === id);
-    const next = { id, a: door.a, b: door.b, open: door.open ?? false, type: door.type === 'gate' ? 'gate' as const : 'door' as const };
+    const next: Door = {
+      id, a: door.a, b: door.b, open: door.open ?? false, type: door.type === 'gate' ? 'gate' as const : 'door' as const,
+      locked: !!door.locked, keyName: door.locked ? (door.keyName?.trim() || 'Key') : null,
+    };
     if (idx >= 0) doors[idx] = next;
     else doors.push(next);
     maps.setDoors(mapId, doors);
@@ -149,8 +163,13 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
     const door = map.doors.find((x) => x.id === doorId);
     if (!door) throw new Error('Unknown door.');
-    if (d.role !== 'dm' && !canReachDoor(d.userId, map, door)) {
-      throw new Error('You need a token within 2 hexes to use that door.');
+    if (d.role !== 'dm') {
+      if (!canReachDoor(d.userId, map, door)) {
+        throw new Error('You need a token within 2 hexes to use that door.');
+      }
+      if (!door.open && door.locked && !hasKeyItem(d.userId, d.campaignId, door.keyName || 'Key')) {
+        throw new Error(`This ${door.type === 'gate' ? 'gate' : 'door'} is locked. You need a "${door.keyName || 'Key'}".`);
+      }
     }
     door.open = !door.open;
     maps.setDoors(mapId, map.doors);

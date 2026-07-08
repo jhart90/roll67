@@ -121,6 +121,12 @@ export interface Door {
    * gate = blocks movement when closed, but always see-through (open or not).
    */
   type?: DoorType;
+  /** Locked doors/gates refuse a player's TOGGLE_DOOR unless they hold a
+   *  matching key item; the DM can always toggle regardless. */
+  locked?: boolean;
+  /** Inventory item name (case-insensitive) required to unlock -- "Key" by
+   *  default represents a generic key; a DM can name a specific item instead. */
+  keyName?: string | null;
 }
 
 export interface Light {

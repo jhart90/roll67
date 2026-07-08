@@ -204,6 +204,8 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
     if (e.button === 0) {
       useGameStore.getState().selectToken(null);
       useGameStore.getState().openInspector(null);
+      useGameStore.getState().selectWall(null);
+      useGameStore.getState().selectDoor(null);
     }
   }
 

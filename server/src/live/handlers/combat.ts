@@ -10,7 +10,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, floatHp, persistSheet } from '../hp.js';
+import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, floatHp, persistSheet, postStatusLine } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 
@@ -162,7 +162,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       applications.push(() => {
         if (ch) {
           const fresh = characters.byId(ch.id);
-          if (fresh) applyHpDelta(io, spec.campaignId, fresh, -amt);
+          if (fresh) applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw');
         } else {
           const live = tokens.byId(tok.id);
           if (live?.bar) {
@@ -268,7 +268,7 @@ function activatePsychicPower(
         if (!fresh) return;
         const dmgRoll = roll(mishap.selfDamage);
         const dmg = Math.max(0, dmgRoll.total);
-        const { character: afterChar, note } = applyHpDelta(io, campaignId, fresh, -dmg);
+        const { character: afterChar, note } = applyHpDelta(io, campaignId, fresh, -dmg, `${label} mishap`);
         const { hp, maxHp } = systemFor(afterChar.system).hp(afterChar.sheet);
         const dmgMsg = chat.add(campaignId, {
           userId: d.userId, fromName: d.username, kind: 'roll',
@@ -549,7 +549,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             // Re-read fresh: item/ammo consumption below may have already
             // patched this same sheet (when the actor heals themself).
             const fresh = characters.byId(targetId);
-            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta);
+            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label);
             floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType);
           };
         } else if (tgt.bar) {
@@ -808,7 +808,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       applications.push(() => {
         if (ch) {
           const fresh = characters.byId(ch.id);
-          if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt);
+          if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt, action.spellName ?? action.label);
         } else {
           const live = tokens.byId(tok.id);
           if (live?.bar) {
@@ -932,10 +932,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     if (statusText) {
-      const smsg = chat.add(d.campaignId, {
-        userId: null, fromName: 'System', kind: 'system', text: statusText, roll: null, recipients: null,
-      });
-      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: smsg });
+      postStatusLine(io, d.campaignId, statusText);
+      postStatusLine(io, d.campaignId, `Status changed by ${character.name}'s death save`);
     }
   }));
 

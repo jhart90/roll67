@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canEditCharacter, num, roll, str, systemFor,
+  C2S, S2C, canEditCharacter, conditionsOf, num, roll, str, systemFor,
   type CreateCharacterPayload, type DeleteCharacterPayload, type LevelUpRollPayload,
   type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
@@ -8,7 +8,7 @@ import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared
 import { generateNpc, generateNpcFromModel, npcById } from 'shared';
 import { campaigns, characters, chat, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
-import { clearConcentrationEffects } from '../hp.js';
+import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -130,7 +130,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
       broadcastDirectory(io, d.campaignId);
     }
-    applyCharacterPatch(io, d.campaignId, character, patch, name);
+    applyCharacterPatch(io, d.campaignId, character, patch, name, d.username);
   }));
 
   socket.on(C2S.LEVEL_UP_ROLL, safe(socket, ({ characterId, patch, hitDie, conMod, avgHp, label }: LevelUpRollPayload) => {
@@ -161,7 +161,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const undo: UndoEntry[] = Object.keys(adjusted).map((key) => ({
       t: 'field', characterId: character.id, key, value: prior[key] ?? null,
     }));
-    applyCharacterPatch(io, d.campaignId, character, adjusted);
+    applyCharacterPatch(io, d.campaignId, character, adjusted, undefined, d.username);
     // Show the roll to everyone.
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll',
@@ -172,7 +172,9 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
 }
 
 /** Persist a sheet patch, mirror HP/art to tokens, resync vision + directory. */
-function applyCharacterPatch(io: Server, campaignId: string, character: Character, patch: SheetData, name?: string): void {
+function applyCharacterPatch(
+  io: Server, campaignId: string, character: Character, patch: SheetData, name?: string, actorName?: string,
+): void {
   // A manual concentration change (clearing the field on the sheet, or
   // typing a different spell) ends the old spell -- lift any conditions it
   // was maintaining on its targets before the new value lands.
@@ -180,10 +182,18 @@ function applyCharacterPatch(io: Server, campaignId: string, character: Characte
   if (typeof patch.concentration === 'string' && patch.concentration !== prevConc && prevConc) {
     character = clearConcentrationEffects(io, campaignId, character);
   }
+  // Captured AFTER the concentration cleanup above, so a manual edit that
+  // both drops concentration AND ticks a condition checkbox in the same
+  // patch doesn't double-post the conditions concentration already lifted.
+  const beforeConditions = conditionsOf(character.sheet);
   const sheet = { ...character.sheet, ...scrubNonFinite(patch) };
   characters.update(character.id, name, sheet);
   const updated = characters.byId(character.id)!;
   emitCharacter(io, campaignId, updated);
+
+  if (Array.isArray(patch.conditions) && actorName) {
+    postConditionDiff(io, campaignId, updated.name, beforeConditions, conditionsOf(updated.sheet), actorName);
+  }
 
   const schema = systemFor(updated.system);
   const hp = schema.hp(updated.sheet);

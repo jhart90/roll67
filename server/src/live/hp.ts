@@ -17,9 +17,38 @@ function concEffectsOf(sheet: SheetData): ConcEffect[] {
   return Array.isArray(v) ? (v as ConcEffect[]) : [];
 }
 
-function postStatusLine(io: Server, campaignId: string, text: string): void {
+export function postStatusLine(io: Server, campaignId: string, text: string): void {
   const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'system', text, roll: null, recipients: null });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+}
+
+/** A status-change line, immediately followed by a second line naming what
+ *  caused it -- every status change gets both, so the log always answers
+ *  "what changed" and "why" as two consecutive chat rows. */
+function postStatusChange(io: Server, campaignId: string, statusLine: string, cause: string): void {
+  postStatusLine(io, campaignId, statusLine);
+  postStatusLine(io, campaignId, `Status changed by ${cause}`);
+}
+
+/** Diff two condition-id lists and post a status-change pair for every
+ *  condition that was added or removed. Used for manual sheet edits (toggling
+ *  a condition checkbox), where -- unlike a spell or an HP-driven change --
+ *  the cause is always the editing player/DM's name, not a game mechanic. */
+export function postConditionDiff(
+  io: Server, campaignId: string, characterName: string, before: string[], after: string[], actorName: string,
+): void {
+  for (const id of after) {
+    if (before.includes(id)) continue;
+    const label = getCondition(id)?.label ?? id;
+    postStatusLine(io, campaignId, `${characterName} is now ${label}!`);
+    postStatusLine(io, campaignId, `Status updated by ${actorName}`);
+  }
+  for (const id of before) {
+    if (after.includes(id)) continue;
+    const label = getCondition(id)?.label ?? id;
+    postStatusLine(io, campaignId, `${characterName} is no longer ${label}.`);
+    postStatusLine(io, campaignId, `Status updated by ${actorName}`);
+  }
 }
 
 /**
@@ -36,7 +65,7 @@ export function applyConditionTo(
   let caster = concentrationCaster;
   if (!conditionsOf(target.sheet).includes(conditionId)) {
     persistSheet(io, campaignId, target, { conditions: [...conditionsOf(target.sheet), conditionId] });
-    postStatusLine(io, campaignId, `${target.name} is ${label} (${sourceLabel})!`);
+    postStatusChange(io, campaignId, `${target.name} is now ${label}!`, sourceLabel);
   }
   if (caster) {
     const fresh = characters.byId(caster.id) ?? caster;
@@ -66,7 +95,7 @@ export function clearConcentrationEffects(io: Server, campaignId: string, caster
     if (!conditionsOf(target.sheet).includes(e.condition)) continue;
     persistSheet(io, campaignId, target, { conditions: conditionsOf(target.sheet).filter((c) => c !== e.condition) });
     const label = getCondition(e.condition)?.label ?? e.condition;
-    postStatusLine(io, campaignId, `${target.name} is no longer ${label} (${spell} ended).`);
+    postStatusChange(io, campaignId, `${target.name} is no longer ${label}.`, `${spell} ending`);
   }
   return persistSheet(io, campaignId, characters.byId(caster.id) ?? caster, { concEffects: [] });
 }
@@ -182,7 +211,7 @@ export function computeHpDelta(
  * rather than folded into whatever roll's text the caller is building.
  */
 export function applyHpDelta(
-  io: Server, campaignId: string, character: Character, delta: number,
+  io: Server, campaignId: string, character: Character, delta: number, sourceLabel?: string,
 ): { character: Character; note: string } {
   const { patch, note, status, concCheck } = computeHpDelta(character, delta);
   let updated = persistSheet(io, campaignId, character, patch);
@@ -200,8 +229,7 @@ export function applyHpDelta(
   // the causal roll's text.
   if (status) {
     const text = status === 'downed' ? `${updated.name} is downed!` : `${updated.name} is back up!`;
-    const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'system', text, roll: null, recipients: null });
-    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+    postStatusChange(io, campaignId, text, sourceLabel ?? (delta < 0 ? 'damage' : 'healing'));
   }
 
   // Concentration save, after the HP change is persisted so events stay ordered.

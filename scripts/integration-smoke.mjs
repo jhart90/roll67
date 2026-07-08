@@ -389,19 +389,25 @@ async function main() {
   // condition landing on the NPC's sheet once the save die settles.
   const holdSaveP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text?.includes('Test Hold') && p.msg.text.includes('FAIL'));
   const paralyzedP = waitFor(dmSock, 'characterUpserted', 10000, (p) => p.character.id === npc.id && (p.character.sheet.conditions ?? []).includes('paralyzed'));
-  const statusLineP = waitFor(playerSock, 'chatMsg', 10000, (p) => p.msg?.text?.includes('Paralyzed') && p.msg.text.includes('Test Hold'));
+  // Status changes post as two consecutive lines: the change itself, then a
+  // second line naming what caused it.
+  const statusLineP = waitFor(playerSock, 'chatMsg', 10000, (p) => p.msg?.text?.includes('is now Paralyzed'));
+  const causeLineP = waitFor(playerSock, 'chatMsg', 10000, (p) => p.msg?.text === 'Status changed by Test Hold');
   playerSock.emit('combatAction', { characterId: pc.id, actionId: 'spell:0', sourceTokenId: pcToken.id, targetTokenId: npcToken.id, adv: null });
   ok(!!(await holdSaveP), 'a condition-only spell resolves as a targeted save (no damage roll needed)');
   ok(!!(await paralyzedP), "the failed save inflicts the spell's condition on the target's sheet");
-  ok(!!(await statusLineP), 'the inflicted condition posts a status chat line naming the spell');
+  ok(!!(await statusLineP), 'the inflicted condition posts a status chat line');
+  ok(!!(await causeLineP), 'a second line names the spell that caused it');
 
   // Concentration linkage: the caster clearing their concentration lifts the
   // condition from the target automatically.
   const unparalyzedP = waitFor(dmSock, 'characterUpserted', 6000, (p) => p.character.id === npc.id && !(p.character.sheet.conditions ?? []).includes('paralyzed'));
   const releaseLineP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text?.includes('no longer') && p.msg.text.includes('Paralyzed'));
+  const releaseCauseLineP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text === 'Status changed by Test Hold ending');
   playerSock.emit('updateCharacter', { characterId: pc.id, patch: { concentration: '' } });
   ok(!!(await unparalyzedP), "ending the caster's concentration removes the condition it was maintaining");
   ok(!!(await releaseLineP), 'the release posts its own status chat line');
+  ok(!!(await releaseCauseLineP), 'the release names the ending spell as the cause');
 
   // ---------- token bar <-> character sheet HP write-through ----------
   console.log('token bar / sheet HP sync:');
@@ -688,6 +694,35 @@ async function main() {
   const toggled = await gateToggled;
   ok(toggled.open === true, 'gate toggles open/closed exactly like a regular door');
   dmSock.emit('deleteDoor', { mapId, doorId: gate.id });
+  await new Promise((r) => setTimeout(r, 300));
+
+  // ---------- door locking ----------
+  console.log('door locks:');
+  // Right next to the player's own token (6,5) so canReachDoor's 2-hex
+  // proximity check always passes -- only the lock itself should block them.
+  const lockSpot = px(6, 5);
+  const lockDoorEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.doors);
+  dmSock.emit('upsertDoor', {
+    mapId, door: { a: { x: lockSpot.x - 20, y: lockSpot.y - 40 }, b: { x: lockSpot.x + 20, y: lockSpot.y - 40 }, open: false, locked: true, keyName: 'Brass Key' },
+  });
+  const lockDoors = (await lockDoorEdit).doors ?? [];
+  const lockDoor = lockDoors.find((x) => x.locked);
+  ok(!!lockDoor && lockDoor.keyName === 'Brass Key', 'locked door persisted with its named key');
+
+  const deniedErr = waitFor(playerSock, 'errorMsg', 3000).catch(() => null);
+  playerSock.emit('toggleDoor', { mapId, doorId: lockDoor.id });
+  const denied = await deniedErr;
+  ok(!!denied?.message && /locked/i.test(denied.message) && denied.message.includes('Brass Key'), `player without the key is refused ("${denied?.message}")`);
+
+  const keyGiven = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && p.character.sheet.inventory?.some((r) => r.name === 'Brass Key'));
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { inventory: [{ name: 'Brass Key', qty: 1 }] } });
+  await keyGiven;
+  const lockOpened = waitFor(dmSock, 'doorState', 3000, (p) => p.doorId === lockDoor.id);
+  playerSock.emit('toggleDoor', { mapId, doorId: lockDoor.id });
+  const opened = await lockOpened;
+  ok(opened.open === true, 'player holding the matching key item opens the locked door');
+  dmSock.emit('deleteDoor', { mapId, doorId: lockDoor.id });
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { inventory: [] } });
 
   // ---------- lighting ----------
   console.log('lighting:');

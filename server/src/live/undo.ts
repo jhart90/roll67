@@ -17,7 +17,7 @@ export function applyUndo(io: Server, campaignId: string, entries: UndoEntry[]):
     if (e.t === 'hp') {
       if (e.characterId) {
         const ch = characters.byId(e.characterId);
-        if (ch) applyHpDelta(io, campaignId, ch, -e.delta);
+        if (ch) applyHpDelta(io, campaignId, ch, -e.delta, 'Undo');
       } else if (e.tokenId) {
         const tok = tokens.byId(e.tokenId);
         if (tok?.bar) {

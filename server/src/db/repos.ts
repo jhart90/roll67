@@ -600,14 +600,6 @@ export const maps = {
     if (fields.bgAssetId !== undefined) stmt('UPDATE maps SET bg_asset_id = ? WHERE id = ?').run(fields.bgAssetId, id);
     if (fields.parentId !== undefined) stmt('UPDATE maps SET parent_id = ? WHERE id = ?').run(fields.parentId, id);
   },
-  clearBgAsset(id: string): void {
-    stmt('UPDATE maps SET bg_asset_id = NULL WHERE id = ?').run(id);
-  },
-  fkCheck(id: string): unknown[] {
-    const row = stmt('SELECT rowid FROM maps WHERE id = ?').get(id) as { rowid: number } | undefined;
-    if (!row) return [{ error: 'map not found' }];
-    return (db.prepare('PRAGMA foreign_key_check(maps)').all() as any[]).filter((r) => r.rowid === row.rowid);
-  },
   setGrid(id: string, grid: GridConfig): void {
     stmt('UPDATE maps SET grid_json = ? WHERE id = ?').run(JSON.stringify(grid), id);
   },

@@ -143,20 +143,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'Asset not found — upload may have failed.');
       return;
     }
-    try {
-      maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId, parentId: payload.parentId });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('FOREIGN KEY')) {
-        const diag = maps.fkCheck(map.id);
-        const assetCheck = payload.bgAssetId ? !!assets.byId(payload.bgAssetId) : 'n/a';
-        const info = `mapId=${map.id} bg=${payload.bgAssetId} curBg=${map.bgAssetId} assetExists=${assetCheck} fkCheck=${JSON.stringify(diag)}`;
-        console.error('FK error in UPDATE_MAP:', info);
-        emitError(socket, `FK diag: ${info}`);
-        return;
-      }
-      throw err;
-    }
+    maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId, parentId: payload.parentId });
     const updated = maps.byId(map.id)!;
     const edit: MapEditedPayload = {
       mapId: map.id,

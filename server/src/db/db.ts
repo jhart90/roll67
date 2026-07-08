@@ -11,7 +11,9 @@ ensureDataDirs();
 
 export const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// FK enforcement is deferred until after all migrations — SQLite's ALTER TABLE
+// RENAME silently redirects FK references in other tables when foreign_keys is
+// ON, which corrupts constraints if the renamed table is later dropped.
 
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
 db.exec(schema);
@@ -79,11 +81,28 @@ ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 ensureColumn('users', 'player_color', 'player_color TEXT');
 
+// Repair FK references broken by migrateAssetsAudioKind running with foreign_keys=ON.
+// The RENAME redirected FK constraints in maps/tokens/handouts/audio_tracks to point
+// to the temp table name; after that table was dropped the constraints became invalid.
+function repairBrokenAssetFKs(): void {
+  const broken = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%assets_pre_audio_migration%'").all() as Array<{ name: string }>);
+  if (broken.length === 0) return;
+  console.log('Repairing broken FK references in:', broken.map(r => r.name).join(', '));
+  db.pragma('writable_schema = ON');
+  db.exec("UPDATE sqlite_master SET sql = REPLACE(sql, 'assets_pre_audio_migration', 'assets') WHERE type = 'table' AND sql LIKE '%assets_pre_audio_migration%'");
+  db.pragma('writable_schema = OFF');
+  db.pragma('integrity_check');
+}
+repairBrokenAssetFKs();
+
 // Fix orphaned FK references that can cause "FOREIGN KEY constraint failed" on
 // any UPDATE to the affected row.  Runs once per boot; harmless if no orphans.
 db.exec(`UPDATE maps SET bg_asset_id = NULL WHERE bg_asset_id IS NOT NULL AND bg_asset_id NOT IN (SELECT id FROM assets)`);
 db.exec(`UPDATE tokens SET art_asset_id = NULL WHERE art_asset_id IS NOT NULL AND art_asset_id NOT IN (SELECT id FROM assets)`);
 db.exec(`UPDATE tokens SET character_id = NULL WHERE character_id IS NOT NULL AND character_id NOT IN (SELECT id FROM characters)`);
+
+// Enable FK enforcement now that all migrations and repairs are complete.
+db.pragma('foreign_keys = ON');
 
 // better-sqlite3 does NOT cache prepared statements: every db.prepare()
 // recompiles the SQL. Repo methods run on hot paths (every token move

@@ -85,13 +85,18 @@ ensureColumn('users', 'player_color', 'player_color TEXT');
 // The RENAME redirected FK constraints in maps/tokens/handouts/audio_tracks to point
 // to the temp table name; after that table was dropped the constraints became invalid.
 function repairBrokenAssetFKs(): void {
-  const broken = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%assets_pre_audio_migration%'").all() as Array<{ name: string }>);
-  if (broken.length === 0) return;
-  console.log('Repairing broken FK references in:', broken.map(r => r.name).join(', '));
-  db.pragma('writable_schema = ON');
-  db.exec("UPDATE sqlite_master SET sql = REPLACE(sql, 'assets_pre_audio_migration', 'assets') WHERE type = 'table' AND sql LIKE '%assets_pre_audio_migration%'");
-  db.pragma('writable_schema = OFF');
-  db.pragma('integrity_check');
+  try {
+    const broken = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%assets_pre_audio_migration%'").all() as Array<{ name: string }>);
+    if (broken.length === 0) return;
+    console.log('Repairing broken FK references in:', broken.map(r => r.name).join(', '));
+    db.pragma('writable_schema = ON');
+    db.exec("UPDATE sqlite_master SET sql = REPLACE(sql, 'assets_pre_audio_migration', 'assets') WHERE type = 'table' AND sql LIKE '%assets_pre_audio_migration%'");
+    db.pragma('writable_schema = OFF');
+    const ver = (db.pragma('schema_version') as Array<{ schema_version: number }>)[0].schema_version;
+    db.pragma(`schema_version = ${ver + 1}`);
+  } catch (err) {
+    console.error('FK repair failed (non-fatal):', err);
+  }
 }
 repairBrokenAssetFKs();
 

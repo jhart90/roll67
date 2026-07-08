@@ -600,6 +600,9 @@ export const maps = {
     if (fields.bgAssetId !== undefined) stmt('UPDATE maps SET bg_asset_id = ? WHERE id = ?').run(fields.bgAssetId, id);
     if (fields.parentId !== undefined) stmt('UPDATE maps SET parent_id = ? WHERE id = ?').run(fields.parentId, id);
   },
+  clearBgAsset(id: string): void {
+    stmt('UPDATE maps SET bg_asset_id = NULL WHERE id = ?').run(id);
+  },
   setGrid(id: string, grid: GridConfig): void {
     stmt('UPDATE maps SET grid_json = ? WHERE id = ?').run(JSON.stringify(grid), id);
   },

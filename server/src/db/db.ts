@@ -79,6 +79,12 @@ ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 ensureColumn('users', 'player_color', 'player_color TEXT');
 
+// Fix orphaned FK references that can cause "FOREIGN KEY constraint failed" on
+// any UPDATE to the affected row.  Runs once per boot; harmless if no orphans.
+db.exec(`UPDATE maps SET bg_asset_id = NULL WHERE bg_asset_id IS NOT NULL AND bg_asset_id NOT IN (SELECT id FROM assets)`);
+db.exec(`UPDATE tokens SET art_asset_id = NULL WHERE art_asset_id IS NOT NULL AND art_asset_id NOT IN (SELECT id FROM assets)`);
+db.exec(`UPDATE tokens SET character_id = NULL WHERE character_id IS NOT NULL AND character_id NOT IN (SELECT id FROM characters)`);
+
 // better-sqlite3 does NOT cache prepared statements: every db.prepare()
 // recompiles the SQL. Repo methods run on hot paths (every token move
 // prepares several statements), so memoize by SQL text -- all repo SQL is

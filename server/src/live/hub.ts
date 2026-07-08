@@ -60,7 +60,11 @@ export function safe<T>(socket: Socket, fn: (payload: T) => void): (payload: T) 
       fn(payload);
     } catch (err) {
       console.error('handler error:', err);
-      emitError(socket, err instanceof Error ? err.message : 'Something went wrong.');
+      const raw = err instanceof Error ? err.message : 'Something went wrong.';
+      const msg = raw.includes('FOREIGN KEY') || raw.includes('SQLITE') || raw.includes('UNIQUE constraint')
+        ? 'A database error occurred. Please try again.'
+        : raw;
+      emitError(socket, msg);
     }
   };
 }

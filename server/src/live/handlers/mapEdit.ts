@@ -143,7 +143,18 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'Asset not found — upload may have failed.');
       return;
     }
-    maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId, parentId: payload.parentId });
+    try {
+      maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId, parentId: payload.parentId });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('FOREIGN KEY')) {
+        console.error('FK error in UPDATE_MAP — healing orphaned bg_asset_id', { mapId: map.id, bgAssetId: payload.bgAssetId, currentBg: map.bgAssetId });
+        maps.clearBgAsset(map.id);
+        maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId, parentId: payload.parentId });
+      } else {
+        throw err;
+      }
+    }
     const updated = maps.byId(map.id)!;
     const edit: MapEditedPayload = {
       mapId: map.id,

@@ -148,6 +148,19 @@ db.exec(`UPDATE maps SET bg_asset_id = NULL WHERE bg_asset_id IS NOT NULL AND bg
 db.exec(`UPDATE tokens SET art_asset_id = NULL WHERE art_asset_id IS NOT NULL AND art_asset_id NOT IN (SELECT id FROM assets)`);
 db.exec(`UPDATE tokens SET character_id = NULL WHERE character_id IS NOT NULL AND character_id NOT IN (SELECT id FROM characters)`);
 
+// Clamp oversized grids that can crash vision/rendering (max 200x200).
+for (const row of db.prepare(`SELECT id, grid_json FROM maps`).all() as Array<{ id: string; grid_json: string }>) {
+  try {
+    const g = JSON.parse(row.grid_json);
+    if (g.cols > 200 || g.rows > 200) {
+      g.cols = Math.min(g.cols, 200);
+      g.rows = Math.min(g.rows, 200);
+      db.prepare(`UPDATE maps SET grid_json = ? WHERE id = ?`).run(JSON.stringify(g), row.id);
+      console.log(`Clamped oversized grid on map ${row.id} to ${g.cols}x${g.rows}`);
+    }
+  } catch { /* malformed json handled by normalizeGrid at read time */ }
+}
+
 // Enable FK enforcement now that all migrations and repairs are complete.
 db.pragma('foreign_keys = ON');
 

@@ -6,9 +6,9 @@ import { UploadProgressBar } from '../../util/UploadProgressBar';
 import { useUploadProgress } from '../../util/useUploadProgress';
 
 function GridField({
-  label, value, onCommit, step = 1, min,
+  label, value, onCommit, step = 1, min, max,
 }: {
-  label: string; value: number; onCommit: (v: number) => void; step?: number; min?: number;
+  label: string; value: number; onCommit: (v: number) => void; step?: number; min?: number; max?: number;
 }) {
   const [text, setText] = useState<string | null>(null);
   return (
@@ -18,10 +18,16 @@ function GridField({
         type="number"
         step={step}
         min={min}
+        max={max}
         value={text ?? value}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
-          if (text !== null && text !== '' && !Number.isNaN(Number(text))) onCommit(Number(text));
+          if (text !== null && text !== '' && !Number.isNaN(Number(text))) {
+            let v = Number(text);
+            if (min !== undefined) v = Math.max(min, v);
+            if (max !== undefined) v = Math.min(max, v);
+            onCommit(v);
+          }
           setText(null);
         }}
         onKeyDown={(e) => {
@@ -143,8 +149,8 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
               <div className="grid-fields">
                 <GridField label="Hex size" value={grid.hexSize} onCommit={(v) => setGrid({ hexSize: v })} min={8} />
                 <GridField label="Feet per hex" value={grid.feetPerHex} onCommit={(v) => setGrid({ feetPerHex: v })} min={1} />
-                <GridField label="Columns" value={grid.cols} onCommit={(v) => setGrid({ cols: v })} min={1} />
-                <GridField label="Rows" value={grid.rows} onCommit={(v) => setGrid({ rows: v })} min={1} />
+                <GridField label="Columns" value={grid.cols} onCommit={(v) => setGrid({ cols: v })} min={1} max={200} />
+                <GridField label="Rows" value={grid.rows} onCommit={(v) => setGrid({ rows: v })} min={1} max={200} />
                 <GridField label="Origin X" value={grid.originX} onCommit={(v) => setGrid({ originX: v })} />
                 <GridField label="Origin Y" value={grid.originY} onCommit={(v) => setGrid({ originY: v })} />
               </div>

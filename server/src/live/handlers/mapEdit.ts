@@ -159,9 +159,9 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.SET_GRID_CONFIG, safe(socket, ({ mapId, grid }: SetGridConfigPayload) => {
     const { d, map } = requireDmMap(socket, mapId);
     const merged = { ...map.grid, ...grid };
-    merged.hexSize = Math.max(8, Math.min(300, merged.hexSize));
-    merged.cols = Math.max(1, Math.min(400, merged.cols));
-    merged.rows = Math.max(1, Math.min(400, merged.rows));
+    merged.hexSize = Math.max(4, Math.min(300, merged.hexSize));
+    merged.cols = Math.max(1, Math.min(200, merged.cols));
+    merged.rows = Math.max(1, Math.min(200, merged.rows));
     maps.setGrid(mapId, merged);
     io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, grid: merged });
     syncMapVision(io, d.campaignId!, mapId);

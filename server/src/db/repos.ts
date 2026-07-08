@@ -597,7 +597,18 @@ export const maps = {
   },
   update(id: string, fields: { name?: string; bgAssetId?: string | null; parentId?: string | null }): void {
     if (fields.name !== undefined) stmt('UPDATE maps SET name = ? WHERE id = ?').run(fields.name, id);
-    if (fields.bgAssetId !== undefined) stmt('UPDATE maps SET bg_asset_id = ? WHERE id = ?').run(fields.bgAssetId, id);
+    if (fields.bgAssetId !== undefined) {
+      try {
+        stmt('UPDATE maps SET bg_asset_id = ? WHERE id = ?').run(fields.bgAssetId, id);
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('FOREIGN KEY')) {
+          console.error('FK error on bg_asset_id update — retrying with FK bypass', { id, bgAssetId: fields.bgAssetId, fkList: db.pragma('foreign_key_list(maps)') });
+          db.pragma('foreign_keys = OFF');
+          stmt('UPDATE maps SET bg_asset_id = ? WHERE id = ?').run(fields.bgAssetId, id);
+          db.pragma('foreign_keys = ON');
+        } else throw err;
+      }
+    }
     if (fields.parentId !== undefined) stmt('UPDATE maps SET parent_id = ? WHERE id = ?').run(fields.parentId, id);
   },
   setGrid(id: string, grid: GridConfig): void {

@@ -83,20 +83,62 @@ ensureColumn('users', 'player_color', 'player_color TEXT');
 
 // Repair FK references broken by migrateAssetsAudioKind running with foreign_keys=ON.
 // The RENAME redirected FK constraints in maps/tokens/handouts/audio_tracks to point
-// to the temp table name; after that table was dropped the constraints became invalid.
+// to the temp table name; after DROP that table the constraints became invalid.
+// Fix: rebuild affected tables from scratch (standard SQLite table-rebuild approach).
 function repairBrokenAssetFKs(): void {
-  try {
-    const broken = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%assets_pre_audio_migration%'").all() as Array<{ name: string }>);
-    if (broken.length === 0) return;
-    console.log('Repairing broken FK references in:', broken.map(r => r.name).join(', '));
-    db.pragma('writable_schema = ON');
-    db.exec("UPDATE sqlite_master SET sql = REPLACE(sql, 'assets_pre_audio_migration', 'assets') WHERE type = 'table' AND sql LIKE '%assets_pre_audio_migration%'");
-    db.pragma('writable_schema = OFF');
-    const ver = (db.pragma('schema_version') as Array<{ schema_version: number }>)[0].schema_version;
-    db.pragma(`schema_version = ${ver + 1}`);
-  } catch (err) {
-    console.error('FK repair failed (non-fatal):', err);
+  const hasBrokenFK = (table: string) =>
+    (db.pragma(`foreign_key_list(${table})`) as Array<{ table: string }>)
+      .some((fk) => fk.table.includes('_pre_audio_migration'));
+
+  if (!hasBrokenFK('maps') && !hasBrokenFK('tokens') && !hasBrokenFK('handouts') && !hasBrokenFK('audio_tracks')) return;
+
+  console.log('Rebuilding tables to fix corrupted FK references from assets migration');
+  db.pragma('legacy_alter_table = ON');
+
+  function rebuild(table: string, createSql: string, indexes: string[]): void {
+    if (!hasBrokenFK(table)) return;
+    const cols = (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map((c) => c.name);
+    const colList = cols.join(', ');
+    const tmp = `${table}__fk_rebuild`;
+    db.exec(createSql.replace(`CREATE TABLE ${table}`, `CREATE TABLE ${tmp}`));
+    db.exec(`INSERT INTO ${tmp} (${colList}) SELECT ${colList} FROM ${table}`);
+    db.exec(`DROP TABLE ${table}`);
+    db.exec(`ALTER TABLE ${tmp} RENAME TO ${table}`);
+    for (const idx of indexes) db.exec(idx);
   }
+
+  rebuild('maps', `CREATE TABLE maps (
+    id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, bg_asset_id TEXT REFERENCES assets(id), grid_json TEXT NOT NULL,
+    walls_json TEXT NOT NULL DEFAULT '[]', doors_json TEXT NOT NULL DEFAULT '[]',
+    lights_json TEXT NOT NULL DEFAULT '[]', parent_id TEXT, spawn_json TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0)`,
+    ['CREATE INDEX IF NOT EXISTS idx_maps_campaign ON maps(campaign_id)']);
+
+  rebuild('tokens', `CREATE TABLE tokens (
+    id TEXT PRIMARY KEY, map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+    character_id TEXT REFERENCES characters(id) ON DELETE SET NULL, name TEXT NOT NULL,
+    art_asset_id TEXT REFERENCES assets(id), q INTEGER NOT NULL, r INTEGER NOT NULL,
+    layer TEXT NOT NULL CHECK (layer IN ('token', 'gm')), size INTEGER NOT NULL DEFAULT 1,
+    shape TEXT NOT NULL DEFAULT 'circle', color TEXT NOT NULL DEFAULT '#6c9bd2',
+    vision_json TEXT, bar_json TEXT, light_json TEXT)`,
+    ['CREATE INDEX IF NOT EXISTS idx_tokens_map ON tokens(map_id)',
+     'CREATE INDEX IF NOT EXISTS idx_tokens_character ON tokens(character_id)']);
+
+  rebuild('handouts', `CREATE TABLE handouts (
+    id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    title TEXT NOT NULL, body_md TEXT NOT NULL DEFAULT '', asset_id TEXT REFERENCES assets(id),
+    shared_all INTEGER NOT NULL DEFAULT 0, parent_id TEXT, folder_id TEXT,
+    created_at INTEGER NOT NULL)`,
+    ['CREATE INDEX IF NOT EXISTS idx_handouts_campaign ON handouts(campaign_id)']);
+
+  rebuild('audio_tracks', `CREATE TABLE audio_tracks (
+    id TEXT PRIMARY KEY, campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    title TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)`, []);
+
+  db.pragma('legacy_alter_table = OFF');
+  console.log('FK repair complete');
 }
 repairBrokenAssetFKs();
 

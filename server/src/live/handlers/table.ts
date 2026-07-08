@@ -159,14 +159,14 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     handouts.delete(handoutId);
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'DELETE_HANDOUT'));
 
   socket.on(C2S.SHARE_HANDOUT, safe(socket, ({ handoutId, to }: ShareHandoutPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     handouts.share(handoutId, to);
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'SHARE_HANDOUT'));
 
   // ----- rollable tables -----
 
@@ -175,7 +175,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') { emitError(socket, 'Only the DM creates tables.'); return; }
     rollableTables.create(d.campaignId, name?.trim() || 'New table');
     broadcastTables(io, d.campaignId);
-  }));
+  }, 'CREATE_TABLE'));
 
   socket.on(C2S.UPDATE_TABLE, safe(socket, ({ tableId, name, playersCanRoll, items, parentId }: UpdateTablePayload) => {
     const d = requireCampaign(socket);
@@ -189,7 +189,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
       items: items?.map((it) => ({ text: String(it.text ?? ''), weight: it.weight && it.weight > 0 ? it.weight : 1 })).filter((it) => it.text.trim()),
     });
     broadcastTables(io, d.campaignId);
-  }));
+  }, 'UPDATE_TABLE'));
 
   socket.on(C2S.DELETE_TABLE, safe(socket, ({ tableId }: DeleteTablePayload) => {
     const d = requireCampaign(socket);
@@ -198,7 +198,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (!t || t.campaignId !== d.campaignId) return;
     rollableTables.delete(tableId);
     broadcastTables(io, d.campaignId);
-  }));
+  }, 'DELETE_TABLE'));
 
   socket.on(C2S.ROLL_TABLE, safe(socket, ({ tableId }: RollTablePayload) => {
     const d = requireCampaign(socket);
@@ -219,5 +219,5 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     // Flash the same result on-screen for everyone as a colored pill.
     io.to(campaignRoom(d.campaignId)).emit(S2C.TABLE_RESULT, { text, color: '#8a6cd2' });
-  }));
+  }, 'ROLL_TABLE'));
 }

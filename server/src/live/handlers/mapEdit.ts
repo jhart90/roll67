@@ -148,12 +148,14 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('FOREIGN KEY')) {
-        console.error('FK error in UPDATE_MAP — healing orphaned bg_asset_id', { mapId: map.id, bgAssetId: payload.bgAssetId, currentBg: map.bgAssetId });
-        maps.clearBgAsset(map.id);
-        maps.update(map.id, { name: payload.name, bgAssetId: payload.bgAssetId, parentId: payload.parentId });
-      } else {
-        throw err;
+        const diag = maps.fkCheck(map.id);
+        const assetCheck = payload.bgAssetId ? !!assets.byId(payload.bgAssetId) : 'n/a';
+        const info = `mapId=${map.id} bg=${payload.bgAssetId} curBg=${map.bgAssetId} assetExists=${assetCheck} fkCheck=${JSON.stringify(diag)}`;
+        console.error('FK error in UPDATE_MAP:', info);
+        emitError(socket, `FK diag: ${info}`);
+        return;
       }
+      throw err;
     }
     const updated = maps.byId(map.id)!;
     const edit: MapEditedPayload = {
@@ -273,7 +275,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     // (or hides) what lies beyond.
     io.to(campaignRoom(d.campaignId)).emit(S2C.DOOR_STATE, { mapId, doorId, open: door.open });
     syncMapVision(io, d.campaignId, mapId);
-  }));
+  }, 'TOGGLE_DOOR'));
 
   // ----- lights -----
 
@@ -293,7 +295,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setLights(mapId, lights);
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, lights });
     syncMapVision(io, d.campaignId!, mapId);
-  }));
+  }, 'UPSERT_LIGHT'));
 
   socket.on(C2S.DELETE_LIGHT, safe(socket, ({ mapId, lightId }: DeleteLightPayload) => {
     const { d, map } = requireDmMap(socket, mapId);
@@ -301,7 +303,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setLights(mapId, lights);
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, lights });
     syncMapVision(io, d.campaignId!, mapId);
-  }));
+  }, 'DELETE_LIGHT'));
 
   // ----- auto-trace walls from background image -----
 
@@ -331,5 +333,5 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
       console.error('Auto-trace failed:', err);
       emitError(socket, 'Auto-trace failed — could not process the image.');
     });
-  }));
+  }, 'AUTO_TRACE_WALLS'));
 }

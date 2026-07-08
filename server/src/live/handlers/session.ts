@@ -133,13 +133,13 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     }
     sendMapState(socket);
     broadcastPresence(io, campaignId);
-  }));
+  }, 'JOIN_CAMPAIGN'));
 
   socket.on(C2S.REQUEST_DIRECTORY, safe(socket, () => {
     const d = sdata(socket);
     if (!d.campaignId || !d.role) return;
     socket.emit(S2C.DIRECTORY, buildDirectory(d.campaignId, d.role === 'dm'));
-  }));
+  }, 'REQUEST_DIRECTORY'));
 
   // Set your own 3D-dice color (a global user preference, shown to everyone).
   socket.on(C2S.SET_DICE_COLOR, safe(socket, ({ color }: SetDiceColorPayload) => {
@@ -148,7 +148,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
     users.setDiceColor(d.userId, clean);
     broadcastPresence(io, d.campaignId);
-  }));
+  }, 'SET_DICE_COLOR'));
 
   // Same, for the color of the pips/numbers painted on your dice.
   socket.on(C2S.SET_DICE_TEXT_COLOR, safe(socket, ({ color }: SetDiceTextColorPayload) => {
@@ -157,7 +157,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
     users.setDiceTextColor(d.userId, clean);
     broadcastPresence(io, d.campaignId);
-  }));
+  }, 'SET_DICE_TEXT_COLOR'));
 
   // Your presence-dot color, and the color your player-controlled token
   // names get bolded in in chat (client/src/panels/ChatPanel.tsx).
@@ -167,7 +167,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
     users.setPlayerColor(d.userId, clean);
     broadcastPresence(io, d.campaignId);
-  }));
+  }, 'SET_PLAYER_COLOR'));
 
   // Rename yourself. Username is the login key (UNIQUE COLLATE NOCASE) but
   // otherwise purely cosmetic -- update the live socket's cached name too so
@@ -191,7 +191,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     d.username = trimmed;
     io.to(userRoom(d.userId)).emit(S2C.YOU_ARE, { userId: d.userId, username: trimmed, role: d.role ?? 'player' });
     broadcastPresence(io, d.campaignId);
-  }));
+  }, 'SET_USERNAME'));
 
   socket.on(C2S.LEAVE_CAMPAIGN, safe(socket, () => {
     const d = sdata(socket);
@@ -203,7 +203,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     d.role = undefined;
     d.viewingAs = undefined;
     broadcastPresence(io, campaignId);
-  }));
+  }, 'LEAVE_CAMPAIGN'));
 
   socket.on(C2S.SWITCH_ACTIVE_MAP, safe(socket, ({ mapId }: SwitchActiveMapPayload) => {
     const d = sdata(socket);
@@ -224,7 +224,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       if (sdata(s).campaignId === d.campaignId) sendMapState(s);
     }
     broadcastPresence(io, d.campaignId);
-  }));
+  }, 'SWITCH_ACTIVE_MAP'));
 
   socket.on(C2S.VIEW_MAP, safe(socket, ({ mapId }: ViewMapPayload) => {
     const d = sdata(socket);
@@ -243,7 +243,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     d.viewingAs = undefined; // working on a map exits any view-as preview
     sendMapStateToUser(io, d.campaignId, d.userId);
     broadcastPresence(io, d.campaignId);
-  }));
+  }, 'VIEW_MAP'));
 
   socket.on(C2S.ASSIGN_PLAYER_MAP, safe(socket, ({ userId, mapId }: AssignPlayerMapPayload) => {
     const d = sdata(socket);
@@ -265,7 +265,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     campaigns.setMemberMap(d.campaignId, userId, mapId);
     sendMapStateToUser(io, d.campaignId, userId);
     broadcastPresence(io, d.campaignId);
-  }));
+  }, 'ASSIGN_PLAYER_MAP'));
 
   socket.on(C2S.DM_VIEW_AS, safe(socket, ({ userId }: DmViewAsPayload) => {
     const d = sdata(socket);
@@ -275,7 +275,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     }
     d.viewingAs = userId ?? undefined;
     sendMapState(socket);
-  }));
+  }, 'DM_VIEW_AS'));
 
   socket.on('disconnect', () => {
     const d = sdata(socket);

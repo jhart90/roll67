@@ -92,7 +92,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const campaign = campaignSystem(d.campaignId);
     shops.create(d.campaignId, name?.trim() || 'New shop', campaign === 'swn' ? 'credits' : 'gp');
     broadcastShops(io, d.campaignId);
-  }));
+  }, 'CREATE_SHOP'));
 
   socket.on(C2S.UPDATE_SHOP, safe(socket, ({ shopId, ...fields }: UpdateShopPayload) => {
     const d = requireCampaign(socket);
@@ -111,7 +111,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     })).filter((it) => it.name);
     shops.update(shopId, { ...fields, items });
     broadcastShops(io, d.campaignId);
-  }));
+  }, 'UPDATE_SHOP'));
 
   socket.on(C2S.DELETE_SHOP, safe(socket, ({ shopId }: DeleteShopPayload) => {
     const d = requireCampaign(socket);
@@ -125,7 +125,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
       broadcastShopPresentation(io, d.campaignId);
     }
     broadcastShops(io, d.campaignId);
-  }));
+  }, 'DELETE_SHOP'));
 
   socket.on(C2S.PRESENT_SHOP, safe(socket, ({ shopId, userIds }: PresentShopPayload) => {
     const d = requireCampaign(socket);
@@ -136,7 +136,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     // Targeted players now receive the shop data, then the storefront pops.
     broadcastShops(io, d.campaignId);
     broadcastShopPresentation(io, d.campaignId);
-  }));
+  }, 'PRESENT_SHOP'));
 
   socket.on(C2S.DISMISS_SHOP, safe(socket, () => {
     const d = requireCampaign(socket);
@@ -144,7 +144,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     presentations.delete(d.campaignId);
     broadcastShops(io, d.campaignId);
     broadcastShopPresentation(io, d.campaignId);
-  }));
+  }, 'DISMISS_SHOP'));
 
   socket.on(C2S.BUY_ITEM, safe(socket, ({ shopId, itemIndex, characterId }: BuyItemPayload) => {
     const d = requireCampaign(socket);
@@ -203,7 +203,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'BUY_ITEM'));
 
   // ----- locations -----
 
@@ -212,7 +212,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') { emitError(socket, 'Only the DM manages locations.'); return; }
     locations.create(d.campaignId, name?.trim() || 'New location', parentId ?? null);
     broadcastLocations(io, d.campaignId);
-  }));
+  }, 'CREATE_LOCATION'));
 
   socket.on(C2S.UPDATE_LOCATION, safe(socket, ({ locationId, ...fields }: UpdateLocationPayload) => {
     const d = requireCampaign(socket);
@@ -221,7 +221,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (!l || l.campaignId !== d.campaignId) return;
     locations.update(locationId, fields);
     broadcastLocations(io, d.campaignId);
-  }));
+  }, 'UPDATE_LOCATION'));
 
   socket.on(C2S.DELETE_LOCATION, safe(socket, ({ locationId }: DeleteLocationPayload) => {
     const d = requireCampaign(socket);
@@ -230,7 +230,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (!l || l.campaignId !== d.campaignId) return;
     locations.delete(locationId);
     broadcastLocations(io, d.campaignId);
-  }));
+  }, 'DELETE_LOCATION'));
 
   // ----- world-tree folders -----
 
@@ -239,7 +239,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') { emitError(socket, 'Only the DM manages folders.'); return; }
     worldFolders.create(d.campaignId, name?.trim() || 'New folder', parentId ?? null);
     broadcastWorldFolders(io, d.campaignId);
-  }));
+  }, 'CREATE_WORLD_FOLDER'));
 
   socket.on(C2S.UPDATE_WORLD_FOLDER, safe(socket, ({ folderId, ...fields }: UpdateWorldFolderPayload) => {
     const d = requireCampaign(socket);
@@ -248,7 +248,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (!f || f.campaignId !== d.campaignId) return;
     worldFolders.update(folderId, fields);
     broadcastWorldFolders(io, d.campaignId);
-  }));
+  }, 'UPDATE_WORLD_FOLDER'));
 
   socket.on(C2S.DELETE_WORLD_FOLDER, safe(socket, ({ folderId }: DeleteWorldFolderPayload) => {
     const d = requireCampaign(socket);
@@ -257,5 +257,5 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (!f || f.campaignId !== d.campaignId) return;
     worldFolders.delete(folderId);
     broadcastWorldFolders(io, d.campaignId);
-  }));
+  }, 'DELETE_WORLD_FOLDER'));
 }

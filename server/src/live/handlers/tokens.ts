@@ -48,7 +48,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: created });
     syncMapVision(io, d.campaignId, payload.mapId);
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'CREATE_TOKEN'));
 
   socket.on(C2S.DELETE_TOKEN, safe(socket, ({ tokenId }: DeleteTokenPayload) => {
     const d = requireCampaign(socket);
@@ -64,7 +64,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId });
     syncMapVision(io, d.campaignId, token.mapId);
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'DELETE_TOKEN'));
 
   socket.on(C2S.UPDATE_TOKEN, safe(socket, ({ tokenId, patch: rawPatch }: UpdateTokenPayload) => {
     const d = requireCampaign(socket);
@@ -100,7 +100,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: updated });
     syncMapVision(io, d.campaignId, token.mapId);
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'UPDATE_TOKEN'));
 
   socket.on(C2S.MOVE_TOKEN, safe(socket, ({ tokenId, q: rawQ, r: rawR }: MoveTokenPayload) => {
     const d = requireCampaign(socket);
@@ -152,7 +152,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       hexes: [fromHex, dest],
       extraRadius: token.light ? Math.max(token.light.bright, token.light.dim) : 0,
     });
-  }));
+  }, 'MOVE_TOKEN'));
 
   socket.on(C2S.DRAG_TOKEN, safe(socket, ({ tokenId, x, y, done }: DragTokenPayload) => {
     const d = requireCampaign(socket);
@@ -165,7 +165,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     for (const s of socketsSeeingToken(io, d.campaignId, token)) {
       if (s.id !== socket.id) s.emit(S2C.TOKEN_DRAG_GHOST, { tokenId, x, y, done: !!done });
     }
-  }));
+  }, 'DRAG_TOKEN'));
 }
 
 const TOKEN_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#c9c96c'];

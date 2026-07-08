@@ -43,7 +43,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const character = characters.create(d.campaignId, owner, name, payload.system, sheet);
     emitCharacter(io, d.campaignId, character);
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'CREATE_CHARACTER'));
 
   socket.on(C2S.CREATE_NPC, safe(socket, ({ libraryId, name }: CreateNpcPayload) => {
     const d = requireCampaign(socket);
@@ -63,7 +63,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       structuredClone(entry.sheet),
     );
     emitCharacter(io, d.campaignId, character);
-  }));
+  }, 'CREATE_NPC'));
 
   socket.on(C2S.CREATE_RANDOM_NPC, safe(socket, ({ count, modelId }: CreateRandomNpcPayload) => {
     const d = requireCampaign(socket);
@@ -84,7 +84,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       emitCharacter(io, d.campaignId, character);
     }
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'CREATE_RANDOM_NPC'));
 
   socket.on(C2S.DELETE_CHARACTER, safe(socket, ({ characterId }: DeleteCharacterPayload) => {
     const d = requireCampaign(socket);
@@ -97,7 +97,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     characters.delete(characterId);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHARACTER_REMOVED, { characterId });
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'DELETE_CHARACTER'));
 
   socket.on(C2S.UPDATE_CHARACTER, safe(socket, ({ characterId, patch, name, parentId, dropHex, ownerUserId }: UpdateCharacterPayload) => {
     const d = requireCampaign(socket);
@@ -131,7 +131,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       broadcastDirectory(io, d.campaignId);
     }
     applyCharacterPatch(io, d.campaignId, character, patch, name, d.username);
-  }));
+  }, 'UPDATE_CHARACTER'));
 
   socket.on(C2S.LEVEL_UP_ROLL, safe(socket, ({ characterId, patch, hitDie, conMod, avgHp, label }: LevelUpRollPayload) => {
     const d = requireCampaign(socket);
@@ -168,7 +168,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       text: String(label ?? '').slice(0, 120), roll: breakdown, recipients: null,
     }, undo);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-  }));
+  }, 'LEVEL_UP_ROLL'));
 }
 
 /** Persist a sheet patch, mirror HP/art to tokens, resync vision + directory. */

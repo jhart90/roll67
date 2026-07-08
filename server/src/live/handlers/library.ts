@@ -45,14 +45,14 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     if (d.campaignId && d.role === 'dm') {
       socket.emit(S2C.ASSETS, { folders: assetFolders.forCampaign(d.campaignId), assets: assets.forCampaign(d.campaignId) });
     }
-  }));
+  }, 'REQUEST_ASSETS'));
 
   socket.on(C2S.CREATE_FOLDER, safe(socket, ({ name, kind }: CreateFolderPayload) => {
     const d = requireDm(socket);
     assetFolders.create(d.campaignId, name?.trim() || 'New folder', kind === 'handout' ? 'handout' : 'art');
     broadcastAssets(io, d.campaignId);
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'CREATE_FOLDER'));
 
   socket.on(C2S.RENAME_FOLDER, safe(socket, ({ folderId, name }: RenameFolderPayload) => {
     const d = requireDm(socket);
@@ -61,7 +61,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     assetFolders.rename(folderId, name?.trim() || f.name);
     broadcastAssets(io, d.campaignId);
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'RENAME_FOLDER'));
 
   socket.on(C2S.DELETE_FOLDER, safe(socket, ({ folderId }: DeleteFolderPayload) => {
     const d = requireDm(socket);
@@ -70,7 +70,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     assetFolders.delete(folderId);
     broadcastAssets(io, d.campaignId);
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'DELETE_FOLDER'));
 
   socket.on(C2S.MOVE_ASSET, safe(socket, ({ assetId, folderId }: MoveAssetPayload) => {
     const d = requireDm(socket);
@@ -78,7 +78,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     if (!a || a.campaign_id !== d.campaignId) return;
     assets.move(assetId, folderId);
     broadcastAssets(io, d.campaignId);
-  }));
+  }, 'MOVE_ASSET'));
 
   socket.on(C2S.RENAME_ASSET, safe(socket, ({ assetId, title }: RenameAssetPayload) => {
     const d = requireDm(socket);
@@ -86,7 +86,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     if (!a || a.campaign_id !== d.campaignId) return;
     assets.rename(assetId, title?.trim() || a.filename);
     broadcastAssets(io, d.campaignId);
-  }));
+  }, 'RENAME_ASSET'));
 
   socket.on(C2S.DELETE_ASSET, safe(socket, ({ assetId }: DeleteAssetPayload) => {
     const d = requireDm(socket);
@@ -105,7 +105,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     }
     try { fs.unlinkSync(path.join(UPLOADS_DIR, `${a.id}.${a.ext}`)); } catch { /* already gone */ }
     broadcastAssets(io, d.campaignId);
-  }));
+  }, 'DELETE_ASSET'));
 
   socket.on(C2S.MOVE_HANDOUT, safe(socket, ({ handoutId, folderId }: MoveHandoutPayload) => {
     const d = requireDm(socket);
@@ -113,7 +113,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     if (!h) return;
     handouts.move(handoutId, folderId);
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'MOVE_HANDOUT'));
 
   // ----- audio -----
 
@@ -123,7 +123,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     if (!a || a.campaign_id !== d.campaignId || a.kind !== 'audio') throw new Error('Not an audio asset.');
     audioTracks.add(d.campaignId, assetId, title?.trim() || a.filename);
     broadcastAudio(io, d.campaignId);
-  }));
+  }, 'ADD_AUDIO'));
 
   socket.on(C2S.REMOVE_AUDIO, safe(socket, ({ trackId }: RemoveAudioPayload) => {
     const d = requireDm(socket);
@@ -133,7 +133,7 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     const st = getAudioState(d.campaignId);
     if (st.trackId === trackId) audioStates.set(d.campaignId, { ...st, trackId: null, playing: false });
     broadcastAudio(io, d.campaignId);
-  }));
+  }, 'REMOVE_AUDIO'));
 
   socket.on(C2S.AUDIO_CONTROL, safe(socket, ({ trackId, action, loop, volume }: AudioControlPayload) => {
     const d = requireDm(socket);
@@ -157,5 +157,5 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     }
     audioStates.set(d.campaignId, next);
     io.to(campaignRoom(d.campaignId)).emit(S2C.AUDIO_STATE, { state: next });
-  }));
+  }, 'AUDIO_CONTROL'));
 }

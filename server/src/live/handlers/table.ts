@@ -59,7 +59,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     const drawing = drawings.add(mapId, d.userId, layer, shape);
     if (layer === 'gm') io.to(dmRoom(d.campaignId)).emit(S2C.DRAWING_ADDED, { drawing });
     else io.to(campaignRoom(d.campaignId)).emit(S2C.DRAWING_ADDED, { drawing });
-  }));
+  }, 'DRAW'));
 
   socket.on(C2S.ERASE_DRAWING, safe(socket, ({ drawingId }: EraseDrawingPayload) => {
     const d = requireCampaign(socket);
@@ -73,7 +73,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     }
     drawings.delete(drawingId);
     io.to(campaignRoom(d.campaignId)).emit(S2C.DRAWING_REMOVED, { drawingId });
-  }));
+  }, 'ERASE_DRAWING'));
 
   socket.on(C2S.CLEAR_DRAWINGS, safe(socket, ({ mapId, layer }: ClearDrawingsPayload) => {
     const d = requireCampaign(socket);
@@ -82,7 +82,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (!map || map.campaignId !== d.campaignId) return;
     drawings.clearLayer(mapId, layer);
     io.to(campaignRoom(d.campaignId)).emit(S2C.DRAWINGS_CLEARED, { mapId, layer });
-  }));
+  }, 'CLEAR_DRAWINGS'));
 
   // ----- pings & measurement -----
 
@@ -91,14 +91,14 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId)).emit(S2C.PING_SHOWN, {
       x, y, color: colorFor(d.userId), byName: d.username,
     });
-  }));
+  }, 'PING'));
 
   socket.on(C2S.MEASURE, safe(socket, ({ from, to, active }: MeasurePayload) => {
     const d = requireCampaign(socket);
     io.to(campaignRoom(d.campaignId)).emit(S2C.MEASURE_SHOWN, {
       userId: d.userId, from, to, active: !!active, byName: d.username, color: colorFor(d.userId),
     });
-  }));
+  }, 'MEASURE'));
 
   // A caster's AoE template as they aim it — relayed live to whoever can
   // currently SEE the caster's token (DM always; the caster themself, since
@@ -115,7 +115,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
         byName: d.username, color: colorFor(d.userId),
       });
     }
-  }));
+  }, 'AOE_PREVIEW'));
 
   // A caster's single-target selection (range highlighting) relayed live, the
   // same visibility-scoped way as AOE_PREVIEW — there's no aim point to
@@ -131,7 +131,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
         byName: d.username, color: colorFor(d.userId),
       });
     }
-  }));
+  }, 'TARGET_PREVIEW'));
 
   // ----- handouts -----
 
@@ -143,7 +143,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     }
     handouts.create(d.campaignId, title?.trim() || 'Untitled', bodyMd ?? '', assetId ?? null);
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'CREATE_HANDOUT'));
 
   socket.on(C2S.UPDATE_HANDOUT, safe(socket, ({ handoutId, title, bodyMd, assetId, parentId }: UpdateHandoutPayload) => {
     const d = requireCampaign(socket);
@@ -152,7 +152,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (!h) return;
     handouts.update(handoutId, { title, bodyMd, assetId, parentId });
     broadcastHandouts(io, d.campaignId);
-  }));
+  }, 'UPDATE_HANDOUT'));
 
   socket.on(C2S.DELETE_HANDOUT, safe(socket, ({ handoutId }: DeleteHandoutPayload) => {
     const d = requireCampaign(socket);

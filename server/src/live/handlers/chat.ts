@@ -51,7 +51,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.CHAT, safe(socket, ({ text }: ChatPayload) => {
     const d = requireCampaign(socket);
     handleChatText(io, socket, d.campaignId, d.userId, d.username, d.role, String(text ?? '').trim(), 0);
-  }));
+  }, 'CHAT'));
 
   socket.on(C2S.SHEET_ROLL, safe(socket, ({ characterId, rollableId, adv }: SheetRollPayload) => {
     const d = requireCampaign(socket);
@@ -75,7 +75,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       recipients: null,
     });
     deliver(io, d.campaignId, msg);
-  }));
+  }, 'SHEET_ROLL'));
 
   socket.on(C2S.SAVE_MACRO, safe(socket, ({ macro }: SaveMacroPayload) => {
     const d = requireCampaign(socket);
@@ -92,7 +92,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       actionId: macro.actionId ?? null,
     });
     socket.emit(S2C.MACROS, { macros: macros.forUser(d.userId, d.campaignId) });
-  }));
+  }, 'SAVE_MACRO'));
 
   socket.on(C2S.CAST_SPELL, safe(socket, ({ characterId, rollableId, slotLevel }: CastSpellPayload) => {
     const d = requireCampaign(socket);
@@ -140,7 +140,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       text: `${character.name}: ${rollable.label}${atLabel}${concNote}`, roll: breakdown, recipients: null,
     }, undo);
     deliver(io, d.campaignId, msg);
-  }));
+  }, 'CAST_SPELL'));
 
   // DM hides / unhides a chat message, optionally undoing its recorded effects.
   socket.on(C2S.MODERATE_MESSAGE, safe(socket, ({ messageId, action }: ModerateMessagePayload) => {
@@ -160,19 +160,19 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     for (const s of campaignSockets(io, d.campaignId)) {
       s.emit(S2C.CHAT_UPDATED, { msg: redactChat(updated, sdata(s).role === 'dm') });
     }
-  }));
+  }, 'MODERATE_MESSAGE'));
 
   socket.on(C2S.REORDER_MACROS, safe(socket, ({ macroIds }: ReorderMacrosPayload) => {
     const d = requireCampaign(socket);
     if (Array.isArray(macroIds)) macros.reorder(d.userId, d.campaignId, macroIds);
     socket.emit(S2C.MACROS, { macros: macros.forUser(d.userId, d.campaignId) });
-  }));
+  }, 'REORDER_MACROS'));
 
   socket.on(C2S.DELETE_MACRO, safe(socket, ({ macroId }: DeleteMacroPayload) => {
     const d = requireCampaign(socket);
     macros.delete(d.userId, macroId);
     socket.emit(S2C.MACROS, { macros: macros.forUser(d.userId, d.campaignId) });
-  }));
+  }, 'DELETE_MACRO'));
 }
 
 /** Roll a character-sheet rollable and post the result (shared by pills). */

@@ -54,15 +54,16 @@ export function emitError(socket: Socket, message: string): void {
 }
 
 /** Wrap a handler so thrown errors become error toasts instead of crashes. */
-export function safe<T>(socket: Socket, fn: (payload: T) => void): (payload: T) => void {
+export function safe<T>(socket: Socket, fn: (payload: T) => void, eventName?: string): (payload: T) => void {
   return (payload: T) => {
     try {
       fn(payload);
     } catch (err) {
-      console.error('handler error:', err);
+      console.error(`handler error [${eventName ?? '?'}]:`, err);
       const raw = err instanceof Error ? err.message : 'Something went wrong.';
-      const msg = raw.includes('FOREIGN KEY') || raw.includes('SQLITE') || raw.includes('UNIQUE constraint')
-        ? 'A database error occurred. Please try again.'
+      const isSqlite = raw.includes('FOREIGN KEY') || raw.includes('SQLITE') || raw.includes('UNIQUE constraint');
+      const msg = isSqlite
+        ? `DB error [${eventName ?? '?'}]: ${raw}`
         : raw;
       emitError(socket, msg);
     }

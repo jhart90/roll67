@@ -113,7 +113,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
       }
     }
     broadcastDirectory(io, d.campaignId);
-  }));
+  }, 'CREATE_MAP'));
 
   socket.on(C2S.DELETE_MAP, safe(socket, ({ mapId }: DeleteMapPayload) => {
     const { d } = requireDmMap(socket, mapId);
@@ -135,7 +135,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     }
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_LIST, { maps: maps.forCampaign(d.campaignId!) });
     broadcastPresence(io, d.campaignId!);
-  }));
+  }, 'DELETE_MAP'));
 
   socket.on(C2S.UPDATE_MAP, safe(socket, (payload: UpdateMapPayload) => {
     const { d, map } = requireDmMap(socket, payload.mapId);
@@ -165,7 +165,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     };
     io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, edit);
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_LIST, { maps: maps.forCampaign(d.campaignId!) });
-  }));
+  }, 'UPDATE_MAP'));
 
   socket.on(C2S.SET_GRID_CONFIG, safe(socket, ({ mapId, grid }: SetGridConfigPayload) => {
     const { d, map } = requireDmMap(socket, mapId);
@@ -176,14 +176,14 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setGrid(mapId, merged);
     io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, grid: merged });
     syncMapVision(io, d.campaignId!, mapId);
-  }));
+  }, 'SET_GRID_CONFIG'));
 
   socket.on(C2S.SET_SPAWN, safe(socket, ({ mapId, q, r }: SetSpawnPayload) => {
     const { d } = requireDmMap(socket, mapId);
     const spawn = { q: Math.round(q), r: Math.round(r) };
     maps.setSpawn(mapId, spawn);
     io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, spawn });
-  }));
+  }, 'SET_SPAWN'));
 
   // ----- walls -----
 
@@ -206,7 +206,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setWalls(mapId, walls);
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, walls });
     syncMapVision(io, d.campaignId!, mapId);
-  }));
+  }, 'UPSERT_WALL'));
 
   socket.on(C2S.DELETE_WALL, safe(socket, ({ mapId, wallId }: DeleteWallPayload) => {
     const { d, map } = requireDmMap(socket, mapId);
@@ -214,7 +214,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setWalls(mapId, walls);
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, walls });
     syncMapVision(io, d.campaignId!, mapId);
-  }));
+  }, 'DELETE_WALL'));
 
   // ----- doors -----
 
@@ -242,7 +242,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     }
     if (!wallsChanged) io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, doors });
     syncMapVision(io, d.campaignId!, mapId);
-  }));
+  }, 'UPSERT_DOOR'));
 
   socket.on(C2S.DELETE_DOOR, safe(socket, ({ mapId, doorId }: DeleteDoorPayload) => {
     const { d, map } = requireDmMap(socket, mapId);
@@ -250,7 +250,7 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setDoors(mapId, doors);
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, doors });
     syncMapVision(io, d.campaignId!, mapId);
-  }));
+  }, 'DELETE_DOOR'));
 
   socket.on(C2S.TOGGLE_DOOR, safe(socket, ({ mapId, doorId }: ToggleDoorPayload) => {
     const d = sdata(socket);

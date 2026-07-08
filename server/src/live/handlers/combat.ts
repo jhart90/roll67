@@ -676,7 +676,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return;
     }
     resolveDamage();
-  }));
+  }, 'COMBAT_ACTION'));
 
   // Lock in an AoE spell's template: recompute (never trust the client) which
   // tokens the shape actually covers on the server's own map data, then run
@@ -834,7 +834,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       () => emitAoeBurst(io, d.campaignId, src.mapId, action.aoe!.shape, action.aoe!.sizeFt, action.aoe!.widthFt, originHex, p.aimHex, action.damageType),
       Math.max(0, noSaveSettleMs - noSaveFlightMs),
     );
-  }));
+  }, 'CAST_AOE'));
 
   // Activate a psychic power that has no target (utility/self powers, e.g.
   // Attunement or Astral Wandering): commits Effort and rolls the discipline
@@ -865,7 +865,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       text: `${actor.name} uses ${name} (−${cost} Effort).`, roll: null, recipients: null,
     }, [result.undo]);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-  }));
+  }, 'USE_POWER'));
 
   // A 5e death saving throw for a character at 0 HP. Server-authoritative:
   // rolls, tallies successes/failures, and resolves stabilize/wake/death.
@@ -935,7 +935,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       postStatusLine(io, d.campaignId, statusText);
       postStatusLine(io, d.campaignId, `Status changed by ${character.name}'s death save`);
     }
-  }));
+  }, 'DEATH_SAVE'));
 
   // DM "call for save": each listed token rolls its own save vs the DC, one
   // at a time — each roll posts as its own red/green chat card, and the next
@@ -948,7 +948,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (!runGroupSave(io, { campaignId: d.campaignId, userId: d.userId, username: d.username, ...p })) {
       emitError(socket, 'No valid targets for the save.');
     }
-  }));
+  }, 'REQUEST_SAVE'));
 
   socket.on(C2S.INIT_ADD, safe(socket, (payload: InitAddPayload) => {
     const d = requireCampaign(socket);
@@ -992,7 +992,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_ADD'));
 
   socket.on(C2S.INIT_REMOVE, safe(socket, ({ entryId }: InitRemovePayload) => {
     const d = requireCampaign(socket);
@@ -1004,7 +1004,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (state.turnIdx >= state.entries.length) state.turnIdx = 0;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_REMOVE'));
 
   socket.on(C2S.INIT_UPDATE, safe(socket, (payload: InitUpdatePayload) => {
     const d = requireCampaign(socket);
@@ -1032,7 +1032,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (payload.name !== undefined) entry.name = payload.name;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_UPDATE'));
 
   socket.on(C2S.INIT_NEXT, safe(socket, () => {
     const d = requireCampaign(socket);
@@ -1046,7 +1046,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_NEXT'));
 
   socket.on(C2S.INIT_PREV, safe(socket, () => {
     const d = requireCampaign(socket);
@@ -1060,7 +1060,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_PREV'));
 
   socket.on(C2S.INIT_SORT, safe(socket, () => {
     const d = requireCampaign(socket);
@@ -1070,14 +1070,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     state.turnIdx = 0;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_SORT'));
 
   socket.on(C2S.INIT_CLEAR, safe(socket, () => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_CLEAR'));
 
   socket.on(C2S.INIT_ROLL_MAP, safe(socket, ({ mapId, includeGm }: InitRollMapPayload) => {
     const d = requireCampaign(socket);
@@ -1107,7 +1107,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       text: `Rolled initiative for ${added} token${added === 1 ? '' : 's'}.`, roll: null, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-  }));
+  }, 'INIT_ROLL_MAP'));
 
   socket.on(C2S.INIT_SET_ACTIVE, safe(socket, ({ active }: { active: boolean }) => {
     const d = requireCampaign(socket);
@@ -1123,5 +1123,5 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-  }));
+  }, 'INIT_SET_ACTIVE'));
 }

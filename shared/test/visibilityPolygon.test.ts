@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { computeVisibilityPolygon, computeVisibilityPolygonBands } from '../src/vision/visibilityPolygon.js';
 import { computeUnionVisibilityPolygons } from '../src/vision/fov.js';
-import type { GridConfig, VisionStats, Wall } from '../src/types.js';
+import type { GridConfig, Point, VisionStats, Wall } from '../src/types.js';
 
 const ORIGIN = { x: 0, y: 0 };
+
+/** Standard even-odd ray-casting point-in-polygon test. */
+function pointInPolygon(pt: Point, poly: Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+    const intersect = (yi > pt.y) !== (yj > pt.y) && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 
 describe('computeVisibilityPolygon', () => {
   it('open field: every point sits at exactly maxDist from the origin', () => {
@@ -50,6 +61,34 @@ describe('computeVisibilityPolygon', () => {
 
   it('returns [] for a non-positive max distance', () => {
     expect(computeVisibilityPolygon(ORIGIN, 0, [])).toEqual([]);
+  });
+
+  it('a wall "north" (atan2 negative range) hides a point behind it, exactly like a wall "east" (atan2 positive range)', () => {
+    // atan2 returns (-PI, PI]: a wall to the north (-y) resolves to a
+    // NEGATIVE angle, while the base sweep ring is generated over [0, 2*PI).
+    // Sorting the two ranges together without normalizing puts every
+    // negative-angle endpoint in its own block instead of interleaving it
+    // with its true angular neighbors (the nearby base rays, which live at
+    // the numerically unrelated end of the range). The connect-the-dots path
+    // then jumps between angularly-distant points, and a point actually
+    // hidden behind the wall can end up enclosed by the resulting
+    // self-intersecting shape anyway. A pure per-sample distance check can't
+    // catch this -- castRayDist resolves each angle correctly in isolation;
+    // only whether a point is INSIDE the assembled polygon exposes it.
+    const wall = { a: { x: -10, y: -30 }, b: { x: 10, y: -30 } };
+    const poly = computeVisibilityPolygon(ORIGIN, 100, [wall]);
+    expect(pointInPolygon({ x: 0, y: -60 }, poly)).toBe(false); // behind the wall
+    expect(pointInPolygon({ x: 60, y: 0 }, poly)).toBe(true); // unobstructed east
+  });
+
+  it('a wall "west" (atan2 wrap-around boundary) hides a point behind it too', () => {
+    // Endpoints straddling the +-PI seam itself (a wall almost due west) are
+    // the other place a naive numeric sort of un-normalized atan2 output can
+    // misorder neighbors.
+    const wall = { a: { x: -30, y: -10 }, b: { x: -30, y: 10 } };
+    const poly = computeVisibilityPolygon(ORIGIN, 100, [wall]);
+    expect(pointInPolygon({ x: -60, y: 0 }, poly)).toBe(false); // behind the wall
+    expect(pointInPolygon({ x: 0, y: 60 }, poly)).toBe(true); // unobstructed south
   });
 });
 

@@ -31,6 +31,17 @@ function pointAt(origin: Point, angle: number, dist: number): Point {
   return { x: origin.x + Math.cos(angle) * dist, y: origin.y + Math.sin(angle) * dist };
 }
 
+const TWO_PI = Math.PI * 2;
+
+/** Wrap to [0, 2*PI) -- `atan2` returns (-PI, PI], which must be folded into
+ *  the same range as the base rays below before sorting, or angles on
+ *  opposite sides of the wrap point sort into two disjoint blocks instead of
+ *  interleaving, turning the sweep into a self-intersecting polygon. */
+function normalizeAngle(a: number): number {
+  const wrapped = a % TWO_PI;
+  return wrapped < 0 ? wrapped + TWO_PI : wrapped;
+}
+
 /** Every angle worth casting a ray at: a base ring plus a hair on each side of every segment endpoint (to catch silhouette edges), in ascending order. */
 function sweepAngles(origin: Point, segments: Segment[]): number[] {
   const angles = new Set<number>();
@@ -38,9 +49,9 @@ function sweepAngles(origin: Point, segments: Segment[]): number[] {
   for (const s of segments) {
     for (const p of [s.a, s.b]) {
       const a = Math.atan2(p.y - origin.y, p.x - origin.x);
-      angles.add(a - EPS);
-      angles.add(a);
-      angles.add(a + EPS);
+      angles.add(normalizeAngle(a - EPS));
+      angles.add(normalizeAngle(a));
+      angles.add(normalizeAngle(a + EPS));
     }
   }
   return [...angles].sort((a, b) => a - b);

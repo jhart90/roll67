@@ -29,7 +29,7 @@ export function sightSegments(walls: Wall[], doors: Door[], viewer: Point): Segm
   const out: Segment[] = [];
   for (const wall of walls) {
     const type = wall.type ?? 'solid';
-    if (type === 'window') continue;
+    if (type === 'window' || type === 'stainedglass') continue;
     for (let i = 0; i + 1 < wall.points.length; i++) {
       const a = wall.points[i];
       const b = wall.points[i + 1];

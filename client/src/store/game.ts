@@ -135,9 +135,11 @@ interface GameState {
   drawLayer: DrawingLayerName;
   setDrawColor(c: string): void;
   setDrawLayer(l: DrawingLayerName): void;
-  wallType: 'solid' | 'window' | 'oneway';
+  wallType: 'solid' | 'window' | 'oneway' | 'stainedglass';
   wallFlip: boolean;
-  setWallType(t: 'solid' | 'window' | 'oneway'): void;
+  wallGlassColor: string;
+  wallRainbow: boolean;
+  setWallType(t: 'solid' | 'window' | 'oneway' | 'stainedglass'): void;
   toggleWallFlip(): void;
   doorType: DoorType;
   setDoorType(t: DoorType): void;
@@ -325,6 +327,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   setDrawLayer(drawLayer) { set({ drawLayer }); },
   wallType: 'solid',
   wallFlip: false,
+  wallGlassColor: '#cc4444',
+  wallRainbow: false,
   setWallType(wallType) { set({ wallType }); },
   toggleWallFlip() { set({ wallFlip: !get().wallFlip }); },
   doorType: 'door',
@@ -832,7 +836,7 @@ export const intents = {
   setGrid: (mapId: string, grid: Partial<GridConfig>) => socket.emit(C2S.SET_GRID_CONFIG, { mapId, grid }),
   setSpawn: (mapId: string, q: number, r: number) => socket.emit(C2S.SET_SPAWN, { mapId, q, r }),
 
-  upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway'; flip?: boolean }) =>
+  upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway' | 'stainedglass'; flip?: boolean; glassColor?: string; rainbow?: boolean }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),
   deleteWall: (mapId: string, wallId: string) => socket.emit(C2S.DELETE_WALL, { mapId, wallId }),
   upsertDoor: (mapId: string, door: { id?: string; a: { x: number; y: number }; b: { x: number; y: number }; open?: boolean; type?: DoorType; locked?: boolean; keyName?: string | null }) =>
@@ -842,6 +846,7 @@ export const intents = {
   upsertLight: (mapId: string, light: { id?: string; x: number; y: number; brightRadius: number; dimRadius: number; color?: string }) =>
     socket.emit(C2S.UPSERT_LIGHT, { mapId, light }),
   deleteLight: (mapId: string, lightId: string) => socket.emit(C2S.DELETE_LIGHT, { mapId, lightId }),
+  autoTraceWalls: (mapId: string) => socket.emit(C2S.AUTO_TRACE_WALLS, { mapId }),
 
   createToken: (payload: {
     mapId: string; name: string; q: number; r: number; characterId?: string | null;

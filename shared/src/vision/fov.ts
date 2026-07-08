@@ -268,6 +268,11 @@ export function computeUnionFovBands(
 export interface VisibilityLitMask {
   circles: Array<{ x: number; y: number; r: number }>;
   lightPolygons: Point[][];
+  /** Color per light polygon (parallel to lightPolygons); undefined = white/uncolored. */
+  lightColors?: (string | undefined)[];
+  /** Tinted light cones projected through stained glass windows; each clipped
+   *  to its parent lightPolygon on the client via canvas clip(). */
+  glassCones?: Array<{ lightIdx: number; cone: Point[]; color: string }>;
 }
 
 export interface VisibilityBand {
@@ -284,17 +289,86 @@ export interface VisibilityPolygonBands {
   fade: VisibilityBand;
 }
 
-/** Each light's own wall-aware illumination shape (an eye standing at the light, per litHexes' hex analog). */
-export function computeLightPolygons(input: FovInput, pxPerHex: number): Point[][] {
-  const out: Point[][] = [];
+export interface LightPolygonResult {
+  polygons: Point[][];
+  colors: (string | undefined)[];
+  glassCones: Array<{ lightIdx: number; cone: Point[]; color: string }>;
+}
+
+const RAINBOW_COLORS = ['#ff0000', '#ff8800', '#ffff00', '#00cc00', '#0066ff', '#8800ff'];
+
+/** Each light's own wall-aware illumination shape (an eye standing at the light, per litHexes' hex analog).
+ *  Also computes tinted cones for light passing through stained glass windows. */
+export function computeLightPolygonsWithColor(input: FovInput, pxPerHex: number): LightPolygonResult {
+  const polygons: Point[][] = [];
+  const colors: (string | undefined)[] = [];
+  const glassCones: LightPolygonResult['glassCones'] = [];
+  const glassWalls = input.walls.filter((w) => w.type === 'stainedglass');
+
   for (const light of input.lights) {
     const pos = { x: light.x, y: light.y };
     const segs = sightSegments(input.walls, input.doors, pos);
     const radius = Math.min(Math.max(light.dimRadius, light.brightRadius), MAX_VISION_RADIUS);
     const poly = computeVisibilityPolygon(pos, radius * pxPerHex, segs);
-    if (poly.length > 0) out.push(poly);
+    if (poly.length === 0) continue;
+    const idx = polygons.length;
+    polygons.push(poly);
+    colors.push(light.color);
+
+    // Compute stained glass cones for this light
+    for (const gw of glassWalls) {
+      for (let si = 0; si + 1 < gw.points.length; si++) {
+        const cones = computeGlassCones(pos, gw.points[si], gw.points[si + 1], radius * pxPerHex, gw.glassColor, gw.rainbow);
+        for (const c of cones) glassCones.push({ lightIdx: idx, ...c });
+      }
+    }
   }
-  return out;
+  return { polygons, colors, glassCones };
+}
+
+/** Backward-compatible wrapper that returns only the polygon array. */
+export function computeLightPolygons(input: FovInput, pxPerHex: number): Point[][] {
+  return computeLightPolygonsWithColor(input, pxPerHex).polygons;
+}
+
+/** Compute the tinted cone(s) that a light at `lightPos` casts through a
+ *  stained glass segment a→b. Returns one cone per color strip (1 for solid
+ *  color, 6 for rainbow). Each cone is a quadrilateral: [a', farA, farB, b']
+ *  that starts at the window and extends outward away from the light, clipped
+ *  to `maxDist` from the light. */
+function computeGlassCones(
+  lightPos: Point, a: Point, b: Point, maxDist: number,
+  glassColor?: string, rainbow?: boolean,
+): Array<{ cone: Point[]; color: string }> {
+  // Check if the window segment is within the light's reach
+  const dA = Math.hypot(a.x - lightPos.x, a.y - lightPos.y);
+  const dB = Math.hypot(b.x - lightPos.x, b.y - lightPos.y);
+  if (dA > maxDist && dB > maxDist) return [];
+
+  const farDist = maxDist * 2;
+  const extend = (p: Point): Point => {
+    const dx = p.x - lightPos.x;
+    const dy = p.y - lightPos.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.1) return p;
+    return { x: lightPos.x + (dx / len) * farDist, y: lightPos.y + (dy / len) * farDist };
+  };
+
+  if (rainbow) {
+    const strips = RAINBOW_COLORS.length;
+    const out: Array<{ cone: Point[]; color: string }> = [];
+    for (let i = 0; i < strips; i++) {
+      const t0 = i / strips;
+      const t1 = (i + 1) / strips;
+      const s0 = { x: a.x + (b.x - a.x) * t0, y: a.y + (b.y - a.y) * t0 };
+      const s1 = { x: a.x + (b.x - a.x) * t1, y: a.y + (b.y - a.y) * t1 };
+      out.push({ cone: [s0, extend(s0), extend(s1), s1], color: RAINBOW_COLORS[i] });
+    }
+    return out;
+  }
+
+  const color = glassColor || '#ffffff';
+  return [{ cone: [a, extend(a), extend(b), b], color }];
 }
 
 /**
@@ -323,7 +397,7 @@ export function computeLightPolygons(input: FovInput, pxPerHex: number): Point[]
 export function computeUnionVisibilityPolygons(
   viewers: Array<{ hex: Hex; stats: VisionStats }>,
   input: FovInput,
-  precomputed?: { lightPolygons?: Point[][]; segsByViewer?: Map<number, Segment[]> },
+  precomputed?: { lightPolygons?: Point[][]; lightColors?: (string | undefined)[]; glassCones?: LightPolygonResult['glassCones']; segsByViewer?: Map<number, Segment[]> },
 ): VisibilityPolygonBands {
   const isLight = input.grid.lighting === 'light';
   const isDim = input.grid.lighting === 'dim';
@@ -366,11 +440,24 @@ export function computeUnionVisibilityPolygons(
   }
 
   if (isLight) {
-    return { full: { reach: full, lit: null }, fade: { reach: fade, lit: null } };
+    // Even under daylight, colored lights and stained glass cones are still
+    // visually relevant (tinted overlay on the map) — compute them so the
+    // client can render the color layer regardless of lighting mode.
+    const lpResult = precomputed?.lightPolygons
+      ? { polygons: precomputed.lightPolygons, colors: precomputed.lightColors ?? [], glassCones: precomputed.glassCones ?? [] }
+      : computeLightPolygonsWithColor(input, pxPerHex);
+    const hasColor = lpResult.colors.some(Boolean) || lpResult.glassCones.length > 0;
+    const colorMask: VisibilityLitMask | null = hasColor
+      ? { circles: [], lightPolygons: lpResult.polygons, lightColors: lpResult.colors, glassCones: lpResult.glassCones }
+      : null;
+    return { full: { reach: full, lit: colorMask }, fade: { reach: fade, lit: colorMask } };
   }
-  const lightPolygons = precomputed?.lightPolygons ?? computeLightPolygons(input, pxPerHex);
+  const lpResult = precomputed?.lightPolygons
+    ? { polygons: precomputed.lightPolygons, colors: precomputed.lightColors ?? [], glassCones: precomputed.glassCones ?? [] }
+    : computeLightPolygonsWithColor(input, pxPerHex);
+  const litMaskBase = { lightPolygons: lpResult.polygons, lightColors: lpResult.colors, glassCones: lpResult.glassCones };
   return {
-    full: { reach: full, lit: { circles: fullCircles, lightPolygons } },
-    fade: { reach: fade, lit: { circles: fadeCircles, lightPolygons } },
+    full: { reach: full, lit: { circles: fullCircles, ...litMaskBase } },
+    fade: { reach: fade, lit: { circles: fadeCircles, ...litMaskBase } },
   };
 }

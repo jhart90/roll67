@@ -118,6 +118,8 @@ function FieldInput({
   );
 }
 
+const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoeSize', 'aoeWidth', 'condition', 'conditionSave', 'conditionDc']);
+
 function ListEditor({
   section, sheet, readOnly, onPatch,
 }: {
@@ -127,6 +129,10 @@ function ListEditor({
   onPatch: (patch: SheetData) => void;
 }) {
   const rows = Array.isArray(sheet[section.id]) ? (sheet[section.id] as SheetData[]) : [];
+  const [detailIdx, setDetailIdx] = useState<number | null>(null);
+  const hasDetail = section.id === 'attacks';
+
+  const mainCols = hasDetail ? section.columns.filter((c) => !ATTACK_DETAIL_COLS.has(c.id)) : section.columns;
 
   function setRows(next: SheetData[]) {
     onPatch({ [section.id]: next });
@@ -140,70 +146,97 @@ function ListEditor({
     setRows([...rows, row]);
   }
 
+  function renderCell(col: FieldDef, row: SheetData, i: number) {
+    if (col.type === 'checkbox') {
+      return (
+        <input
+          type="checkbox"
+          checked={row[col.id] === true}
+          disabled={readOnly}
+          onChange={(e) => {
+            const next = rows.map((r, j) => (j === i ? { ...r, [col.id]: e.target.checked } : r));
+            setRows(next);
+          }}
+        />
+      );
+    }
+    if (col.type === 'select') {
+      return (
+        <select
+          value={typeof row[col.id] === 'string' ? String(row[col.id]) : String(col.default ?? '')}
+          disabled={readOnly}
+          onChange={(e) => {
+            const next = rows.map((r, j) => (j === i ? { ...r, [col.id]: e.target.value } : r));
+            setRows(next);
+          }}
+        >
+          {(col.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+    }
+    return (
+      <>
+        <input
+          type={col.type === 'number' ? 'number' : 'text'}
+          defaultValue={row[col.id] === undefined ? '' : String(row[col.id])}
+          readOnly={readOnly}
+          list={col.suggestions ? `dl-${section.id}-${col.id}` : undefined}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          onBlur={(e) => {
+            const raw = e.target.value;
+            const val = col.type === 'number' ? (raw === '' ? 0 : Number(raw)) : raw;
+            if (col.type === 'number' && Number.isNaN(val)) return;
+            if (val === row[col.id]) return;
+            const next = rows.map((r, j) => (j === i ? { ...r, [col.id]: val } : r));
+            setRows(next);
+          }}
+        />
+        {col.suggestions && i === 0 && (
+          <datalist id={`dl-${section.id}-${col.id}`}>
+            {col.suggestions.map((s) => <option key={s} value={s} />)}
+          </datalist>
+        )}
+      </>
+    );
+  }
+
+  const detailRow = detailIdx !== null && detailIdx < rows.length ? rows[detailIdx] : null;
+
   return (
     <div className="sheet-list">
       <table>
         <thead>
           <tr>
-            {section.columns.map((c) => <th key={c.id}>{c.label}</th>)}
+            {mainCols.map((c) => <th key={c.id}>{c.label}</th>)}
+            {hasDetail && <th />}
             {!readOnly && <th />}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={i}>
-              {section.columns.map((col) => (
-                <td key={col.id}>
-                  {col.type === 'checkbox' ? (
-                    <input
-                      type="checkbox"
-                      checked={row[col.id] === true}
-                      disabled={readOnly}
-                      onChange={(e) => {
-                        const next = rows.map((r, j) => (j === i ? { ...r, [col.id]: e.target.checked } : r));
-                        setRows(next);
-                      }}
-                    />
-                  ) : col.type === 'select' ? (
-                    <select
-                      value={typeof row[col.id] === 'string' ? String(row[col.id]) : String(col.default ?? '')}
-                      disabled={readOnly}
-                      onChange={(e) => {
-                        const next = rows.map((r, j) => (j === i ? { ...r, [col.id]: e.target.value } : r));
-                        setRows(next);
-                      }}
-                    >
-                      {(col.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <>
-                      <input
-                        type={col.type === 'number' ? 'number' : 'text'}
-                        defaultValue={row[col.id] === undefined ? '' : String(row[col.id])}
-                        readOnly={readOnly}
-                        list={col.suggestions ? `dl-${section.id}-${col.id}` : undefined}
-                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                        onBlur={(e) => {
-                          const raw = e.target.value;
-                          const val = col.type === 'number' ? (raw === '' ? 0 : Number(raw)) : raw;
-                          if (col.type === 'number' && Number.isNaN(val)) return;
-                          if (val === row[col.id]) return;
-                          const next = rows.map((r, j) => (j === i ? { ...r, [col.id]: val } : r));
-                          setRows(next);
-                        }}
-                      />
-                      {col.suggestions && i === 0 && (
-                        <datalist id={`dl-${section.id}-${col.id}`}>
-                          {col.suggestions.map((s) => <option key={s} value={s} />)}
-                        </datalist>
-                      )}
-                    </>
-                  )}
-                </td>
+              {mainCols.map((col) => (
+                <td key={col.id}>{renderCell(col, row, i)}</td>
               ))}
+              {hasDetail && (
+                <td>
+                  <button
+                    className="link"
+                    title="Attack details"
+                    style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i ? 1 : 0.5 }}
+                    onClick={() => setDetailIdx(detailIdx === i ? null : i)}
+                  >
+                    ✏️
+                  </button>
+                </td>
+              )}
               {!readOnly && (
                 <td>
-                  <button className="link danger" onClick={() => setRows(rows.filter((_, j) => j !== i))}>×</button>
+                  <button className="link danger" onClick={() => {
+                    if (detailIdx === i) setDetailIdx(null);
+                    else if (detailIdx !== null && detailIdx > i) setDetailIdx(detailIdx - 1);
+                    setRows(rows.filter((_, j) => j !== i));
+                  }}>×</button>
                 </td>
               )}
             </tr>
@@ -211,6 +244,25 @@ function ListEditor({
         </tbody>
       </table>
       {!readOnly && <button className="link" onClick={addRow}>+ add {section.title.toLowerCase()}</button>}
+
+      {hasDetail && detailRow && detailIdx !== null && (
+        <div className="attack-detail-popover">
+          <div className="dock-header" style={{ marginBottom: 8 }}>
+            <h4 style={{ margin: 0, textTransform: 'none', color: 'var(--text)' }}>
+              {String(detailRow.name || 'Attack')} — Details
+            </h4>
+            <button className="link" onClick={() => setDetailIdx(null)}>close</button>
+          </div>
+          <div className="attack-detail-grid">
+            {section.columns.map((col) => (
+              <label key={col.id} className={ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}>
+                {col.label}
+                {renderCell(col, detailRow, detailIdx)}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

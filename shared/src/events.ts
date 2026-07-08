@@ -6,7 +6,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WorldFolder,
+  RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
 
@@ -122,6 +122,8 @@ export const C2S = {
   ADD_AUDIO: 'addAudio',
   REMOVE_AUDIO: 'removeAudio',
   AUDIO_CONTROL: 'audioControl',
+  // auto-trace
+  AUTO_TRACE_WALLS: 'autoTraceWalls',
 } as const;
 
 export interface JoinCampaignPayload { campaignId: string }
@@ -145,7 +147,7 @@ export interface SetSpawnPayload { mapId: string; q: number; r: number }
 
 export interface UpsertWallPayload {
   mapId: string;
-  wall: { id?: string; points: Point[]; type?: 'solid' | 'window' | 'oneway'; flip?: boolean };
+  wall: { id?: string; points: Point[]; type?: WallType; flip?: boolean; glassColor?: string; rainbow?: boolean };
 }
 export interface DeleteWallPayload { mapId: string; wallId: string }
 export interface UpsertDoorPayload {
@@ -423,6 +425,8 @@ export interface CreateHandoutPayload { title: string; bodyMd?: string; assetId?
 export interface UpdateHandoutPayload { handoutId: string; title?: string; bodyMd?: string; assetId?: string | null; parentId?: string | null }
 export interface DeleteHandoutPayload { handoutId: string }
 export interface ShareHandoutPayload { handoutId: string; to: string[] | 'all' | 'none' }
+
+export interface AutoTraceWallsPayload { mapId: string }
 
 // ---------- Server -> client events ----------
 

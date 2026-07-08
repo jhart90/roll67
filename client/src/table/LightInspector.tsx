@@ -9,7 +9,7 @@ export function LightInspector() {
 
   if (!isDm || !map || !light) return null;
 
-  function update(patch: Partial<{ brightRadius: number; dimRadius: number }>) {
+  function update(patch: Partial<{ brightRadius: number; dimRadius: number; color: string }>) {
     if (!light || !map) return;
     intents.upsertLight(map.id, { ...light, ...patch });
   }
@@ -47,9 +47,26 @@ export function LightInspector() {
             onChange={(e) => update({ dimRadius: Math.max(0, Number(e.target.value) || 0) })}
           />
         </label>
+        <label>
+          Color
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="color"
+              value={light.color || '#ffffff'}
+              onChange={(e) => update({ color: e.target.value })}
+              style={{ width: 36, height: 28, border: 'none', padding: 0, cursor: 'pointer' }}
+            />
+            {light.color && (
+              <button className="link" style={{ fontSize: 11 }} onClick={() => update({ color: undefined })}>
+                reset to white
+              </button>
+            )}
+          </div>
+        </label>
       </div>
       <p className="dim" style={{ fontSize: 12 }}>
         Hexes lit by this light are visible to characters whose sight reaches them.
+        {light.color ? ' Colored lights blend additively where they overlap.' : ''}
       </p>
     </div>
   );

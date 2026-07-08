@@ -53,6 +53,8 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const drawLayer = useGameStore((s) => s.drawLayer);
   const wallType = useGameStore((s) => s.wallType);
   const wallFlip = useGameStore((s) => s.wallFlip);
+  const wallGlassColor = useGameStore((s) => s.wallGlassColor);
+  const wallRainbow = useGameStore((s) => s.wallRainbow);
   const doorType = useGameStore((s) => s.doorType);
   const [showMaps, setShowMaps] = useState(false);
   const [showDice, setShowDice] = useState(false);
@@ -156,21 +158,40 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         {tool === 'wall' && map && isDm && (
           <div className="draw-options">
             <span className="dim" style={{ fontSize: 12 }}>Wall:</span>
-            {(['solid', 'window', 'oneway'] as const).map((t) => (
+            {(['solid', 'window', 'oneway', 'stainedglass'] as const).map((t) => (
               <button
                 key={t}
                 className={wallType === t ? 'active' : ''}
                 style={{ fontSize: 12 }}
-                title={t === 'solid' ? 'Blocks movement & sight' : t === 'window' ? 'Blocks movement, see-through' : 'One-way: see out, not in'}
+                title={t === 'solid' ? 'Blocks movement & sight' : t === 'window' ? 'Blocks movement, see-through' : t === 'oneway' ? 'One-way: see out, not in' : 'Stained glass: tints light passing through'}
                 onClick={() => useGameStore.getState().setWallType(t)}
               >
-                {t === 'solid' ? 'Solid' : t === 'window' ? 'Window' : 'One-way'}
+                {t === 'solid' ? 'Solid' : t === 'window' ? 'Window' : t === 'oneway' ? 'One-way' : 'Stained Glass'}
               </button>
             ))}
             {wallType === 'oneway' && (
               <button className={wallFlip ? 'active' : ''} style={{ fontSize: 12 }} onClick={() => useGameStore.getState().toggleWallFlip()}>
                 flip side
               </button>
+            )}
+            {wallType === 'stainedglass' && (
+              <>
+                <input
+                  type="color"
+                  value={wallGlassColor}
+                  onChange={(e) => useGameStore.setState({ wallGlassColor: e.target.value })}
+                  style={{ width: 28, height: 22, border: 'none', padding: 0, cursor: 'pointer', verticalAlign: 'middle' }}
+                  title="Glass tint color"
+                />
+                <button
+                  className={wallRainbow ? 'active' : ''}
+                  style={{ fontSize: 12 }}
+                  title="Rainbow: splits light into 6 color bands"
+                  onClick={() => useGameStore.setState({ wallRainbow: !wallRainbow })}
+                >
+                  Rainbow
+                </button>
+              </>
             )}
             <span className="dim" style={{ fontSize: 11 }}>click points · double-click/Enter to finish</span>
           </div>

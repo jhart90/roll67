@@ -4,7 +4,7 @@ import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
-const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b' };
+const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b', stainedglass: '#d26cd2' };
 
 /** A light marker: selectable, draggable, and right-clickable (DM), in both the
  *  light tool and the normal select cursor. */
@@ -68,19 +68,23 @@ const LightPiece = memo(function LightPiece({ light, selected, interactive, hexP
 const WallPiece = memo(function WallPiece({ wall, selected, interactive }: { wall: Wall; selected: boolean; interactive: boolean }) {
   const type = wall.type ?? 'solid';
   const pts = wall.points.map((p) => `${p.x},${p.y}`).join(' ');
+  const strokeColor = type === 'stainedglass' ? (wall.glassColor || '#d26cd2') : WALL_STROKE[type];
   return (
     <g>
       {selected && (
         <polyline points={pts} fill="none" stroke="#fff" strokeWidth={9} strokeLinecap="round" strokeLinejoin="round" opacity={0.35} pointerEvents="none" />
       )}
+      {type === 'stainedglass' && (
+        <polyline points={pts} fill="none" stroke={strokeColor} strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" opacity={0.3} pointerEvents="none" />
+      )}
       <polyline
         points={pts}
         fill="none"
-        stroke={WALL_STROKE[type]}
+        stroke={strokeColor}
         strokeWidth={4}
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeDasharray={type === 'window' ? '2 8' : type === 'oneway' ? '12 6' : undefined}
+        strokeDasharray={type === 'window' ? '2 8' : type === 'oneway' ? '12 6' : type === 'stainedglass' ? '4 6' : undefined}
         opacity={0.9}
         pointerEvents="none"
       />
@@ -191,6 +195,8 @@ export function GeometryLayer() {
   const lights = isDm ? dmGeometry?.lights ?? [] : [];
   const wallType = useGameStore((s) => s.wallType);
   const wallFlip = useGameStore((s) => s.wallFlip);
+  const wallGlassColor = useGameStore((s) => s.wallGlassColor);
+  const wallRainbow = useGameStore((s) => s.wallRainbow);
   const doorType = useGameStore((s) => s.doorType);
 
   const DOOR_STROKE: Record<string, string> = { door: '#c98d4b', gate: '#4b8fc9' };
@@ -205,7 +211,7 @@ export function GeometryLayer() {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setDraft([]);
       if (e.key === 'Enter' && tool === 'wall' && draft.length >= 2) {
-        intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip });
+        intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip, ...(wallType === 'stainedglass' ? { glassColor: wallGlassColor, rainbow: wallRainbow } : {}) });
         setDraft([]);
       }
     }
@@ -354,7 +360,7 @@ export function GeometryLayer() {
   function onOverlayDoubleClick(e: React.MouseEvent<SVGRectElement>) {
     if (tool === 'wall' && draft.length >= 2) {
       e.stopPropagation();
-      intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip });
+      intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip, ...(wallType === 'stainedglass' ? { glassColor: wallGlassColor, rainbow: wallRainbow } : {}) });
       setDraft([]);
     }
   }
@@ -374,7 +380,7 @@ export function GeometryLayer() {
     e.preventDefault();
     e.stopPropagation();
     if (tool === 'wall' && draft.length >= 2) {
-      intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip });
+      intents.upsertWall(map.id, { points: draft, type: wallType, flip: wallFlip, ...(wallType === 'stainedglass' ? { glassColor: wallGlassColor, rainbow: wallRainbow } : {}) });
     }
     if (tool === 'wall' || tool === 'door') {
       setDraft([]);

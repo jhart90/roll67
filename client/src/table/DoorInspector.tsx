@@ -13,10 +13,11 @@ export function DoorInspector() {
 
   const isGeneric = !door?.keyName || door.keyName === 'Key';
   const [customKey, setCustomKey] = useState(isGeneric ? '' : door?.keyName ?? '');
+  const [keyMode, setKeyMode] = useState<'generic' | 'specific'>(isGeneric ? 'generic' : 'specific');
 
-  // Resync the custom-key text box when a different door is selected.
   useEffect(() => {
     setCustomKey(isGeneric ? '' : door?.keyName ?? '');
+    setKeyMode(isGeneric ? 'generic' : 'specific');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [door?.id]);
 
@@ -51,40 +52,65 @@ export function DoorInspector() {
             <option value="gate">Gate — blocks movement, always see-through</option>
           </select>
         </label>
-        <label>
-          <input type="checkbox" checked={door.open} onChange={(e) => update({ open: e.target.checked })} />
-          {' '}Open
-        </label>
-        <label>
-          <input type="checkbox" checked={!!door.locked} onChange={(e) => update({ locked: e.target.checked, keyName: e.target.checked ? (door.keyName || 'Key') : null })} />
-          {' '}Locked
-        </label>
-        <label className={!door.locked ? 'dim' : undefined}>
-          Key
-          <select
-            disabled={!door.locked}
-            value={isGeneric ? 'generic' : 'specific'}
-            onChange={(e) => {
-              if (e.target.value === 'generic') update({ keyName: 'Key' });
-              else update({ keyName: customKey.trim() || 'Key' });
-            }}
-          >
-            <option value="generic">Generic Key</option>
-            <option value="specific">Specific item…</option>
-          </select>
-        </label>
-        {!isGeneric && (
-          <label className={!door.locked ? 'dim' : undefined}>
-            Item name
-            <input
-              type="text"
-              disabled={!door.locked}
-              value={customKey}
-              onChange={(e) => setCustomKey(e.target.value)}
-              onBlur={() => update({ keyName: customKey.trim() || 'Key' })}
-              placeholder="e.g. Rusty Brass Key"
-            />
-          </label>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, gridColumn: '1 / -1' }}>
+          <div className="toggle-row">
+            <span>{door.open ? 'Open' : 'Closed'}</span>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={door.open} onChange={(e) => update({ open: e.target.checked })} />
+              <span className="slider" />
+            </label>
+          </div>
+          <div className="toggle-row">
+            <span>{door.locked ? 'Locked' : 'Unlocked'}</span>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={!!door.locked}
+                onChange={(e) => update({ locked: e.target.checked, keyName: e.target.checked ? (door.keyName || 'Key') : null })}
+              />
+              <span className="slider" />
+            </label>
+          </div>
+        </div>
+
+        {door.locked && (
+          <>
+            <label>
+              Key
+              <select
+                value={keyMode}
+                onChange={(e) => {
+                  const mode = e.target.value as 'generic' | 'specific';
+                  setKeyMode(mode);
+                  if (mode === 'generic') {
+                    setCustomKey('');
+                    update({ keyName: 'Key' });
+                  }
+                }}
+              >
+                <option value="generic">Generic Key</option>
+                <option value="specific">Specific item…</option>
+              </select>
+            </label>
+            {keyMode === 'specific' && (
+              <label>
+                Item name
+                <input
+                  type="text"
+                  value={customKey}
+                  onChange={(e) => setCustomKey(e.target.value)}
+                  onBlur={() => {
+                    const name = customKey.trim() || 'Key';
+                    update({ keyName: name });
+                    if (name === 'Key') setKeyMode('generic');
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  placeholder="e.g. Rusty Brass Key"
+                />
+              </label>
+            )}
+          </>
         )}
       </div>
       <p className="dim" style={{ fontSize: 12 }}>

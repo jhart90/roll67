@@ -391,6 +391,51 @@ button.link:hover { text-decoration: underline; }
 .inspector-grid label { margin: 0; font-size: 12px; }
 .inspector-grid input[type='color'] { padding: 2px; height: 34px; }
 
+/* Toggle switch — replaces checkboxes for binary on/off controls */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-switch .slider {
+  position: absolute;
+  inset: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.toggle-switch .slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.2s, background 0.2s;
+}
+.toggle-switch input:checked + .slider {
+  background: #34c759;
+  border-color: #34c759;
+}
+.toggle-switch input:checked + .slider::before {
+  transform: translateX(20px);
+  background: #fff;
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
 .viewas-banner {
   position: absolute;
   bottom: 12px;
@@ -719,6 +764,40 @@ button.link:hover { text-decoration: underline; }
 .sheet-list th { text-align: left; color: var(--text-dim); font-weight: 400; padding: 2px 4px; }
 .sheet-list td { padding: 2px 4px; }
 .sheet-list input, .sheet-list select { margin: 0; padding: 4px 6px; font-size: 12px; }
+
+/* Attack detail pop-over */
+.attack-detail-popover {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.attack-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px 10px;
+}
+.attack-detail-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.attack-detail-grid label.detail-field {
+  color: var(--accent);
+}
+.attack-detail-grid input,
+.attack-detail-grid select {
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 13px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
 
 .rolls-column {
   width: 240px;

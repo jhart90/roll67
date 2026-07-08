@@ -4,7 +4,8 @@
 
 import type { Server, Socket } from 'socket.io';
 import {
-  computeLightPolygons, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, litHexes,
+  computeLightPolygonsWithColor, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, litHexes,
+  type LightPolygonResult,
   packHex, pixelToHex, sightSegments, systemFor,
   S2C, type Door, type FovInput, type Hex, type Light, type MapStatePayload, type Point, type Segment, type Token,
   type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
@@ -239,14 +240,13 @@ export interface UserMapView {
 export interface MapVisionShared {
   fovInput: FovInput;
   lit: Set<number> | undefined;
-  lightPolygons: Point[][] | undefined;
+  lightPolygonResult: LightPolygonResult | undefined;
 }
 
 const SQRT3 = Math.sqrt(3);
 
 export function buildMapVisionShared(map: MapRecord, mapTokens?: Token[]): MapVisionShared {
   const allTokens = mapTokens ?? tokens.forMap(map.id);
-  // Tokens flagged as light sources contribute lights at their hex position.
   const tokenLights: Light[] = allTokens
     .filter((t) => t.light && (t.light.bright > 0 || t.light.dim > 0))
     .map((t) => {
@@ -256,10 +256,12 @@ export function buildMapVisionShared(map: MapRecord, mapTokens?: Token[]): MapVi
   const lights = tokenLights.length > 0 ? [...map.lights, ...tokenLights] : map.lights;
   const fovInput: FovInput = { grid: map.grid, walls: map.walls, doors: map.doors, lights };
   const isLight = map.grid.lighting === 'light';
+  const pxPerHex = map.grid.hexSize * SQRT3;
+  const lpResult = computeLightPolygonsWithColor(fovInput, pxPerHex);
   return {
     fovInput,
     lit: isLight ? undefined : litHexes(fovInput),
-    lightPolygons: isLight ? undefined : computeLightPolygons(fovInput, map.grid.hexSize * SQRT3),
+    lightPolygonResult: lpResult,
   };
 }
 
@@ -287,7 +289,7 @@ function computeUserMapViewInner(
     hex: { q: t.q, r: t.r },
     stats: tokenVision(t),
   }));
-  const { fovInput, lit, lightPolygons } = shared ?? buildMapVisionShared(map, allTokens);
+  const { fovInput, lit, lightPolygonResult } = shared ?? buildMapVisionShared(map, allTokens);
   // Both the hex-band and polygon computations below need each viewer's own
   // sight-blocking segments (one-way walls depend on which side the viewer
   // stands on) -- built once here and handed to both instead of each of them
@@ -298,7 +300,12 @@ function computeUserMapViewInner(
   const bands = viewers.length === 0
     ? { full: new Set<number>(), fade: new Set<number>() }
     : computeUnionFovBands(viewers, fovInput, lit, segsByViewer);
-  const polyBands = viewers.length === 0 ? null : computeUnionVisibilityPolygons(viewers, fovInput, { lightPolygons, segsByViewer });
+  const polyBands = viewers.length === 0 ? null : computeUnionVisibilityPolygons(viewers, fovInput, {
+    lightPolygons: lightPolygonResult?.polygons,
+    lightColors: lightPolygonResult?.colors,
+    glassCones: lightPolygonResult?.glassCones,
+    segsByViewer,
+  });
   const { full: visible, fade } = bands;
   const newlyExplored: number[] = [];
   for (const h of [...visible, ...fade]) {

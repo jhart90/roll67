@@ -93,7 +93,7 @@ export interface GridConfig {
   feetPerHex: number;
 }
 
-export type WallType = 'solid' | 'window' | 'oneway';
+export type WallType = 'solid' | 'window' | 'oneway' | 'stainedglass';
 
 export interface Wall {
   id: string;
@@ -103,10 +103,17 @@ export interface Wall {
    * solid  = blocks movement + sight (default).
    * window = blocks movement, transparent to sight.
    * oneway = blocks movement; blocks sight only from the "blocked" side.
+   * stainedglass = like window (blocks movement, transparent to sight) but
+   *   tints any light that passes through it.
    */
   type?: WallType;
   /** One-way walls: which side sight is blocked from. */
   flip?: boolean;
+  /** Stained glass: the tint color applied to light passing through.
+   *  Ignored for other wall types. */
+  glassColor?: string;
+  /** Stained glass: if true, projects a rainbow fan instead of a single color. */
+  rainbow?: boolean;
 }
 
 export type DoorType = 'door' | 'gate';

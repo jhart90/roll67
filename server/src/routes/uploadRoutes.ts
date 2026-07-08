@@ -88,7 +88,16 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: Aut
     res.status(400).json({ error: 'Audio file too large (30 MB max).' });
     return;
   }
-  const role = typeof campaignId === 'string' ? campaigns.memberRole(campaignId, req.user!.id) : undefined;
+  if (typeof campaignId !== 'string' || !campaignId) {
+    res.status(400).json({ error: 'campaignId is required.' });
+    return;
+  }
+  const campaign = campaigns.byId(campaignId);
+  if (!campaign) {
+    res.status(404).json({ error: 'Campaign not found.' });
+    return;
+  }
+  const role = campaigns.memberRole(campaignId, req.user!.id);
   if (!role) {
     res.status(403).json({ error: 'Not a member of that campaign.' });
     return;

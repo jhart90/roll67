@@ -9,6 +9,7 @@ import { CombatTextLayer } from './CombatTextLayer';
 import { DrawingLayer } from './DrawingLayer';
 import { FogCanvas } from './FogCanvas';
 import { GeometryLayer } from './GeometryLayer';
+import { LightColorOverlay } from './LightColorOverlay';
 import { PingMeasureLayer } from './PingMeasureLayer';
 import { TargetPreviewLayer } from './TargetPreviewLayer';
 import { TokenLayer } from './TokenLayer';
@@ -277,6 +278,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           }}
         >
           <BackgroundCanvas map={map} />
+          <LightColorOverlay map={map} visibleLitMask={visibleLitMask} fadePolygons={fadePolygons} />
           <DrawingLayer />
           <TokenLayer />
           <FogCanvas

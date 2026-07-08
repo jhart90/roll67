@@ -724,6 +724,76 @@ async function main() {
   dmSock.emit('deleteDoor', { mapId, doorId: lockDoor.id });
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { inventory: [] } });
 
+  // ---------- wall overwrite (split) ----------
+  console.log('wall overwrite:');
+  // Draw a 3-point solid wall A→B→C, then place a 2-point window segment whose
+  // both endpoints land on segment A→B. The server should split the original
+  // wall into "before" (A→P1) and "after" (P2→B→C) parts, and the window sits
+  // in the gap seamlessly.
+  const owA = { x: 100, y: 500 };
+  const owB = { x: 300, y: 500 };
+  const owC = { x: 300, y: 700 };
+  const owWallEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.walls);
+  dmSock.emit('upsertWall', { mapId, wall: { points: [owA, owB, owC], type: 'solid' } });
+  const owWalls1 = (await owWallEdit).walls ?? [];
+  const owSolid = owWalls1.find((w) => w.points.length === 3 && w.type === 'solid'
+    && Math.abs(w.points[0].x - owA.x) < 3 && Math.abs(w.points[2].y - owC.y) < 3);
+  ok(!!owSolid, 'base solid wall created for overwrite test');
+
+  // Place a window from (150,500) to (250,500) — both on the A→B segment.
+  const owP1 = { x: 150, y: 500 };
+  const owP2 = { x: 250, y: 500 };
+  const owSplitEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.walls);
+  dmSock.emit('upsertWall', { mapId, wall: { points: [owP1, owP2], type: 'window' } });
+  const owWalls2 = (await owSplitEdit).walls ?? [];
+
+  // The original solid wall should be gone; in its place we expect:
+  // 1. A "before" solid wall ending at P1
+  // 2. An "after" solid wall starting at P2 and continuing to C
+  // 3. The new window segment from P1→P2
+  const owWindow = owWalls2.find((w) => w.type === 'window' && w.points.length === 2);
+  ok(!!owWindow, 'window segment was created');
+  const owBefore = owWalls2.find((w) => w.type === 'solid' && w.points.length === 2
+    && Math.abs(w.points[0].x - owA.x) < 3 && Math.abs(w.points[1].x - owP1.x) < 3);
+  ok(!!owBefore, 'solid wall split: "before" part (A→P1) exists');
+  const owAfter = owWalls2.find((w) => w.type === 'solid' && w.points.length === 3
+    && Math.abs(w.points[0].x - owP2.x) < 3 && Math.abs(w.points[2].y - owC.y) < 3);
+  ok(!!owAfter, 'solid wall split: "after" part (P2→B→C) exists');
+  const owOrigGone = !owWalls2.some((w) => w.id === owSolid.id);
+  ok(owOrigGone, 'original 3-point solid wall was removed by the split');
+
+  // Door-on-wall split: create a simple horizontal solid, then place a door on it.
+  const owDA = { x: 100, y: 800 };
+  const owDB = { x: 400, y: 800 };
+  const owDWallEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.walls);
+  dmSock.emit('upsertWall', { mapId, wall: { points: [owDA, owDB], type: 'solid' } });
+  const owDWalls1 = (await owDWallEdit).walls ?? [];
+  const owDSolid = owDWalls1.find((w) => w.points.length === 2 && w.type === 'solid'
+    && Math.abs(w.points[0].x - owDA.x) < 3 && Math.abs(w.points[1].x - owDB.x) < 3);
+  ok(!!owDSolid, 'base solid wall created for door-split test');
+
+  const owDoorP1 = { x: 200, y: 800 };
+  const owDoorP2 = { x: 300, y: 800 };
+  const owDoorEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.doors && !!p.walls);
+  dmSock.emit('upsertDoor', { mapId, door: { a: owDoorP1, b: owDoorP2, open: false } });
+  const owDoorPayload = await owDoorEdit;
+  const owDoorWalls = owDoorPayload.walls ?? [];
+  const owDoorBefore = owDoorWalls.find((w) => w.type === 'solid' && w.points.length === 2
+    && Math.abs(w.points[0].x - owDA.x) < 3 && Math.abs(w.points[1].x - owDoorP1.x) < 3);
+  ok(!!owDoorBefore, 'door-on-wall: solid "before" part exists');
+  const owDoorAfter = owDoorWalls.find((w) => w.type === 'solid' && w.points.length === 2
+    && Math.abs(w.points[0].x - owDoorP2.x) < 3 && Math.abs(w.points[1].x - owDB.x) < 3);
+  ok(!!owDoorAfter, 'door-on-wall: solid "after" part exists');
+  const owDoorOrigGone = !owDoorWalls.some((w) => w.id === owDSolid.id);
+  ok(owDoorOrigGone, 'door-on-wall: original solid wall was removed by the split');
+
+  // Cleanup: delete all overwrite-test walls and doors.
+  for (const w of owWalls2) dmSock.emit('deleteWall', { mapId, wallId: w.id });
+  for (const w of owDoorWalls) dmSock.emit('deleteWall', { mapId, wallId: w.id });
+  const owDoors = owDoorPayload.doors ?? [];
+  for (const d of owDoors) if (Math.abs(d.a.y - 800) < 3) dmSock.emit('deleteDoor', { mapId, doorId: d.id });
+  await new Promise((r) => setTimeout(r, 300));
+
   // ---------- lighting ----------
   console.log('lighting:');
   // Switch to dark lighting -> player vision limited to darkvision (0) + lights.

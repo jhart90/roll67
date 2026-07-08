@@ -42,6 +42,7 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
   const map = useGameStore((s) => s.map);
   const [newName, setNewName] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [tracing, setTracing] = useState(false);
   const { progress, upload } = useUploadProgress();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -115,6 +116,19 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
               <UploadProgressBar progress={progress} />
             </label>
             {loaded.bgUrl && <img className="handout-img" src={loaded.bgUrl} alt={loaded.name} />}
+            {loaded.bgUrl && (
+              <button
+                className="btn"
+                disabled={tracing}
+                onClick={() => {
+                  setTracing(true);
+                  intents.autoTraceWalls(loaded.id);
+                  setTimeout(() => setTracing(false), 8000);
+                }}
+              >
+                {tracing ? 'Tracing…' : 'Auto-trace walls'}
+              </button>
+            )}
 
             <h4>Hex grid</h4>
             <label className="check-row">

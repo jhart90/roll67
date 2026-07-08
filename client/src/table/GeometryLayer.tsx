@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { Door, Light, Point, Wall } from 'shared';
 import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -185,6 +185,7 @@ export function GeometryLayer() {
   // In-progress wall polyline / door first point.
   const [draft, setDraft] = useState<Point[]>([]);
   const [cursor, setCursor] = useState<Point | null>(null);
+  const eraseDragging = useRef(false);
 
   const { width, height } = mapPixelSize(map);
   const grid = map.grid;
@@ -302,6 +303,40 @@ export function GeometryLayer() {
     return best;
   }
 
+  function eraseAt(raw: Point) {
+    const threshold = 12;
+    const { walls: w, doors: d, lights: l } = useGameStore.getState().dmGeometry ?? { walls: [], doors: [], lights: [] };
+    for (const wall of w) {
+      for (let i = 0; i + 1 < wall.points.length; i++) {
+        if (distToSegment(raw, wall.points[i], wall.points[i + 1]) < threshold) {
+          intents.deleteWall(map.id, wall.id);
+          return;
+        }
+      }
+    }
+    for (const door of d) {
+      if (distToSegment(raw, door.a, door.b) < threshold) {
+        intents.deleteDoor(map.id, door.id);
+        return;
+      }
+    }
+    for (const light of l) {
+      if (Math.hypot(light.x - raw.x, light.y - raw.y) < threshold + 6) {
+        intents.deleteLight(map.id, light.id);
+        return;
+      }
+    }
+    for (const dr of useGameStore.getState().drawingList) {
+      const pts = dr.shape.kind === 'line' ? [dr.shape.a, dr.shape.b] : dr.shape.points;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        if (distToSegment(raw, pts[i], pts[i + 1]) < threshold) {
+          intents.eraseDrawing(dr.id);
+          return;
+        }
+      }
+    }
+  }
+
   function onOverlayPointerDown(e: React.PointerEvent<SVGRectElement>) {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -323,37 +358,9 @@ export function GeometryLayer() {
       const hex = pixelToHex(raw, grid);
       intents.setSpawn(map.id, hex.q, hex.r);
     } else if (tool === 'erase') {
-      const threshold = 12;
-      for (const w of walls) {
-        for (let i = 0; i + 1 < w.points.length; i++) {
-          if (distToSegment(raw, w.points[i], w.points[i + 1]) < threshold) {
-            intents.deleteWall(map.id, w.id);
-            return;
-          }
-        }
-      }
-      for (const d of doors) {
-        if (distToSegment(raw, d.a, d.b) < threshold) {
-          intents.deleteDoor(map.id, d.id);
-          return;
-        }
-      }
-      for (const l of lights) {
-        if (Math.hypot(l.x - raw.x, l.y - raw.y) < threshold + 6) {
-          intents.deleteLight(map.id, l.id);
-          return;
-        }
-      }
-      // Drawings render below this layer, so hit-test them here too.
-      for (const dr of drawingList) {
-        const pts = dr.shape.kind === 'line' ? [dr.shape.a, dr.shape.b] : dr.shape.points;
-        for (let i = 0; i + 1 < pts.length; i++) {
-          if (distToSegment(raw, pts[i], pts[i + 1]) < threshold) {
-            intents.eraseDrawing(dr.id);
-            return;
-          }
-        }
-      }
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+      eraseDragging.current = true;
+      eraseAt(raw);
     }
   }
 
@@ -368,6 +375,15 @@ export function GeometryLayer() {
   function onOverlayPointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (tool === 'wall' || tool === 'door') {
       setCursor(snap(stage.toMap(e.clientX, e.clientY), e.shiftKey));
+    } else if (tool === 'erase' && eraseDragging.current) {
+      eraseAt(stage.toMap(e.clientX, e.clientY));
+    }
+  }
+
+  function onOverlayPointerUp(e: React.PointerEvent<SVGRectElement>) {
+    if (eraseDragging.current) {
+      eraseDragging.current = false;
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     }
   }
 
@@ -403,6 +419,7 @@ export function GeometryLayer() {
           style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
           onPointerDown={onOverlayPointerDown}
           onPointerMove={onOverlayPointerMove}
+          onPointerUp={onOverlayPointerUp}
           onDoubleClick={onOverlayDoubleClick}
           onContextMenu={onOverlayContextMenu}
         />

@@ -537,11 +537,11 @@ interface MapRow {
 }
 
 export const DEFAULT_GRID: GridConfig = {
-  hexSize: 40,
+  hexSize: 8,
   originX: 0,
   originY: 0,
-  cols: 40,
-  rows: 30,
+  cols: 100,
+  rows: 100,
   gridEnabled: true,
   lighting: 'light',
   feetPerHex: 5,
@@ -569,7 +569,7 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     bgWidth: bg?.width ?? 0,
     bgHeight: bg?.height ?? 0,
     grid: normalizeGrid(safeParse<GridConfig & { globalIllumination?: boolean }>(row.grid_json, {
-      hexSize: 40, originX: 0, originY: 0, cols: 30, rows: 30, gridEnabled: true, lighting: 'light', feetPerHex: 5,
+      hexSize: 8, originX: 0, originY: 0, cols: 100, rows: 100, gridEnabled: true, lighting: 'light', feetPerHex: 5,
     })),
     walls: safeParse(row.walls_json, []),
     doors: safeParse(row.doors_json, []),

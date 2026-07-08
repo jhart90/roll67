@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Drawing, Point } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
@@ -27,8 +27,15 @@ export function DrawingLayer() {
 
   const [draft, setDraft] = useState<Point[] | null>(null);
   const { width, height } = mapPixelSize(map);
+  const eraseHeld = useRef(false);
 
   useEffect(() => setDraft(null), [tool, map.id]);
+
+  useEffect(() => {
+    const onUp = () => { eraseHeld.current = false; };
+    window.addEventListener('pointerup', onUp);
+    return () => window.removeEventListener('pointerup', onUp);
+  }, []);
 
   function onPointerDown(e: React.PointerEvent<SVGRectElement>) {
     if (e.button !== 0 || tool !== 'draw') return;
@@ -92,6 +99,12 @@ export function DrawingLayer() {
           onPointerDown={(e) => {
             if (tool === 'erase') {
               e.stopPropagation();
+              eraseHeld.current = true;
+              intents.eraseDrawing(d.id);
+            }
+          }}
+          onPointerEnter={() => {
+            if (tool === 'erase' && eraseHeld.current) {
               intents.eraseDrawing(d.id);
             }
           }}

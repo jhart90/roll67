@@ -142,11 +142,11 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
             {grid.gridEnabled && (
               <div className="grid-fields">
                 <GridField label="Hex size" value={grid.hexSize} onCommit={(v) => setGrid({ hexSize: v })} min={8} />
-                <GridField label="Origin X" value={grid.originX} onCommit={(v) => setGrid({ originX: v })} />
-                <GridField label="Origin Y" value={grid.originY} onCommit={(v) => setGrid({ originY: v })} />
+                <GridField label="Feet per hex" value={grid.feetPerHex} onCommit={(v) => setGrid({ feetPerHex: v })} min={1} />
                 <GridField label="Columns" value={grid.cols} onCommit={(v) => setGrid({ cols: v })} min={1} />
                 <GridField label="Rows" value={grid.rows} onCommit={(v) => setGrid({ rows: v })} min={1} />
-                <GridField label="Feet per hex" value={grid.feetPerHex} onCommit={(v) => setGrid({ feetPerHex: v })} min={1} />
+                <GridField label="Origin X" value={grid.originX} onCommit={(v) => setGrid({ originX: v })} />
+                <GridField label="Origin Y" value={grid.originY} onCommit={(v) => setGrid({ originY: v })} />
               </div>
             )}
             <label className="lu-field">

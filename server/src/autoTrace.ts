@@ -21,7 +21,7 @@ export async function detectWalls(assetId: string, ext: string, minLengthPx: num
   const { data } = await sharp(filePath)
     .resize(pw, ph, { fit: 'fill' })
     .grayscale()
-    .blur(1.4)
+    .blur(2.0)
     .raw()
     .toBuffer({ resolveWithObject: true });
 
@@ -64,8 +64,8 @@ function canny(mag: Float32Array, dir: Float32Array, w: number, h: number): Uint
   const sorted = Float32Array.from(mag).sort();
   const nonZero = sorted.findIndex(v => v > 0);
   const count = sorted.length - nonZero;
-  const high = sorted[Math.min(sorted.length - 1, nonZero + Math.round(count * 0.92))];
-  const low = high * 0.4;
+  const high = sorted[Math.min(sorted.length - 1, nonZero + Math.round(count * 0.96))];
+  const low = high * 0.5;
 
   // Non-maximum suppression along gradient direction.
   const nms = new Float32Array(w * h);
@@ -135,9 +135,9 @@ function houghSegments(edges: Uint8Array, w: number, h: number, minLen: number):
   }
 
   // Find peaks with non-maximum suppression in accumulator space.
-  const houghThresh = Math.max(15, Math.round(minLen * 0.5));
+  const houghThresh = Math.max(20, Math.round(minLen * 0.75));
   const peaks: Array<{ theta: number; rho: number; votes: number }> = [];
-  const NMS_W = 5;
+  const NMS_W = 7;
   for (let t = 0; t < NUM_THETA; t++) {
     for (let r = NMS_W; r < NUM_RHO - NMS_W; r++) {
       const v = acc[t * NUM_RHO + r];
@@ -158,7 +158,7 @@ function houghSegments(edges: Uint8Array, w: number, h: number, minLen: number):
 
   // Extract segments from each peak.
   const segments: Seg[] = [];
-  const GAP = Math.max(3, Math.round(minLen * 0.15));
+  const GAP = Math.max(2, Math.round(minLen * 0.1));
 
   for (const peak of peaks) {
     const ct = Math.cos(peak.theta), st = Math.sin(peak.theta);
@@ -169,7 +169,7 @@ function houghSegments(edges: Uint8Array, w: number, h: number, minLen: number):
 
     // Project all edge points onto this line; keep those close enough.
     const projections: number[] = [];
-    const BAND = 2;
+    const BAND = 1.5;
     for (const p of edgePts) {
       const perpDist = Math.abs((p.x - ox) * ct + (p.y - oy) * st);
       if (perpDist > BAND) continue;

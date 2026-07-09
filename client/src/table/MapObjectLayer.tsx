@@ -2,7 +2,7 @@ import { memo } from 'react';
 import type { MapObject } from 'shared';
 import { hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
-import { useStage } from '../util/stage';
+import { mapPixelSize, useStage } from '../util/stage';
 
 const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject }) {
   const map = useGameStore((s) => s.map)!;
@@ -81,7 +81,9 @@ export function MapObjectLayer() {
 
   if (!map) return null;
 
-  function onSvgPointerUp(e: React.PointerEvent<SVGSVGElement>) {
+  const { width, height } = mapPixelSize(map);
+
+  function onSvgPointerUp(e: React.PointerEvent<SVGRectElement>) {
     if (!isDm || tool !== 'loot' || !map || e.button !== 0) return;
     const p = stage.toMap(e.clientX, e.clientY);
     const hex = pixelToHex(p, map.grid);
@@ -91,9 +93,19 @@ export function MapObjectLayer() {
 
   return (
     <svg
-      style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: tool === 'loot' ? 'auto' : 'none', overflow: 'visible' }}
-      onPointerUp={onSvgPointerUp}
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}
     >
+      {tool === 'loot' && (
+        <rect
+          x={0} y={0} width={width} height={height}
+          fill="transparent"
+          style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
+          onPointerUp={onSvgPointerUp}
+        />
+      )}
       {objects.map((obj) => (
         <MapObjectPiece key={obj.id} obj={obj} />
       ))}

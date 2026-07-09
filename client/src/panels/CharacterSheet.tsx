@@ -564,6 +564,15 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
             {you.role === 'dm' && (
               <div className="sheet-delete-row">
                 <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    intents.saveToCompendium(character.id);
+                    alert(`"${character.name}" added to your compendium.`);
+                  }}
+                >
+                  Add to Compendium
+                </button>
+                <button
                   className="btn btn-sm btn-danger"
                   onClick={() => {
                     if (confirm(`Delete character "${character.name}"? This can't be undone.`)) {

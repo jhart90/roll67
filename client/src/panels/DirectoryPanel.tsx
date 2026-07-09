@@ -59,6 +59,11 @@ export function DirectoryPanel() {
                   <span className="dir-tag">
                     {c.owner ? c.owner : 'NPC'} · {SYSTEM_LABEL[c.system] ?? c.system}
                   </span>
+                  {isDm && (
+                    <button className="link" style={{ marginLeft: 4, fontSize: 11 }} onClick={() => intents.saveToCompendium(c.id)}>
+                      save to compendium
+                    </button>
+                  )}
                 </div>
               ))}
               {dir.characters.length === 0 && <div className="dir-empty">None yet.</div>}

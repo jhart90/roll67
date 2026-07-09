@@ -88,8 +88,8 @@ const WallPiece = memo(function WallPiece({ wall, selected, interactive }: { wal
     // Perpendicular: (-uy, ux) is the "left" normal of A→B.
     // Default (no flip): cross < 0 side sees through = the (-uy, ux) side.
     // With flip: cross > 0 side sees through = the (uy, -ux) side.
-    const nx = wall.flip ? uy : -uy;
-    const ny = wall.flip ? -ux : ux;
+    const nx = wall.flip ? -uy : uy;
+    const ny = wall.flip ? ux : -ux;
     const ARROW_SIZE = 8;
     const OFFSET = 10;
     const count = Math.max(1, Math.floor(len / 40));

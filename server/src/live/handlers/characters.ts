@@ -87,7 +87,12 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     let model: ReturnType<typeof npcById> | undefined;
     if (modelId) {
       model = npcById(modelId);
-      if (!model) throw new Error('Unknown model NPC.');
+      if (!model) {
+        const custom = customNpcs.byId(modelId);
+        if (!custom) throw new Error('Unknown model NPC.');
+        if (custom.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
+        model = { id: custom.id, system: custom.system, name: custom.name, category: custom.category, challenge: 0, challengeLabel: custom.challengeLabel || '—', ac: custom.ac, hp: custom.hp, sheet: custom.sheet };
+      }
       if (model.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
     }
     const n = Math.max(1, Math.min(10, count ?? 1));
@@ -107,8 +112,16 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'Only the DM can delete characters.');
       return;
     }
+    const linkedTokens = tokens.forCharacter(characterId);
+    const touchedMaps = new Set<string>();
+    for (const t of linkedTokens) {
+      tokens.delete(t.id);
+      io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId: t.id });
+      touchedMaps.add(t.mapId);
+    }
     characters.delete(characterId);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHARACTER_REMOVED, { characterId });
+    for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
     broadcastDirectory(io, d.campaignId);
   }, 'DELETE_CHARACTER'));
 

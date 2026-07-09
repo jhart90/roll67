@@ -95,6 +95,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         }
       }
     }
+    // Art sync: changing a character-linked token's art also updates the sheet.
+    if (typeof tokenPatch.artAssetId === 'string' && token.characterId) {
+      const ch = characters.byId(token.characterId);
+      if (ch) {
+        characters.update(ch.id, undefined, { ...ch.sheet, tokenImageAssetId: tokenPatch.artAssetId });
+        const updatedCh = characters.byId(ch.id)!;
+        io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
+        if (updatedCh.ownerUserId) io.to(userRoom(updatedCh.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
+      }
+    }
     // Name sync: renaming a character-linked token also renames the character.
     if (typeof tokenPatch.name === 'string' && token.characterId) {
       const ch = characters.byId(token.characterId);

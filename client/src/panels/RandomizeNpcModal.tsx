@@ -1,4 +1,4 @@
-import { npcFlavorHint, type NpcEntry } from 'shared';
+import { npcFlavorHint, type CustomNpcView, type NpcEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { useNpcPicker } from './useNpcPicker';
 
@@ -7,10 +7,14 @@ import { useNpcPicker } from './useNpcPicker';
  *  dragon doesn't end up with a townsfolk's name). */
 export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign);
+  const customNpcs = useGameStore((s) => s.customNpcs);
   const system = campaign?.system ?? 'dnd5e';
   const { search, setSearch, category, setCategory, categories, sort, setSort, entries } = useNpcPicker(system);
 
-  function pick(entry: NpcEntry) {
+  const q = search.trim().toLowerCase();
+  const filteredCustom = customNpcs.filter((c) => !q || c.name.toLowerCase().includes(q));
+
+  function pick(entry: NpcEntry | CustomNpcView) {
     intents.createRandomNpc(1, entry.id);
     onClose();
   }
@@ -61,7 +65,21 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
                   : null;
                 return <ModelRow key={n.id} entry={n} header={header} onPick={pick} />;
               })}
-              {entries.length === 0 && (
+              {filteredCustom.length > 0 && (
+                <>
+                  <tr className="npc-category-row"><td colSpan={5}>Player Added</td></tr>
+                  {filteredCustom.map((c) => (
+                    <tr key={c.id}>
+                      <td className="npc-name">{c.name}</td>
+                      <td>{c.challengeLabel || '—'}</td>
+                      <td>{c.ac}</td>
+                      <td>{c.hp}</td>
+                      <td><button className="link" onClick={() => pick(c)}>🎲 use as model</button></td>
+                    </tr>
+                  ))}
+                </>
+              )}
+              {entries.length === 0 && filteredCustom.length === 0 && (
                 <tr><td colSpan={5} className="dim">Nothing matches that search.</td></tr>
               )}
             </tbody>

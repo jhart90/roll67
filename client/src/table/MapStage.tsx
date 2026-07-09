@@ -123,29 +123,42 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
 
       const s = useGameStore.getState();
       const token = s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined;
-      if (!token || !s.you) return;
-      const character = s.characters.find((c) => c.id === token.characterId);
-      if (!canMoveToken(s.you.role, s.you.userId, token, character)) return;
+      const canMove = token && s.you && canMoveToken(s.you.role, s.you.userId, token, s.characters.find((c) => c.id === token.characterId));
 
-      // Pointy-top axial directions. W/S ("up"/"down") alternate NE-NW / SE-SW
-      // so repeated presses zig-zag visually straight up or down instead of
-      // drifting diagonally. NW/NE (and SW/SE) both step r by the same
-      // amount, so r's own parity flips on every vertical step and can be
-      // read directly -- no separate toggle state needed to keep alternating.
-      const vertUp = (token.r & 1) === 0 ? { q: 1, r: -1 } : { q: 0, r: -1 };
-      const vertDown = (token.r & 1) === 0 ? { q: 0, r: 1 } : { q: -1, r: 1 };
-      const DIRS: Record<string, { q: number; r: number }> = {
-        a: { q: -1, r: 0 }, arrowleft: { q: -1, r: 0 },
-        d: { q: 1, r: 0 }, arrowright: { q: 1, r: 0 },
-        q: { q: 0, r: -1 },  // northwest
-        e: { q: 1, r: -1 },  // northeast
-        w: vertUp, arrowup: vertUp,
-        s: vertDown, arrowdown: vertDown,
+      if (token && canMove) {
+        // Pointy-top axial directions. W/S ("up"/"down") alternate NE-NW / SE-SW
+        // so repeated presses zig-zag visually straight up or down instead of
+        // drifting diagonally.
+        const vertUp = (token.r & 1) === 0 ? { q: 1, r: -1 } : { q: 0, r: -1 };
+        const vertDown = (token.r & 1) === 0 ? { q: 0, r: 1 } : { q: -1, r: 1 };
+        const DIRS: Record<string, { q: number; r: number }> = {
+          a: { q: -1, r: 0 }, arrowleft: { q: -1, r: 0 },
+          d: { q: 1, r: 0 }, arrowright: { q: 1, r: 0 },
+          q: { q: 0, r: -1 },
+          e: { q: 1, r: -1 },
+          w: vertUp, arrowup: vertUp,
+          s: vertDown, arrowdown: vertDown,
+        };
+        const dir = DIRS[e.key.toLowerCase()];
+        if (!dir) return;
+        e.preventDefault();
+        intents.moveToken(token.id, token.q + dir.q, token.r + dir.r);
+        return;
+      }
+
+      // No movable token selected — pan the camera instead.
+      const PAN_PX = 80;
+      const PAN_DIRS: Record<string, { dx: number; dy: number }> = {
+        w: { dx: 0, dy: PAN_PX }, arrowup: { dx: 0, dy: PAN_PX },
+        s: { dx: 0, dy: -PAN_PX }, arrowdown: { dx: 0, dy: -PAN_PX },
+        a: { dx: PAN_PX, dy: 0 }, arrowleft: { dx: PAN_PX, dy: 0 },
+        d: { dx: -PAN_PX, dy: 0 }, arrowright: { dx: -PAN_PX, dy: 0 },
       };
-      const dir = DIRS[e.key.toLowerCase()];
-      if (!dir) return;
+      const pan = PAN_DIRS[e.key.toLowerCase()];
+      if (!pan) return;
       e.preventDefault();
-      intents.moveToken(token.id, token.q + dir.q, token.r + dir.r);
+      const cam = useGameStore.getState().camera;
+      useGameStore.getState().setCamera({ x: cam.x + pan.dx, y: cam.y + pan.dy, scale: cam.scale });
     }
 
     window.addEventListener('keydown', onKeyDown);

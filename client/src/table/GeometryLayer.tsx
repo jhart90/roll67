@@ -69,6 +69,51 @@ const WallPiece = memo(function WallPiece({ wall, selected, interactive }: { wal
   const type = wall.type ?? 'solid';
   const pts = wall.points.map((p) => `${p.x},${p.y}`).join(' ');
   const strokeColor = type === 'stainedglass' ? (wall.glassColor || '#d26cd2') : WALL_STROKE[type];
+
+  // One-way arrows: solid triangles along each segment pointing toward the
+  // see-through side. The normal of A→B is (-dy, dx); `flip` inverts it.
+  // Raycast convention: cross > 0 is the default blocked side, flip inverts.
+  // So the see-through normal points in the direction: flip ? normal : -normal
+  // (where normal = perpendicular of segment direction, i.e. (-dy, dx)).
+  const onewayArrows = type === 'oneway' ? wall.points.flatMap((_, i) => {
+    if (i + 1 >= wall.points.length) return [];
+    const a = wall.points[i];
+    const b = wall.points[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) return [];
+    const ux = dx / len;
+    const uy = dy / len;
+    // Perpendicular: (-uy, ux) is the "left" normal of A→B.
+    // Default (no flip): cross < 0 side sees through = the (-uy, ux) side.
+    // With flip: cross > 0 side sees through = the (uy, -ux) side.
+    const nx = wall.flip ? uy : -uy;
+    const ny = wall.flip ? -ux : ux;
+    const ARROW_SIZE = 8;
+    const OFFSET = 10;
+    const count = Math.max(1, Math.floor(len / 40));
+    const arrows: Array<{ cx: number; cy: number; nx: number; ny: number }> = [];
+    for (let j = 0; j < count; j++) {
+      const t = (j + 0.5) / count;
+      arrows.push({ cx: a.x + dx * t, cy: a.y + dy * t, nx, ny });
+    }
+    return arrows.map((ar, j) => {
+      const tip = { x: ar.cx + ar.nx * (OFFSET + ARROW_SIZE), y: ar.cy + ar.ny * (OFFSET + ARROW_SIZE) };
+      const base1 = { x: ar.cx + ar.nx * OFFSET - ux * ARROW_SIZE * 0.5, y: ar.cy + ar.ny * OFFSET - uy * ARROW_SIZE * 0.5 };
+      const base2 = { x: ar.cx + ar.nx * OFFSET + ux * ARROW_SIZE * 0.5, y: ar.cy + ar.ny * OFFSET + uy * ARROW_SIZE * 0.5 };
+      return (
+        <polygon
+          key={`${i}-${j}`}
+          points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
+          fill={strokeColor}
+          opacity={0.85}
+          pointerEvents="none"
+        />
+      );
+    });
+  }) : null;
+
   return (
     <g>
       {selected && (
@@ -88,6 +133,7 @@ const WallPiece = memo(function WallPiece({ wall, selected, interactive }: { wal
         opacity={0.9}
         pointerEvents="none"
       />
+      {onewayArrows}
       <polyline
         points={pts}
         fill="none"

@@ -6,7 +6,7 @@ import {
 } from 'shared';
 import { campaigns, characters, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
-import { dmRoom, emitError, safe, scrubNonFinite, sdata } from '../hub.js';
+import { dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { persistSheet } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -93,6 +93,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
           broadcastDirectory(io, d.campaignId);
           return;
         }
+      }
+    }
+    // Name sync: renaming a character-linked token also renames the character.
+    if (typeof tokenPatch.name === 'string' && token.characterId) {
+      const ch = characters.byId(token.characterId);
+      if (ch && ch.name !== tokenPatch.name) {
+        characters.update(ch.id, tokenPatch.name, ch.sheet);
+        const updatedCh = characters.byId(ch.id)!;
+        io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
+        if (updatedCh.ownerUserId) io.to(userRoom(updatedCh.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
       }
     }
     tokens.update(tokenId, tokenPatch);

@@ -40,9 +40,9 @@ export function CharactersPanel() {
     if (!map) return;
     const q = Math.floor(map.grid.cols / 2);
     const r = Math.floor(map.grid.rows / 2);
-    // Offset -> axial for the map's center-ish hex.
     const axialQ = q - (r - (r & 1)) / 2;
     const artAssetId = typeof c.sheet.tokenImageAssetId === 'string' ? c.sheet.tokenImageAssetId : undefined;
+    const savedColor = typeof c.sheet.tokenColor === 'string' ? c.sheet.tokenColor : undefined;
     intents.createToken({
       mapId: map.id,
       name: c.name,
@@ -50,7 +50,7 @@ export function CharactersPanel() {
       r,
       characterId: c.id,
       layer: c.ownerUserId ? 'token' : 'gm',
-      color: TOKEN_COLORS[colorIdx++ % TOKEN_COLORS.length],
+      color: savedColor || TOKEN_COLORS[colorIdx++ % TOKEN_COLORS.length],
       artAssetId,
     });
   }
@@ -74,6 +74,11 @@ export function CharactersPanel() {
             <div className="char-actions">
               {isDm && map && (
                 <button className="link" onClick={() => placeToken(c)}>place token</button>
+              )}
+              {isDm && (
+                <button className="link" onClick={() => { intents.saveToCompendium(c.id); }}>
+                  save to compendium
+                </button>
               )}
               {isDm && (
                 <button

@@ -124,6 +124,9 @@ export const C2S = {
   AUDIO_CONTROL: 'audioControl',
   // auto-trace
   AUTO_TRACE_WALLS: 'autoTraceWalls',
+  // custom compendium
+  SAVE_TO_COMPENDIUM: 'saveToCompendium',
+  DELETE_CUSTOM_NPC: 'deleteCustomNpc',
 } as const;
 
 export interface JoinCampaignPayload { campaignId: string }
@@ -428,6 +431,22 @@ export interface ShareHandoutPayload { handoutId: string; to: string[] | 'all' |
 
 export interface AutoTraceWallsPayload { mapId: string }
 
+export interface SaveToCompendiumPayload { characterId: string }
+export interface DeleteCustomNpcPayload { customNpcId: string }
+
+export interface CustomNpcView {
+  id: string;
+  system: GameSystem;
+  name: string;
+  category: string;
+  challengeLabel: string;
+  ac: number;
+  hp: number;
+  sheet: SheetData;
+  color: string | null;
+  artAssetId: string | null;
+}
+
 // ---------- Server -> client events ----------
 
 export const S2C = {
@@ -468,6 +487,7 @@ export const S2C = {
   ASSETS: 'assets',
   AUDIO_TRACKS: 'audioTracks',
   AUDIO_STATE: 'audioState',
+  CUSTOM_NPCS: 'customNpcs',
   DIRECTORY: 'directory',
   MEMBER_PRESENCE: 'memberPresence',
   ACTIVE_MAP: 'activeMap',

@@ -215,6 +215,22 @@ CREATE TABLE IF NOT EXISTS rollable_tables (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS custom_npcs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn')),
+  name TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Player Added',
+  challenge_label TEXT NOT NULL DEFAULT '',
+  ac INTEGER NOT NULL DEFAULT 10,
+  hp INTEGER NOT NULL DEFAULT 1,
+  sheet_json TEXT NOT NULL DEFAULT '{}',
+  color TEXT,
+  art_asset_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_custom_npcs_user ON custom_npcs(user_id);
+
 CREATE TABLE IF NOT EXISTS drawings (
   id TEXT PRIMARY KEY,
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,

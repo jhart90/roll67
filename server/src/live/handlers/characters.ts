@@ -1,12 +1,13 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, canEditCharacter, conditionsOf, num, roll, str, systemFor,
-  type CreateCharacterPayload, type DeleteCharacterPayload, type LevelUpRollPayload,
-  type SheetData, type UndoEntry, type UpdateCharacterPayload,
+  type CreateCharacterPayload, type CustomNpcView, type DeleteCharacterPayload,
+  type DeleteCustomNpcPayload, type LevelUpRollPayload,
+  type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared';
 import { generateNpc, generateNpcFromModel, npcById } from 'shared';
-import { campaigns, characters, chat, maps, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, customNpcs, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
@@ -51,18 +52,30 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'Only the DM can add pre-built NPCs.');
       return;
     }
-    const entry = npcById(libraryId);
-    if (!entry) throw new Error('Unknown library NPC.');
     const campaign = campaigns.byId(d.campaignId)!;
-    if (entry.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
-    const character = characters.create(
-      d.campaignId,
-      null, // NPCs are DM-controlled
-      name?.trim() || entry.name,
-      entry.system,
-      structuredClone(entry.sheet),
-    );
-    emitCharacter(io, d.campaignId, character);
+    const entry = npcById(libraryId);
+    if (entry) {
+      if (entry.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
+      const character = characters.create(
+        d.campaignId, null, name?.trim() || entry.name, entry.system,
+        structuredClone(entry.sheet),
+      );
+      emitCharacter(io, d.campaignId, character);
+      return;
+    }
+    const custom = customNpcs.byId(libraryId);
+    if (custom) {
+      if (custom.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
+      const sheet = structuredClone(custom.sheet);
+      if (custom.artAssetId) (sheet as Record<string, unknown>).tokenImageAssetId = custom.artAssetId;
+      if (custom.color) (sheet as Record<string, unknown>).tokenColor = custom.color;
+      const character = characters.create(
+        d.campaignId, null, name?.trim() || custom.name, custom.system, sheet,
+      );
+      emitCharacter(io, d.campaignId, character);
+      return;
+    }
+    throw new Error('Unknown library NPC.');
   }, 'CREATE_NPC'));
 
   socket.on(C2S.CREATE_RANDOM_NPC, safe(socket, ({ count, modelId }: CreateRandomNpcPayload) => {
@@ -169,6 +182,45 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     }, undo);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'LEVEL_UP_ROLL'));
+
+  socket.on(C2S.SAVE_TO_COMPENDIUM, safe(socket, ({ characterId }: SaveToCompendiumPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can save to the compendium.'); return; }
+    const character = characters.byId(characterId);
+    if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    const campaign = campaigns.byId(d.campaignId)!;
+    const schema = systemFor(campaign.system);
+    const hp = schema.hp(character.sheet);
+    const ac = typeof character.sheet.ac === 'number' ? character.sheet.ac : 10;
+    const artAssetId = typeof character.sheet.tokenImageAssetId === 'string' ? character.sheet.tokenImageAssetId : null;
+    const token = tokens.forCharacter(characterId)[0];
+    const color = token?.color ?? null;
+    customNpcs.create(d.userId, campaign.system, character.name, ac, hp.maxHp, '', character.sheet, color, artAssetId);
+    emitCustomNpcs(socket, d.userId, campaign.system);
+  }, 'SAVE_TO_COMPENDIUM'));
+
+  socket.on(C2S.DELETE_CUSTOM_NPC, safe(socket, ({ customNpcId }: DeleteCustomNpcPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can manage the compendium.'); return; }
+    const entry = customNpcs.byId(customNpcId);
+    if (!entry || entry.userId !== d.userId) throw new Error('Unknown custom NPC.');
+    customNpcs.delete(customNpcId);
+    const campaign = campaigns.byId(d.campaignId!)!;
+    emitCustomNpcs(socket, d.userId, campaign.system);
+  }, 'DELETE_CUSTOM_NPC'));
+}
+
+function toCustomNpcView(d: ReturnType<typeof customNpcs.byId> & {}): CustomNpcView {
+  return {
+    id: d.id, system: d.system, name: d.name, category: d.category,
+    challengeLabel: d.challengeLabel, ac: d.ac, hp: d.hp,
+    sheet: d.sheet, color: d.color, artAssetId: d.artAssetId,
+  };
+}
+
+export function emitCustomNpcs(socket: Socket, userId: string, system: string): void {
+  const list = customNpcs.forUserSystem(userId, system as 'dnd5e' | 'swn').map(toCustomNpcView);
+  socket.emit(S2C.CUSTOM_NPCS, { npcs: list });
 }
 
 /** Persist a sheet patch, mirror HP/art to tokens, resync vision + directory. */
@@ -202,7 +254,9 @@ function applyCharacterPatch(
     : undefined;
   const touchedMaps = new Set<string>();
   for (const t of tokens.forCharacter(character.id)) {
-    tokens.update(t.id, artId !== undefined ? { bar: hp, artAssetId: artId } : { bar: hp });
+    const tokenPatch: Record<string, unknown> = artId !== undefined ? { bar: hp, artAssetId: artId } : { bar: hp };
+    if (name !== undefined && t.name !== updated.name) tokenPatch.name = updated.name;
+    tokens.update(t.id, tokenPatch);
     io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(t.id)! });
     touchedMaps.add(t.mapId);
   }

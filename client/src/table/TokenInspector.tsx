@@ -69,8 +69,9 @@ export function TokenInspector() {
             key={token.id}
             defaultValue={token.name}
             onBlur={(e) => {
-              if (e.target.value.trim() && e.target.value !== token.name) {
-                intents.updateToken(token.id, { name: e.target.value.trim() });
+              const trimmed = e.target.value.trim();
+              if (trimmed && trimmed !== token.name) {
+                intents.updateToken(token.id, { name: trimmed });
               }
             }}
           />

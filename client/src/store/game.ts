@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import {
   C2S, S2C, castableLevels, combatActions, systemFor,
   type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
-  type CombatAction, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
+  type CombatAction, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
   type Door, type DoorType, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
@@ -49,6 +49,7 @@ interface GameState {
   shopList: Shop[];
   locationList: LocationNode[];
   worldFolderList: WorldFolder[];
+  customNpcs: CustomNpcView[];
   /** Shop the DM is presenting to this viewer (players pop a storefront). */
   presentedShopId: string | null;
   closePresentedShop(): void;
@@ -184,6 +185,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   shopList: [],
   locationList: [],
   worldFolderList: [],
+  customNpcs: [],
   presentedShopId: null,
   closePresentedShop() { set({ presentedShopId: null }); },
   directory: null,
@@ -733,6 +735,10 @@ export function wireSocket(): void {
     useGameStore.setState({ worldFolderList: folders });
   });
 
+  socket.on(S2C.CUSTOM_NPCS, ({ npcs }: { npcs: CustomNpcView[] }) => {
+    useGameStore.setState({ customNpcs: npcs });
+  });
+
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
     useGameStore.setState({ initiativeState: state });
   });
@@ -862,6 +868,8 @@ export const intents = {
   createCharacter: (name: string, system: 'dnd5e' | 'swn', ownerUserId?: string | null, initialClass?: string) =>
     socket.emit(C2S.CREATE_CHARACTER, { name, system, ownerUserId, initialClass }),
   createNpc: (libraryId: string, name?: string) => socket.emit(C2S.CREATE_NPC, { libraryId, name }),
+  saveToCompendium: (characterId: string) => socket.emit(C2S.SAVE_TO_COMPENDIUM, { characterId }),
+  deleteCustomNpc: (customNpcId: string) => socket.emit(C2S.DELETE_CUSTOM_NPC, { customNpcId }),
   createRandomNpc: (count?: number, modelId?: string) => socket.emit(C2S.CREATE_RANDOM_NPC, { count, modelId }),
   deleteCharacter: (characterId: string) => socket.emit(C2S.DELETE_CHARACTER, { characterId }),
   updateCharacter: (characterId: string, patch: Record<string, unknown>, name?: string) =>

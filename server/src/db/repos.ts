@@ -2,7 +2,7 @@ import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, Macro, MapDef, MapMeta,
-  RollableTable, RollBreakdown, Role, Shop, ShopItem, Token, Wall, WorldFolder,
+  RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, Token, Wall, WorldFolder,
 } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
@@ -1118,5 +1118,74 @@ export const drawings = {
   },
   clearLayer(mapId: string, layer: 'map' | 'gm'): void {
     stmt('DELETE FROM drawings WHERE map_id = ? AND layer = ?').run(mapId, layer);
+  },
+};
+
+// ─── custom NPCs (user-scoped, reusable across campaigns) ──────────
+
+interface CustomNpcRow {
+  id: string;
+  user_id: string;
+  system: string;
+  name: string;
+  category: string;
+  challenge_label: string;
+  ac: number;
+  hp: number;
+  sheet_json: string;
+  color: string | null;
+  art_asset_id: string | null;
+  created_at: number;
+}
+
+export interface CustomNpcDef {
+  id: string;
+  userId: string;
+  system: GameSystem;
+  name: string;
+  category: string;
+  challengeLabel: string;
+  ac: number;
+  hp: number;
+  sheet: SheetData;
+  color: string | null;
+  artAssetId: string | null;
+}
+
+function toCustomNpc(row: CustomNpcRow): CustomNpcDef {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    system: row.system as GameSystem,
+    name: row.name,
+    category: row.category,
+    challengeLabel: row.challenge_label,
+    ac: row.ac,
+    hp: row.hp,
+    sheet: safeParse(row.sheet_json, {}),
+    color: row.color,
+    artAssetId: row.art_asset_id,
+  };
+}
+
+export const customNpcs = {
+  forUser(userId: string): CustomNpcDef[] {
+    return (stmt('SELECT * FROM custom_npcs WHERE user_id = ? ORDER BY name').all(userId) as CustomNpcRow[]).map(toCustomNpc);
+  },
+  forUserSystem(userId: string, system: GameSystem): CustomNpcDef[] {
+    return (stmt('SELECT * FROM custom_npcs WHERE user_id = ? AND system = ? ORDER BY name').all(userId, system) as CustomNpcRow[]).map(toCustomNpc);
+  },
+  byId(id: string): CustomNpcDef | undefined {
+    const row = stmt('SELECT * FROM custom_npcs WHERE id = ?').get(id) as CustomNpcRow | undefined;
+    return row ? toCustomNpc(row) : undefined;
+  },
+  create(userId: string, system: GameSystem, name: string, ac: number, hp: number, challengeLabel: string, sheet: SheetData, color: string | null, artAssetId: string | null): CustomNpcDef {
+    const id = newId();
+    stmt('INSERT INTO custom_npcs (id, user_id, system, name, category, challenge_label, ac, hp, sheet_json, color, art_asset_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, userId, system, name, 'Player Added', challengeLabel, ac, hp, JSON.stringify(sheet), color, artAssetId, now());
+    return toCustomNpc({ id, user_id: userId, system, name, category: 'Player Added', challenge_label: challengeLabel, ac, hp, sheet_json: JSON.stringify(sheet), color, art_asset_id: artAssetId, created_at: now() });
+  },
+  delete(id: string): void {
+    stmt('DELETE FROM custom_npcs WHERE id = ?').run(id);
   },
 };

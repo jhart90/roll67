@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { CLASS_LIST_5E, npcsForSystem, SWN_CLASS_LIST, type NpcEntry } from 'shared';
+import { CLASS_LIST_5E, npcsForSystem, SWN_CLASS_LIST, type CustomNpcView, type NpcEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { useNpcPicker } from './useNpcPicker';
 
 export function NpcLibrary({ onClose }: { onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign);
+  const customNpcs = useGameStore((s) => s.customNpcs);
   const [added, setAdded] = useState<Record<string, boolean>>({});
 
   const system = campaign?.system ?? 'dnd5e';
@@ -14,14 +15,17 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
     ? CLASS_LIST_5E.map((c) => ({ id: c.id, name: c.name }))
     : SWN_CLASS_LIST.map((c) => ({ id: c.id, name: c.name }));
 
-  // The same search box also narrows the "quick add" rows above the main
-  // compendium table -- otherwise typing e.g. "goblin" still leaves the
-  // blank-sheet/class rows cluttering the top of an otherwise-filtered list.
   const q = search.trim().toLowerCase();
   const showBlank = !q || 'blank character sheet'.includes(q);
   const filteredClassRows = classRows.filter((c) => !q || c.name.toLowerCase().includes(q));
+  const filteredCustom = customNpcs.filter((c) => !q || c.name.toLowerCase().includes(q));
 
   function add(entry: NpcEntry) {
+    intents.createNpc(entry.id);
+    setAdded((prev) => ({ ...prev, [entry.id]: true }));
+  }
+
+  function addCustom(entry: CustomNpcView) {
     intents.createNpc(entry.id);
     setAdded((prev) => ({ ...prev, [entry.id]: true }));
   }
@@ -127,6 +131,35 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
               )}
             </tbody>
           </table>
+
+          {filteredCustom.length > 0 && (
+            <table>
+              <tbody>
+                <tr className="npc-category-row"><td colSpan={5}>Player Added</td></tr>
+                {filteredCustom.map((c) => (
+                  <tr key={c.id}>
+                    <td className="npc-name">{c.name}</td>
+                    <td>{c.challengeLabel || '—'}</td>
+                    <td>{c.ac}</td>
+                    <td>{c.hp}</td>
+                    <td>
+                      <button className="link" disabled={!!added[c.id]} onClick={() => addCustom(c)}>
+                        {added[c.id] ? 'added ✓' : '+ add'}
+                      </button>
+                      <button
+                        className="link danger"
+                        style={{ marginLeft: 6 }}
+                        onClick={() => { if (confirm(`Remove "${c.name}" from your compendium?`)) intents.deleteCustomNpc(c.id); }}
+                        title="Remove from compendium"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
   );

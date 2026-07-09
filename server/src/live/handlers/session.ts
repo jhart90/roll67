@@ -13,6 +13,7 @@ import {
 } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
+import { emitCustomNpcs } from './characters.js';
 import { initiativeViewFor } from './combat.js';
 import { buildDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
@@ -130,6 +131,8 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     }
     if (role === 'dm') {
       socket.emit(S2C.ASSETS, { folders: assetFolders.forCampaign(campaignId), assets: assets.forCampaign(campaignId) });
+      const camp = campaigns.byId(campaignId);
+      if (camp) emitCustomNpcs(socket, d.userId, camp.system);
     }
     sendMapState(socket);
     broadcastPresence(io, campaignId);

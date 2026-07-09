@@ -932,8 +932,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     if (statusText) {
-      postStatusLine(io, d.campaignId, statusText);
-      postStatusLine(io, d.campaignId, `Status changed by ${character.name}'s death save`);
+      postStatusLine(io, d.campaignId, statusText.replace(/[!.]?$/, '') + ` by ${character.name}'s death save`);
     }
   }, 'DEATH_SAVE'));
 

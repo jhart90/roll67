@@ -22,12 +22,9 @@ export function postStatusLine(io: Server, campaignId: string, text: string): vo
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
-/** A status-change line, immediately followed by a second line naming what
- *  caused it -- every status change gets both, so the log always answers
- *  "what changed" and "why" as two consecutive chat rows. */
 function postStatusChange(io: Server, campaignId: string, statusLine: string, cause: string): void {
-  postStatusLine(io, campaignId, statusLine);
-  postStatusLine(io, campaignId, `Status changed by ${cause}`);
+  const combined = statusLine.replace(/[!.]?$/, '') + ` by ${cause}`;
+  postStatusLine(io, campaignId, combined);
 }
 
 /** Diff two condition-id lists and post a status-change pair for every
@@ -40,14 +37,12 @@ export function postConditionDiff(
   for (const id of after) {
     if (before.includes(id)) continue;
     const label = getCondition(id)?.label ?? id;
-    postStatusLine(io, campaignId, `${characterName} is now ${label}!`);
-    postStatusLine(io, campaignId, `Status updated by ${actorName}`);
+    postStatusLine(io, campaignId, `${characterName} is now ${label} by ${actorName}`);
   }
   for (const id of before) {
     if (after.includes(id)) continue;
     const label = getCondition(id)?.label ?? id;
-    postStatusLine(io, campaignId, `${characterName} is no longer ${label}.`);
-    postStatusLine(io, campaignId, `Status updated by ${actorName}`);
+    postStatusLine(io, campaignId, `${characterName} is no longer ${label} by ${actorName}`);
   }
 }
 

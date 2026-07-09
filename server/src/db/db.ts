@@ -77,6 +77,7 @@ ensureColumn('shops', 'parent_id', 'parent_id TEXT');
 ensureColumn('rollable_tables', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
+ensureColumn('maps', 'terrain_json', "terrain_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 ensureColumn('users', 'player_color', 'player_color TEXT');

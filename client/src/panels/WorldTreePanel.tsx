@@ -43,8 +43,10 @@ export function WorldTreePanel() {
   const folders = useGameStore((s) => s.worldFolderList);
   const isDm = you?.role === 'dm';
 
+  const tokens = useGameStore((s) => s.tokens);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
   // The dragged item lives in a module-level ref (not state) so `drop` reads
   // it synchronously and so a drop on the map canvas — a different panel
   // entirely — can read it too.
@@ -81,7 +83,6 @@ export function WorldTreePanel() {
       return;
     }
     if (node.kind === 'folder') {
-      // Folders are pure organization — no editor window, just an inline rename.
       if (!isDm) return;
       const name = prompt('Folder name', node.name);
       if (name && name.trim()) intents.updateWorldFolder(node.id, { name: name.trim() });
@@ -112,6 +113,25 @@ export function WorldTreePanel() {
     return false;
   }
 
+  /** Collect character node IDs that are direct children of `folderId`. */
+  function folderCharacters(folderId: string): string[] {
+    return (childrenOf.get(folderId) ?? []).filter((n) => n.kind === 'character').map((n) => n.id);
+  }
+
+  function placeFolderOnMap(folderId: string, mapId: string) {
+    for (const cid of folderCharacters(folderId)) intents.dropCharacterOnMap(cid, mapId, 0, 0);
+    intents.viewMap(mapId);
+  }
+
+  function setFolderTokensLayer(folderId: string, layer: 'token' | 'gm') {
+    const charIds = new Set(folderCharacters(folderId));
+    for (const t of Object.values(tokens)) {
+      if (t.characterId && charIds.has(t.characterId) && t.layer !== layer) {
+        intents.updateToken(t.id, { layer });
+      }
+    }
+  }
+
   function drop(targetId: string | null) {
     const drag = dragRef.current;
     dragRef.current = null;
@@ -119,6 +139,11 @@ export function WorldTreePanel() {
     if (!drag) return;
     // Can't parent an item under itself or its own descendant.
     if (targetId && (targetId === drag.id || isAncestor(drag.id, targetId))) return;
+    // Dragging a folder onto a map places all its characters on that map.
+    if (drag.kind === 'folder' && targetId && byId.get(targetId)?.kind === 'map') {
+      placeFolderOnMap(drag.id, targetId);
+      return;
+    }
     intents.setParent(drag.kind, drag.id, targetId);
     // Dragging a character onto a map relocates its token there server-side;
     // switch the DM's view to that map so the new token is immediately
@@ -140,6 +165,7 @@ export function WorldTreePanel() {
         <div
           className={`wt-row ${isDropOn ? 'drop-on' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
+          {...(node.kind === 'map' ? { 'data-map-id': node.id } : {})}
           draggable={isDm}
           onDragStart={isDm ? (e) => {
             e.stopPropagation();
@@ -152,7 +178,11 @@ export function WorldTreePanel() {
           onDragEnd={isDm ? () => { dragRef.current = null; setDropTarget(null); } : undefined}
           onClick={() => activate(node, kids.length > 0)}
           onDoubleClick={() => open(node)}
-          onContextMenu={(e) => { e.preventDefault(); open(node); }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            if (isDm && node.kind === 'folder') { setCtxMenu({ x: e.clientX, y: e.clientY, folderId: node.id }); return; }
+            open(node);
+          }}
           title={node.kind === 'map' ? 'Click to open in the viewer · double/right-click to edit · drag to re-parent' : 'Click to expand · double/right-click to open · drag to re-parent'}
         >
           <span
@@ -214,6 +244,25 @@ export function WorldTreePanel() {
       {isDm && <p className="dim wt-hint">Drag an item onto another to nest it; drag to empty space to move it to the top level.</p>}
 
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}
+
+      {ctxMenu && (
+        <div className="wt-ctx-backdrop" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}>
+          <div className="wt-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { placeFolderOnMap(ctxMenu.folderId, useGameStore.getState().map?.id ?? ''); setCtxMenu(null); }}
+              disabled={!useGameStore.getState().map}
+            >Place all on current map</button>
+            <button onClick={() => { setFolderTokensLayer(ctxMenu.folderId, 'gm'); setCtxMenu(null); }}>Hide all tokens</button>
+            <button onClick={() => { setFolderTokensLayer(ctxMenu.folderId, 'token'); setCtxMenu(null); }}>Show all tokens</button>
+            <hr />
+            <button onClick={() => {
+              const f = byId.get(ctxMenu.folderId);
+              const name = prompt('Folder name', f?.name ?? '');
+              if (name && name.trim()) intents.updateWorldFolder(ctxMenu.folderId, { name: name.trim() });
+              setCtxMenu(null);
+            }}>Rename</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

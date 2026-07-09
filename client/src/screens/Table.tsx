@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { intents, useGameStore, wireSocket, type Tool } from '../store/game';
+import { intents, useGameStore, wireSocket, type Tool, type TerrainBrush } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { MapStage } from '../table/MapStage';
 import { MapManager } from '../table/dm/MapManager';
@@ -13,6 +13,8 @@ import { WorldTreePanel } from '../panels/WorldTreePanel';
 import { ShopStorefront } from '../panels/ShopStorefront';
 import { TargetPopup } from '../panels/TargetPopup';
 import { CastLevelPopup } from '../panels/CastLevelPopup';
+import { LootPopup } from '../panels/LootPopup';
+import { MapObjectInspector } from '../table/MapObjectInspector';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { InitiativeFloat } from '../table/InitiativeFloat';
@@ -35,7 +37,9 @@ const DM_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'wall', icon: '🧱', label: 'Walls (block movement & sight)' },
   { id: 'door', icon: '🚪', label: 'Doors' },
   { id: 'light', icon: '💡', label: 'Lights' },
+  { id: 'loot', icon: '💰', label: 'Place loot (items & chests)' },
   { id: 'spawn', icon: '🎯', label: 'Set token spawn point (where dropped tokens appear)' },
+  { id: 'terrain', icon: '🏔️', label: 'Paint rough terrain' },
 ];
 
 type DockTab = 'chat' | 'initiative' | 'world';
@@ -56,6 +60,9 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const wallGlassColor = useGameStore((s) => s.wallGlassColor);
   const wallRainbow = useGameStore((s) => s.wallRainbow);
   const doorType = useGameStore((s) => s.doorType);
+  const lootKind = useGameStore((s) => s.lootKind);
+  const terrainBrush = useGameStore((s) => s.terrainBrush);
+  const terrainErase = useGameStore((s) => s.terrainErase);
   const [showMaps, setShowMaps] = useState(false);
   const [showDice, setShowDice] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
@@ -105,7 +112,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           </>
         )}
         <button onClick={() => setShowAudio((v) => !v)} title="Jukebox">🎵</button>
-        <span className="user-chip">{you.username} ({you.role})</span>
+        <button className="user-chip" onClick={() => openWindow('accountDetails', 'me', {}, 'Account Details')} title="Account settings">{you.username} ({you.role})</button>
       </header>
 
       <div className="table-main">
@@ -215,6 +222,53 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           </div>
         )}
 
+        {tool === 'loot' && map && isDm && (
+          <div className="draw-options">
+            <span className="dim" style={{ fontSize: 12 }}>Place:</span>
+            {(['item', 'chest'] as const).map((k) => (
+              <button
+                key={k}
+                className={lootKind === k ? 'active' : ''}
+                style={{ fontSize: 12 }}
+                onClick={() => useGameStore.getState().setLootKind(k)}
+              >
+                {k === 'item' ? '✦ Item' : '📦 Chest'}
+              </button>
+            ))}
+            <span className="dim" style={{ fontSize: 11 }}>click map to place · right-click to edit</span>
+          </div>
+        )}
+
+        {tool === 'terrain' && map && isDm && (
+          <div className="draw-options">
+            <span className="dim" style={{ fontSize: 12 }}>Shape:</span>
+            {(['brush', 'rect', 'circle'] as TerrainBrush[]).map((b) => (
+              <button
+                key={b}
+                className={terrainBrush === b ? 'active' : ''}
+                style={{ fontSize: 12 }}
+                onClick={() => useGameStore.getState().setTerrainBrush(b)}
+              >
+                {b === 'brush' ? '🖌️ Brush' : b === 'rect' ? '▬ Rect' : '⬤ Circle'}
+              </button>
+            ))}
+            <span style={{ width: 8, display: 'inline-block' }} />
+            <button
+              className={terrainErase ? 'active' : ''}
+              style={{ fontSize: 12, color: terrainErase ? '#d26c6c' : undefined }}
+              onClick={() => useGameStore.getState().setTerrainErase(!terrainErase)}
+            >
+              {terrainErase ? '🧹 Erasing' : '🧹 Erase'}
+            </button>
+            <button
+              style={{ fontSize: 12 }}
+              onClick={() => { if (map) intents.setTerrain(map.id, []); }}
+            >
+              🗑️ Erase All
+            </button>
+          </div>
+        )}
+
         {(tool === 'draw' || tool === 'erase') && map && (
           <div className="draw-options">
             {tool === 'draw' && DRAW_COLORS.map((c) => (
@@ -250,6 +304,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <LightInspector />
         <WallInspector />
         <DoorInspector />
+        <MapObjectInspector />
         <WindowHost />
         <DiceOverlay />
         <Toolbar />
@@ -259,6 +314,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <ShopStorefront />
         <TargetPopup />
         <CastLevelPopup />
+        <LootPopup />
       </div>
 
       {targeting && targeting.action.source === 'attack' && (

@@ -17,7 +17,7 @@ export function TargetPopup() {
   const heal = targeting.action.effect === 'heal';
 
   const candidates = Object.values(tokens).filter(
-    (t) => src && hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes,
+    (t) => src && hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes + (t.size >= 3 ? 1 : 0),
   );
 
   function cancel() { useGameStore.getState().cancelTargeting(); }

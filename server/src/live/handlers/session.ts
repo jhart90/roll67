@@ -9,7 +9,7 @@ import { CHAT_TAIL } from '../../config.js';
 import { validUsername } from '../../auth.js';
 import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, drawings,
-  handouts, initiative, locations, macros, maps, rollableTables, shops, users, worldFolders,
+  handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, users, worldFolders,
 } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
@@ -66,6 +66,7 @@ export function sendMapState(socket: Socket): void {
     map,
     { userId: d.userId, isDm: d.role === 'dm', viewingAs: d.viewingAs },
     drawings.forMap(map.id),
+    mapObjects.forMap(map.id),
   );
   socket.emit(S2C.MAP_STATE, payload);
 }

@@ -1,7 +1,7 @@
 import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, Door, Drawing, GameSystem,
-  GridConfig, Handout, InitiativeState, LocationNode, Light, Macro, MapDef, MapMeta,
+  GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta,
   RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, Token, Wall, WorldFolder,
 } from 'shared';
 import { db, newId, now, stmt } from './db.js';
@@ -53,6 +53,9 @@ export const users = {
   },
   rename(userId: string, username: string): void {
     stmt('UPDATE users SET username = ? WHERE id = ?').run(username, userId);
+  },
+  setPassword(userId: string, hash: string): void {
+    stmt('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, userId);
   },
 };
 
@@ -533,6 +536,7 @@ interface MapRow {
   doors_json: string;
   lights_json: string;
   spawn_json: string | null;
+  terrain_json: string;
   sort_order: number;
 }
 
@@ -575,6 +579,7 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     doors: safeParse(row.doors_json, []),
     lights: safeParse(row.lights_json, []),
     spawn: row.spawn_json ? safeParse(row.spawn_json, null) : null,
+    terrain: safeParse(row.terrain_json, []),
   };
 }
 
@@ -625,6 +630,9 @@ export const maps = {
   },
   setLights(id: string, lights: Light[]): void {
     stmt('UPDATE maps SET lights_json = ? WHERE id = ?').run(JSON.stringify(lights), id);
+  },
+  setTerrain(id: string, terrain: number[]): void {
+    stmt('UPDATE maps SET terrain_json = ? WHERE id = ?').run(JSON.stringify(terrain), id);
   },
   delete(id: string): void {
     stmt('DELETE FROM maps WHERE id = ?').run(id);
@@ -1187,5 +1195,66 @@ export const customNpcs = {
   },
   delete(id: string): void {
     stmt('DELETE FROM custom_npcs WHERE id = ?').run(id);
+  },
+};
+
+// ─── map objects (loot items & chests on maps) ──────────────────────
+
+interface MapObjectRow {
+  id: string;
+  map_id: string;
+  name: string;
+  description: string;
+  kind: string;
+  q: number;
+  r: number;
+  art_asset_id: string | null;
+  items_json: string;
+  created_at: number;
+}
+
+function toMapObject(row: MapObjectRow) {
+  return {
+    id: row.id,
+    mapId: row.map_id,
+    name: row.name,
+    description: row.description,
+    kind: row.kind as 'item' | 'chest',
+    q: row.q,
+    r: row.r,
+    artAssetId: row.art_asset_id,
+    items: safeParse<LootItem[]>(row.items_json, []),
+  };
+}
+
+export const mapObjects = {
+  forMap(mapId: string) {
+    return (stmt('SELECT * FROM map_objects WHERE map_id = ? ORDER BY created_at').all(mapId) as MapObjectRow[]).map(toMapObject);
+  },
+  byId(id: string) {
+    const row = stmt('SELECT * FROM map_objects WHERE id = ?').get(id) as MapObjectRow | undefined;
+    return row ? toMapObject(row) : undefined;
+  },
+  create(mapId: string, kind: 'item' | 'chest', name: string, description: string, q: number, r: number) {
+    const id = newId();
+    stmt('INSERT INTO map_objects (id, map_id, name, description, kind, q, r, items_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, mapId, name, description, kind, q, r, '[]', now());
+    return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, items_json: '[]', created_at: now() });
+  },
+  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: unknown[] }): void {
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (patch.name !== undefined) { sets.push('name = ?'); vals.push(patch.name); }
+    if (patch.description !== undefined) { sets.push('description = ?'); vals.push(patch.description); }
+    if (patch.artAssetId !== undefined) { sets.push('art_asset_id = ?'); vals.push(patch.artAssetId); }
+    if (patch.q !== undefined) { sets.push('q = ?'); vals.push(patch.q); }
+    if (patch.r !== undefined) { sets.push('r = ?'); vals.push(patch.r); }
+    if (patch.items !== undefined) { sets.push('items_json = ?'); vals.push(JSON.stringify(patch.items)); }
+    if (sets.length === 0) return;
+    vals.push(id);
+    stmt(`UPDATE map_objects SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  },
+  delete(id: string): void {
+    stmt('DELETE FROM map_objects WHERE id = ?').run(id);
   },
 };

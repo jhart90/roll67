@@ -166,6 +166,20 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     handouts.share(handoutId, to);
     broadcastHandouts(io, d.campaignId);
+    if (to !== 'none') {
+      const h = handouts.byId(handoutId);
+      if (h) {
+        const payload = { handoutId, title: h.title };
+        if (to === 'all') {
+          io.to(campaignRoom(d.campaignId)).emit(S2C.OPEN_HANDOUT, payload);
+        } else {
+          for (const uid of to) {
+            io.to(`user:${uid}`).emit(S2C.OPEN_HANDOUT, payload);
+          }
+          socket.emit(S2C.OPEN_HANDOUT, payload);
+        }
+      }
+    }
   }, 'SHARE_HANDOUT'));
 
   // ----- rollable tables -----

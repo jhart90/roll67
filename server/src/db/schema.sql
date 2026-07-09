@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS maps (
   lights_json TEXT NOT NULL DEFAULT '[]',
   parent_id TEXT,
   spawn_json TEXT,
+  terrain_json TEXT NOT NULL DEFAULT '[]',
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
@@ -230,6 +231,20 @@ CREATE TABLE IF NOT EXISTS custom_npcs (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_custom_npcs_user ON custom_npcs(user_id);
+
+CREATE TABLE IF NOT EXISTS map_objects (
+  id TEXT PRIMARY KEY,
+  map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL CHECK (kind IN ('item', 'chest')),
+  q INTEGER NOT NULL,
+  r INTEGER NOT NULL,
+  art_asset_id TEXT,
+  items_json TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_map_objects_map ON map_objects(map_id);
 
 CREATE TABLE IF NOT EXISTS drawings (
   id TEXT PRIMARY KEY,

@@ -47,6 +47,38 @@ authRouter.get('/me', requireAuth, (req: AuthedRequest, res) => {
   res.json({ user: { id: req.user!.id, username: req.user!.username } });
 });
 
+authRouter.post('/account', requireAuth, (req: AuthedRequest, res) => {
+  const { currentPassword, newUsername, newPassword } = req.body ?? {};
+  if (typeof currentPassword !== 'string' || !verifyPassword(currentPassword, req.user!.password_hash)) {
+    res.status(403).json({ error: 'Current password is incorrect.' });
+    return;
+  }
+  if (newUsername !== undefined) {
+    const trimmed = String(newUsername).trim();
+    if (!validUsername(trimmed)) {
+      res.status(400).json({ error: 'Username must be 2-24 characters (letters, numbers, _ or -).' });
+      return;
+    }
+    if (trimmed.toLowerCase() !== req.user!.username.toLowerCase()) {
+      const existing = users.byUsername(trimmed);
+      if (existing && existing.id !== req.user!.id) {
+        res.status(409).json({ error: 'That username is already taken.' });
+        return;
+      }
+    }
+    users.rename(req.user!.id, trimmed);
+  }
+  if (newPassword !== undefined) {
+    if (!validPassword(newPassword)) {
+      res.status(400).json({ error: 'Password must be at least 4 characters.' });
+      return;
+    }
+    users.setPassword(req.user!.id, hashPassword(newPassword));
+  }
+  const updated = users.byId(req.user!.id)!;
+  res.json({ user: { id: updated.id, username: updated.username } });
+});
+
 // ---------- campaigns (REST: list/create/join happen outside the live table) ----------
 
 export const campaignRouter = Router();

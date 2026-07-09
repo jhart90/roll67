@@ -9,7 +9,8 @@ export type WindowKind =
   | 'mapEditor'
   | 'npcLibrary'
   | 'randomizeNpc'
-  | 'assetLibrary';
+  | 'assetLibrary'
+  | 'accountDetails';
 
 export interface WindowInstance {
   /** `${kind}:${key}` — opening the same kind+key again focuses this instance. */

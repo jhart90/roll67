@@ -61,7 +61,12 @@ html, body, #root {
   align-items: baseline;
   margin-bottom: 12px;
 }
-.user-chip { color: var(--text-dim); font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+.user-chip {
+  color: var(--text-dim); font-size: 13px; display: flex; gap: 8px; align-items: baseline;
+  background: none; border: none; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+  font-family: inherit;
+}
+.user-chip:hover { background: rgba(255,255,255,0.08); color: var(--text); }
 
 label { display: block; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); }
 input, select, textarea {
@@ -391,6 +396,30 @@ button.link:hover { text-decoration: underline; }
 .inspector-grid label { margin: 0; font-size: 12px; }
 .inspector-grid input[type='color'] { padding: 2px; height: 34px; }
 
+/* Loot popup */
+.loot-popup-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.loot-popup {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px; min-width: 280px; max-width: 400px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+.loot-popup h3 { margin: 0 0 8px; font-size: 16px; }
+.loot-desc { font-size: 13px; color: var(--text-dim); margin: 0 0 12px; }
+.loot-actions { display: flex; gap: 8px; margin-top: 12px; }
+.loot-actions button { flex: 1; }
+.chest-items { list-style: none; padding: 0; margin: 0; }
+.chest-items li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.chest-items li:last-child { border-bottom: none; }
+.chest-item-name { flex: 1; font-size: 13px; font-weight: 500; }
+.chest-item-desc { font-size: 11px; color: var(--text-dim); }
+
 /* Toggle switch — replaces checkboxes for binary on/off controls */
 .toggle-switch {
   position: relative;
@@ -544,6 +573,19 @@ button.link:hover { text-decoration: underline; }
 .wt-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wt-sub { font-size: 10px; color: var(--text-dim); text-transform: uppercase; }
 .wt-hint { font-size: 10px; padding: 4px 8px; }
+.wt-ctx-backdrop { position: fixed; inset: 0; z-index: 9999; }
+.wt-ctx-menu {
+  position: fixed; background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 0; min-width: 180px; box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  z-index: 10000;
+}
+.wt-ctx-menu button {
+  display: block; width: 100%; text-align: left; padding: 6px 12px;
+  background: none; border: none; color: var(--text); font-size: 12px; cursor: pointer;
+}
+.wt-ctx-menu button:hover:not(:disabled) { background: rgba(255,255,255,.08); }
+.wt-ctx-menu button:disabled { color: var(--text-dim); cursor: default; }
+.wt-ctx-menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
 /* ---------- chat ---------- */
 
@@ -1619,3 +1661,16 @@ button.link:hover { text-decoration: underline; }
   background: var(--accent);
   transition: width 150ms linear;
 }
+
+/* Account details */
+.account-details { padding: 0 12px 12px; min-width: 300px; }
+.account-form { display: flex; flex-direction: column; gap: 4px; }
+.account-form hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+.account-form button:not(.link) {
+  margin-top: 8px; padding: 8px 16px; background: var(--accent); color: #fff;
+  border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.account-form button:not(.link):hover { filter: brightness(1.1); }
+.account-form button:disabled { opacity: 0.5; cursor: default; }
+.account-success { color: #5cb85c; font-size: 13px; margin-top: 4px; }
+.account-error { color: #e85050; font-size: 13px; margin-top: 4px; }

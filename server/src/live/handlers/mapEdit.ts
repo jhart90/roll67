@@ -5,7 +5,8 @@ import {
   type CreateMapPayload, type DeleteMapPayload, type DeleteDoorPayload,
   type DeleteLightPayload, type DeleteWallPayload, type Door, type MapEditedPayload,
   type Point, type Wall,
-  type SetGridConfigPayload, type SetSpawnPayload, type ToggleDoorPayload, type UpdateMapPayload,
+  type SetGridConfigPayload, type SetSpawnPayload, type SetTerrainPayload,
+  type ToggleDoorPayload, type UpdateMapPayload,
   type UpsertDoorPayload, type UpsertLightPayload, type UpsertWallPayload,
 } from 'shared';
 import { assets, campaigns, characters, doorMemory, fog, maps } from '../../db/repos.js';
@@ -173,6 +174,13 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     maps.setSpawn(mapId, spawn);
     io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, spawn });
   }, 'SET_SPAWN'));
+
+  socket.on(C2S.SET_TERRAIN, safe(socket, ({ mapId, terrain }: SetTerrainPayload) => {
+    const { d } = requireDmMap(socket, mapId);
+    const packed = Array.isArray(terrain) ? terrain.filter((n) => typeof n === 'number' && Number.isFinite(n)) : [];
+    maps.setTerrain(mapId, packed);
+    io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, terrain: packed } as MapEditedPayload);
+  }, 'SET_TERRAIN'));
 
   // ----- walls -----
 

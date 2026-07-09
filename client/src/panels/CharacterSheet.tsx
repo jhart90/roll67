@@ -513,7 +513,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
         <div className="sheet-header">
           <input
             className="sheet-name"
-            key={character.id}
+            key={`${character.id}-${character.name}`}
             defaultValue={character.name}
             readOnly={!editable}
             onBlur={(e) => {

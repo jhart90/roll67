@@ -26,6 +26,7 @@ export const C2S = {
   UPDATE_MAP: 'updateMap',
   SET_GRID_CONFIG: 'setGridConfig',
   SET_SPAWN: 'setSpawn',
+  SET_TERRAIN: 'setTerrain',
   // map geometry (DM, except toggleDoor)
   UPSERT_WALL: 'upsertWall',
   DELETE_WALL: 'deleteWall',
@@ -127,6 +128,13 @@ export const C2S = {
   // custom compendium
   SAVE_TO_COMPENDIUM: 'saveToCompendium',
   DELETE_CUSTOM_NPC: 'deleteCustomNpc',
+  // map loot objects
+  PLACE_MAP_OBJECT: 'placeMapObject',
+  UPDATE_MAP_OBJECT: 'updateMapObject',
+  DELETE_MAP_OBJECT: 'deleteMapObject',
+  TAKE_MAP_ITEM: 'takeMapItem',
+  TAKE_CHEST_ITEM: 'takeChestItem',
+  TAKE_ALL_CHEST: 'takeAllChest',
 } as const;
 
 export interface JoinCampaignPayload { campaignId: string }
@@ -147,6 +155,7 @@ export interface UpdateMapPayload {
 }
 export interface SetGridConfigPayload { mapId: string; grid: Partial<GridConfig> }
 export interface SetSpawnPayload { mapId: string; q: number; r: number }
+export interface SetTerrainPayload { mapId: string; terrain: number[] }
 
 export interface UpsertWallPayload {
   mapId: string;
@@ -447,6 +456,52 @@ export interface CustomNpcView {
   artAssetId: string | null;
 }
 
+// ---------- Map loot objects ----------
+
+export interface LootItem {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface MapObject {
+  id: string;
+  mapId: string;
+  name: string;
+  description: string;
+  kind: 'item' | 'chest';
+  q: number;
+  r: number;
+  artAssetId: string | null;
+  items: LootItem[];
+}
+
+export interface PlaceMapObjectPayload {
+  mapId: string;
+  kind: 'item' | 'chest';
+  name: string;
+  description?: string;
+  q: number;
+  r: number;
+}
+
+export interface UpdateMapObjectPayload {
+  objectId: string;
+  patch: {
+    name?: string;
+    description?: string;
+    artAssetId?: string;
+    q?: number;
+    r?: number;
+    items?: LootItem[];
+  };
+}
+
+export interface DeleteMapObjectPayload { objectId: string }
+export interface TakeMapItemPayload { objectId: string }
+export interface TakeChestItemPayload { objectId: string; itemId: string }
+export interface TakeAllChestPayload { objectId: string }
+
 // ---------- Server -> client events ----------
 
 export const S2C = {
@@ -476,6 +531,7 @@ export const S2C = {
   MEASURE_SHOWN: 'measureShown',
   AOE_PREVIEW_SHOWN: 'aoePreviewShown',
   TARGET_PREVIEW_SHOWN: 'targetPreviewShown',
+  OPEN_HANDOUT: 'openHandout',
   HANDOUTS: 'handouts',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
@@ -488,6 +544,8 @@ export const S2C = {
   AUDIO_TRACKS: 'audioTracks',
   AUDIO_STATE: 'audioState',
   CUSTOM_NPCS: 'customNpcs',
+  MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
+  MAP_OBJECT_REMOVED: 'mapObjectRemoved',
   DIRECTORY: 'directory',
   MEMBER_PRESENCE: 'memberPresence',
   ACTIVE_MAP: 'activeMap',
@@ -544,6 +602,8 @@ export interface MapStatePayload {
   fadeLitMask: VisibilityLitMask | null;
   /** Doors within the viewer's explored region (players only). */
   knownDoors: Door[];
+  /** Loot objects on this map (items and chests). */
+  mapObjects: MapObject[];
   /** Non-null when this payload is a DM "view as" preview. */
   viewingAs: string | null;
 }
@@ -559,6 +619,7 @@ export interface MapEditedPayload {
   bgWidth?: number;
   bgHeight?: number;
   spawn?: import('./types.js').Hex | null;
+  terrain?: number[];
 }
 
 export interface VisionUpdatePayload {
@@ -621,6 +682,7 @@ export interface AoePreviewShownPayload extends AoePreviewInfo { userId: string 
 export interface TargetPreviewShownPayload extends TargetPreviewInfo { userId: string }
 
 export interface HandoutsPayload { handouts: Handout[] }
+export interface OpenHandoutPayload { handoutId: string; title: string }
 export interface ShopsPayload { shops: Shop[] }
 /** Which shop (if any) to pop for this viewer; DM receives the presented id for a badge. */
 export interface ShopPresentationPayload { shopId: string | null }

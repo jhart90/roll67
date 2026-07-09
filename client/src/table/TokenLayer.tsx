@@ -4,6 +4,7 @@ import type { TokenShape, TokenView } from 'shared';
 import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, pointInAoe, pxPerFoot } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
+import { worldDrag } from '../store/worldDrag';
 
 const DRAG_THROTTLE_MS = 100;
 
@@ -42,11 +43,13 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const map = useGameStore((s) => s.map)!;
   const you = useGameStore((s) => s.you);
   const character = useGameStore((s) => s.characters.find((c) => c.id === token.characterId));
-  const selected = useGameStore((s) => s.selectedTokenId === token.id);
+  const selected = useGameStore((s) => s.selectedTokenIds.includes(token.id));
   const tool = useGameStore((s) => s.tool);
   const targetEffect = useGameStore((s) => s.targeting?.action.effect ?? null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const lastSent = useRef(0);
+  const dragOrigin = useRef<{ x: number; y: number } | null>(null);
+  const isDm = you?.role === 'dm';
   const movable = !!you && tool === 'select' && targetState === 'off' &&
     canMoveToken(you.role, you.userId, token, character);
 
@@ -57,47 +60,89 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const ringColor = targetEffect === 'heal' ? '#7ed28a' : '#d26c6c';
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
-    // Targeting mode: a click picks the target (if in range) instead of moving.
     if (targetState !== 'off') {
       e.stopPropagation();
       if (targetState === 'valid' && e.button === 0) useGameStore.getState().resolveTarget(token.id);
       return;
     }
     if (tool !== 'select') return;
-    if (e.button === 2) return; // right-click handled by onContextMenu
+    if (e.button === 2) return;
     e.stopPropagation();
-    useGameStore.getState().selectToken(token.id);
-    useGameStore.getState().openInspector(null); // left-click closes the inspector
+    const additive = e.shiftKey && isDm;
+    useGameStore.getState().selectToken(token.id, additive);
+    useGameStore.getState().openInspector(null);
     if (!movable || e.button !== 0) return;
+    dragOrigin.current = stage.toMap(e.clientX, e.clientY);
     try {
       (e.currentTarget as SVGGElement).setPointerCapture(e.pointerId);
-    } catch {
-      // capture can fail for exotic pointers; selection already happened
-    }
+    } catch {}
   }
 
   function onPointerMove(e: React.PointerEvent<SVGGElement>) {
-    if (!movable || !(e.currentTarget as SVGGElement).hasPointerCapture(e.pointerId)) return;
+    if (!movable || !(e.currentTarget as SVGGElement).hasPointerCapture(e.pointerId) || !dragOrigin.current) return;
     const p = stage.toMap(e.clientX, e.clientY);
-    setDragPos(p);
+    const dx = p.x - dragOrigin.current.x;
+    const dy = p.y - dragOrigin.current.y;
+    setDragPos({ x: home.x + dx, y: home.y + dy });
     const now = Date.now();
     if (now - lastSent.current > DRAG_THROTTLE_MS) {
       lastSent.current = now;
-      intents.dragToken(token.id, p.x, p.y);
+      const s = useGameStore.getState();
+      if (isDm && s.selectedTokenIds.length > 1 && s.selectedTokenIds.includes(token.id)) {
+        for (const id of s.selectedTokenIds) {
+          const t = s.tokens[id];
+          if (!t) continue;
+          const th = hexToPixel({ q: t.q, r: t.r }, map.grid);
+          intents.dragToken(id, th.x + dx, th.y + dy);
+        }
+      } else {
+        intents.dragToken(token.id, home.x + dx, home.y + dy);
+      }
     }
   }
 
   function onPointerUp(e: React.PointerEvent<SVGGElement>) {
-    if (!movable || !dragPos) {
+    const origin = dragOrigin.current;
+    dragOrigin.current = null;
+    if (!movable || !dragPos || !origin) {
       setDragPos(null);
       return;
     }
     (e.currentTarget as SVGGElement).releasePointerCapture(e.pointerId);
-    const hex = pixelToHex(dragPos, map.grid);
+    const dx = dragPos.x - home.x;
+    const dy = dragPos.y - home.y;
     setDragPos(null);
-    intents.dragToken(token.id, dragPos.x, dragPos.y, true);
-    if (hex.q !== token.q || hex.r !== token.r) {
-      intents.moveToken(token.id, hex.q, hex.r);
+
+    const s = useGameStore.getState();
+    const isMulti = isDm && s.selectedTokenIds.length > 1 && s.selectedTokenIds.includes(token.id);
+
+    // Check if pointer released over a map node in the World panel (cross-panel drop)
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const mapNode = el?.closest('[data-map-id]') as HTMLElement | null;
+    if (isMulti && mapNode) {
+      const targetMapId = mapNode.dataset.mapId!;
+      for (const id of s.selectedTokenIds) {
+        const t = s.tokens[id];
+        if (!t?.characterId) continue;
+        intents.dropCharacterOnMap(t.characterId, targetMapId, 0, 0);
+      }
+      for (const id of s.selectedTokenIds) intents.dragToken(id, 0, 0, true);
+      return;
+    }
+
+    if (isMulti) {
+      for (const id of s.selectedTokenIds) {
+        const t = s.tokens[id];
+        if (!t) continue;
+        const th = hexToPixel({ q: t.q, r: t.r }, map.grid);
+        intents.dragToken(id, th.x + dx, th.y + dy, true);
+        const hex = pixelToHex({ x: th.x + dx, y: th.y + dy }, map.grid);
+        if (hex.q !== t.q || hex.r !== t.r) intents.moveToken(id, hex.q, hex.r);
+      }
+    } else {
+      intents.dragToken(token.id, dragPos.x, dragPos.y, true);
+      const hex = pixelToHex(dragPos, map.grid);
+      if (hex.q !== token.q || hex.r !== token.r) intents.moveToken(token.id, hex.q, hex.r);
     }
   }
 
@@ -110,10 +155,10 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
 
   function onContextMenu(e: React.MouseEvent<SVGGElement>) {
     if (targetState !== 'off' || tool !== 'select') { e.preventDefault(); return; }
-    // Right-click opens the token inspector (DM-only panel; a no-op for players).
     e.preventDefault();
     e.stopPropagation();
-    useGameStore.getState().selectToken(token.id);
+    const additive = e.shiftKey && isDm;
+    useGameStore.getState().selectToken(token.id, additive);
     useGameStore.getState().openInspector(token.id);
   }
 
@@ -269,7 +314,8 @@ export function TokenLayer() {
   function stateFor(t: TokenView): TargetState {
     if (aoeTargeting) return aoeHitIds?.has(t.id) ? 'valid' : 'invalid';
     if (!targeting || !src) return 'off';
-    const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes;
+    const reach = rangeHexes + (t.size >= 3 ? 1 : 0);
+    const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= reach;
     const selfBlocked = targeting.action.effect === 'damage' && t.id === src.id;
     return inRange && !selfBlocked ? 'valid' : 'invalid';
   }

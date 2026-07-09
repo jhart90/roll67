@@ -11,6 +11,7 @@ import { MapEditorWindow } from '../table/dm/MapManager';
 import { NpcLibrary } from '../panels/NpcLibrary';
 import { RandomizeNpcModal } from '../panels/RandomizeNpcModal';
 import { AssetLibrary } from '../panels/AssetLibrary';
+import { AccountDetails } from '../panels/AccountDetails';
 
 /** Mounted once at the top level: renders every open window instance,
  *  each in its own draggable/poppable WindowFrame, so multiple windows
@@ -60,6 +61,9 @@ export function WindowHost() {
             break;
           case 'assetLibrary':
             content = <AssetLibrary onClose={onClose} />;
+            break;
+          case 'accountDetails':
+            content = <AccountDetails onClose={onClose} />;
             break;
         }
         if (!content) return null;

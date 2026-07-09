@@ -66,7 +66,7 @@ export function TokenInspector() {
         <label>
           Name
           <input
-            key={token.id}
+            key={`${token.id}-${token.name}`}
             defaultValue={token.name}
             onBlur={(e) => {
               const trimmed = e.target.value.trim();

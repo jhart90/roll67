@@ -322,7 +322,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
     const rangeHexes = action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(action.rangeFt / feetPerHex));
     const dist = hexDistance({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
-    if (dist > rangeHexes) {
+    const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0);
+    if (dist > effectiveRange) {
       emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${action.rangeFt} ft).`);
       return;
     }

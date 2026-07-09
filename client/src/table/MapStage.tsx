@@ -9,9 +9,12 @@ import { CombatTextLayer } from './CombatTextLayer';
 import { DrawingLayer } from './DrawingLayer';
 import { FogCanvas } from './FogCanvas';
 import { GeometryLayer } from './GeometryLayer';
+import { MapObjectLayer } from './MapObjectLayer';
 import { LightColorOverlay } from './LightColorOverlay';
 import { PingMeasureLayer } from './PingMeasureLayer';
 import { TargetPreviewLayer } from './TargetPreviewLayer';
+import { TerrainCanvas } from './TerrainCanvas';
+import { TerrainPainter } from './TerrainPainter';
 import { TokenLayer } from './TokenLayer';
 
 const MIN_SCALE = 0.1;
@@ -126,9 +129,6 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
       const canMove = token && s.you && canMoveToken(s.you.role, s.you.userId, token, s.characters.find((c) => c.id === token.characterId));
 
       if (token && canMove) {
-        // Pointy-top axial directions. W/S ("up"/"down") alternate NE-NW / SE-SW
-        // so repeated presses zig-zag visually straight up or down instead of
-        // drifting diagonally.
         const vertUp = (token.r & 1) === 0 ? { q: 1, r: -1 } : { q: 0, r: -1 };
         const vertDown = (token.r & 1) === 0 ? { q: 0, r: 1 } : { q: -1, r: 1 };
         const DIRS: Record<string, { q: number; r: number }> = {
@@ -142,7 +142,36 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
         const dir = DIRS[e.key.toLowerCase()];
         if (!dir) return;
         e.preventDefault();
-        intents.moveToken(token.id, token.q + dir.q, token.r + dir.r);
+        const isDm = s.you?.role === 'dm';
+        if (isDm && s.selectedTokenIds.length > 1) {
+          for (const id of s.selectedTokenIds) {
+            const t = s.tokens[id];
+            if (!t) continue;
+            const tDir = { ...dir };
+            if (dir === vertUp) {
+              const up = (t.r & 1) === 0 ? { q: 1, r: -1 } : { q: 0, r: -1 };
+              tDir.q = up.q; tDir.r = up.r;
+            } else if (dir === vertDown) {
+              const dn = (t.r & 1) === 0 ? { q: 0, r: 1 } : { q: -1, r: 1 };
+              tDir.q = dn.q; tDir.r = dn.r;
+            }
+            intents.moveToken(id, t.q + tDir.q, t.r + tDir.r);
+          }
+        } else {
+          intents.moveToken(token.id, token.q + dir.q, token.r + dir.r);
+        }
+        return;
+      }
+
+      // 'L' toggles layer for all selected tokens (DM only)
+      if (e.key.toLowerCase() === 'l' && s.you?.role === 'dm' && s.selectedTokenIds.length > 0) {
+        e.preventDefault();
+        for (const id of s.selectedTokenIds) {
+          const t = s.tokens[id];
+          if (!t) continue;
+          const newLayer = t.layer === 'gm' ? 'token' : 'gm';
+          intents.updateToken(id, { layer: newLayer });
+        }
         return;
       }
 
@@ -248,7 +277,8 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
   // map (mirrors dragging onto the map's row in the tree, but with an
   // explicit landing spot instead of the spawn point).
   function onDragOver(e: React.DragEvent<HTMLDivElement>) {
-    if (worldDrag.current?.kind !== 'character') return;
+    const k = worldDrag.current?.kind;
+    if (k !== 'character' && k !== 'folder') return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   }
@@ -256,12 +286,17 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
   function onDrop(e: React.DragEvent<HTMLDivElement>) {
     const drag = worldDrag.current;
     worldDrag.current = null;
-    if (!drag || drag.kind !== 'character' || !map) return;
+    if (!drag || !map) return;
     e.preventDefault();
     if (useGameStore.getState().you?.role !== 'dm') return;
     const p = stageApi.toMap(e.clientX, e.clientY);
     const hex = pixelToHex(p, map.grid);
-    intents.dropCharacterOnMap(drag.id, map.id, hex.q, hex.r);
+    if (drag.kind === 'character') {
+      intents.dropCharacterOnMap(drag.id, map.id, hex.q, hex.r);
+    } else if (drag.kind === 'folder') {
+      const chars = useGameStore.getState().characters.filter((c) => c.parentId === drag.id);
+      for (const c of chars) intents.dropCharacterOnMap(c.id, map.id, hex.q, hex.r);
+    }
   }
 
   if (!map) {
@@ -291,8 +326,10 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           }}
         >
           <BackgroundCanvas map={map} />
+          <TerrainCanvas grid={map.grid} />
           <LightColorOverlay map={map} visibleLitMask={visibleLitMask} fadePolygons={fadePolygons} />
           <DrawingLayer />
+          <MapObjectLayer />
           <TokenLayer />
           <FogCanvas
             map={map} visible={visible} fade={fade} exploredLog={exploredLog}
@@ -304,6 +341,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <AoeTemplateLayer />
           <TargetPreviewLayer />
           <CombatTextLayer />
+          <TerrainPainter />
           {children}
         </div>
       </div>

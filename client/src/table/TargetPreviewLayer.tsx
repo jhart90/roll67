@@ -33,7 +33,8 @@ export function TargetPreviewLayer() {
       const srcPos = hexToPixel({ q: src.q, r: src.r }, map.grid);
       const srcRadius = map.grid.hexSize * 0.72 * src.size;
       const inRangeTokens = allTokens.filter((t) => {
-        const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= rangeHexes;
+        const reach = rangeHexes + (t.size >= 3 ? 1 : 0);
+        const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= reach;
         const selfBlocked = p.effect === 'damage' && t.id === src.id;
         return inRange && !selfBlocked;
       });

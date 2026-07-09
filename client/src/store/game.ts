@@ -4,7 +4,7 @@ import {
   type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
   type Door, type DoorType, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
-  type InitiativeState, type Light, type Macro, type MapEditedPayload, type MapMeta,
+  type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
   type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type Shop,
@@ -15,7 +15,9 @@ import {
 import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
 
-export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn';
+export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain';
+
+export type TerrainBrush = 'brush' | 'rect' | 'circle';
 
 export interface HpFloat { id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }
 export interface Projectile { id: number; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }
@@ -80,6 +82,12 @@ interface GameState {
    *  (fresh reference) only on map switch/join — FogCanvas's full-rebuild cue. */
   exploredLog: number[] | null;
   knownDoors: Door[];
+  mapObjects: Record<string, MapObject>;
+  /** Map object whose popup/inspector is open (click on item/chest). */
+  lootPopupId: string | null;
+  /** Map object whose DM edit inspector is open (right-click). */
+  inspectedObjectId: string | null;
+  openObjectInspector(id: string | null): void;
   viewingAs: string | null;
   dragGhosts: Record<string, { x: number; y: number }>;
   pings: Array<PingShownPayload & { id: number }>;
@@ -123,6 +131,8 @@ interface GameState {
   camera: Camera;
   tool: Tool;
   selectedTokenId: string | null;
+  /** All selected token IDs (multi-select via shift-click). First entry = primary. */
+  selectedTokenIds: string[];
   /** Token whose inspector panel is open (right-click), separate from selection. */
   inspectorTokenId: string | null;
   openInspector(id: string | null): void;
@@ -136,6 +146,8 @@ interface GameState {
   drawLayer: DrawingLayerName;
   setDrawColor(c: string): void;
   setDrawLayer(l: DrawingLayerName): void;
+  lootKind: 'item' | 'chest';
+  setLootKind(k: 'item' | 'chest'): void;
   wallType: 'solid' | 'window' | 'oneway' | 'stainedglass';
   wallFlip: boolean;
   wallGlassColor: string;
@@ -144,13 +156,17 @@ interface GameState {
   toggleWallFlip(): void;
   doorType: DoorType;
   setDoorType(t: DoorType): void;
+  terrainBrush: TerrainBrush;
+  terrainErase: boolean;
+  setTerrainBrush(b: TerrainBrush): void;
+  setTerrainErase(e: boolean): void;
 
   // actions
   join(campaignId: string): void;
   leave(): void;
   setCamera(c: Camera): void;
   setTool(t: Tool): void;
-  selectToken(id: string | null): void;
+  selectToken(id: string | null, additive?: boolean): void;
   selectLight(id: string | null): void;
   selectWall(id: string | null): void;
   selectDoor(id: string | null): void;
@@ -205,6 +221,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   explored: null,
   exploredLog: null,
   knownDoors: [],
+  mapObjects: {},
+  lootPopupId: null,
+  inspectedObjectId: null,
+  openObjectInspector(inspectedObjectId) { set({ inspectedObjectId }); },
   viewingAs: null,
   dragGhosts: {},
   pings: [],
@@ -222,7 +242,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   beginTargeting(characterId, sourceTokenId, action, adv) {
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
-    set({ targeting: { characterId, sourceTokenId, action, adv }, tool: 'select', selectedTokenId: null });
+    set({ targeting: { characterId, sourceTokenId, action, adv }, tool: 'select', selectedTokenId: null, selectedTokenIds: [] });
     // Live-broadcast the range highlight so the DM + other players see the
     // same in-range/out-of-range tokens the caster sees, before they click.
     socket.emit(C2S.TARGET_PREVIEW, {
@@ -255,7 +275,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const originHex = src ? { q: src.q, r: src.r } : { q: 0, r: 0 };
     set({
       aoeTargeting: { characterId, sourceTokenId, action, adv, originHex, aimHex: originHex },
-      tool: 'select', selectedTokenId: null,
+      tool: 'select', selectedTokenId: null, selectedTokenIds: [],
     });
   },
   updateAoeAim(hex) {
@@ -316,6 +336,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   camera: { x: 0, y: 0, scale: 1 },
   tool: 'select',
   selectedTokenId: null,
+  selectedTokenIds: [],
   inspectorTokenId: null,
   openInspector(inspectorTokenId) { set({ inspectorTokenId }); },
   selectedLightId: null,
@@ -327,6 +348,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   drawLayer: 'map',
   setDrawColor(drawColor) { set({ drawColor }); },
   setDrawLayer(drawLayer) { set({ drawLayer }); },
+  lootKind: 'item',
+  setLootKind(lootKind) { set({ lootKind }); },
   wallType: 'solid',
   wallFlip: false,
   wallGlassColor: '#cc4444',
@@ -335,6 +358,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   toggleWallFlip() { set({ wallFlip: !get().wallFlip }); },
   doorType: 'door',
   setDoorType(doorType) { set({ doorType }); },
+  terrainBrush: 'brush',
+  terrainErase: false,
+  setTerrainBrush(terrainBrush) { set({ terrainBrush }); },
+  setTerrainErase(terrainErase) { set({ terrainErase }); },
 
   join(campaignId) {
     connectSocket();
@@ -348,8 +375,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [],
-      viewingAs: null, dragGhosts: {}, selectedTokenId: null, inspectorTokenId: null,
-      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null,
+      viewingAs: null, dragGhosts: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
+      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
       // Transient slices that used to leak into the NEXT campaign: a live
       // ruler from campaign A rendering over campaign B's map, a stale error
       // toast, a presented shop, last session's initiative order.
@@ -371,12 +398,25 @@ export const useGameStore = create<GameState>((set, get) => ({
       tool,
       inspectorTokenId: null,
       selectedTokenId: tool === 'select' ? get().selectedTokenId : null,
+      selectedTokenIds: tool === 'select' ? get().selectedTokenIds : [],
       selectedLightId: tool === 'light' ? get().selectedLightId : null,
       selectedWallId: tool === 'select' ? get().selectedWallId : null,
       selectedDoorId: tool === 'select' ? get().selectedDoorId : null,
     });
   },
-  selectToken(selectedTokenId) { set({ selectedTokenId }); },
+  selectToken(id: string | null, additive?: boolean) {
+    if (!id) {
+      set({ selectedTokenId: null, selectedTokenIds: [] });
+      return;
+    }
+    if (additive && get().you?.role === 'dm') {
+      const ids = get().selectedTokenIds;
+      const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+      set({ selectedTokenIds: next, selectedTokenId: next[0] ?? null });
+    } else {
+      set({ selectedTokenId: id, selectedTokenIds: [id] });
+    }
+  },
   selectLight(selectedLightId) { set({ selectedLightId }); },
   selectWall(selectedWallId) { set({ selectedWallId, selectedDoorId: null, selectedLightId: null }); },
   selectDoor(selectedDoorId) { set({ selectedDoorId, selectedWallId: null, selectedLightId: null }); },
@@ -400,6 +440,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 function tokensById(list: TokenView[]): Record<string, TokenView> {
   const out: Record<string, TokenView> = {};
   for (const t of list) out[t.id] = t;
+  return out;
+}
+
+function mapObjectsById(list: MapObject[]): Record<string, MapObject> {
+  const out: Record<string, MapObject> = {};
+  for (const o of list) out[o.id] = o;
   return out;
 }
 
@@ -488,7 +534,11 @@ export function wireSocket(): void {
       viewingAs: p.viewingAs,
       dragGhosts: {},
       selectedTokenId: null,
+      selectedTokenIds: [],
       inspectorTokenId: null,
+      inspectedObjectId: null,
+      lootPopupId: null,
+      mapObjects: mapObjectsById(p.mapObjects),
       measures: {},
       aoePreviews: {},
       targetPreviews: {},
@@ -510,6 +560,7 @@ export function wireSocket(): void {
       ...(p.bgWidth !== undefined ? { bgWidth: p.bgWidth } : {}),
       ...(p.bgHeight !== undefined ? { bgHeight: p.bgHeight } : {}),
       ...(p.spawn !== undefined ? { spawn: p.spawn } : {}),
+      ...(p.terrain !== undefined ? { terrain: p.terrain } : {}),
     };
     const dmGeometry = s.dmGeometry
       ? {
@@ -571,6 +622,7 @@ export function wireSocket(): void {
     delete tokens[tokenId];
     useGameStore.setState({
       tokens,
+      selectedTokenIds: s.selectedTokenIds.filter((x) => x !== tokenId),
       selectedTokenId: s.selectedTokenId === tokenId ? null : s.selectedTokenId,
       inspectorTokenId: s.inspectorTokenId === tokenId ? null : s.inspectorTokenId,
     });
@@ -739,12 +791,32 @@ export function wireSocket(): void {
     useGameStore.setState({ customNpcs: npcs });
   });
 
+  socket.on(S2C.MAP_OBJECT_UPSERTED, ({ object }: { object: MapObject }) => {
+    const s = useGameStore.getState();
+    useGameStore.setState({ mapObjects: { ...s.mapObjects, [object.id]: object } });
+  });
+
+  socket.on(S2C.MAP_OBJECT_REMOVED, ({ objectId }: { objectId: string }) => {
+    const s = useGameStore.getState();
+    const mapObjects = { ...s.mapObjects };
+    delete mapObjects[objectId];
+    useGameStore.setState({
+      mapObjects,
+      lootPopupId: s.lootPopupId === objectId ? null : s.lootPopupId,
+      inspectedObjectId: s.inspectedObjectId === objectId ? null : s.inspectedObjectId,
+    });
+  });
+
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
     useGameStore.setState({ initiativeState: state });
   });
 
   socket.on(S2C.HANDOUTS, ({ handouts }: { handouts: Handout[] }) => {
     useGameStore.setState({ handoutList: handouts });
+  });
+
+  socket.on(S2C.OPEN_HANDOUT, ({ handoutId, title }: { handoutId: string; title: string }) => {
+    openWindow('handout', handoutId, {}, title);
   });
 
   socket.on(S2C.DIRECTORY, (payload: DirectoryPayload) => {
@@ -841,6 +913,7 @@ export const intents = {
     socket.emit(C2S.UPDATE_MAP, { mapId, ...fields }),
   setGrid: (mapId: string, grid: Partial<GridConfig>) => socket.emit(C2S.SET_GRID_CONFIG, { mapId, grid }),
   setSpawn: (mapId: string, q: number, r: number) => socket.emit(C2S.SET_SPAWN, { mapId, q, r }),
+  setTerrain: (mapId: string, terrain: number[]) => socket.emit(C2S.SET_TERRAIN, { mapId, terrain }),
 
   upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway' | 'stainedglass'; flip?: boolean; glassColor?: string; rainbow?: boolean }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),
@@ -1001,4 +1074,14 @@ export const intents = {
   /** Dragged a character from the World tab straight onto the map canvas: nest it under the map and drop its token at the exact hex released. */
   dropCharacterOnMap: (characterId: string, mapId: string, q: number, r: number) =>
     socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch: {}, parentId: mapId, dropHex: { q, r } }),
+
+  // map loot objects
+  placeMapObject: (mapId: string, kind: 'item' | 'chest', name: string, q: number, r: number, description?: string) =>
+    socket.emit(C2S.PLACE_MAP_OBJECT, { mapId, kind, name, description, q, r }),
+  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: LootItem[] }) =>
+    socket.emit(C2S.UPDATE_MAP_OBJECT, { objectId, patch }),
+  deleteMapObject: (objectId: string) => socket.emit(C2S.DELETE_MAP_OBJECT, { objectId }),
+  takeMapItem: (objectId: string) => socket.emit(C2S.TAKE_MAP_ITEM, { objectId }),
+  takeChestItem: (objectId: string, itemId: string) => socket.emit(C2S.TAKE_CHEST_ITEM, { objectId, itemId }),
+  takeAllChest: (objectId: string) => socket.emit(C2S.TAKE_ALL_CHEST, { objectId }),
 };

@@ -7,7 +7,7 @@ import {
   computeLightPolygonsWithColor, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, litHexes,
   type LightPolygonResult,
   packHex, pixelToHex, sightSegments, systemFor,
-  S2C, type Door, type FovInput, type Hex, type Light, type MapStatePayload, type Point, type Segment, type Token,
+  S2C, type Door, type FovInput, type Hex, type Light, type MapObject, type MapStatePayload, type Point, type Segment, type Token,
   type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
 import { campaigns, characters, doorMemory, fog, maps, tokens } from '../db/repos.js';
@@ -339,6 +339,7 @@ export function buildMapState(
   map: MapRecord,
   viewer: { userId: string; isDm: boolean; viewingAs?: string },
   drawings: MapStatePayload['drawings'],
+  mapObjectList?: MapObject[],
 ): MapStatePayload {
   const mapView = {
     id: map.id,
@@ -349,8 +350,11 @@ export function buildMapState(
     bgHeight: map.bgHeight,
     grid: map.grid,
     spawn: map.spawn ?? null,
+    terrain: map.terrain ?? [],
   };
   const allTokens = tokens.forMap(map.id);
+
+  const objs = mapObjectList ?? [];
 
   if (viewer.isDm && !viewer.viewingAs) {
     return {
@@ -366,6 +370,7 @@ export function buildMapState(
       fadeLitMask: null,
       explored: null,
       knownDoors: [],
+      mapObjects: objs,
       viewingAs: null,
     };
   }
@@ -386,6 +391,7 @@ export function buildMapState(
     fadeLitMask: view.fadeLitMask,
     explored: [...view.explored],
     knownDoors: view.knownDoors,
+    mapObjects: objs,
     viewingAs: viewer.viewingAs ?? null,
   };
 }

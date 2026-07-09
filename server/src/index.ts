@@ -17,6 +17,7 @@ import { registerCombatHandlers } from './live/handlers/combat.js';
 import { registerTableHandlers } from './live/handlers/table.js';
 import { registerLibraryHandlers } from './live/handlers/library.js';
 import { registerWorldHandlers } from './live/handlers/world.js';
+import { registerMapObjectHandlers } from './live/handlers/mapObjects.js';
 import { flushAllVisionMemory } from './live/visionService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -66,6 +67,7 @@ io.on('connection', (socket) => {
   registerTableHandlers(io, socket);
   registerLibraryHandlers(io, socket);
   registerWorldHandlers(io, socket);
+  registerMapObjectHandlers(io, socket);
 });
 
 httpServer.listen(PORT, () => {

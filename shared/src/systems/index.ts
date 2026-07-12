@@ -2,6 +2,7 @@ import type { GameSystem } from '../types.js';
 import type { SystemSchema } from './types.js';
 import { dnd5e } from './dnd5e.js';
 import { swn } from './swn.js';
+import { swade } from './swade.js';
 
 export * from './types.js';
 export * from './combat.js';
@@ -22,8 +23,12 @@ export {
   bestPsychicSkillLevel, effortMaxFor, hasDiscipline, isPsychicMishap, rollMishap, type PsychicMishap,
   hasFocus, swnDerivedAc, swnEncumbrance, cyberwareStrainTotal,
 } from './swn.js';
+export {
+  swade, ATTRIBUTES_SWADE, SKILLS_SWADE, RANKS_SWADE, ARCANE_BACKGROUNDS_SWADE, ANCESTRIES_SWADE,
+  TRAIT_DICE, dieSides, traitExpr, woundPenalty, swadeParry, swadeToughness,
+} from './swade.js';
 
-export const SYSTEMS: Record<GameSystem, SystemSchema> = { dnd5e, swn };
+export const SYSTEMS: Record<GameSystem, SystemSchema> = { dnd5e, swn, swade };
 
 export function systemFor(system: GameSystem): SystemSchema {
   return SYSTEMS[system];

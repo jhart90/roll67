@@ -188,16 +188,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
   }, 'DRAG_TOKEN'));
 }
 
-const TOKEN_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#c9c96c'];
+export const TOKEN_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#c9c96c'];
 
-function hashStr(s: string): number {
+export function hashStr(s: string): number {
   let h = 0;
   for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
   return h;
 }
 
 /** The map's rough center hex (odd-r offset → axial). */
-function centerHex(grid: GridConfig): Hex {
+export function centerHex(grid: GridConfig): Hex {
   const r = Math.floor(grid.rows / 2);
   const col = Math.floor(grid.cols / 2);
   return { q: col - (r - (r & 1)) / 2, r };

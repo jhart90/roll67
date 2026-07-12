@@ -16,6 +16,7 @@ export const CURRENCIES: Record<GameSystem, Currency[]> = {
     { id: 'pp', label: 'Platinum (pp)' },
   ],
   swn: [{ id: 'credits', label: 'Credits' }],
+  swade: [{ id: 'dollars', label: 'Currency ($)' }],
 };
 
 export function currenciesFor(system: GameSystem): Currency[] {
@@ -27,5 +28,5 @@ export function normalizeCurrency(system: GameSystem, currency: string | undefin
   const valid = new Set(CURRENCIES[system].map((c) => c.id));
   if (currency && valid.has(currency)) return currency;
   if (currency === 'cr') return 'credits'; // legacy default
-  return system === 'swn' ? 'credits' : 'gp';
+  return system === 'swn' ? 'credits' : system === 'swade' ? 'dollars' : 'gp';
 }

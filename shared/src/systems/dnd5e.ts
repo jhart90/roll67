@@ -244,22 +244,16 @@ const coreTab: SheetTab = {
         { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6' },
         { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES_5E] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
-        // A save-based special attack (breath weapons, etc.) leaves "bonus" as
-        // the flat +0 SRD monsters use and forces this save instead of a to-hit
-        // roll; "Save DC" is a fixed stat-block number, not derived like a PC's.
+        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', ...CONDITIONS_5E] },
         { id: 'save', label: 'Forces save', type: 'select', width: 'sixth', default: '', options: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'] },
         { id: 'onSave', label: 'On save', type: 'select', width: 'sixth', default: 'half', options: ['half', 'negate'] },
         { id: 'saveDc', label: 'Save DC', type: 'number', width: 'sixth', default: 0 },
         { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', ...AOE_SHAPES_5E] },
         { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'aoeWidth', label: 'Area width ft', type: 'number', width: 'sixth', default: 0 },
-        // On-hit condition rider (ghoul claws, wolf trip): the target rolls
-        // 'Rider save' vs 'Rider DC' AFTER a hit; failing gains the condition.
-        // No rider save = the condition applies automatically on a hit (grabs).
-        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', ...CONDITIONS_5E] },
         { id: 'conditionSave', label: 'Rider save', type: 'select', width: 'sixth', default: '', options: ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'] },
         { id: 'conditionDc', label: 'Rider DC', type: 'number', width: 'sixth', default: 0 },
-        { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'full' },
       ],
     },
     {

@@ -8,33 +8,45 @@ interface EvalResult {
   detail: string;
 }
 
+/** Max extra rolls a single exploding die may chain — a runaway safety cap. */
+const MAX_EXPLOSIONS = 20;
+
 function rollDice(
   count: number,
   sides: number,
+  explode: boolean,
   keep: { mode: 'kh' | 'kl'; n: number } | null,
   rng: RNG,
   allDice: DieRoll[],
 ): EvalResult {
-  const rolls: number[] = [];
+  // Each original die is a chain: just [v], or [max, max, v] when exploding
+  // (a die that shows its max "aces" — rolls again and adds, SWADE-style).
+  const chains: number[][] = [];
   for (let i = 0; i < count; i++) {
-    rolls.push(1 + Math.floor(rng() * sides));
+    const chain = [1 + Math.floor(rng() * sides)];
+    while (explode && sides >= 2 && chain[chain.length - 1] === sides && chain.length <= MAX_EXPLOSIONS) {
+      chain.push(1 + Math.floor(rng() * sides));
+    }
+    chains.push(chain);
   }
-  let keptIdx = new Set(rolls.map((_, i) => i));
+  const sums = chains.map((ch) => ch.reduce((a, b) => a + b, 0));
+  let keptIdx = new Set(chains.map((_, i) => i));
   if (keep) {
-    const order = rolls
+    const order = sums
       .map((v, i) => ({ v, i }))
       .sort((a, b) => (keep.mode === 'kh' ? b.v - a.v : a.v - b.v));
     keptIdx = new Set(order.slice(0, keep.n).map((x) => x.i));
   }
   let total = 0;
   const parts: string[] = [];
-  rolls.forEach((v, i) => {
+  chains.forEach((chain, i) => {
     const kept = keptIdx.has(i);
-    if (kept) total += v;
-    allDice.push({ sides, value: v, kept });
-    parts.push(kept ? String(v) : `~${v}~`);
+    if (kept) total += sums[i];
+    for (const v of chain) allDice.push({ sides, value: v, kept });
+    const text = chain.length > 1 ? `${chain.join('+')}=${sums[i]}` : String(chain[0]);
+    parts.push(kept ? text : `~${text}~`);
   });
-  const name = `${count}d${sides}${keep ? keep.mode + keep.n : ''}`;
+  const name = `${count}d${sides}${explode ? '!' : ''}${keep ? keep.mode + keep.n : ''}`;
   return { total, detail: `${name} (${parts.join(', ')})` };
 }
 
@@ -43,7 +55,22 @@ function evalNode(node: DiceNode, rng: RNG, allDice: DieRoll[]): EvalResult {
     case 'num':
       return { total: node.value, detail: String(node.value) };
     case 'dice':
-      return rollDice(node.count, node.sides, node.keep, rng, allDice);
+      return rollDice(node.count, node.sides, node.explode, node.keep, rng, allDice);
+    case 'best': {
+      // Roll every arm, keep the highest total (SWADE trait die vs wild die).
+      // Losing arms' dice stay in the breakdown but are marked not-kept.
+      const arms = node.args.map((arg) => {
+        const dice: DieRoll[] = [];
+        const res = evalNode(arg, rng, dice);
+        return { ...res, dice };
+      });
+      const winner = arms.reduce((a, b) => (b.total > a.total ? b : a));
+      for (const arm of arms) {
+        for (const die of arm.dice) allDice.push(arm === winner ? die : { ...die, kept: false });
+      }
+      const detail = arms.map((a) => (a === winner ? a.detail : `~${a.detail}~`)).join(' | ');
+      return { total: winner.total, detail: `best(${detail})` };
+    }
     case 'binop': {
       const l = evalNode(node.left, rng, allDice);
       const r = evalNode(node.right, rng, allDice);

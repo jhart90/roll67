@@ -102,8 +102,8 @@ campaignRouter.post('/', (req: AuthedRequest, res) => {
     res.status(400).json({ error: 'Campaign name required (max 60 chars).' });
     return;
   }
-  if (system !== 'dnd5e' && system !== 'swn') {
-    res.status(400).json({ error: 'System must be dnd5e or swn.' });
+  if (system !== 'dnd5e' && system !== 'swn' && system !== 'swade') {
+    res.status(400).json({ error: 'System must be dnd5e, swn, or swade.' });
     return;
   }
   const campaign = campaigns.create(name.trim(), system, req.user!.id);

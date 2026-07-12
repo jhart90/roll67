@@ -49,7 +49,7 @@ export function MapObjectInspector() {
   return (
     <div className="token-inspector">
       <div className="dock-header">
-        <strong>{obj.kind === 'chest' ? '📦 Chest' : '✦ Item'}</strong>
+        <strong>{obj.kind === 'chest' ? '📦 Chest' : obj.kind === 'shop' ? '🏪 Shop' : '✦ Item'}</strong>
         <span className="spacer" />
         <button className="link" onClick={() => useGameStore.getState().openObjectInspector(null)}>✕</button>
       </div>
@@ -85,6 +85,18 @@ export function MapObjectInspector() {
         <button className="small" style={{ marginTop: 4 }} onClick={() => intents.updateMapObject(obj.id, { artAssetId: '' })}>
           Remove art
         </button>
+      )}
+
+      {obj.kind === 'shop' && (
+        <label>
+          Interact range (hexes)
+          <input
+            type="number" min={1} max={20}
+            value={obj.interactRange}
+            onChange={(e) => intents.updateMapObject(obj.id, { interactRange: Math.max(1, +e.target.value || 1) })}
+            style={{ width: 60 }}
+          />
+        </label>
       )}
 
       {obj.kind === 'chest' && (

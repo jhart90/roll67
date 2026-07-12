@@ -5,7 +5,7 @@ import {
   type DeleteCustomNpcPayload, type LevelUpRollPayload,
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
-import type { Character, CreateNpcPayload, CreateRandomNpcPayload } from 'shared';
+import type { Character, CreateNpcPayload, CreateRandomNpcPayload, GameSystem } from 'shared';
 import { generateNpc, generateNpcFromModel, npcById } from 'shared';
 import { campaigns, characters, chat, customNpcs, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
@@ -232,7 +232,7 @@ function toCustomNpcView(d: ReturnType<typeof customNpcs.byId> & {}): CustomNpcV
 }
 
 export function emitCustomNpcs(socket: Socket, userId: string, system: string): void {
-  const list = customNpcs.forUserSystem(userId, system as 'dnd5e' | 'swn').map(toCustomNpcView);
+  const list = customNpcs.forUserSystem(userId, system as GameSystem).map(toCustomNpcView);
   socket.emit(S2C.CUSTOM_NPCS, { npcs: list });
 }
 

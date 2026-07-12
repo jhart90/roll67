@@ -4,19 +4,33 @@ import { roll, seededRng } from '../src/dice/roller.js';
 
 describe('dice parser', () => {
   it('parses plain dice and numbers', () => {
-    expect(parseDice('2d6')).toEqual({ kind: 'dice', count: 2, sides: 6, keep: null });
-    expect(parseDice('d20')).toEqual({ kind: 'dice', count: 1, sides: 20, keep: null });
+    expect(parseDice('2d6')).toEqual({ kind: 'dice', count: 2, sides: 6, explode: false, keep: null });
+    expect(parseDice('d20')).toEqual({ kind: 'dice', count: 1, sides: 20, explode: false, keep: null });
     expect(parseDice('7')).toEqual({ kind: 'num', value: 7 });
   });
 
   it('parses keep-highest / keep-lowest', () => {
-    expect(parseDice('2d20kh1')).toEqual({ kind: 'dice', count: 2, sides: 20, keep: { mode: 'kh', n: 1 } });
-    expect(parseDice('4d6kl3')).toEqual({ kind: 'dice', count: 4, sides: 6, keep: { mode: 'kl', n: 3 } });
+    expect(parseDice('2d20kh1')).toEqual({ kind: 'dice', count: 2, sides: 20, explode: false, keep: { mode: 'kh', n: 1 } });
+    expect(parseDice('4d6kl3')).toEqual({ kind: 'dice', count: 4, sides: 6, explode: false, keep: { mode: 'kl', n: 3 } });
   });
 
   it('parses adv/dis sugar', () => {
-    expect(parseDice('adv')).toEqual({ kind: 'dice', count: 2, sides: 20, keep: { mode: 'kh', n: 1 } });
+    expect(parseDice('adv')).toEqual({ kind: 'dice', count: 2, sides: 20, explode: false, keep: { mode: 'kh', n: 1 } });
     expect(parseDice('dis+5')).toMatchObject({ kind: 'binop', op: '+' });
+  });
+
+  it('parses exploding dice and best()', () => {
+    expect(parseDice('1d8!')).toEqual({ kind: 'dice', count: 1, sides: 8, explode: true, keep: null });
+    expect(parseDice('best(1d8!, 1d6!)')).toMatchObject({
+      kind: 'best',
+      args: [
+        { kind: 'dice', sides: 8, explode: true },
+        { kind: 'dice', sides: 6, explode: true },
+      ],
+    });
+    expect(parseDice('best(1d8!, 1d6!)+2')).toMatchObject({ kind: 'binop', op: '+' });
+    expect(() => parseDice('best(1d8)')).toThrow(DiceParseError); // needs 2+ args
+    expect(() => parseDice('best(1d8, 1d6')).toThrow(DiceParseError); // unclosed
   });
 
   it('handles arithmetic precedence and parens', () => {
@@ -90,5 +104,36 @@ describe('dice roller', () => {
   it('detail string shows dropped dice in ~tildes~', () => {
     const r = roll('2d20kh1', seededRng(3));
     expect(r.detail).toMatch(/~\d+~/);
+  });
+
+  it('exploding dice reroll on their max and add the chain', () => {
+    const rng = seededRng(11);
+    for (let i = 0; i < 300; i++) {
+      const r = roll('1d4!', rng);
+      // Total equals the sum of the whole chain; every roll before the last
+      // must be a 4 (that is what made it explode), the last must not be.
+      const values = r.dice.map((d) => d.value);
+      expect(r.total).toBe(values.reduce((a, b) => a + b, 0));
+      for (const v of values.slice(0, -1)) expect(v).toBe(4);
+      if (values.length <= 20) expect(values[values.length - 1]).toBeLessThan(4);
+    }
+  });
+
+  it('best() keeps the highest arm and marks the loser dropped', () => {
+    const rng = seededRng(5);
+    for (let i = 0; i < 200; i++) {
+      const r = roll('best(1d8!, 1d6!)', rng);
+      const keptSum = r.dice.filter((d) => d.kept).reduce((a, d) => a + d.value, 0);
+      const dropSum = r.dice.filter((d) => !d.kept).reduce((a, d) => a + d.value, 0);
+      expect(r.total).toBe(keptSum);
+      expect(keptSum).toBeGreaterThanOrEqual(dropSum);
+      expect(r.detail.startsWith('best(')).toBe(true);
+    }
+  });
+
+  it('best() composes with modifiers (SWADE trait roll shape)', () => {
+    const r = roll('best(1d8!, 1d6!)-2', seededRng(9));
+    const keptSum = r.dice.filter((d) => d.kept).reduce((a, d) => a + d.value, 0);
+    expect(r.total).toBe(keptSum - 2);
   });
 });

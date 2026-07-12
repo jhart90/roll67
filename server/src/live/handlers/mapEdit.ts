@@ -1,15 +1,16 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, rows, str,
+  C2S, S2C, hexToPixel, rows, str,
   type AutoTraceWallsPayload,
   type CreateMapPayload, type DeleteMapPayload, type DeleteDoorPayload,
   type DeleteLightPayload, type DeleteWallPayload, type Door, type MapEditedPayload,
-  type Point, type Wall,
+  type LinkLightToTokenPayload, type MoveLightToMapPayload,
+  type Point, type RenameLightPayload, type UnlinkLightFromTokenPayload, type Wall,
   type SetGridConfigPayload, type SetSpawnPayload, type SetTerrainPayload,
   type ToggleDoorPayload, type UpdateMapPayload,
   type UpsertDoorPayload, type UpsertLightPayload, type UpsertWallPayload,
 } from 'shared';
-import { assets, campaigns, characters, doorMemory, fog, maps } from '../../db/repos.js';
+import { assets, campaigns, characters, doorMemory, fog, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata } from '../hub.js';
 import { canReachDoor, dropMapVisionCaches, syncMapVision } from '../visionService.js';
@@ -279,8 +280,9 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     const lights = [...map.lights];
     const id = light.id ?? newId();
     const idx = lights.findIndex((x) => x.id === id);
+    const existing = idx >= 0 ? lights[idx] : undefined;
     const next = {
-      id, x: light.x, y: light.y,
+      id, name: light.name ?? existing?.name, x: light.x, y: light.y,
       brightRadius: Math.max(0, light.brightRadius),
       dimRadius: Math.max(0, light.dimRadius),
       color: light.color,
@@ -299,6 +301,61 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, lights });
     syncMapVision(io, d.campaignId!, mapId);
   }, 'DELETE_LIGHT'));
+
+  socket.on(C2S.RENAME_LIGHT, safe(socket, ({ lightId, mapId, name }: RenameLightPayload) => {
+    const { d, map } = requireDmMap(socket, mapId);
+    const lights = map.lights.map((l) => l.id === lightId ? { ...l, name } : l);
+    maps.setLights(mapId, lights);
+    io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, lights });
+  }, 'RENAME_LIGHT'));
+
+  socket.on(C2S.MOVE_LIGHT_TO_MAP, safe(socket, ({ lightId, sourceMapId, targetMapId }: MoveLightToMapPayload) => {
+    const { d, map: src } = requireDmMap(socket, sourceMapId);
+    const tgt = maps.byId(targetMapId);
+    if (!tgt || tgt.campaignId !== d.campaignId) throw new Error('Unknown target map.');
+    const light = src.lights.find((l) => l.id === lightId);
+    if (!light) throw new Error('Light not found.');
+    maps.setLights(sourceMapId, src.lights.filter((l) => l.id !== lightId));
+    const spawn = tgt.spawn ?? { q: 0, r: 0 };
+    const pos = hexToPixel(spawn, tgt.grid);
+    const moved = { ...light, x: pos.x, y: pos.y };
+    const tgtLights = [...tgt.lights, moved];
+    maps.setLights(targetMapId, tgtLights);
+    io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId: sourceMapId, lights: src.lights.filter((l) => l.id !== lightId) });
+    io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId: targetMapId, lights: tgtLights });
+    syncMapVision(io, d.campaignId!, sourceMapId);
+    syncMapVision(io, d.campaignId!, targetMapId);
+  }, 'MOVE_LIGHT_TO_MAP'));
+
+  socket.on(C2S.LINK_LIGHT_TO_TOKEN, safe(socket, ({ lightId, sourceMapId, tokenId }: LinkLightToTokenPayload) => {
+    const { d, map } = requireDmMap(socket, sourceMapId);
+    const light = map.lights.find((l) => l.id === lightId);
+    if (!light) throw new Error('Light not found.');
+    const tok = tokens.byId(tokenId);
+    if (!tok) throw new Error('Token not found.');
+    maps.setLights(sourceMapId, map.lights.filter((l) => l.id !== lightId));
+    tokens.update(tokenId, { light: { bright: light.brightRadius, dim: light.dimRadius, color: light.color } });
+    io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId: sourceMapId, lights: map.lights.filter((l) => l.id !== lightId) });
+    io.to(dmRoom(d.campaignId!)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tokenId)! });
+    syncMapVision(io, d.campaignId!, sourceMapId);
+    syncMapVision(io, d.campaignId!, tok.mapId);
+  }, 'LINK_LIGHT_TO_TOKEN'));
+
+  socket.on(C2S.UNLINK_LIGHT_FROM_TOKEN, safe(socket, ({ tokenId, mapId }: UnlinkLightFromTokenPayload) => {
+    const { d } = requireDmMap(socket, mapId);
+    const tok = tokens.byId(tokenId);
+    if (!tok || !tok.light) throw new Error('Token has no light.');
+    const map = maps.byId(mapId);
+    if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
+    const pos = hexToPixel({ q: tok.q, r: tok.r }, map.grid);
+    const newLight = { id: newId(), name: tok.name ? `${tok.name}'s light` : undefined, x: pos.x, y: pos.y, brightRadius: tok.light.bright, dimRadius: tok.light.dim, color: tok.light.color };
+    const lights = [...map.lights, newLight];
+    maps.setLights(mapId, lights);
+    tokens.update(tokenId, { light: null });
+    io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, lights });
+    io.to(dmRoom(d.campaignId!)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tokenId)! });
+    syncMapVision(io, d.campaignId!, mapId);
+  }, 'UNLINK_LIGHT_FROM_TOKEN'));
 
   // ----- auto-trace walls from background image -----
 

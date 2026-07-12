@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/auth';
 const SYSTEM_LABELS: Record<GameSystem, string> = {
   dnd5e: 'D&D 5e',
   swn: 'Stars Without Number',
+  swade: 'Savage Worlds (SWADE)',
 };
 
 export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void }) {
@@ -80,6 +81,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
               <select value={system} onChange={(e) => setSystem(e.target.value as GameSystem)}>
                 <option value="dnd5e">D&amp;D 5e</option>
                 <option value="swn">Stars Without Number</option>
+                <option value="swade">Savage Worlds (SWADE)</option>
               </select>
             </label>
             <div className="row">

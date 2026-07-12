@@ -50,19 +50,22 @@ describe('pre-built NPC library', () => {
     // attacks with no compendium lookup at all, so a named weapon like
     // "Longbow" silently fell back to the schema's 5-ft melee default —
     // making every ranged NPC attack unusable beyond one hex.
+    // Keyed per system — the same weapon name can exist in several systems
+    // with different ranges (a 5e Spear is thrown 20/60; a SWADE Spear is a
+    // reach weapon), and an NPC only ever shops its own system's compendium.
     const rangedWeaponsByName = new Map<string, number>();
     for (const c of ITEMS_5E) {
-      if (c.kind === 'weapon' && c.weapon) rangedWeaponsByName.set(c.name.toLowerCase(), weaponRangeFt5e(c.weapon.props));
+      if (c.kind === 'weapon' && c.weapon) rangedWeaponsByName.set(`dnd5e:${c.name.toLowerCase()}`, weaponRangeFt5e(c.weapon.props));
     }
     for (const c of CONTENT_SWN) {
-      if (c.kind === 'weapon' && c.weapon) rangedWeaponsByName.set(c.name.toLowerCase(), weaponRangeFtSwn(c.weapon.props));
+      if (c.kind === 'weapon' && c.weapon) rangedWeaponsByName.set(`swn:${c.name.toLowerCase()}`, weaponRangeFtSwn(c.weapon.props));
     }
     let checked = 0;
     for (const n of ALL_NPCS) {
       const attacks = n.sheet.attacks as Array<Record<string, unknown>> | undefined;
       if (!attacks) continue;
       for (const atk of attacks) {
-        const expected = rangedWeaponsByName.get(String(atk.name).toLowerCase());
+        const expected = rangedWeaponsByName.get(`${n.system}:${String(atk.name).toLowerCase()}`);
         if (expected === undefined || expected <= 5) continue; // only a real ranged weapon proves the bug
         checked++;
         expect(atk.range, `${n.id}: ${atk.name}`).toBe(expected);

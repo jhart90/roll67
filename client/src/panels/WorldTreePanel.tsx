@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Character, Handout, LocationNode, MapMeta, RollableTable, Shop, WorldFolder } from 'shared';
+import type { Character, Handout, Light, LocationNode, MapMeta, RollableTable, Shop, Token, WorldFolder } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
@@ -12,14 +12,19 @@ interface TreeNode {
   name: string;
   parentId: string | null;
   sub: string; // secondary label (owner, kind, item count…)
+  displayKind?: 'folder' | 'chest';
+  /** For light nodes: the map the light lives on (for drag operations). */
+  lightMapId?: string;
+  /** For token-light nodes: the token carrying the light. */
+  lightTokenId?: string;
 }
 
-const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁' };
+const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡' } as Record<string, string>;
 
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
   locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
-  folders: WorldFolder[],
+  folders: WorldFolder[], mapLights: Light[], mapId: string | null, allTokens: Record<string, Token>,
 ): TreeNode[] {
   const out: TreeNode[] = [];
   for (const m of maps) out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: 'map' });
@@ -28,7 +33,27 @@ function buildNodes(
   for (const s of shops) out.push({ kind: 'shop', id: s.id, name: s.name || 'Shop', parentId: s.parentId ?? null, sub: `${s.items.length} items` });
   for (const t of tables) out.push({ kind: 'table', id: t.id, name: t.name || 'Table', parentId: t.parentId ?? null, sub: `${t.items.length}` });
   for (const h of handouts) out.push({ kind: 'handout', id: h.id, name: h.title || 'Handout', parentId: h.parentId ?? null, sub: '' });
-  for (const f of folders) out.push({ kind: 'folder', id: f.id, name: f.name || 'Folder', parentId: f.parentId ?? null, sub: '' });
+  for (const f of folders) {
+    const isChest = f.displayKind === 'chest';
+    const sub = isChest && f.items.length ? `${f.items.length} items` : '';
+    out.push({ kind: isChest ? 'folder' : 'folder', id: f.id, name: f.name || (isChest ? 'Chest' : 'Folder'), parentId: f.parentId ?? null, sub, displayKind: f.displayKind } as TreeNode);
+  }
+  // Map lights appear under their map
+  if (mapId) {
+    for (const light of mapLights) {
+      const name = light.name || 'Light';
+      const sub = `bright ${light.brightRadius}, dim ${light.dimRadius}`;
+      out.push({ kind: 'light', id: light.id, name, parentId: mapId, sub, lightMapId: mapId });
+    }
+  }
+  // Token-carried lights appear under their character
+  for (const tok of Object.values(allTokens)) {
+    if (!tok.light || !tok.characterId) continue;
+    const id = `tlight-${tok.id}`;
+    const name = tok.name ? `${tok.name}'s light` : 'Token light';
+    const sub = `bright ${tok.light.bright}, dim ${tok.light.dim}`;
+    out.push({ kind: 'light', id, name, parentId: tok.characterId, sub, lightTokenId: tok.id, lightMapId: tok.mapId });
+  }
   return out;
 }
 
@@ -43,7 +68,9 @@ export function WorldTreePanel() {
   const folders = useGameStore((s) => s.worldFolderList);
   const isDm = you?.role === 'dm';
 
-  const tokens = useGameStore((s) => s.tokens);
+  const allTokens = useGameStore((s) => s.tokens);
+  const dmLights = useGameStore((s) => s.dmGeometry?.lights ?? []);
+  const currentMapId = useGameStore((s) => s.map?.id ?? null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
@@ -54,8 +81,8 @@ export function WorldTreePanel() {
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null);
 
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders),
-    [locations, characters, shops, tables, handouts, maps, folders],
+    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens),
+    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens],
   );
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const childrenOf = useMemo(() => {
@@ -86,6 +113,13 @@ export function WorldTreePanel() {
       if (!isDm) return;
       const name = prompt('Folder name', node.name);
       if (name && name.trim()) intents.updateWorldFolder(node.id, { name: name.trim() });
+      return;
+    }
+    if (node.kind === 'light') {
+      if (!isDm || !node.lightMapId) return;
+      if (node.lightTokenId) return; // can't rename token-carried lights directly
+      const name = prompt('Light name', node.name);
+      if (name && name.trim()) intents.renameLight(node.id, node.lightMapId, name.trim());
       return;
     }
     // The DM edits (each in its own draggable window); players get a
@@ -119,13 +153,13 @@ export function WorldTreePanel() {
   }
 
   function placeFolderOnMap(folderId: string, mapId: string) {
-    for (const cid of folderCharacters(folderId)) intents.dropCharacterOnMap(cid, mapId, 0, 0);
+    intents.dropFolderOnMap(folderId, mapId);
     intents.viewMap(mapId);
   }
 
   function setFolderTokensLayer(folderId: string, layer: 'token' | 'gm') {
     const charIds = new Set(folderCharacters(folderId));
-    for (const t of Object.values(tokens)) {
+    for (const t of Object.values(allTokens)) {
       if (t.characterId && charIds.has(t.characterId) && t.layer !== layer) {
         intents.updateToken(t.id, { layer });
       }
@@ -139,11 +173,43 @@ export function WorldTreePanel() {
     if (!drag) return;
     // Can't parent an item under itself or its own descendant.
     if (targetId && (targetId === drag.id || isAncestor(drag.id, targetId))) return;
-    // Dragging a folder onto a map places all its characters on that map.
+
+    // --- Light drag operations ---
+    if (drag.kind === 'light') {
+      const dragNode = byId.get(drag.id);
+      if (!dragNode) return;
+      const target = targetId ? byId.get(targetId) : null;
+
+      if (dragNode.lightTokenId) {
+        // Dragging a token-carried light off its character → unlink
+        if (!target || target.kind !== 'character' || target.id !== dragNode.parentId) {
+          const tok = allTokens[dragNode.lightTokenId];
+          if (tok) intents.unlinkLightFromToken(tok.id, tok.mapId);
+        }
+        return;
+      }
+
+      // Map light dragged onto a character → find a token for that character and link
+      if (target?.kind === 'character' && dragNode.lightMapId) {
+        const charToken = Object.values(allTokens).find((t) => t.characterId === target.id);
+        if (charToken) intents.linkLightToToken(drag.id, dragNode.lightMapId, charToken.id);
+        return;
+      }
+
+      // Map light dragged onto a different map → move to that map
+      if (target?.kind === 'map' && dragNode.lightMapId && target.id !== dragNode.lightMapId) {
+        intents.moveLightToMap(drag.id, dragNode.lightMapId, target.id);
+        return;
+      }
+      return;
+    }
+
+    // Dragging a folder onto a map reparents it + places character tokens.
     if (drag.kind === 'folder' && targetId && byId.get(targetId)?.kind === 'map') {
       placeFolderOnMap(drag.id, targetId);
       return;
     }
+    // Dragging a folder onto any other node just reparents the folder.
     intents.setParent(drag.kind, drag.id, targetId);
     // Dragging a character onto a map relocates its token there server-side;
     // switch the DM's view to that map so the new token is immediately
@@ -191,7 +257,7 @@ export function WorldTreePanel() {
           >
             {kids.length ? (isOpen ? '▾' : '▸') : ''}
           </span>
-          <span className="wt-icon">{ICON[node.kind]}</span>
+          <span className="wt-icon">{node.kind === 'folder' && node.displayKind === 'chest' ? '📦' : ICON[node.kind]}</span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
           {isDm && node.kind === 'folder' && (
@@ -204,6 +270,31 @@ export function WorldTreePanel() {
               }}
             >
               ✕
+            </button>
+          )}
+          {isDm && node.kind === 'light' && !node.lightTokenId && node.lightMapId && (
+            <button
+              className="link danger"
+              title="Delete light"
+              onClick={(e) => {
+                e.stopPropagation();
+                intents.deleteLight(node.lightMapId!, node.id);
+              }}
+            >
+              ✕
+            </button>
+          )}
+          {isDm && node.kind === 'light' && node.lightTokenId && (
+            <button
+              className="link danger"
+              title="Unlink light from character"
+              onClick={(e) => {
+                e.stopPropagation();
+                const tok = allTokens[node.lightTokenId!];
+                if (tok) intents.unlinkLightFromToken(tok.id, tok.mapId);
+              }}
+            >
+              ⊘
             </button>
           )}
         </div>
@@ -229,6 +320,7 @@ export function WorldTreePanel() {
           <button className="btn btn-sm" onClick={() => intents.createTable('New table')}>+ Table</button>
           <button className="btn btn-sm" onClick={() => openWindow('handout', 'new', {}, 'New handout')}>+ Handout</button>
           <button className="btn btn-sm" onClick={() => intents.createWorldFolder('New folder', null)}>+ Folder</button>
+          <button className="btn btn-sm" onClick={() => intents.createWorldFolder('Chest', null, { displayKind: 'chest' })}>+ Chest</button>
           <button className="btn btn-sm" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
       )}
@@ -253,6 +345,16 @@ export function WorldTreePanel() {
             >Place all on current map</button>
             <button onClick={() => { setFolderTokensLayer(ctxMenu.folderId, 'gm'); setCtxMenu(null); }}>Hide all tokens</button>
             <button onClick={() => { setFolderTokensLayer(ctxMenu.folderId, 'token'); setCtxMenu(null); }}>Show all tokens</button>
+            {(() => {
+              const f = byId.get(ctxMenu.folderId);
+              const isChest = f?.displayKind === 'chest';
+              return (
+                <button onClick={() => {
+                  intents.updateWorldFolder(ctxMenu.folderId, { displayKind: isChest ? 'folder' : 'chest' });
+                  setCtxMenu(null);
+                }}>{isChest ? 'Convert to Folder' : 'Convert to Chest'}</button>
+              );
+            })()}
             <hr />
             <button onClick={() => {
               const f = byId.get(ctxMenu.folderId);

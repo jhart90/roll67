@@ -68,8 +68,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     if (tool !== 'select') return;
     if (e.button === 2) return;
     e.stopPropagation();
-    const additive = e.shiftKey && isDm;
-    useGameStore.getState().selectToken(token.id, additive);
+    useGameStore.getState().selectToken(token.id, e.shiftKey);
     useGameStore.getState().openInspector(null);
     if (!movable || e.button !== 0) return;
     dragOrigin.current = stage.toMap(e.clientX, e.clientY);
@@ -88,7 +87,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     if (now - lastSent.current > DRAG_THROTTLE_MS) {
       lastSent.current = now;
       const s = useGameStore.getState();
-      if (isDm && s.selectedTokenIds.length > 1 && s.selectedTokenIds.includes(token.id)) {
+      if (s.selectedTokenIds.length > 1 && s.selectedTokenIds.includes(token.id)) {
         for (const id of s.selectedTokenIds) {
           const t = s.tokens[id];
           if (!t) continue;
@@ -114,7 +113,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     setDragPos(null);
 
     const s = useGameStore.getState();
-    const isMulti = isDm && s.selectedTokenIds.length > 1 && s.selectedTokenIds.includes(token.id);
+    const isMulti = s.selectedTokenIds.length > 1 && s.selectedTokenIds.includes(token.id);
 
     // Check if pointer released over a map node in the World panel (cross-panel drop)
     const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -157,9 +156,16 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     if (targetState !== 'off' || tool !== 'select') { e.preventDefault(); return; }
     e.preventDefault();
     e.stopPropagation();
-    const additive = e.shiftKey && isDm;
-    useGameStore.getState().selectToken(token.id, additive);
-    useGameStore.getState().openInspector(token.id);
+    if (isDm) {
+      useGameStore.getState().selectToken(token.id, e.shiftKey);
+      useGameStore.getState().openInspector(token.id);
+    } else if (token.characterId) {
+      const shops = useGameStore.getState().shopList;
+      const linkedShop = shops.find((s) => s.linkedCharacterId === token.characterId);
+      if (linkedShop) {
+        useGameStore.setState({ presentedShopId: linkedShop.id });
+      }
+    }
   }
 
   const bar = token.bar;

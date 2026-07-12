@@ -1,14 +1,17 @@
 // Dice expression parser. Grammar (case-insensitive):
 //   expr   := term (('+' | '-') term)*
 //   term   := factor ('*' factor)*
-//   factor := dice | number | '(' expr ')'
-//   dice   := [count] 'd' sides [('kh' | 'kl') keep]
+//   factor := dice | number | '(' expr ')' | 'best(' expr (',' expr)+ ')'
+//   dice   := [count] 'd' sides ['!'] [('kh' | 'kl') keep]
 //   sugar  := 'adv' == 2d20kh1, 'dis' == 2d20kl1
-// Limits: count <= 100, sides <= 1000 — friendly errors beyond that.
+// '!' = exploding/acing dice (max roll rolls again and adds, SWADE-style);
+// 'best(a, b)' rolls each argument and keeps the highest total (SWADE trait
+// die vs wild die). Limits: count <= 100, sides <= 1000 — friendly errors.
 
 export type DiceNode =
   | { kind: 'num'; value: number }
-  | { kind: 'dice'; count: number; sides: number; keep: { mode: 'kh' | 'kl'; n: number } | null }
+  | { kind: 'dice'; count: number; sides: number; explode: boolean; keep: { mode: 'kh' | 'kl'; n: number } | null }
+  | { kind: 'best'; args: DiceNode[] }
   | { kind: 'binop'; op: '+' | '-' | '*'; left: DiceNode; right: DiceNode };
 
 export class DiceParseError extends Error {}
@@ -47,15 +50,29 @@ function parseFactor(c: Cursor): DiceNode {
     return inner;
   }
 
-  // adv / dis sugar
+  // adv / dis sugar + best(a, b) keep-highest-arm
   const rest = c.src.slice(c.pos).toLowerCase();
   if (rest.startsWith('adv')) {
     c.pos += 3;
-    return { kind: 'dice', count: 2, sides: 20, keep: { mode: 'kh', n: 1 } };
+    return { kind: 'dice', count: 2, sides: 20, explode: false, keep: { mode: 'kh', n: 1 } };
   }
   if (rest.startsWith('dis')) {
     c.pos += 3;
-    return { kind: 'dice', count: 2, sides: 20, keep: { mode: 'kl', n: 1 } };
+    return { kind: 'dice', count: 2, sides: 20, explode: false, keep: { mode: 'kl', n: 1 } };
+  }
+  if (rest.startsWith('best(')) {
+    c.pos += 5;
+    const args: DiceNode[] = [parseExpr(c)];
+    skipWs(c);
+    while (peek(c) === ',') {
+      c.pos++;
+      args.push(parseExpr(c));
+      skipWs(c);
+    }
+    if (peek(c) !== ')') throw new DiceParseError('best(...) is missing its closing parenthesis.');
+    c.pos++;
+    if (args.length < 2) throw new DiceParseError('best(...) needs at least two arguments, e.g. best(1d8!, 1d6!).');
+    return { kind: 'best', args };
   }
 
   const num = readNumber(c);
@@ -68,6 +85,11 @@ function parseFactor(c: Cursor): DiceNode {
     const count = num ?? 1;
     if (count < 1) throw new DiceParseError('Dice count must be at least 1.');
     if (count > 100) throw new DiceParseError('At most 100 dice per roll.');
+    let explode = false;
+    if (peek(c) === '!') {
+      c.pos++;
+      explode = true;
+    }
     let keep: { mode: 'kh' | 'kl'; n: number } | null = null;
     const after = c.src.slice(c.pos, c.pos + 2).toLowerCase();
     if (after === 'kh' || after === 'kl') {
@@ -77,7 +99,7 @@ function parseFactor(c: Cursor): DiceNode {
       if (n > count) throw new DiceParseError(`Cannot keep ${n} of ${count} dice.`);
       keep = { mode: after, n };
     }
-    return { kind: 'dice', count, sides, keep };
+    return { kind: 'dice', count, sides, explode, keep };
   }
   if (num !== null) return { kind: 'num', value: num };
   throw new DiceParseError(`Cannot read dice expression at "${c.src.slice(c.pos, c.pos + 10)}".`);

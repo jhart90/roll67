@@ -255,9 +255,22 @@ function ListEditor({
           </div>
           <div className="attack-detail-grid">
             {section.columns.map((col) => (
-              <label key={col.id} className={ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}>
+              <label key={col.id} className={`${ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}${col.width === 'full' ? ' detail-full' : ''}`}>
                 {col.label}
-                {renderCell(col, detailRow, detailIdx)}
+                {col.width === 'full' ? (
+                  <textarea
+                    defaultValue={detailRow[col.id] === undefined ? '' : String(detailRow[col.id])}
+                    readOnly={readOnly}
+                    rows={2}
+                    style={{ resize: 'vertical', width: '100%' }}
+                    onBlur={(e) => {
+                      const val = e.target.value;
+                      if (val === detailRow[col.id]) return;
+                      const next = rows.map((r, j) => (j === detailIdx ? { ...r, [col.id]: val } : r));
+                      setRows(next);
+                    }}
+                  />
+                ) : renderCell(col, detailRow, detailIdx)}
               </label>
             ))}
           </div>
@@ -524,7 +537,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
           />
           <span className="dim">{schema.name}{character.ownerUserId ? '' : ' · NPC'}</span>
           <span className="spacer" />
-          {editable && <button className="link" onClick={() => setShowLevelUp(true)}>⬆ Level Up</button>}
+          {editable && character.system !== 'swade' && <button className="link" onClick={() => setShowLevelUp(true)}>⬆ Level Up</button>}
           {editable && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
         </div>
 

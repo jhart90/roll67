@@ -81,6 +81,108 @@ ensureColumn('maps', 'terrain_json', "terrain_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 ensureColumn('users', 'player_color', 'player_color TEXT');
+// Chest-folder unification: folders can be placed on maps as chests
+ensureColumn('world_folders', 'items_json', "items_json TEXT NOT NULL DEFAULT '[]'");
+ensureColumn('world_folders', 'display_kind', "display_kind TEXT NOT NULL DEFAULT 'folder'");
+ensureColumn('world_folders', 'art_asset_id', 'art_asset_id TEXT');
+// Map objects: link to world folders / shops
+ensureColumn('map_objects', 'world_folder_id', 'world_folder_id TEXT');
+ensureColumn('map_objects', 'shop_id', 'shop_id TEXT');
+ensureColumn('map_objects', 'interact_range', "interact_range INTEGER NOT NULL DEFAULT 1");
+// Walking merchants: shop linked to a character
+ensureColumn('shops', 'linked_character_id', 'linked_character_id TEXT');
+ensureColumn('shops', 'art_asset_id', 'art_asset_id TEXT');
+
+// map_objects CHECK constraint: add 'shop' kind (same pattern as migrateAssetsAudioKind).
+function migrateMapObjectsShopKind(): void {
+  const table = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'map_objects'`).get() as
+    | { sql: string }
+    | undefined;
+  if (!table || table.sql.includes("'shop'")) return;
+  const oldCols = (db.prepare(`PRAGMA table_info(map_objects)`).all() as Array<{ name: string }>).map((c) => c.name);
+  const allCols = oldCols.join(', ');
+  db.exec('ALTER TABLE map_objects RENAME TO map_objects_pre_shop');
+  db.exec(`
+    CREATE TABLE map_objects (
+      id TEXT PRIMARY KEY,
+      map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL CHECK (kind IN ('item', 'chest', 'shop')),
+      q INTEGER NOT NULL,
+      r INTEGER NOT NULL,
+      art_asset_id TEXT,
+      items_json TEXT NOT NULL DEFAULT '[]',
+      world_folder_id TEXT,
+      shop_id TEXT,
+      interact_range INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
+    )
+  `);
+  db.exec(`INSERT INTO map_objects (${allCols}) SELECT ${allCols} FROM map_objects_pre_shop`);
+  db.exec('DROP TABLE map_objects_pre_shop');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_map_objects_map ON map_objects(map_id)');
+}
+migrateMapObjectsShopKind();
+
+// campaigns/custom_npcs system CHECK constraints: add 'swade' via rename-
+// rebuild-copy. CRITICAL: campaigns is FK-referenced by a dozen child tables
+// (campaign_members, characters, maps, ...), and two separate SQLite
+// behaviors will destroy them during a rename-rebuild:
+//  - ALTER TABLE RENAME rewrites every child table's REFERENCES clause to
+//    follow the rename (gated by legacy_alter_table, NOT by foreign_keys),
+//    stranding them pointing at the dropped temp table; and
+//  - better-sqlite3 opens connections with foreign_keys ON (the "deferred
+//    until after migrations" note at the top of this file is not actually
+//    true), so DROP TABLE runs an implicit DELETE FROM whose ON DELETE
+//    CASCADE wipes every child row.
+// Both pragmas must be flipped for the duration of the rebuild.
+function migrateSystemSwade(table: string, createSql: string): void {
+  const existing = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table) as
+    | { sql: string }
+    | undefined;
+  if (!existing || existing.sql.includes("'swade'")) return;
+  const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name).join(', ');
+  db.pragma('foreign_keys = OFF');
+  db.pragma('legacy_alter_table = ON');
+  try {
+    db.exec(`ALTER TABLE ${table} RENAME TO ${table}_pre_swade`);
+    db.exec(createSql);
+    db.exec(`INSERT INTO ${table} (${cols}) SELECT ${cols} FROM ${table}_pre_swade`);
+    db.exec(`DROP TABLE ${table}_pre_swade`);
+  } finally {
+    db.pragma('legacy_alter_table = OFF');
+    db.pragma('foreign_keys = ON');
+  }
+}
+migrateSystemSwade('campaigns', `
+  CREATE TABLE campaigns (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade')),
+    dm_user_id TEXT NOT NULL REFERENCES users(id),
+    invite_code TEXT UNIQUE NOT NULL,
+    active_map_id TEXT,
+    created_at INTEGER NOT NULL
+  )
+`);
+migrateSystemSwade('custom_npcs', `
+  CREATE TABLE custom_npcs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade')),
+    name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'Player Added',
+    challenge_label TEXT NOT NULL DEFAULT '',
+    ac INTEGER NOT NULL DEFAULT 10,
+    hp INTEGER NOT NULL DEFAULT 1,
+    sheet_json TEXT NOT NULL DEFAULT '{}',
+    color TEXT,
+    art_asset_id TEXT,
+    created_at INTEGER NOT NULL
+  )
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_custom_npcs_user ON custom_npcs(user_id)');
 
 // Repair FK references broken by migrateAssetsAudioKind running with foreign_keys=ON.
 // The RENAME redirected FK constraints in maps/tokens/handouts/audio_tracks to point

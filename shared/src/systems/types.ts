@@ -119,7 +119,7 @@ export interface CombatAction {
 }
 
 export interface SystemSchema {
-  id: 'dnd5e' | 'swn';
+  id: 'dnd5e' | 'swn' | 'swade';
   name: string;
   tabs: SheetTab[];
   defaultSheet(): SheetData;

@@ -6,6 +6,7 @@ import type { GameSystem, SheetData } from '../types.js';
 import { systemFor } from '../systems/index.js';
 import { ALIGNMENTS, BACKGROUNDS_5E, RACES_5E, SKILLS_5E } from '../systems/dnd5e.js';
 import { BACKGROUNDS_SWN, SKILLS_SWN, SPECIES_SWN } from '../systems/swn.js';
+import { ANCESTRIES_SWADE, SKILLS_SWADE, TRAIT_DICE } from '../systems/swade.js';
 import type { RNG } from '../dice/roller.js';
 import type { NpcEntry } from './npcTypes.js';
 
@@ -32,6 +33,13 @@ const OCCUPATIONS_SWN = [
   'Corp Rep', 'Street Doc', 'Fixer', 'Pilot', 'Miner', 'Cultist', 'Smuggler', 'Bureaucrat',
   'Journalist', 'Gunrunner', 'Prospector', 'Hydroponics Tech', 'Salvager', 'Bodyguard',
 ];
+// SWADE is setting-agnostic — a deliberately genre-mixed pool.
+const OCCUPATIONS_SWADE = [
+  'Saloon Keeper', 'Bounty Hunter', 'Deputy', 'Prospector', 'Gambler', 'Preacher', 'Rancher',
+  'Detective', 'Reporter', 'Professor', 'Mechanic', 'Smuggler', 'Sailor', 'Explorer',
+  'Merchant', 'Physician', 'Drifter', 'Trapper', 'Entertainer', 'Occultist',
+];
+const GEAR_SWADE = ['a trusty knife', 'a coil of rope', 'a battered hat', 'a deck of cards', 'a first aid kit', 'a flask', 'an old map', 'a lucky coin'];
 const PERSONALITY = [
   'gruff', 'cheerful', 'suspicious', 'greedy', 'kind-hearted', 'nervous', 'arrogant', 'loyal',
   'sarcastic', 'devout', 'cowardly', 'brave', 'melancholy', 'gossipy', 'meticulous', 'reckless',
@@ -186,6 +194,33 @@ export function generateNpc(system: GameSystem, rng: RNG = Math.random): Generat
     return { name, occupation, tags, sheet };
   }
 
+  if (system === 'swade') {
+    const occupation = pick(OCCUPATIONS_SWADE, rng);
+    // Ordinary folk: mostly d6s, one trait a notch better or worse.
+    const die = () => pick(['d4', 'd6', 'd6', 'd6', 'd8'] as const, rng);
+    const skillPool = pickSome(SKILLS_SWADE.filter((s) => !['Athletics', 'Common Knowledge', 'Notice', 'Persuasion', 'Stealth'].includes(s)), 2, rng);
+    const coreSkills = [
+      { name: 'Athletics', die: 'd4', notes: '' },
+      { name: 'Common Knowledge', die: 'd6', notes: '' },
+      { name: 'Notice', die: pick(['d4', 'd6'] as const, rng), notes: '' },
+      { name: 'Persuasion', die: pick(['d4', 'd6'] as const, rng), notes: '' },
+      { name: 'Stealth', die: 'd4', notes: '' },
+    ];
+    const strength = die();
+    Object.assign(sheet, {
+      concept: occupation, ancestry: pick(ANCESTRIES_SWADE, rng), rank: 'Novice', wildCard: false,
+      agility: die(), smarts: die(), spirit: die(), strength, vigor: die(),
+      hp: 10, maxHp: 10, bennies: 0, pace: 6,
+      age, height, weight, eyes, skin, hair,
+      dollars: between(20, 400, rng),
+      skills: [...coreSkills, ...skillPool.map((name) => ({ name, die: pick(TRAIT_DICE.slice(0, 3), rng), notes: '' }))],
+      attacks: [{ name: 'Knife', skill: 'Fighting', damage: `1${strength}!+1d4!`, dtype: 'piercing', range: 5, notes: '' }],
+      inventory: pickSome(GEAR_SWADE, 2, rng).map((g) => ({ name: g, qty: 1, weight: 0, notes: '' })),
+      notes: `Occupation: ${occupation}. ${personality[0]}, ${personality[1]}; has ${appearance}; ${quirk}. Hook: ${hook}.`,
+    });
+    return { name, occupation, tags, sheet };
+  }
+
   // SWN
   const occupation = pick(OCCUPATIONS_SWN, rng);
   const attrs = { str: roll3d6(rng), dex: roll3d6(rng), con: roll3d6(rng), int: roll3d6(rng), wis: roll3d6(rng), cha: roll3d6(rng) };
@@ -217,6 +252,7 @@ export function generateNpc(system: GameSystem, rng: RNG = Math.random): Generat
 const PERSON_CATEGORIES_5E = new Set(['People & NPCs', 'Savage Humanoids']);
 const PERSON_CATEGORIES_SWN = new Set(['Civilians', 'Criminals', 'Military', 'Psychics', 'Spacers & Adventurers']);
 const ROBOT_CATEGORIES_SWN = new Set(['Robots & VIs']);
+const PERSON_CATEGORIES_SWADE = new Set(['People', 'Soldiers & Lawmen']);
 
 export type NpcKind = 'person' | 'creature' | 'robot';
 
@@ -224,6 +260,9 @@ export type NpcKind = 'person' | 'creature' | 'robot';
 export function npcKindForEntry(entry: Pick<NpcEntry, 'system' | 'category'>): NpcKind {
   if (entry.system === 'dnd5e') {
     return PERSON_CATEGORIES_5E.has(entry.category) ? 'person' : 'creature';
+  }
+  if (entry.system === 'swade') {
+    return PERSON_CATEGORIES_SWADE.has(entry.category) ? 'person' : 'creature';
   }
   if (ROBOT_CATEGORIES_SWN.has(entry.category)) return 'robot';
   return PERSON_CATEGORIES_SWN.has(entry.category) ? 'person' : 'creature';
@@ -845,12 +884,16 @@ export function generateNpcFromModel(entry: NpcEntry, rng: RNG = Math.random): G
   const hp = jitter(Number(sheet.maxHp ?? sheet.hp ?? entry.hp), 0.15, rng, 1);
   sheet.hp = hp;
   sheet.maxHp = hp;
-  sheet.ac = jitter(Number(sheet.ac ?? entry.ac), 0.08, rng, 5);
+  // SWADE sheets have no manual AC (Parry is derived) or attack bonus, and
+  // trait dice don't jitter — only the HP pool above varies for them.
+  if (entry.system !== 'swade') {
+    sheet.ac = jitter(Number(sheet.ac ?? entry.ac), 0.08, rng, 5);
+  }
   if (entry.system === 'dnd5e') {
     for (const ab of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const) {
       sheet[ab] = jitter(Number(sheet[ab] ?? 10), 0.1, rng, 1);
     }
-  } else {
+  } else if (entry.system === 'swn') {
     sheet.attackBonus = jitter(Number(sheet.attackBonus ?? 0), 0.2, rng, 0);
   }
 
@@ -891,7 +934,7 @@ export function generateNpcFromModel(entry: NpcEntry, rng: RNG = Math.random): G
   }
   sheet.notes = priorNotes ? `${notes} ${priorNotes}` : notes;
   if (entry.system === 'dnd5e') sheet.backstory = notes;
-  else sheet.goal = notes;
+  else if (entry.system === 'swn') sheet.goal = notes;
 
   return { name, occupation: entry.category, tags: [kind, entry.category], sheet };
 }

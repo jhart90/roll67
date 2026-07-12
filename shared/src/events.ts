@@ -4,7 +4,7 @@
 import type {
   AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
-  GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, Macro,
+  GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
   RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
@@ -135,6 +135,20 @@ export const C2S = {
   TAKE_MAP_ITEM: 'takeMapItem',
   TAKE_CHEST_ITEM: 'takeChestItem',
   TAKE_ALL_CHEST: 'takeAllChest',
+  OPEN_CHEST: 'openChest',
+  // folder batch operations
+  DROP_FOLDER_ON_MAP: 'dropFolderOnMap',
+  DROP_SHOP_ON_MAP: 'dropShopOnMap',
+  DROP_FOLDER_ON_CHARACTER: 'dropFolderOnCharacter',
+  // light management
+  MOVE_LIGHT_TO_MAP: 'moveLightToMap',
+  LINK_LIGHT_TO_TOKEN: 'linkLightToToken',
+  UNLINK_LIGHT_FROM_TOKEN: 'unlinkLightFromToken',
+  RENAME_LIGHT: 'renameLight',
+  // custom compendium items
+  CREATE_CUSTOM_ITEM: 'createCustomItem',
+  UPDATE_CUSTOM_ITEM: 'updateCustomItem',
+  DELETE_CUSTOM_ITEM: 'deleteCustomItem',
 } as const;
 
 export interface JoinCampaignPayload { campaignId: string }
@@ -170,7 +184,7 @@ export interface DeleteDoorPayload { mapId: string; doorId: string }
 export interface ToggleDoorPayload { mapId: string; doorId: string }
 export interface UpsertLightPayload {
   mapId: string;
-  light: { id?: string; x: number; y: number; brightRadius: number; dimRadius: number; color?: string };
+  light: { id?: string; name?: string; x: number; y: number; brightRadius: number; dimRadius: number; color?: string };
 }
 export interface DeleteLightPayload { mapId: string; lightId: string }
 
@@ -252,9 +266,29 @@ export interface UpdateLocationPayload {
 }
 export interface DeleteLocationPayload { locationId: string }
 
-export interface CreateWorldFolderPayload { name: string; parentId?: string | null }
-export interface UpdateWorldFolderPayload { folderId: string; name?: string; parentId?: string | null }
+export interface CreateWorldFolderPayload {
+  name: string;
+  parentId?: string | null;
+  displayKind?: 'folder' | 'chest';
+  items?: LootItem[];
+}
+export interface UpdateWorldFolderPayload {
+  folderId: string;
+  name?: string;
+  parentId?: string | null;
+  items?: LootItem[];
+  displayKind?: 'folder' | 'chest';
+  artAssetId?: string | null;
+}
 export interface DeleteWorldFolderPayload { folderId: string }
+export interface DropFolderOnMapPayload { folderId: string; mapId: string; q?: number; r?: number }
+export interface DropShopOnMapPayload { shopId: string; mapId: string; q?: number; r?: number }
+export interface DropFolderOnCharacterPayload { folderId: string; characterId: string }
+export interface MoveLightToMapPayload { lightId: string; sourceMapId: string; targetMapId: string }
+export interface LinkLightToTokenPayload { lightId: string; sourceMapId: string; tokenId: string }
+export interface UnlinkLightFromTokenPayload { tokenId: string; mapId: string }
+export interface RenameLightPayload { lightId: string; mapId: string; name: string }
+export interface OpenChestPayload { objectId: string }
 export interface UpdateCharacterPayload {
   characterId: string;
   patch: SheetData;
@@ -458,31 +492,36 @@ export interface CustomNpcView {
 
 // ---------- Map loot objects ----------
 
-export interface LootItem {
-  id: string;
-  name: string;
-  description: string;
-}
+export type { LootItem } from './types.js';
 
 export interface MapObject {
   id: string;
   mapId: string;
   name: string;
   description: string;
-  kind: 'item' | 'chest';
+  kind: 'item' | 'chest' | 'shop';
   q: number;
   r: number;
   artAssetId: string | null;
   items: LootItem[];
+  /** Links this map object to a world folder (chest-folder unification). */
+  worldFolderId: string | null;
+  /** Links this map object to a shop placed on the map. */
+  shopId: string | null;
+  /** How many hexes away a player must be to interact (default 1). */
+  interactRange: number;
 }
 
 export interface PlaceMapObjectPayload {
   mapId: string;
-  kind: 'item' | 'chest';
+  kind: 'item' | 'chest' | 'shop';
   name: string;
   description?: string;
   q: number;
   r: number;
+  worldFolderId?: string;
+  shopId?: string;
+  interactRange?: number;
 }
 
 export interface UpdateMapObjectPayload {
@@ -494,6 +533,7 @@ export interface UpdateMapObjectPayload {
     q?: number;
     r?: number;
     items?: LootItem[];
+    interactRange?: number;
   };
 }
 
@@ -501,6 +541,19 @@ export interface DeleteMapObjectPayload { objectId: string }
 export interface TakeMapItemPayload { objectId: string }
 export interface TakeChestItemPayload { objectId: string; itemId: string }
 export interface TakeAllChestPayload { objectId: string }
+
+// ---------- Custom compendium items ----------
+
+export interface CustomItem {
+  id: string;
+  campaignId: string;
+  entryJson: string;
+  createdAt: number;
+}
+
+export interface CreateCustomItemPayload { entryJson: string }
+export interface UpdateCustomItemPayload { itemId: string; entryJson: string }
+export interface DeleteCustomItemPayload { itemId: string }
 
 // ---------- Server -> client events ----------
 
@@ -546,6 +599,7 @@ export const S2C = {
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
+  CUSTOM_ITEMS: 'customItems',
   DIRECTORY: 'directory',
   MEMBER_PRESENCE: 'memberPresence',
   ACTIVE_MAP: 'activeMap',

@@ -3,7 +3,7 @@
 // combat implications. Pure functions so the server and client agree and the
 // logic is unit-testable.
 
-import type { SheetData } from '../types.js';
+import type { GameSystem, SheetData } from '../types.js';
 import { num, str } from './types.js';
 import { hasSavageAttacker } from './feats5e.js';
 
@@ -67,7 +67,7 @@ export interface ConditionDef {
   label: string;
   icon: string;
   /** Which systems offer this condition in their picker. */
-  systems: Array<'dnd5e' | 'swn'>;
+  systems: GameSystem[];
   /** Attackers targeting this creature roll with advantage ('melee' = only melee attackers, e.g. prone). */
   grantsAttackAdv?: boolean | 'melee';
   /** Attackers targeting this creature roll with disadvantage ('ranged' = only ranged attackers, e.g. prone). */
@@ -82,7 +82,7 @@ export interface ConditionDef {
 }
 
 export const CONDITIONS: ConditionDef[] = [
-  { id: 'blinded', label: 'Blinded', icon: '🕶️', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, selfAttackDis: true, desc: "Can't see; attacks against have advantage, its attacks have disadvantage." },
+  { id: 'blinded', label: 'Blinded', icon: '🕶️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, selfAttackDis: true, desc: "Can't see; attacks against have advantage, its attacks have disadvantage." },
   { id: 'charmed', label: 'Charmed', icon: '💗', systems: ['dnd5e'], desc: "Can't attack the charmer; the charmer has advantage on social checks." },
   { id: 'deafened', label: 'Deafened', icon: '🔇', systems: ['dnd5e', 'swn'], desc: "Can't hear; fails hearing-based checks." },
   { id: 'frightened', label: 'Frightened', icon: '😱', systems: ['dnd5e', 'swn'], selfAttackDis: true, desc: 'Disadvantage on attacks/checks while the source is in sight; can’t move closer.' },
@@ -92,11 +92,17 @@ export const CONDITIONS: ConditionDef[] = [
   { id: 'paralyzed', label: 'Paralyzed', icon: '🧊', systems: ['dnd5e'], grantsAttackAdv: true, incapacitated: true, desc: "Incapacitated, can't move/speak; melee hits crit; auto-fails STR/DEX saves." },
   { id: 'petrified', label: 'Petrified', icon: '🗿', systems: ['dnd5e'], grantsAttackAdv: true, incapacitated: true, desc: 'Turned to stone; resistant to all damage; incapacitated.' },
   { id: 'poisoned', label: 'Poisoned', icon: '🤢', systems: ['dnd5e', 'swn'], selfAttackDis: true, desc: 'Disadvantage on attack rolls and ability checks.' },
-  { id: 'prone', label: 'Prone', icon: '⬇️', systems: ['dnd5e', 'swn'], grantsAttackAdv: 'melee', grantsAttackDis: 'ranged', selfAttackDis: true, desc: 'Melee attackers have advantage, ranged have disadvantage; its attacks have disadvantage.' },
+  { id: 'prone', label: 'Prone', icon: '⬇️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: 'melee', grantsAttackDis: 'ranged', selfAttackDis: true, desc: 'Melee attackers have advantage, ranged have disadvantage; its attacks have disadvantage.' },
   { id: 'restrained', label: 'Restrained', icon: '🕸️', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, selfAttackDis: true, desc: 'Speed 0; attacks against have advantage; its attacks have disadvantage; disadvantage on DEX saves.' },
-  { id: 'stunned', label: 'Stunned', icon: '⭐', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated; attacks against have advantage; auto-fails STR/DEX saves.' },
-  { id: 'unconscious', label: 'Unconscious', icon: '💤', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated and prone; melee hits crit; auto-fails STR/DEX saves.' },
-  { id: 'dead', label: 'Dead', icon: '💀', systems: ['dnd5e', 'swn'], incapacitated: true, desc: 'Out of the fight.' },
+  { id: 'stunned', label: 'Stunned', icon: '⭐', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated; attacks against have advantage; auto-fails STR/DEX saves.' },
+  { id: 'unconscious', label: 'Unconscious', icon: '💤', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated and prone; melee hits crit; auto-fails STR/DEX saves.' },
+  { id: 'dead', label: 'Dead', icon: '💀', systems: ['dnd5e', 'swn', 'swade'], incapacitated: true, desc: 'Out of the fight.' },
+  // SWADE-only states.
+  { id: 'shaken', label: 'Shaken', icon: '😵', systems: ['swade'], incapacitated: true, desc: 'Can only move and take free actions; make a Spirit roll to recover (or spend a Benny).' },
+  { id: 'distracted', label: 'Distracted', icon: '😖', systems: ['swade'], selfAttackDis: true, desc: '−2 on all trait rolls until end of next turn.' },
+  { id: 'vulnerable', label: 'Vulnerable', icon: '🎯', systems: ['swade'], grantsAttackAdv: true, desc: 'Actions against this character get +2 until end of its next turn.' },
+  { id: 'entangled', label: 'Entangled', icon: '🕸️', systems: ['swade'], selfAttackDis: true, desc: 'Cannot move; Distracted until free.' },
+  { id: 'bound', label: 'Bound', icon: '⛓️', systems: ['swade'], grantsAttackAdv: true, selfAttackDis: true, incapacitated: true, desc: 'Cannot move; Distracted and Vulnerable; can take no actions other than trying to break free.' },
 ];
 
 const CONDITION_MAP = new Map(CONDITIONS.map((c) => [c.id, c]));
@@ -105,7 +111,7 @@ export function getCondition(id: string): ConditionDef | undefined {
   return CONDITION_MAP.get(id);
 }
 
-export function conditionsFor(system: 'dnd5e' | 'swn'): ConditionDef[] {
+export function conditionsFor(system: GameSystem): ConditionDef[] {
   return CONDITIONS.filter((c) => c.systems.includes(system));
 }
 
@@ -196,7 +202,17 @@ function focusAtLevel(sheet: SheetData, id: string, minLevel: number): boolean {
  * resources: a per-round Reaction for everyone, plus once-per-scene reroll pools
  * (5e Lucky feat; SWN Warrior Knack / Expert Expertise).
  */
-export function combatResources(system: 'dnd5e' | 'swn', sheet: SheetData): CombatResource[] {
+export function combatResources(system: GameSystem, sheet: SheetData): CombatResource[] {
+  // SWADE has no reaction economy — its universal pool is the Bennies stash
+  // (refreshed each session, tracked on the sheet's own bennies field).
+  if (system === 'swade') {
+    const max = Math.max(0, num(sheet, 'bennies', 3));
+    const used = num(sheet, 'res_bennies', 0);
+    return [{
+      id: 'bennies', name: 'Bennies', max, used, remaining: Math.max(0, max - used),
+      reset: 'long', note: 'reroll a trait roll, soak wounds, unshake…',
+    }];
+  }
   const defs: Array<Omit<CombatResource, 'used' | 'remaining'>> = [
     { id: 'reaction', name: 'Reaction', max: 1, reset: 'round', note: 'opportunity attack, Shield, Deflect…' },
   ];

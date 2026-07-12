@@ -8,7 +8,7 @@ import {
 import { CHAT_TAIL } from '../../config.js';
 import { validUsername } from '../../auth.js';
 import {
-  assetFolders, assets, audioTracks, campaigns, characters, chat, drawings,
+  assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings,
   handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, users, worldFolders,
 } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
@@ -129,6 +129,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       const allLoc = locations.forCampaign(campaignId);
       socket.emit(S2C.LOCATIONS, { locations: role === 'dm' ? allLoc : allLoc.filter((l) => l.visibleToPlayers) });
       socket.emit(S2C.WORLD_FOLDERS, { folders: worldFolders.forCampaign(campaignId) });
+      socket.emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(campaignId) });
     }
     if (role === 'dm') {
       socket.emit(S2C.ASSETS, { folders: assetFolders.forCampaign(campaignId), assets: assets.forCampaign(campaignId) });

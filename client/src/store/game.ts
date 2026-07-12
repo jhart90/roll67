@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import {
   C2S, S2C, castableLevels, combatActions, systemFor,
   type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
-  type CombatAction, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
-  type Door, type DoorType, type Drawing, type DrawingLayerName, type GridConfig, type Handout, type Hex,
+  type CombatAction, type CustomItem, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
+  type Door, type DoorType, type Drawing, type DrawingLayerName, type GameSystem, type GridConfig, type Handout, type Hex,
   type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
@@ -52,6 +52,7 @@ interface GameState {
   locationList: LocationNode[];
   worldFolderList: WorldFolder[];
   customNpcs: CustomNpcView[];
+  customItems: CustomItem[];
   /** Shop the DM is presenting to this viewer (players pop a storefront). */
   presentedShopId: string | null;
   closePresentedShop(): void;
@@ -202,6 +203,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   locationList: [],
   worldFolderList: [],
   customNpcs: [],
+  customItems: [],
   presentedShopId: null,
   closePresentedShop() { set({ presentedShopId: null }); },
   directory: null,
@@ -409,7 +411,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ selectedTokenId: null, selectedTokenIds: [] });
       return;
     }
-    if (additive && get().you?.role === 'dm') {
+    if (additive) {
       const ids = get().selectedTokenIds;
       const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
       set({ selectedTokenIds: next, selectedTokenId: next[0] ?? null });
@@ -791,6 +793,10 @@ export function wireSocket(): void {
     useGameStore.setState({ customNpcs: npcs });
   });
 
+  socket.on(S2C.CUSTOM_ITEMS, ({ items }: { items: CustomItem[] }) => {
+    useGameStore.setState({ customItems: items });
+  });
+
   socket.on(S2C.MAP_OBJECT_UPSERTED, ({ object }: { object: MapObject }) => {
     const s = useGameStore.getState();
     useGameStore.setState({ mapObjects: { ...s.mapObjects, [object.id]: object } });
@@ -925,6 +931,13 @@ export const intents = {
   upsertLight: (mapId: string, light: { id?: string; x: number; y: number; brightRadius: number; dimRadius: number; color?: string }) =>
     socket.emit(C2S.UPSERT_LIGHT, { mapId, light }),
   deleteLight: (mapId: string, lightId: string) => socket.emit(C2S.DELETE_LIGHT, { mapId, lightId }),
+  renameLight: (lightId: string, mapId: string, name: string) => socket.emit(C2S.RENAME_LIGHT, { lightId, mapId, name }),
+  moveLightToMap: (lightId: string, sourceMapId: string, targetMapId: string) =>
+    socket.emit(C2S.MOVE_LIGHT_TO_MAP, { lightId, sourceMapId, targetMapId }),
+  linkLightToToken: (lightId: string, sourceMapId: string, tokenId: string) =>
+    socket.emit(C2S.LINK_LIGHT_TO_TOKEN, { lightId, sourceMapId, tokenId }),
+  unlinkLightFromToken: (tokenId: string, mapId: string) =>
+    socket.emit(C2S.UNLINK_LIGHT_FROM_TOKEN, { tokenId, mapId }),
   autoTraceWalls: (mapId: string) => socket.emit(C2S.AUTO_TRACE_WALLS, { mapId }),
 
   createToken: (payload: {
@@ -938,7 +951,7 @@ export const intents = {
   dragToken: (tokenId: string, x: number, y: number, done = false) =>
     socket.emit(C2S.DRAG_TOKEN, { tokenId, x, y, done }),
 
-  createCharacter: (name: string, system: 'dnd5e' | 'swn', ownerUserId?: string | null, initialClass?: string) =>
+  createCharacter: (name: string, system: GameSystem, ownerUserId?: string | null, initialClass?: string) =>
     socket.emit(C2S.CREATE_CHARACTER, { name, system, ownerUserId, initialClass }),
   createNpc: (libraryId: string, name?: string) => socket.emit(C2S.CREATE_NPC, { libraryId, name }),
   saveToCompendium: (characterId: string) => socket.emit(C2S.SAVE_TO_COMPENDIUM, { characterId }),
@@ -1056,7 +1069,8 @@ export const intents = {
   deleteLocation: (locationId: string) => socket.emit(C2S.DELETE_LOCATION, { locationId }),
 
   /** Pure-organization world-tree folders (DM). Distinct from the art/handout library's asset folders. */
-  createWorldFolder: (name: string, parentId?: string | null) => socket.emit(C2S.CREATE_WORLD_FOLDER, { name, parentId }),
+  createWorldFolder: (name: string, parentId?: string | null, opts?: { displayKind?: 'folder' | 'chest'; items?: unknown[] }) =>
+    socket.emit(C2S.CREATE_WORLD_FOLDER, { name, parentId, ...opts }),
   updateWorldFolder: (folderId: string, fields: Record<string, unknown>) => socket.emit(C2S.UPDATE_WORLD_FOLDER, { folderId, ...fields }),
   deleteWorldFolder: (folderId: string) => socket.emit(C2S.DELETE_WORLD_FOLDER, { folderId }),
 
@@ -1075,13 +1089,26 @@ export const intents = {
   dropCharacterOnMap: (characterId: string, mapId: string, q: number, r: number) =>
     socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch: {}, parentId: mapId, dropHex: { q, r } }),
 
+  dropFolderOnMap: (folderId: string, mapId: string, q?: number, r?: number) =>
+    socket.emit(C2S.DROP_FOLDER_ON_MAP, { folderId, mapId, q, r }),
+  dropShopOnMap: (shopId: string, mapId: string, q: number, r: number) =>
+    socket.emit(C2S.DROP_SHOP_ON_MAP, { shopId, mapId, q, r }),
+  dropFolderOnCharacter: (folderId: string, characterId: string) =>
+    socket.emit(C2S.DROP_FOLDER_ON_CHARACTER, { folderId, characterId }),
+
   // map loot objects
   placeMapObject: (mapId: string, kind: 'item' | 'chest', name: string, q: number, r: number, description?: string) =>
     socket.emit(C2S.PLACE_MAP_OBJECT, { mapId, kind, name, description, q, r }),
-  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: LootItem[] }) =>
+  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: LootItem[]; interactRange?: number }) =>
     socket.emit(C2S.UPDATE_MAP_OBJECT, { objectId, patch }),
   deleteMapObject: (objectId: string) => socket.emit(C2S.DELETE_MAP_OBJECT, { objectId }),
   takeMapItem: (objectId: string) => socket.emit(C2S.TAKE_MAP_ITEM, { objectId }),
   takeChestItem: (objectId: string, itemId: string) => socket.emit(C2S.TAKE_CHEST_ITEM, { objectId, itemId }),
   takeAllChest: (objectId: string) => socket.emit(C2S.TAKE_ALL_CHEST, { objectId }),
+  openChest: (objectId: string) => socket.emit(C2S.OPEN_CHEST, { objectId }),
+
+  // custom compendium items
+  createCustomItem: (entryJson: string) => socket.emit(C2S.CREATE_CUSTOM_ITEM, { entryJson }),
+  updateCustomItem: (itemId: string, entryJson: string) => socket.emit(C2S.UPDATE_CUSTOM_ITEM, { itemId, entryJson }),
+  deleteCustomItem: (itemId: string) => socket.emit(C2S.DELETE_CUSTOM_ITEM, { itemId }),
 };

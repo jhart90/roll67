@@ -10,7 +10,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, floatHp, persistSheet, postStatusLine } from '../hp.js';
+import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 
@@ -919,6 +919,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (fail >= 3) {
       patch.conditions = [...conditionsOf(character.sheet).filter((c) => c !== 'unconscious'), 'dead'];
       statusText = `${character.name} has died.`;
+      dropCarriedLoot(io, d.campaignId, characterId);
     } else if (succ >= 3) {
       patch.deathSuccesses = 0;
       patch.deathFailures = 0;

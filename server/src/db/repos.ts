@@ -1,6 +1,6 @@
 import type {
   AssetFolder, AssetInfo, AudioTrack,
-  CampaignInfo, Character, ChatKind, ChatMessage, Door, Drawing, GameSystem,
+  CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta,
   RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, Token, Wall, WorldFolder,
 } from 'shared';
@@ -290,6 +290,7 @@ export const assetFolders = {
 interface ShopRow {
   id: string; name: string; description: string; currency: string;
   players_can_buy: number; items_json: string; parent_id: string | null;
+  linked_character_id: string | null; art_asset_id: string | null;
 }
 function toShop(r: ShopRow): Shop {
   const items = (safeParse<Array<Partial<ShopItem>>>(r.items_json, [])).map((it) => ({
@@ -297,13 +298,17 @@ function toShop(r: ShopRow): Shop {
     price: typeof it.price === 'number' ? it.price : 0,
     qty: typeof it.qty === 'number' ? it.qty : -1,
     notes: String(it.notes ?? ''),
-    // Carried "logic" for buy-transfer (optional).
     ...(it.contentId ? { contentId: String(it.contentId) } : {}),
     ...(it.effect === 'heal' || it.effect === 'damage' ? { effect: it.effect } : {}),
     ...(it.amount ? { amount: String(it.amount) } : {}),
     ...(typeof it.range === 'number' ? { range: it.range } : {}),
   }));
-  return { id: r.id, name: r.name, description: r.description, currency: r.currency, playersCanBuy: !!r.players_can_buy, items, parentId: r.parent_id ?? null };
+  return {
+    id: r.id, name: r.name, description: r.description, currency: r.currency,
+    playersCanBuy: !!r.players_can_buy, items, parentId: r.parent_id ?? null,
+    linkedCharacterId: r.linked_character_id ?? null,
+    artAssetId: r.art_asset_id ?? null,
+  };
 }
 
 export const shops = {
@@ -321,16 +326,18 @@ export const shops = {
     stmt('INSERT INTO shops (id, campaign_id, name, currency, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, currency, maxOrder + 1);
     return { id, name, description: '', currency, playersCanBuy: true, items: [] };
   },
-  update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[]; parentId?: string | null }): void {
+  update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[]; parentId?: string | null; linkedCharacterId?: string | null; artAssetId?: string | null }): void {
     const cur = stmt('SELECT * FROM shops WHERE id = ?').get(id) as ShopRow | undefined;
     if (!cur) return;
-    stmt('UPDATE shops SET name = ?, description = ?, currency = ?, players_can_buy = ?, items_json = ?, parent_id = ? WHERE id = ?').run(
+    stmt('UPDATE shops SET name = ?, description = ?, currency = ?, players_can_buy = ?, items_json = ?, parent_id = ?, linked_character_id = ?, art_asset_id = ? WHERE id = ?').run(
       fields.name ?? cur.name,
       fields.description ?? cur.description,
       fields.currency ?? cur.currency,
       fields.playersCanBuy !== undefined ? (fields.playersCanBuy ? 1 : 0) : cur.players_can_buy,
       fields.items !== undefined ? JSON.stringify(fields.items) : cur.items_json,
       fields.parentId !== undefined ? fields.parentId : cur.parent_id,
+      fields.linkedCharacterId !== undefined ? fields.linkedCharacterId : (cur.linked_character_id ?? null),
+      fields.artAssetId !== undefined ? fields.artAssetId : (cur.art_asset_id ?? null),
       id,
     );
   },
@@ -400,9 +407,17 @@ export const locations = {
 
 interface WorldFolderRow {
   id: string; name: string; parent_id: string | null;
+  items_json: string; display_kind: string; art_asset_id: string | null;
 }
 function toWorldFolder(r: WorldFolderRow): WorldFolder {
-  return { id: r.id, name: r.name, parentId: r.parent_id };
+  return {
+    id: r.id,
+    name: r.name,
+    parentId: r.parent_id,
+    items: safeParse<LootItem[]>(r.items_json ?? '[]', []),
+    displayKind: (r.display_kind ?? 'folder') as 'folder' | 'chest',
+    artAssetId: r.art_asset_id ?? null,
+  };
 }
 
 export const worldFolders = {
@@ -414,23 +429,27 @@ export const worldFolders = {
     const r = stmt('SELECT * FROM world_folders WHERE id = ?').get(id) as (WorldFolderRow & { campaign_id: string }) | undefined;
     return r ? { ...toWorldFolder(r), campaignId: r.campaign_id } : undefined;
   },
-  create(campaignId: string, name: string, parentId: string | null): WorldFolder {
+  create(campaignId: string, name: string, parentId: string | null, opts?: { displayKind?: 'folder' | 'chest'; items?: LootItem[] }): WorldFolder {
     const id = newId();
+    const dk = opts?.displayKind ?? 'folder';
+    const itemsJson = JSON.stringify(opts?.items ?? []);
     const maxOrder = (stmt('SELECT MAX(sort_order) as m FROM world_folders WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
-    stmt('INSERT INTO world_folders (id, campaign_id, name, parent_id, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, parentId, maxOrder + 1);
-    return { id, name, parentId };
+    stmt('INSERT INTO world_folders (id, campaign_id, name, parent_id, sort_order, display_kind, items_json) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, campaignId, name, parentId, maxOrder + 1, dk, itemsJson);
+    return { id, name, parentId, items: opts?.items ?? [], displayKind: dk, artAssetId: null };
   },
   update(id: string, fields: Partial<Omit<WorldFolder, 'id'>>): void {
-    const cur = stmt('SELECT * FROM world_folders WHERE id = ?').get(id) as WorldFolderRow | undefined;
-    if (!cur) return;
-    stmt('UPDATE world_folders SET name = ?, parent_id = ? WHERE id = ?').run(
-      fields.name ?? cur.name,
-      fields.parentId !== undefined ? fields.parentId : cur.parent_id,
-      id,
-    );
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (fields.name !== undefined) { sets.push('name = ?'); vals.push(fields.name); }
+    if (fields.parentId !== undefined) { sets.push('parent_id = ?'); vals.push(fields.parentId); }
+    if (fields.items !== undefined) { sets.push('items_json = ?'); vals.push(JSON.stringify(fields.items)); }
+    if (fields.displayKind !== undefined) { sets.push('display_kind = ?'); vals.push(fields.displayKind); }
+    if (fields.artAssetId !== undefined) { sets.push('art_asset_id = ?'); vals.push(fields.artAssetId); }
+    if (sets.length === 0) return;
+    vals.push(id);
+    stmt(`UPDATE world_folders SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
   },
   delete(id: string): void {
-    // Re-parent children up to this node's parent (mirrors locations.delete).
     const cur = stmt('SELECT parent_id FROM world_folders WHERE id = ?').get(id) as { parent_id: string | null } | undefined;
     stmt('UPDATE world_folders SET parent_id = ? WHERE parent_id = ?').run(cur?.parent_id ?? null, id);
     stmt('DELETE FROM world_folders WHERE id = ?').run(id);
@@ -717,6 +736,9 @@ export const tokens = {
   },
   move(id: string, q: number, r: number): void {
     stmt('UPDATE tokens SET q = ?, r = ? WHERE id = ?').run(q, r, id);
+  },
+  relocate(id: string, mapId: string, q: number, r: number): void {
+    stmt('UPDATE tokens SET map_id = ?, q = ?, r = ? WHERE id = ?').run(mapId, q, r, id);
   },
   update(id: string, patch: {
     name?: string; layer?: 'token' | 'gm'; size?: number; shape?: string; color?: string;
@@ -1210,6 +1232,9 @@ interface MapObjectRow {
   r: number;
   art_asset_id: string | null;
   items_json: string;
+  world_folder_id: string | null;
+  shop_id: string | null;
+  interact_range: number;
   created_at: number;
 }
 
@@ -1219,11 +1244,14 @@ function toMapObject(row: MapObjectRow) {
     mapId: row.map_id,
     name: row.name,
     description: row.description,
-    kind: row.kind as 'item' | 'chest',
+    kind: row.kind as 'item' | 'chest' | 'shop',
     q: row.q,
     r: row.r,
     artAssetId: row.art_asset_id,
     items: safeParse<LootItem[]>(row.items_json, []),
+    worldFolderId: row.world_folder_id,
+    shopId: row.shop_id,
+    interactRange: row.interact_range ?? 1,
   };
 }
 
@@ -1235,13 +1263,17 @@ export const mapObjects = {
     const row = stmt('SELECT * FROM map_objects WHERE id = ?').get(id) as MapObjectRow | undefined;
     return row ? toMapObject(row) : undefined;
   },
-  create(mapId: string, kind: 'item' | 'chest', name: string, description: string, q: number, r: number) {
+  create(mapId: string, kind: 'item' | 'chest' | 'shop', name: string, description: string, q: number, r: number,
+    opts?: { worldFolderId?: string; shopId?: string; interactRange?: number }) {
     const id = newId();
-    stmt('INSERT INTO map_objects (id, map_id, name, description, kind, q, r, items_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, mapId, name, description, kind, q, r, '[]', now());
-    return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, items_json: '[]', created_at: now() });
+    const wfId = opts?.worldFolderId ?? null;
+    const sId = opts?.shopId ?? null;
+    const range = opts?.interactRange ?? 1;
+    stmt('INSERT INTO map_objects (id, map_id, name, description, kind, q, r, items_json, world_folder_id, shop_id, interact_range, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, mapId, name, description, kind, q, r, '[]', wfId, sId, range, now());
+    return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, items_json: '[]', world_folder_id: wfId, shop_id: sId, interact_range: range, created_at: now() });
   },
-  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: unknown[] }): void {
+  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number }): void {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (patch.name !== undefined) { sets.push('name = ?'); vals.push(patch.name); }
@@ -1250,11 +1282,37 @@ export const mapObjects = {
     if (patch.q !== undefined) { sets.push('q = ?'); vals.push(patch.q); }
     if (patch.r !== undefined) { sets.push('r = ?'); vals.push(patch.r); }
     if (patch.items !== undefined) { sets.push('items_json = ?'); vals.push(JSON.stringify(patch.items)); }
+    if (patch.interactRange !== undefined) { sets.push('interact_range = ?'); vals.push(patch.interactRange); }
     if (sets.length === 0) return;
     vals.push(id);
     stmt(`UPDATE map_objects SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
   },
   delete(id: string): void {
     stmt('DELETE FROM map_objects WHERE id = ?').run(id);
+  },
+};
+
+// ---------- custom compendium items ----------
+
+export const customItems = {
+  forCampaign(campaignId: string): CustomItem[] {
+    return stmt('SELECT * FROM custom_items WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as CustomItem[];
+  },
+  byId(id: string): (CustomItem & { campaignId: string }) | undefined {
+    const r = stmt('SELECT id, campaign_id, entry_json, created_at FROM custom_items WHERE id = ?').get(id) as
+      { id: string; campaign_id: string; entry_json: string; created_at: number } | undefined;
+    return r ? { id: r.id, campaignId: r.campaign_id, entryJson: r.entry_json, createdAt: r.created_at } : undefined;
+  },
+  create(campaignId: string, entryJson: string): CustomItem {
+    const id = newId();
+    const ts = now();
+    stmt('INSERT INTO custom_items (id, campaign_id, entry_json, created_at) VALUES (?, ?, ?, ?)').run(id, campaignId, entryJson, ts);
+    return { id, campaignId, entryJson, createdAt: ts };
+  },
+  update(id: string, entryJson: string): void {
+    stmt('UPDATE custom_items SET entry_json = ? WHERE id = ?').run(entryJson, id);
+  },
+  delete(id: string): void {
+    stmt('DELETE FROM custom_items WHERE id = ?').run(id);
   },
 };

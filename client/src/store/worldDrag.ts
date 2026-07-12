@@ -5,7 +5,7 @@
 // A plain mutable ref (not Zustand state) avoids remounting the dragged row
 // mid-drag, which would silently abort the browser's native drag gesture.
 
-export type WorldDragKind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map' | 'folder';
+export type WorldDragKind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map' | 'folder' | 'light';
 
 export interface WorldDragItem {
   kind: WorldDragKind;

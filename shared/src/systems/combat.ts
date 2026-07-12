@@ -1,9 +1,10 @@
 import type { AoeShape, Character } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
+import { swade } from './swade.js';
 import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
-const SYSTEMS = { dnd5e, swn };
+const SYSTEMS = { dnd5e, swn, swade };
 
 /**
  * Derive the targeted combat actions available from a character sheet:

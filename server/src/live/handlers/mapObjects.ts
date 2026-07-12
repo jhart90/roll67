@@ -1,12 +1,15 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, hexDistance,
-  type DeleteMapObjectPayload, type PlaceMapObjectPayload,
+  C2S, S2C, hexDistance, firstFreeHex, packHex, systemFor,
+  type DeleteMapObjectPayload, type OpenChestPayload, type PlaceMapObjectPayload,
   type TakeAllChestPayload, type TakeChestItemPayload,
   type TakeMapItemPayload, type UpdateMapObjectPayload,
 } from 'shared';
-import { campaigns, characters, chat, mapObjects, maps, tokens } from '../../db/repos.js';
-import { campaignRoom, emitError, safe, sdata } from '../hub.js';
+import { campaigns, characters, chat, handouts, mapObjects, maps, tokens, worldFolders } from '../../db/repos.js';
+import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
+import { syncMapVision } from '../visionService.js';
+import { centerHex, hashStr, TOKEN_COLORS } from './tokens.js';
+import { broadcastHandouts } from './table.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -14,12 +17,12 @@ function requireCampaign(socket: Socket) {
   return d as typeof d & { campaignId: string; role: 'dm' | 'player' };
 }
 
-function playerWithinRange(userId: string, mapId: string, q: number, r: number): boolean {
+function playerWithinRange(userId: string, mapId: string, q: number, r: number, range = 1): boolean {
   for (const t of tokens.forMap(mapId)) {
     if (!t.characterId) continue;
     const ch = characters.byId(t.characterId);
     if (!ch || ch.ownerUserId !== userId) continue;
-    if (hexDistance({ q: t.q, r: t.r }, { q, r }) <= 1) return true;
+    if (hexDistance({ q: t.q, r: t.r }, { q, r }) <= range) return true;
   }
   return false;
 }
@@ -115,4 +118,68 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     const updated = mapObjects.byId(objectId)!;
     io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
   }, 'TAKE_ALL_CHEST'));
+
+  socket.on(C2S.OPEN_CHEST, safe(socket, ({ objectId }: OpenChestPayload) => {
+    const d = requireCampaign(socket);
+    const obj = mapObjects.byId(objectId);
+    if (!obj || obj.kind !== 'chest') throw new Error('Unknown chest.');
+    const map = maps.byId(obj.mapId);
+    if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
+    if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
+      emitError(socket, 'You are not close enough to open that chest.'); return;
+    }
+
+    const folderId = obj.worldFolderId;
+    if (!folderId) return;
+
+    const allFolders = worldFolders.forCampaign(d.campaignId);
+    const folderIds = new Set<string>();
+    function collectFolders(id: string) {
+      folderIds.add(id);
+      for (const sub of allFolders) if (sub.parentId === id) collectFolders(sub.id);
+    }
+    collectFolders(folderId);
+
+    // 1. Place character tokens on adjacent hexes.
+    const allChars = characters.forCampaign(d.campaignId);
+    const charList = allChars.filter((c) => c.parentId && folderIds.has(c.parentId));
+    if (charList.length > 0) {
+      const spawn = { q: obj.q, r: obj.r };
+      const occupied = new Set(tokens.forMap(obj.mapId).map((t) => packHex({ q: t.q, r: t.r })));
+      occupied.add(packHex(spawn));
+
+      for (const char of charList) {
+        const existing = tokens.forCharacter(char.id).find((t) => t.mapId === obj.mapId);
+        if (existing) continue;
+        const hex = firstFreeHex(spawn, occupied, map.grid);
+        occupied.add(packHex(hex));
+        const artAssetId = typeof char.sheet.tokenImageAssetId === 'string' ? char.sheet.tokenImageAssetId : null;
+        const hp = systemFor(char.system).hp(char.sheet);
+        const created = tokens.create({
+          mapId: obj.mapId, characterId: char.id, name: char.name, artAssetId,
+          q: hex.q, r: hex.r, layer: char.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
+          color: TOKEN_COLORS[Math.abs(hashStr(char.id)) % TOKEN_COLORS.length],
+          vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
+        });
+        io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: created });
+      }
+      syncMapVision(io, d.campaignId, obj.mapId);
+    }
+
+    // 2. Share handouts with the opener and auto-open them.
+    const allHandouts = handouts.forCampaign(d.campaignId);
+    const chestHandouts = allHandouts.filter((h) => h.parentId && folderIds.has(h.parentId));
+    let sharedAny = false;
+    for (const h of chestHandouts) {
+      if (!h.sharedAll && !h.sharedWith.includes(d.userId)) {
+        const newList = [...h.sharedWith, d.userId];
+        handouts.share(h.id, newList);
+        sharedAny = true;
+      }
+      io.to(userRoom(d.userId)).emit(S2C.OPEN_HANDOUT, { handoutId: h.id, title: h.title });
+    }
+    if (sharedAny) broadcastHandouts(io, d.campaignId);
+
+    // 3. The loot popup (item contents) is handled client-side via lootPopupId.
+  }, 'OPEN_CHEST'));
 }

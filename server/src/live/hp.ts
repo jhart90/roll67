@@ -1,6 +1,6 @@
 import type { Server } from 'socket.io';
-import { S2C, conditionsOf, getCondition, hasConcentrationAdvantage, num, roll, str, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
-import { characters, chat, tokens } from '../db/repos.js';
+import { S2C, conditionsOf, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, str, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
+import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { syncMapVision } from './visionService.js';
 import { applyAdv } from './handlers/chat.js';
@@ -257,4 +257,31 @@ export function floatHp(
   kind?: ImpactKind, damageType?: string,
 ): void {
   io.to(campaignRoom(campaignId)).emit(S2C.HP_FLOAT, { mapId, tokenId, delta, kind, damageType });
+}
+
+/**
+ * When a character dies, drop any chest-display folders nested under them
+ * as MapObject chests on adjacent hexes.
+ */
+export function dropCarriedLoot(io: Server, campaignId: string, characterId: string): void {
+  const folders = worldFolders.forCampaign(campaignId);
+  const carried = folders.filter((f) => f.parentId === characterId && f.displayKind === 'chest');
+  if (carried.length === 0) return;
+
+  const charTokens = tokens.forCharacter(characterId);
+  if (charTokens.length === 0) return;
+
+  for (const folder of carried) {
+    const tok = charTokens[0];
+    const map = maps.byId(tok.mapId);
+    if (!map) continue;
+    const existing = mapObjects.forMap(tok.mapId);
+    const occupied = new Set(existing.map((o) => packHex({ q: o.q, r: o.r })));
+    occupied.add(packHex({ q: tok.q, r: tok.r }));
+    const hex = firstFreeHex({ q: tok.q, r: tok.r }, occupied, map.grid);
+    const obj = mapObjects.create(tok.mapId, 'chest', folder.name, '', hex.q, hex.r, { worldFolderId: folder.id });
+    worldFolders.update(folder.id, { parentId: tok.mapId });
+    io.to(campaignRoom(campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+  }
+  io.to(campaignRoom(campaignId)).emit(S2C.WORLD_FOLDERS, { folders: worldFolders.forCampaign(campaignId) });
 }

@@ -2,10 +2,11 @@ import type { GameSystem } from '../types.js';
 import type { NpcEntry } from './npcTypes.js';
 import { NPCS_5E } from './npcs5e.js';
 import { NPCS_SWN } from './npcsSwn.js';
+import { NPCS_SWADE } from './npcsSwade.js';
 
 export type { NpcEntry } from './npcTypes.js';
 
-export const ALL_NPCS: NpcEntry[] = [...NPCS_5E, ...NPCS_SWN];
+export const ALL_NPCS: NpcEntry[] = [...NPCS_5E, ...NPCS_SWN, ...NPCS_SWADE];
 
 const byId = new Map(ALL_NPCS.map((n) => [n.id, n]));
 

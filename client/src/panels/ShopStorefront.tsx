@@ -17,7 +17,7 @@ export function ShopStorefront() {
   const mine = characters.filter((c) => c.ownerUserId === you.userId);
   const target = charId || mine[0]?.id;
   const character = characters.find((c) => c.id === target);
-  const currencyField = character?.system === 'swn' ? 'credits' : 'gp';
+  const currencyField = character?.system === 'swn' ? 'credits' : character?.system === 'swade' ? 'dollars' : 'gp';
   const purse = character ? Number((character.sheet as Record<string, unknown>)[currencyField]) || 0 : 0;
 
   return (

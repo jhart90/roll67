@@ -3,10 +3,11 @@ import type { ContentEntry, ContentKind } from './compendiumTypes.js';
 import { ITEMS_5E } from './items5e.js';
 import { SPELLS_5E } from './spells5e.js';
 import { CONTENT_SWN } from './contentSwn.js';
+import { CONTENT_SWADE } from './contentSwade.js';
 
 export * from './compendiumTypes.js';
 
-export const ALL_CONTENT: ContentEntry[] = [...ITEMS_5E, ...SPELLS_5E, ...CONTENT_SWN];
+export const ALL_CONTENT: ContentEntry[] = [...ITEMS_5E, ...SPELLS_5E, ...CONTENT_SWN, ...CONTENT_SWADE];
 
 const byId = new Map(ALL_CONTENT.map((c) => [c.id, c]));
 

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { MapObject } from 'shared';
-import { hexToPixel, pixelToHex } from 'shared';
+import { hexDistance, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
@@ -12,9 +12,30 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
   const r = map.grid.hexSize * 0.5;
   const artUrl = obj.artAssetId ? `/uploads/${obj.artAssetId}` : null;
 
+  function playerInRange(range: number): boolean {
+    if (isDm) return true;
+    const s = useGameStore.getState();
+    const myChars = new Set(
+      Object.values(s.characters).filter((c) => c.ownerUserId === s.you?.userId).map((c) => c.id),
+    );
+    return Object.values(s.tokens).some(
+      (t) => t.characterId && myChars.has(t.characterId) && hexDistance({ q: t.q, r: t.r }, { q: obj.q, r: obj.r }) <= range,
+    );
+  }
+
   function onPointerUp(e: React.PointerEvent<SVGGElement>) {
     e.stopPropagation();
-    useGameStore.setState({ lootPopupId: obj.id });
+    if (obj.kind === 'shop' && obj.shopId) {
+      if (!playerInRange(obj.interactRange)) return;
+      useGameStore.setState({ presentedShopId: obj.shopId });
+    } else if (obj.kind === 'chest' && obj.worldFolderId) {
+      if (!playerInRange(1)) return;
+      intents.openChest(obj.id);
+      useGameStore.setState({ lootPopupId: obj.id });
+    } else {
+      if (!playerInRange(1)) return;
+      useGameStore.setState({ lootPopupId: obj.id });
+    }
   }
 
   function onContextMenu(e: React.MouseEvent) {
@@ -46,11 +67,14 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
           {obj.kind === 'chest' ? (
             <rect x={-r * 0.7} y={-r * 0.5} width={r * 1.4} height={r} rx={3}
               fill="#8B6914" stroke="#5c4a0e" strokeWidth={1.5} />
+          ) : obj.kind === 'shop' ? (
+            <rect x={-r * 0.6} y={-r * 0.6} width={r * 1.2} height={r * 1.2} rx={4}
+              fill="#2a6e3f" stroke="#1a4a2a" strokeWidth={1.5} />
           ) : (
             <circle r={r * 0.5} fill="#d4af37" stroke="#8b7722" strokeWidth={1.5} />
           )}
           <text textAnchor="middle" dy="0.35em" fontSize={r * 0.7} fill="white" style={{ pointerEvents: 'none' }}>
-            {obj.kind === 'chest' ? '📦' : '✦'}
+            {obj.kind === 'chest' ? '📦' : obj.kind === 'shop' ? '🏪' : '✦'}
           </text>
         </>
       )}
@@ -83,8 +107,10 @@ export function MapObjectLayer() {
 
   const { width, height } = mapPixelSize(map);
 
-  function onSvgPointerUp(e: React.PointerEvent<SVGRectElement>) {
+  function onSvgPointerDown(e: React.PointerEvent<SVGRectElement>) {
     if (!isDm || tool !== 'loot' || !map || e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
     const p = stage.toMap(e.clientX, e.clientY);
     const hex = pixelToHex(p, map.grid);
     const name = lootKind === 'chest' ? 'Chest' : 'Loot';
@@ -103,7 +129,7 @@ export function MapObjectLayer() {
           x={0} y={0} width={width} height={height}
           fill="transparent"
           style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
-          onPointerUp={onSvgPointerUp}
+          onPointerDown={onSvgPointerDown}
         />
       )}
       {objects.map((obj) => (

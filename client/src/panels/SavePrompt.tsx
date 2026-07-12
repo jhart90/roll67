@@ -33,7 +33,10 @@ export function SavePrompt({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
+  // Target-number systems derive their own threshold — no DC input needed.
   const swn = campaign?.system === 'swn';
+  const swade = campaign?.system === 'swade';
+  const targetNumber = swn || swade;
 
   return (
     <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -50,13 +53,14 @@ export function SavePrompt({ onClose }: { onClose: () => void }) {
           </select>
         </label>
 
-        {!swn && (
+        {!targetNumber && (
           <label className="lu-field">
             DC
             <input type="number" value={dc} onChange={(e) => setDc(Number(e.target.value) || 0)} />
           </label>
         )}
         {swn && <p className="dim" style={{ fontSize: 12 }}>SWN: each target rolls against its own save target (15 − level − mod).</p>}
+        {swade && <p className="dim" style={{ fontSize: 12 }}>SWADE: each target makes a trait roll against target number 4 (wild die included).</p>}
 
         <label className="lu-field">
           Damage (optional, e.g. 8d6)

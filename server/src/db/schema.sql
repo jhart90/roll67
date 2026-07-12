@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn')),
+  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade')),
   dm_user_id TEXT NOT NULL REFERENCES users(id),
   invite_code TEXT UNIQUE NOT NULL,
   active_map_id TEXT,
@@ -183,7 +183,9 @@ CREATE TABLE IF NOT EXISTS shops (
   players_can_buy INTEGER NOT NULL DEFAULT 1,
   items_json TEXT NOT NULL DEFAULT '[]',
   parent_id TEXT,
-  sort_order INTEGER NOT NULL DEFAULT 0
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  linked_character_id TEXT,
+  art_asset_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS locations (
@@ -203,7 +205,10 @@ CREATE TABLE IF NOT EXISTS world_folders (
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   parent_id TEXT,
-  sort_order INTEGER NOT NULL DEFAULT 0
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  items_json TEXT NOT NULL DEFAULT '[]',
+  display_kind TEXT NOT NULL DEFAULT 'folder',
+  art_asset_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS rollable_tables (
@@ -219,7 +224,7 @@ CREATE TABLE IF NOT EXISTS rollable_tables (
 CREATE TABLE IF NOT EXISTS custom_npcs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn')),
+  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade')),
   name TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'Player Added',
   challenge_label TEXT NOT NULL DEFAULT '',
@@ -237,14 +242,25 @@ CREATE TABLE IF NOT EXISTS map_objects (
   map_id TEXT NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  kind TEXT NOT NULL CHECK (kind IN ('item', 'chest')),
+  kind TEXT NOT NULL CHECK (kind IN ('item', 'chest', 'shop')),
   q INTEGER NOT NULL,
   r INTEGER NOT NULL,
   art_asset_id TEXT,
   items_json TEXT NOT NULL DEFAULT '[]',
+  world_folder_id TEXT,
+  shop_id TEXT,
+  interact_range INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_map_objects_map ON map_objects(map_id);
+
+CREATE TABLE IF NOT EXISTS custom_items (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  entry_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_custom_items_campaign ON custom_items(campaign_id);
 
 CREATE TABLE IF NOT EXISTS drawings (
   id TEXT PRIMARY KEY,

@@ -2,7 +2,7 @@
 
 // ---------- Accounts & campaigns ----------
 
-export type GameSystem = 'dnd5e' | 'swn';
+export type GameSystem = 'dnd5e' | 'swn' | 'swade';
 export type Role = 'dm' | 'player';
 
 export interface UserInfo {
@@ -138,6 +138,7 @@ export interface Door {
 
 export interface Light {
   id: string;
+  name?: string;
   x: number;
   y: number;
   /** Radii in hexes. */
@@ -210,7 +211,7 @@ export interface Token {
   vision: VisionStats | null;
   bar: { hp: number; maxHp: number } | null;
   /** Emits light from the token's position (radii in hexes); null = no light. */
-  light: { bright: number; dim: number } | null;
+  light: { bright: number; dim: number; color?: string } | null;
 }
 
 /** Token as seen by a player (same shape; gm-layer tokens never sent). */
@@ -449,6 +450,10 @@ export interface Shop {
   playersCanBuy: boolean;
   items: ShopItem[];
   parentId?: string | null;
+  /** Walking merchant: links this shop to a character token. */
+  linkedCharacterId?: string | null;
+  /** Custom art for the shop when placed on the map. */
+  artAssetId?: string | null;
 }
 
 // ---------- Locations ----------
@@ -467,10 +472,26 @@ export interface LocationNode {
   handoutIds: string[];
 }
 
-// ---------- World folders (pure organization; no game behavior) ----------
+// ---------- Loot items ----------
+
+export interface LootItem {
+  id: string;
+  name: string;
+  description: string;
+  /** Links to a compendium or custom item entry for full apply-on-take logic. */
+  contentId?: string;
+}
+
+// ---------- World folders / chests ----------
 
 export interface WorldFolder {
   id: string;
   name: string;
   parentId: string | null;
+  /** Item contents for chest-folders (compendium-linked or plain). */
+  items: LootItem[];
+  /** Visual kind: 'folder' for organization, 'chest' for map-placeable containers. */
+  displayKind: 'folder' | 'chest';
+  /** Custom art for the chest on the map. */
+  artAssetId: string | null;
 }

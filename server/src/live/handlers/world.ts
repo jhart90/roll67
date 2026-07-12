@@ -1,15 +1,20 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, applyEntry, contentById, normalizeCurrency,
-  type BuyItemPayload, type CreateLocationPayload, type CreateShopPayload,
-  type CreateWorldFolderPayload, type DeleteLocationPayload, type DeleteShopPayload,
-  type DeleteWorldFolderPayload, type GameSystem, type PresentShopPayload,
-  type SheetData, type Shop, type ShopItem, type UpdateLocationPayload, type UpdateShopPayload,
+  C2S, S2C, applyEntry, contentById, firstFreeHex, normalizeCurrency, packHex, systemFor,
+  type BuyItemPayload, type CreateCustomItemPayload, type CreateLocationPayload, type CreateShopPayload,
+  type CreateWorldFolderPayload, type DeleteCustomItemPayload, type DeleteLocationPayload, type DeleteShopPayload,
+  type DeleteWorldFolderPayload, type DropFolderOnCharacterPayload, type DropFolderOnMapPayload, type DropShopOnMapPayload, type GameSystem,
+  type PresentShopPayload,
+  type SheetData, type Shop, type ShopItem, type UpdateCustomItemPayload, type UpdateLocationPayload, type UpdateShopPayload,
   type UpdateWorldFolderPayload,
 } from 'shared';
-import { campaigns, characters, chat, locations, shops, worldFolders } from '../../db/repos.js';
+import { campaigns, characters, chat, customItems, locations, mapObjects, maps, shops, tokens, worldFolders } from '../../db/repos.js';
+import { db } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { broadcastDirectory } from '../directory.js';
+import { syncMapVision } from '../visionService.js';
+import { broadcastPresence, sendMapStateToUser } from './session.js';
+import { centerHex, hashStr, TOKEN_COLORS } from './tokens.js';
 
 function campaignSystem(campaignId: string): string {
   return campaigns.byId(campaignId)?.system ?? 'dnd5e';
@@ -90,7 +95,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM creates shops.'); return; }
     const campaign = campaignSystem(d.campaignId);
-    shops.create(d.campaignId, name?.trim() || 'New shop', campaign === 'swn' ? 'credits' : 'gp');
+    shops.create(d.campaignId, name?.trim() || 'New shop', normalizeCurrency(campaign as GameSystem, undefined));
     broadcastShops(io, d.campaignId);
   }, 'CREATE_SHOP'));
 
@@ -234,10 +239,10 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
 
   // ----- world-tree folders -----
 
-  socket.on(C2S.CREATE_WORLD_FOLDER, safe(socket, ({ name, parentId }: CreateWorldFolderPayload) => {
+  socket.on(C2S.CREATE_WORLD_FOLDER, safe(socket, ({ name, parentId, displayKind, items }: CreateWorldFolderPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM manages folders.'); return; }
-    worldFolders.create(d.campaignId, name?.trim() || 'New folder', parentId ?? null);
+    worldFolders.create(d.campaignId, name?.trim() || 'New folder', parentId ?? null, { displayKind, items });
     broadcastWorldFolders(io, d.campaignId);
   }, 'CREATE_WORLD_FOLDER'));
 
@@ -258,4 +263,177 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     worldFolders.delete(folderId);
     broadcastWorldFolders(io, d.campaignId);
   }, 'DELETE_WORLD_FOLDER'));
+
+  socket.on(C2S.DROP_FOLDER_ON_MAP, safe(socket, ({ folderId, mapId, q, r }: DropFolderOnMapPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const f = worldFolders.byId(folderId);
+    if (!f || f.campaignId !== d.campaignId) return;
+    const map = maps.byId(mapId);
+    if (!map || map.campaignId !== d.campaignId) return;
+
+    // 1. Reparent the folder under the map + mark as chest.
+    worldFolders.update(folderId, { parentId: mapId, displayKind: 'chest' });
+
+    // 1b. Create a chest MapObject linked to this folder (if one doesn't already exist).
+    const existingObjs = mapObjects.forMap(mapId);
+    const alreadyLinked = existingObjs.find((o) => o.worldFolderId === folderId);
+    if (!alreadyLinked) {
+      const spawn = map.spawn ?? centerHex(map.grid);
+      const occupied = new Set(existingObjs.map((o) => packHex({ q: o.q, r: o.r })));
+      const hex = (q != null && r != null) ? { q, r } : firstFreeHex(spawn, occupied, map.grid);
+      const obj = mapObjects.create(mapId, 'chest', f.name, '', hex.q, hex.r, { worldFolderId: folderId });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+    }
+
+    // 2. Collect all character descendants recursively.
+    const allChars = characters.forCampaign(d.campaignId);
+    const allFolders = worldFolders.forCampaign(d.campaignId);
+    const folderIds = new Set<string>();
+    function collectFolders(id: string) {
+      folderIds.add(id);
+      for (const sub of allFolders) if (sub.parentId === id) collectFolders(sub.id);
+    }
+    collectFolders(folderId);
+    const charList = allChars.filter((c) => c.parentId && folderIds.has(c.parentId));
+    if (charList.length === 0) {
+      broadcastWorldFolders(io, d.campaignId);
+      broadcastDirectory(io, d.campaignId);
+      return;
+    }
+
+    // 3. Place tokens: relocate existing or create new, with shared occupancy tracking.
+    const spawn = map.spawn ?? centerHex(map.grid);
+    const occupied = new Set(tokens.forMap(mapId).map((t) => packHex({ q: t.q, r: t.r })));
+    const touchedMaps = new Set<string>();
+    const removedTokenIds: string[] = [];
+    const upsertedTokens: ReturnType<typeof tokens.byId>[] = [];
+
+    db.transaction(() => {
+      for (const char of charList) {
+        const existing = tokens.forCharacter(char.id);
+        const onTarget = existing.find((t) => t.mapId === mapId);
+        const onOther = existing.filter((t) => t.mapId !== mapId);
+
+        if (onTarget) {
+          // Already on this map — keep it, remove from other maps.
+          occupied.add(packHex({ q: onTarget.q, r: onTarget.r }));
+          for (const t of onOther) {
+            tokens.delete(t.id);
+            removedTokenIds.push(t.id);
+            touchedMaps.add(t.mapId);
+          }
+        } else if (onOther.length > 0) {
+          // Has a token on another map — relocate the first one (preserving size/hp/etc), delete extras.
+          const primary = onOther[0];
+          const hex = firstFreeHex(spawn, occupied, map.grid);
+          occupied.add(packHex(hex));
+          tokens.relocate(primary.id, mapId, hex.q, hex.r);
+          touchedMaps.add(primary.mapId);
+          touchedMaps.add(mapId);
+          upsertedTokens.push(tokens.byId(primary.id)!);
+          // Remove duplicates on other maps.
+          for (let i = 1; i < onOther.length; i++) {
+            tokens.delete(onOther[i].id);
+            removedTokenIds.push(onOther[i].id);
+            touchedMaps.add(onOther[i].mapId);
+          }
+        } else {
+          // No token anywhere — create a new one.
+          const hex = firstFreeHex(spawn, occupied, map.grid);
+          occupied.add(packHex(hex));
+          const artAssetId = typeof char.sheet.tokenImageAssetId === 'string' ? char.sheet.tokenImageAssetId : null;
+          const hp = systemFor(char.system).hp(char.sheet);
+          const created = tokens.create({
+            mapId, characterId: char.id, name: char.name, artAssetId,
+            q: hex.q, r: hex.r, layer: char.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
+            color: TOKEN_COLORS[Math.abs(hashStr(char.id)) % TOKEN_COLORS.length],
+            vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
+          });
+          touchedMaps.add(mapId);
+          upsertedTokens.push(created);
+        }
+      }
+    })();
+
+    // Broadcast changes.
+    for (const id of removedTokenIds) io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId: id });
+    for (const t of upsertedTokens) if (t) io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: t });
+
+    // Pull player-owned characters' owners onto this map.
+    for (const char of charList) {
+      if (char.ownerUserId && campaigns.viewMapIdFor(d.campaignId, char.ownerUserId) !== mapId) {
+        campaigns.setMemberMap(d.campaignId, char.ownerUserId, mapId);
+        sendMapStateToUser(io, d.campaignId, char.ownerUserId);
+        broadcastPresence(io, d.campaignId);
+      }
+    }
+
+    for (const m of touchedMaps) syncMapVision(io, d.campaignId, m);
+    broadcastWorldFolders(io, d.campaignId);
+    broadcastDirectory(io, d.campaignId);
+  }, 'DROP_FOLDER_ON_MAP'));
+
+  // ---------- drop folder on character (carried loot) ----------
+
+  socket.on(C2S.DROP_FOLDER_ON_CHARACTER, safe(socket, ({ folderId, characterId }: DropFolderOnCharacterPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const f = worldFolders.byId(folderId);
+    if (!f || f.campaignId !== d.campaignId) return;
+    const char = characters.byId(characterId);
+    if (!char || char.campaignId !== d.campaignId) return;
+
+    worldFolders.update(folderId, { parentId: characterId, displayKind: 'chest' });
+    broadcastWorldFolders(io, d.campaignId);
+    broadcastDirectory(io, d.campaignId);
+  }, 'DROP_FOLDER_ON_CHARACTER'));
+
+  // ---------- drop shop on map ----------
+
+  socket.on(C2S.DROP_SHOP_ON_MAP, safe(socket, ({ shopId, mapId, q, r }: DropShopOnMapPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const shop = shops.byId(shopId);
+    if (!shop || shop.campaignId !== d.campaignId) return;
+    const map = maps.byId(mapId);
+    if (!map || map.campaignId !== d.campaignId) return;
+
+    const existing = mapObjects.forMap(mapId);
+    const alreadyLinked = existing.find((o) => o.shopId === shopId);
+    if (!alreadyLinked) {
+      const spawn = map.spawn ?? centerHex(map.grid);
+      const occupied = new Set(existing.map((o) => packHex({ q: o.q, r: o.r })));
+      const hex = (q != null && r != null) ? { q, r } : firstFreeHex(spawn, occupied, map.grid);
+      const obj = mapObjects.create(mapId, 'shop', shop.name, shop.description ?? '', hex.q, hex.r, { shopId });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+    }
+  }, 'DROP_SHOP_ON_MAP'));
+
+  // ---------- custom compendium items ----------
+
+  socket.on(C2S.CREATE_CUSTOM_ITEM, safe(socket, ({ entryJson }: CreateCustomItemPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can create custom items.'); return; }
+    customItems.create(d.campaignId, entryJson);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(d.campaignId) });
+  }, 'CREATE_CUSTOM_ITEM'));
+
+  socket.on(C2S.UPDATE_CUSTOM_ITEM, safe(socket, ({ itemId, entryJson }: UpdateCustomItemPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const item = customItems.byId(itemId);
+    if (!item || item.campaignId !== d.campaignId) return;
+    customItems.update(itemId, entryJson);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(d.campaignId) });
+  }, 'UPDATE_CUSTOM_ITEM'));
+
+  socket.on(C2S.DELETE_CUSTOM_ITEM, safe(socket, ({ itemId }: DeleteCustomItemPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const item = customItems.byId(itemId);
+    if (!item || item.campaignId !== d.campaignId) return;
+    customItems.delete(itemId);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(d.campaignId) });
+  }, 'DELETE_CUSTOM_ITEM'));
 }

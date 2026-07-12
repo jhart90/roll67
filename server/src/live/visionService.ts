@@ -251,7 +251,7 @@ export function buildMapVisionShared(map: MapRecord, mapTokens?: Token[]): MapVi
     .filter((t) => t.light && (t.light.bright > 0 || t.light.dim > 0))
     .map((t) => {
       const px = hexToPixel({ q: t.q, r: t.r }, map.grid);
-      return { id: `tl-${t.id}`, x: px.x, y: px.y, brightRadius: t.light!.bright, dimRadius: t.light!.dim };
+      return { id: `tl-${t.id}`, x: px.x, y: px.y, brightRadius: t.light!.bright, dimRadius: t.light!.dim, color: t.light!.color };
     });
   const lights = tokenLights.length > 0 ? [...map.lights, ...tokenLights] : map.lights;
   const fovInput: FovInput = { grid: map.grid, walls: map.walls, doors: map.doors, lights };

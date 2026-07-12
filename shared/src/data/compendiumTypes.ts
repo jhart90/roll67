@@ -42,8 +42,10 @@ export interface SpellData {
 }
 
 export interface PowerData {
+  /** SWN: psychic discipline. SWADE: required Rank. */
   discipline: string;
-  level: number;          // SWN power level 1-4
+  /** SWN: power level 1-4. SWADE: Power Point cost. */
+  level: number;
   notes?: string;
   /** Rollable damage/heal expression, for powers with a direct combat effect. */
   damage?: string;
@@ -53,6 +55,8 @@ export interface PowerData {
   save?: string;
   /** Damage type, e.g. "kinetic". */
   damageType?: string;
+  /** SWADE: the power's range in feet. */
+  rangeFt?: number;
 }
 
 export interface GearData {
@@ -228,9 +232,27 @@ export interface ApplyResult {
  */
 export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult | null {
   const is5e = entry.system === 'dnd5e';
+  const isSwade = entry.system === 'swade';
 
   if (entry.kind === 'weapon' && entry.weapon) {
     const w = entry.weapon;
+    if (isSwade) {
+      // Melee damage is Strength die + weapon die, all acing; ranged weapons
+      // roll their own dice alone. The attack roll itself comes from the
+      // sheet's Fighting/Shooting/Athletics trait (the row's skill column).
+      const melee = w.ability === 'str';
+      const strDie = /^d\d+$/.test(String(sheet.strength ?? '')) ? String(sheet.strength) : 'd6';
+      const damage = melee ? (w.damage ? `1${strDie}!+${w.damage}` : `1${strDie}!`) : w.damage;
+      return {
+        listId: 'attacks',
+        row: {
+          name: entry.name, skill: melee ? 'Fighting' : 'Shooting', damage,
+          dtype: w.damageType, range: melee ? 5 : weaponRangeFtSwn(w.props),
+          notes: w.props.join(', '),
+        },
+        label: `${entry.name} added to weapons`,
+      };
+    }
     if (is5e) {
       const strMod = abilityMod5e(sheet, 'str');
       const dexMod = abilityMod5e(sheet, 'dex');
@@ -294,6 +316,19 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
 
   if (entry.kind === 'power' && entry.power) {
     const p = entry.power;
+    if (isSwade) {
+      return {
+        listId: 'powers',
+        row: {
+          name: entry.name, cost: p.level, notes: p.notes ?? '',
+          effect: p.heal ? 'heal' : 'damage',
+          damage: p.damage ?? '',
+          dtype: p.heal ? '' : (p.damageType ?? ''),
+          range: p.rangeFt ?? 0,
+        },
+        label: `${entry.name} added to powers`,
+      };
+    }
     return {
       listId: 'powers',
       row: {
@@ -310,6 +345,19 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
   }
 
   if (entry.kind === 'armor' && entry.armor) {
+    if (isSwade) {
+      const shield = entry.category === 'Shield';
+      return {
+        listId: 'armor',
+        row: {
+          name: entry.name,
+          armor: shield ? 0 : entry.armor.baseAc,
+          parryBonus: shield ? entry.armor.baseAc : 0,
+          equipped: false, notes: entry.armor.notes ?? '',
+        },
+        label: `${entry.name} added to armor`,
+      };
+    }
     if (is5e) {
       return {
         listId: 'armor',
@@ -337,7 +385,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
     const equip = { equipped: false, acBonus: bonus.ac, saveBonus: bonus.save };
     return {
       listId: 'inventory',
-      row: is5e
+      row: is5e || isSwade
         ? { name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, ...usable, ...equip, notes: entry.subtitle }
         : { name: entry.name, qty: 1, enc: 1, ...usable, ...equip, notes: entry.subtitle },
       label: `${entry.name} added to inventory`,

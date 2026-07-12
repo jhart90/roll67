@@ -831,7 +831,8 @@ button.link:hover { text-decoration: underline; }
   color: var(--accent);
 }
 .attack-detail-grid input,
-.attack-detail-grid select {
+.attack-detail-grid select,
+.attack-detail-grid textarea {
   margin: 0;
   padding: 5px 8px;
   font-size: 13px;
@@ -839,6 +840,9 @@ button.link:hover { text-decoration: underline; }
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 5px;
+}
+.attack-detail-grid label.detail-full {
+  grid-column: 1 / -1;
 }
 
 .rolls-column {

@@ -142,8 +142,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
         const dir = DIRS[e.key.toLowerCase()];
         if (!dir) return;
         e.preventDefault();
-        const isDm = s.you?.role === 'dm';
-        if (isDm && s.selectedTokenIds.length > 1) {
+        if (s.selectedTokenIds.length > 1) {
           for (const id of s.selectedTokenIds) {
             const t = s.tokens[id];
             if (!t) continue;
@@ -278,7 +277,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
   // explicit landing spot instead of the spawn point).
   function onDragOver(e: React.DragEvent<HTMLDivElement>) {
     const k = worldDrag.current?.kind;
-    if (k !== 'character' && k !== 'folder') return;
+    if (k !== 'character' && k !== 'folder' && k !== 'shop' && k !== 'light') return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   }
@@ -294,8 +293,24 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
     if (drag.kind === 'character') {
       intents.dropCharacterOnMap(drag.id, map.id, hex.q, hex.r);
     } else if (drag.kind === 'folder') {
-      const chars = useGameStore.getState().characters.filter((c) => c.parentId === drag.id);
-      for (const c of chars) intents.dropCharacterOnMap(c.id, map.id, hex.q, hex.r);
+      const tokenOnHex = Object.values(useGameStore.getState().tokens).find((t) => t.q === hex.q && t.r === hex.r);
+      if (tokenOnHex?.characterId) {
+        intents.dropFolderOnCharacter(drag.id, tokenOnHex.characterId);
+      } else {
+        intents.dropFolderOnMap(drag.id, map.id, hex.q, hex.r);
+      }
+    } else if (drag.kind === 'shop') {
+      const tokenOnHex = Object.values(useGameStore.getState().tokens).find((t) => t.q === hex.q && t.r === hex.r);
+      if (tokenOnHex?.characterId) {
+        intents.updateShop(drag.id, { linkedCharacterId: tokenOnHex.characterId });
+      } else {
+        intents.dropShopOnMap(drag.id, map.id, hex.q, hex.r);
+      }
+    } else if (drag.kind === 'light') {
+      const tokenOnHex = Object.values(useGameStore.getState().tokens).find((t) => t.q === hex.q && t.r === hex.r);
+      if (tokenOnHex?.characterId) {
+        intents.linkLightToToken(drag.id, map.id, tokenOnHex.id);
+      }
     }
   }
 

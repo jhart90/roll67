@@ -11,9 +11,12 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
 
   const system = campaign?.system ?? 'dnd5e';
   const { search, setSearch, category, setCategory, categories, sort, setSort, entries } = useNpcPicker(system);
+  // SWADE has no classes — only the blank-sheet quick start applies.
   const classRows = system === 'dnd5e'
     ? CLASS_LIST_5E.map((c) => ({ id: c.id, name: c.name }))
-    : SWN_CLASS_LIST.map((c) => ({ id: c.id, name: c.name }));
+    : system === 'swn'
+      ? SWN_CLASS_LIST.map((c) => ({ id: c.id, name: c.name }))
+      : [];
 
   const q = search.trim().toLowerCase();
   const showBlank = !q || 'blank character sheet'.includes(q);
@@ -46,7 +49,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
       <div className="sheet-window npc-library">
         <div className="sheet-header">
           <h3 style={{ margin: 0 }}>NPC Library</h3>
-          <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : 'Stars Without Number'}</span>
+          <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : system === 'swn' ? 'Stars Without Number' : 'Savage Worlds'}</span>
           <span className="spacer" />
           <button className="link" title="Randomize an NPC based on a compendium model" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>

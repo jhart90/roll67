@@ -123,7 +123,11 @@ export const campaigns = {
     ).run(id, name, system, dmUserId, inviteCode, now());
     stmt('INSERT INTO campaign_members (campaign_id, user_id, role) VALUES (?, ?, ?)')
       .run(id, dmUserId, 'dm');
-    return toCampaignInfo({ id, name, system, dm_user_id: dmUserId, invite_code: inviteCode, active_map_id: null });
+    // Seed a starter map and make it active: a campaign with no maps opens
+    // onto an empty black stage, which reads as a broken load.
+    const starter = maps.create(id, 'Starting Map');
+    campaigns.setActiveMap(id, starter.id);
+    return toCampaignInfo({ id, name, system, dm_user_id: dmUserId, invite_code: inviteCode, active_map_id: starter.id });
   },
   byId(id: string): CampaignInfo | undefined {
     const row = stmt('SELECT * FROM campaigns WHERE id = ?').get(id) as CampaignRow | undefined;

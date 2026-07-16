@@ -231,7 +231,10 @@ async function main() {
   // ---------- walls & doors block vision ----------
   console.log('walls & doors (vision blocking):');
   // Geometry: player token at (6,5). Compute its pixel position from the grid
-  // (hexSize 40, pointy-top): x = 40*sqrt3*(q + r/2), y = 60*r.
+  // (pointy-top): x = hexSize*sqrt3*(q + r/2), y = hexSize*1.5*r. Any absolute
+  // pixel offsets layered on top of px() must be scaled by g.hexSize too --
+  // the default grid scale has changed before (40 -> 8) and hard-coded pixel
+  // nudges silently drift whole hexes when it does.
   const g = dmMapState.map.grid;
   const SQRT3 = Math.sqrt(3);
   const px = (q, r) => ({
@@ -695,10 +698,13 @@ async function main() {
   console.log('door locks:');
   // Right next to the player's own token (6,5) so canReachDoor's 2-hex
   // proximity check always passes -- only the lock itself should block them.
+  // Offsets are scaled by hexSize (NOT absolute pixels) so the door's
+  // midpoint still resolves to a hex adjacent to (6,5) whatever the map's
+  // grid scale is -- a hard-coded 40px offset spans 3+ hexes on small grids.
   const lockSpot = px(6, 5);
   const lockDoorEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.doors);
   dmSock.emit('upsertDoor', {
-    mapId, door: { a: { x: lockSpot.x - 20, y: lockSpot.y - 40 }, b: { x: lockSpot.x + 20, y: lockSpot.y - 40 }, open: false, locked: true, keyName: 'Brass Key' },
+    mapId, door: { a: { x: lockSpot.x - g.hexSize / 2, y: lockSpot.y - g.hexSize }, b: { x: lockSpot.x + g.hexSize / 2, y: lockSpot.y - g.hexSize }, open: false, locked: true, keyName: 'Brass Key' },
   });
   const lockDoors = (await lockDoorEdit).doors ?? [];
   const lockDoor = lockDoors.find((x) => x.locked);

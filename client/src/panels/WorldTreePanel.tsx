@@ -21,6 +21,11 @@ interface TreeNode {
 
 const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡' } as Record<string, string>;
 
+// Players have no dmGeometry; the selector must return this SAME array every
+// time, not a fresh `?? []` — a fresh array per call is the Zustand
+// getSnapshot infinite-loop crash (blank screen for every non-DM member).
+const NO_LIGHTS: Light[] = [];
+
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
   locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
@@ -69,7 +74,7 @@ export function WorldTreePanel() {
   const isDm = you?.role === 'dm';
 
   const allTokens = useGameStore((s) => s.tokens);
-  const dmLights = useGameStore((s) => s.dmGeometry?.lights ?? []);
+  const dmLights = useGameStore((s) => s.dmGeometry?.lights ?? NO_LIGHTS);
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);

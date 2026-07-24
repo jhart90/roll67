@@ -1000,6 +1000,8 @@ export const intents = {
     socket.emit(C2S.CAST_SPELL, { characterId, rollableId, slotLevel }),
   usePower: (characterId: string, powerIndex: number) =>
     socket.emit(C2S.USE_POWER, { characterId, powerIndex }),
+  reloadWeapon: (characterId: string, attackIndex: number) =>
+    socket.emit(C2S.RELOAD_WEAPON, { characterId, attackIndex }),
   deathSave: (characterId: string) => socket.emit(C2S.DEATH_SAVE, { characterId }),
   requestSave: (p: { tokenIds: string[]; saveId: string; dc: number; damageExpr?: string; onSave: 'half' | 'negate'; damageType?: string; label?: string }) =>
     socket.emit(C2S.REQUEST_SAVE, p),

@@ -301,8 +301,11 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
     // SWN: weapon-specific bonus 0; sheet attackBonus applies in rollables.
     // Mechanical props become live stats: "shock N/AC M" fills both shock
     // columns (min damage on a miss vs AC ≤ M, server-resolved), "mag N" /
-    // "N shots" pre-fills the enforced ammo counter, and "blast" weapons
-    // (grenades) become area attacks with an Evasion-for-half save.
+    // "N shots" pre-fills the enforced ammo counter (and its matching
+    // reload item — a magazine for kinetic weapons, a cell for energy ones,
+    // so the Reload action has something to consume from the sheet's
+    // Gear list without the player configuring it by hand), and "blast"
+    // weapons (grenades) become area attacks with an Evasion-for-half save.
     const swnProps = w.props.join(', ');
     const shockAcMatch = swnProps.match(/shock\s+\d+\s*\/\s*AC\s*(\d+)/i);
     const magMatch = swnProps.match(/\bmag (\d+)/i) ?? swnProps.match(/\b(\d+) shots/i);
@@ -313,7 +316,10 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
         name: entry.name, bonus: 0, damage: w.damage,
         dtype: w.damageType, range: weaponRangeFtSwn(w.props), shock: weaponShockSwn(w.props),
         ...(shockAcMatch ? { shockAc: Number(shockAcMatch[1]) } : {}),
-        ...(magMatch ? { ammo: Number(magMatch[1]) } : {}),
+        ...(magMatch ? {
+          ammo: Number(magMatch[1]), maxAmmo: Number(magMatch[1]),
+          ammoItem: w.damageType === 'energy' ? 'Ammo, Type A Cell' : 'Spare Magazine',
+        } : {}),
         ...(isBlast ? { aoeShape: 'sphere', aoeSize: 20, save: 'evasion', onSave: 'half' } : {}),
         notes: swnProps,
       },

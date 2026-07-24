@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, SheetData } from 'shared';
 import {
-  canEditCharacter, castableLevels, combatActions, needsNpcBoost, spellSlots, systemFor,
+  canEditCharacter, castableLevels, combatActions, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -331,6 +331,14 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
   const schema = systemFor(character.system);
   const rollables = useMemo(() => schema.rollables(character.sheet), [schema, character.sheet]);
   const actions = useMemo(() => combatActions(character), [character]);
+  // SWN weapons with a magazine size get a self-only Reload action here —
+  // it has no target, so it doesn't belong in combatActions()'s targeted list.
+  const reloadable = useMemo(() => {
+    if (character.system !== 'swn') return [];
+    return rows(character.sheet, 'attacks')
+      .map((atk, i) => ({ atk, i, check: swnReloadCheck(character.sheet, i) }))
+      .filter(({ atk }) => num(atk, 'maxAmmo', 0) > 0);
+  }, [character]);
   const tokens = useGameStore((s) => s.tokens);
   const mapId = useGameStore((s) => s.map?.id ?? null);
   const myToken = useMemo(
@@ -396,6 +404,24 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             </div>
           ))}
           {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
+        </div>
+      )}
+      {reloadable.length > 0 && (
+        <div className="roll-group">
+          <h5>Reload</h5>
+          {reloadable.map(({ atk, i, check }) => (
+            <div key={i} className="roll-row">
+              <button
+                className="roll-btn"
+                disabled={!canRoll || !check.ok}
+                title={check.ok ? `Reload from ${check.ammoItemName}` : check.reason}
+                onClick={() => intents.reloadWeapon(character.id, i)}
+              >
+                <span>🔄 Reload {str(atk, 'name', 'Weapon')}</span>
+                <span className="roll-btn-expr">{num(atk, 'ammo', 0)}/{num(atk, 'maxAmmo', 0)}</span>
+              </button>
+            </div>
+          ))}
         </div>
       )}
       {[...groups.entries()].map(([group, rolls]) => (

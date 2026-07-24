@@ -174,6 +174,37 @@ export function cyberwareStrainTotal(sheet: SheetData): number {
   return rows(sheet, 'cyberware').reduce((sum, c) => sum + num(c, 'strain', 0), 0);
 }
 
+/** Whether a weapon row can be reloaded right now, and what that would take
+ *  — a single pure check shared by the client (button enable/tooltip) and
+ *  the server (the only place that actually authorizes the reload). A
+ *  weapon reloads from a same-named inventory item (its `ammoItem` column,
+ *  set automatically when added from the compendium, or typed in by hand)
+ *  back up to its own `maxAmmo`. */
+export interface SwnReloadCheck {
+  ok: boolean;
+  reason?: string;
+  weaponName?: string;
+  ammoItemName?: string;
+  invIndex?: number;
+  maxAmmo?: number;
+}
+
+export function swnReloadCheck(sheet: SheetData, attackIndex: number): SwnReloadCheck {
+  const atk = rows(sheet, 'attacks')[attackIndex];
+  if (!atk) return { ok: false, reason: 'Unknown weapon.' };
+  const weaponName = str(atk, 'name', 'Weapon');
+  const maxAmmo = num(atk, 'maxAmmo', 0);
+  if (maxAmmo <= 0) return { ok: false, reason: `${weaponName} doesn't track a magazine size.` };
+  const ammo = num(atk, 'ammo', maxAmmo);
+  if (ammo >= maxAmmo) return { ok: false, reason: `${weaponName} is already fully loaded.` };
+  const ammoItemName = str(atk, 'ammoItem', '').trim();
+  if (!ammoItemName) return { ok: false, reason: `${weaponName} has no reload item set (Gear & Combat tab).` };
+  const invIndex = rows(sheet, 'inventory')
+    .findIndex((i) => str(i, 'name', '').toLowerCase() === ammoItemName.toLowerCase() && num(i, 'qty', 0) > 0);
+  if (invIndex < 0) return { ok: false, reason: `No ${ammoItemName} left to reload ${weaponName} with.` };
+  return { ok: true, weaponName, ammoItemName, invIndex, maxAmmo };
+}
+
 /** The skill Specialist's 3d6-keep-2 bonus applies to: the character's
  *  highest-level skill (there's no per-focus "which skill" picker yet, so
  *  this reads as "specializes in what you're already best at"). */
@@ -299,6 +330,8 @@ const gearTab: SheetTab = {
         { id: 'shockAc', label: 'Shock vs AC ≤', type: 'number', width: 'sixth', default: 0 },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },
+        { id: 'maxAmmo', label: 'Mag size', type: 'number', width: 'sixth' },
+        { id: 'ammoItem', label: 'Reload item', type: 'text', width: 'sixth', suggestions: ['Ammo, Type A Cell', 'Spare Magazine'] },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },

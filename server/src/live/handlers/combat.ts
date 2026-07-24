@@ -6,8 +6,8 @@ import {
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
-  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor,
-  type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw,
+  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck,
+  type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -952,6 +952,42 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }, [result.undo]);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'USE_POWER'));
+
+  // SWN: reload a weapon from a matching ammo item in inventory. Consumes
+  // one unit of that item and refills the weapon back to its magazine size
+  // (swnReloadCheck is the single source of truth for whether this is legal
+  // right now — the client uses the same check to enable/disable its button).
+  socket.on(C2S.RELOAD_WEAPON, safe(socket, ({ characterId, attackIndex }: ReloadWeaponPayload) => {
+    const d = requireCampaign(socket);
+    const actor = characters.byId(characterId);
+    if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    if (d.role !== 'dm' && actor.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only act with your own character.');
+      return;
+    }
+    const check = swnReloadCheck(actor.sheet, attackIndex);
+    if (!check.ok) { emitError(socket, check.reason!); return; }
+
+    const atks = rows(actor.sheet, 'attacks').map((r) => ({ ...r }));
+    const atksBefore = atks.map((r) => ({ ...r }));
+    atks[attackIndex] = { ...atks[attackIndex], ammo: check.maxAmmo };
+
+    const inv = rows(actor.sheet, 'inventory').map((r) => ({ ...r }));
+    const invBefore = inv.map((r) => ({ ...r }));
+    const invRow = inv[check.invIndex!];
+    inv[check.invIndex!] = { ...invRow, qty: Math.max(0, num(invRow, 'qty', 1) - 1) };
+
+    const updated = persistSheet(io, d.campaignId, actor, { attacks: atks, inventory: inv });
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'system',
+      text: `${updated.name} reloads ${check.weaponName} (−1 ${check.ammoItemName}).`,
+      roll: null, recipients: null,
+    }, [
+      { t: 'field', characterId: actor.id, key: 'attacks', value: atksBefore },
+      { t: 'field', characterId: actor.id, key: 'inventory', value: invBefore },
+    ]);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'RELOAD_WEAPON'));
 
   // A 5e death saving throw for a character at 0 HP. Server-authoritative:
   // rolls, tallies successes/failures, and resolves stabilize/wake/death.

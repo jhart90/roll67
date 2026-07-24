@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { swn, swnDerivedAc, cyberwareStrainTotal, cyberInitBonus } from '../src/systems/swn.js';
+import { swn, swnDerivedAc, cyberwareStrainTotal, cyberInitBonus, swnReloadCheck } from '../src/systems/swn.js';
 import { combatActions } from '../src/systems/combat.js';
 import { applyEntry, contentForSystem } from '../src/data/compendium.js';
 import { NPCS_SWN } from '../src/data/npcsSwn.js';
@@ -18,6 +18,39 @@ describe('SWN compendium automation', () => {
     expect(mono).toMatchObject({ shock: 2, shockAc: 15 });
     expect(applyEntry(bySwnName('Semi-auto Pistol'), sheet)!.row).toMatchObject({ ammo: 15 });
     expect(applyEntry(bySwnName('Laser Pistol'), sheet)!.row).toMatchObject({ ammo: 10 }); // "10 shots"
+  });
+
+  it('a magazine weapon carries maxAmmo and a real reload-item name', () => {
+    const pistol = applyEntry(bySwnName('Semi-auto Pistol'), swn.defaultSheet())!.row;
+    expect(pistol).toMatchObject({ ammo: 15, maxAmmo: 15, ammoItem: 'Spare Magazine' });
+    const laser = applyEntry(bySwnName('Laser Pistol'), swn.defaultSheet())!.row;
+    expect(laser).toMatchObject({ ammo: 10, maxAmmo: 10, ammoItem: 'Ammo, Type A Cell' });
+  });
+
+  it('swnReloadCheck refuses a weapon with no magazine, one already full, or no reload item', () => {
+    expect(swnReloadCheck(swn.defaultSheet(), 0)).toMatchObject({ ok: false, reason: 'Unknown weapon.' });
+    const noMag = { ...swn.defaultSheet(), attacks: [{ name: 'Knife', damage: '1d4' }] };
+    expect(swnReloadCheck(noMag, 0).ok).toBe(false);
+    const full = { ...swn.defaultSheet(), attacks: [{ name: 'Pistol', ammo: 15, maxAmmo: 15, ammoItem: 'Spare Magazine' }] };
+    expect(swnReloadCheck(full, 0)).toMatchObject({ ok: false, reason: 'Pistol is already fully loaded.' });
+    const noItemSet = { ...swn.defaultSheet(), attacks: [{ name: 'Pistol', ammo: 3, maxAmmo: 15 }] };
+    expect(swnReloadCheck(noItemSet, 0).ok).toBe(false);
+    const noStock = {
+      ...swn.defaultSheet(),
+      attacks: [{ name: 'Pistol', ammo: 3, maxAmmo: 15, ammoItem: 'Spare Magazine' }],
+      inventory: [{ name: 'Spare Magazine', qty: 0 }],
+    };
+    expect(swnReloadCheck(noStock, 0)).toMatchObject({ ok: false, reason: 'No Spare Magazine left to reload Pistol with.' });
+  });
+
+  it('swnReloadCheck approves a reload and points at the matching inventory row (case-insensitive)', () => {
+    const sheet = {
+      ...swn.defaultSheet(),
+      attacks: [{ name: 'Laser Pistol', ammo: 2, maxAmmo: 10, ammoItem: 'Ammo, Type A Cell' }],
+      inventory: [{ name: 'Rations', qty: 5 }, { name: 'ammo, type a cell', qty: 3 }],
+    };
+    const check = swnReloadCheck(sheet, 0);
+    expect(check).toMatchObject({ ok: true, weaponName: 'Laser Pistol', ammoItemName: 'Ammo, Type A Cell', invIndex: 1, maxAmmo: 10 });
   });
 
   it('grenades become sphere-template attacks with an Evasion-for-half save', () => {

@@ -53,6 +53,8 @@ export const C2S = {
   CAST_SPELL: 'castSpell',
   COMBAT_ACTION: 'combatAction',
   USE_POWER: 'usePower',
+  /** SWN: reload a weapon's magazine from a matching ammo inventory item. */
+  RELOAD_WEAPON: 'reloadWeapon',
   DEATH_SAVE: 'deathSave',
   REQUEST_SAVE: 'requestSave',
   AOE_PREVIEW: 'aoePreview',
@@ -342,6 +344,12 @@ export interface CombatActionPayload {
 export interface UsePowerPayload {
   characterId: string;
   powerIndex: number;
+}
+
+/** SWN: refill a weapon's magazine from a matching ammo item in inventory. */
+export interface ReloadWeaponPayload {
+  characterId: string;
+  attackIndex: number;
 }
 
 /** Roll a 5e death saving throw for a downed character (server-authoritative). */

@@ -1,10 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Character, Handout, Light, LocationNode, MapMeta, RollableTable, Shop, Token, WorldFolder } from 'shared';
+import type { Character, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
 
-type Kind = WorldDragKind;
+// 'mapobject' nodes (loot/chests placed on the current map) live only in
+// this tree — they are not draggable, so the kind is not part of WorldDragKind.
+type Kind = WorldDragKind | 'mapobject';
 
 interface TreeNode {
   kind: Kind;
@@ -17,9 +19,11 @@ interface TreeNode {
   lightMapId?: string;
   /** For token-light nodes: the token carrying the light. */
   lightTokenId?: string;
+  /** For mapobject nodes: the placed object's own kind (item/chest). */
+  mapObjectKind?: 'item' | 'chest' | 'shop';
 }
 
-const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡' } as Record<string, string>;
+const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦' } as Record<string, string>;
 
 // Players have no dmGeometry; the selector must return this SAME array every
 // time, not a fresh `?? []` — a fresh array per call is the Zustand
@@ -29,7 +33,7 @@ const NO_LIGHTS: Light[] = [];
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
   locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
-  folders: WorldFolder[], mapLights: Light[], mapId: string | null, allTokens: Record<string, Token>,
+  folders: WorldFolder[], mapLights: Light[], mapId: string | null, allTokens: Record<string, Token>, mapObjects: MapObject[],
 ): TreeNode[] {
   const out: TreeNode[] = [];
   for (const m of maps) out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: 'map' });
@@ -49,6 +53,19 @@ function buildNodes(
       const name = light.name || 'Light';
       const sub = `bright ${light.brightRadius}, dim ${light.dimRadius}`;
       out.push({ kind: 'light', id: light.id, name, parentId: mapId, sub, lightMapId: mapId });
+    }
+  }
+  // Loot & chests placed on the current map appear nested under that map
+  // (shop markers are skipped — the shop itself is already a tree node).
+  if (mapId) {
+    for (const obj of mapObjects) {
+      if (obj.kind === 'shop') continue;
+      const sub = obj.items.length ? `${obj.items.length} item${obj.items.length === 1 ? '' : 's'}` : '';
+      out.push({
+        kind: 'mapobject', id: obj.id,
+        name: obj.name || (obj.kind === 'chest' ? 'Chest' : 'Loot'),
+        parentId: mapId, sub, mapObjectKind: obj.kind,
+      });
     }
   }
   // Token-carried lights appear under their character
@@ -76,6 +93,7 @@ export function WorldTreePanel() {
   const allTokens = useGameStore((s) => s.tokens);
   const dmLights = useGameStore((s) => s.dmGeometry?.lights ?? NO_LIGHTS);
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
+  const mapObjectsById = useGameStore((s) => s.mapObjects);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
@@ -85,9 +103,13 @@ export function WorldTreePanel() {
   const dragRef = worldDrag;
   const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null);
 
+  const mapObjectList = useMemo(
+    () => (isDm ? Object.values(mapObjectsById) : []),
+    [isDm, mapObjectsById],
+  );
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens),
-    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens],
+    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList),
+    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList],
   );
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const childrenOf = useMemo(() => {
@@ -125,6 +147,10 @@ export function WorldTreePanel() {
       if (node.lightTokenId) return; // can't rename token-carried lights directly
       const name = prompt('Light name', node.name);
       if (name && name.trim()) intents.renameLight(node.id, node.lightMapId, name.trim());
+      return;
+    }
+    if (node.kind === 'mapobject') {
+      if (isDm) useGameStore.getState().openObjectInspector(node.id);
       return;
     }
     // The DM edits (each in its own draggable window); players get a
@@ -237,12 +263,12 @@ export function WorldTreePanel() {
           className={`wt-row ${isDropOn ? 'drop-on' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
           {...(node.kind === 'map' ? { 'data-map-id': node.id } : {})}
-          draggable={isDm}
-          onDragStart={isDm ? (e) => {
+          draggable={isDm && node.kind !== 'mapobject'}
+          onDragStart={isDm && node.kind !== 'mapobject' ? (e) => {
             e.stopPropagation();
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', node.id);
-            dragRef.current = { kind: node.kind, id: node.id };
+            dragRef.current = { kind: node.kind as WorldDragKind, id: node.id };
           } : undefined}
           onDragOver={isDm ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropTarget !== node.id) setDropTarget(node.id); } : undefined}
           onDrop={isDm ? (e) => { e.preventDefault(); e.stopPropagation(); drop(node.id); } : undefined}
@@ -262,7 +288,7 @@ export function WorldTreePanel() {
           >
             {kids.length ? (isOpen ? '▾' : '▸') : ''}
           </span>
-          <span className="wt-icon">{node.kind === 'folder' && node.displayKind === 'chest' ? '📦' : ICON[node.kind]}</span>
+          <span className="wt-icon">{(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦' : ICON[node.kind]}</span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
           {isDm && node.kind === 'folder' && (

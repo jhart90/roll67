@@ -25,6 +25,10 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
 
   function onPointerUp(e: React.PointerEvent<SVGGElement>) {
     e.stopPropagation();
+    // Left-click only: a right-click fires pointerup too, and without this
+    // gate it opened the loot popup (and even the chest) on top of the
+    // DM's context-menu editor.
+    if (e.button !== 0) return;
     if (obj.kind === 'shop' && obj.shopId) {
       if (!playerInRange(obj.interactRange)) return;
       useGameStore.setState({ presentedShopId: obj.shopId });

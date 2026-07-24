@@ -73,6 +73,10 @@ export interface GearData {
   notes?: string;
   /** SWADE: equipped-gear bonus to a named trait ("Thievery", "Athletics", "Strength"). */
   traitBonus?: { trait: string; amount: number };
+  /** SWN cyberware: system strain the implant costs. */
+  strain?: number;
+  /** SWN cyberware: initiative bonus (Boosted Reflexes). */
+  initBonus?: number;
 }
 
 export interface ContentEntry {
@@ -295,12 +299,23 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       };
     }
     // SWN: weapon-specific bonus 0; sheet attackBonus applies in rollables.
+    // Mechanical props become live stats: "shock N/AC M" fills both shock
+    // columns (min damage on a miss vs AC ≤ M, server-resolved), "mag N" /
+    // "N shots" pre-fills the enforced ammo counter, and "blast" weapons
+    // (grenades) become area attacks with an Evasion-for-half save.
+    const swnProps = w.props.join(', ');
+    const shockAcMatch = swnProps.match(/shock\s+\d+\s*\/\s*AC\s*(\d+)/i);
+    const magMatch = swnProps.match(/\bmag (\d+)/i) ?? swnProps.match(/\b(\d+) shots/i);
+    const isBlast = w.props.some((p) => /^blast$/i.test(p));
     return {
       listId: 'attacks',
       row: {
         name: entry.name, bonus: 0, damage: w.damage,
         dtype: w.damageType, range: weaponRangeFtSwn(w.props), shock: weaponShockSwn(w.props),
-        notes: w.props.join(', '),
+        ...(shockAcMatch ? { shockAc: Number(shockAcMatch[1]) } : {}),
+        ...(magMatch ? { ammo: Number(magMatch[1]) } : {}),
+        ...(isBlast ? { aoeShape: 'sphere', aoeSize: 20, save: 'evasion', onSave: 'half' } : {}),
+        notes: swnProps,
       },
       label: `${entry.name} added to weapons`,
     };
@@ -363,6 +378,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           damage: p.damage,
           dtype: p.heal ? '' : (p.damageType ?? ''),
           save: p.heal ? '' : (p.save ?? ''),
+          ...(p.rangeFt !== undefined ? { range: p.rangeFt } : {}),
         } : {}),
       },
       label: `${entry.name} added to psychic powers`,
@@ -395,10 +411,36 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
         label: `${entry.name} added to armor`,
       };
     }
+    // SWN: a Shield row is flagged so derived AC treats it by the shield
+    // rule (AC 13 alone, +1 on top of better armor) instead of as a
+    // base-AC-1 body armor that would clobber the real armor.
+    const swnShield = entry.category === 'Shield';
     return {
       listId: 'armor',
-      row: { name: entry.name, ac: entry.armor.baseAc, equipped: false, notes: entry.armor.notes ?? '' },
+      row: {
+        name: entry.name, ac: swnShield ? 13 : entry.armor.baseAc,
+        ...(swnShield ? { shield: true } : {}),
+        equipped: false, notes: entry.armor.notes ?? '',
+      },
       label: `${entry.name} added to armor`,
+    };
+  }
+
+  // SWN cyberware installs into the cyberware list: strain feeds the strain
+  // total, an "+N armor" bonus feeds derived AC, an init bonus feeds the
+  // initiative roll (implants are always active — no equipped flag).
+  if (entry.system === 'swn' && entry.kind === 'magicitem' && entry.category === 'Cyberware') {
+    const bonus = parseAcSaveBonus(entry.subtitle);
+    return {
+      listId: 'cyberware',
+      row: {
+        name: entry.name,
+        strain: entry.gear?.strain ?? 1,
+        acBonus: bonus.ac,
+        initBonus: entry.gear?.initBonus ?? 0,
+        notes: entry.subtitle,
+      },
+      label: `${entry.name} installed (system strain +${entry.gear?.strain ?? 1})`,
     };
   }
 

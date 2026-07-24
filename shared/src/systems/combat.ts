@@ -53,6 +53,8 @@ export function combatActions(character: Character): CombatAction[] {
       source: 'attack',
       index: i,
       ...(num(atk, 'ap', 0) > 0 ? { ap: num(atk, 'ap', 0) } : {}),
+      ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
+        ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),
       ...(save ? { saveId: save, onSave: str(atk, 'onSave', 'half') === 'negate' ? 'negate' as const : 'half' as const, fixedDc: num(atk, 'saveDc', 13) } : {}),
       ...(aoeShape && aoeSize > 0
         ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }

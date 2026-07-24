@@ -16,7 +16,9 @@ const WEAPONS_BY_NAME_SWN = new Map(
 );
 const lookupWeaponSwn: WeaponLookup = (name) => {
   const w = WEAPONS_BY_NAME_SWN.get(name.toLowerCase().trim());
-  return w ? { range: weaponRangeFtSwn(w.props), dtype: w.damageType } : null;
+  return w
+    ? { range: weaponRangeFtSwn(w.props), dtype: w.damageType, ...(w.props.some((p) => /^blast$/i.test(p)) ? { blast: true } : {}) }
+    : null;
 };
 
 type SkillRow = [string, number, string?]; // name, level, attr
@@ -139,6 +141,8 @@ export const NPCS_SWN: NpcEntry[] = ROWS.map((row) => {
     darkvision: 0,
     attacks: attackRows(attacks, lookupWeaponSwn),
     skills: skills.map(([n, lvl, attr]) => ({ name: n, level: lvl, attr: attr ?? 'dex', notes: '' })),
+    // "Robot: immune to poison" statblock notes become a live immunity.
+    ...(category === 'Robots & VIs' ? { immune: 'poison' } : {}),
     notes: note,
   };
   return {

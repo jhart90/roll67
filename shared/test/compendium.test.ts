@@ -176,10 +176,10 @@ describe('applyEntry -> sheet rows', () => {
     expect(res.row).toMatchObject({ ac: 18, equipped: false });
   });
 
-  it('SWN cyberware with a flat "+N armor" note becomes equippable for an AC bonus', () => {
+  it('SWN cyberware installs into the cyberware list with strain + a live "+N armor" AC bonus', () => {
     const plating = contentById('swn-gear-cyber-dermal-plating')!;
     const res = applyEntry(plating, swn.defaultSheet())!;
-    expect(res.listId).toBe('inventory');
-    expect(res.row).toMatchObject({ equipped: false, acBonus: 1 });
+    expect(res.listId).toBe('cyberware');
+    expect(res.row).toMatchObject({ strain: 1, acBonus: 1 });
   });
 });

@@ -46,7 +46,7 @@ const GEAR: G[] = [
   ['Backpack', 'Gear', 'Standard load carrier'],
   ['Compad', 'Gear', 'Handheld comm/computer'],
   ['Dataslab', 'Gear', 'Tablet computer'],
-  ['Lazarus Patch', 'Gear', 'Emergency medical nanite patch; stabilize + heal'],
+  ['Lazarus Patch', 'Gear', 'Emergency nanite patch; stabilize; regain 1d8 hit points'],
   ['Medkit', 'Gear', 'First aid supplies for Heal checks'],
   ['Metatool', 'Gear', 'Universal repair/fabrication tool'],
   ['Rebreather', 'Gear', 'Filters air / short vacuum use'],
@@ -62,24 +62,24 @@ const GEAR: G[] = [
   ['Toolkit (Pretech)', 'Gear', 'Fix advanced pretech'],
   ['Data Cube', 'Gear', 'Data storage'],
   ['Grav Harness', 'Gear', 'Short-range personal lift'],
-  ['Stim Injector', 'Gear', 'Combat stimulant, temporary boost'],
+  ['Stim Injector', 'Gear', 'Combat stimulant; regain 1d6 hit points'],
 ];
 
-// [name, subtitle]
-type C = [string, string];
+// [name, subtitle, strain, initBonus?]
+type C = [string, string, number, number?];
 const CYBER: C[] = [
-  ['Cybereye (Basic)', 'Vision enhancement, low-light/thermal'],
-  ['Dermal Plating', '+1 armor; subdermal weave'],
-  ['Boosted Reflexes', 'React faster; init bonus'],
-  ['Neural Interface Seat', 'Direct machine/ship control'],
-  ['Suboccipital Databank', 'Perfect skill recall for one skill'],
-  ['Metabolic Optimizer', 'Improved healing/system strain'],
-  ['Grip Feet', 'Cling to surfaces; climb'],
-  ['Prosthetic Limb', 'Replacement limb, integral tool'],
+  ['Cybereye (Basic)', 'Vision enhancement, low-light/thermal', 1],
+  ['Dermal Plating', '+1 armor; subdermal weave', 1],
+  ['Boosted Reflexes', 'React faster; +1 initiative', 1, 1],
+  ['Neural Interface Seat', 'Direct machine/ship control', 1],
+  ['Suboccipital Databank', 'Perfect skill recall for one skill', 1],
+  ['Metabolic Optimizer', 'Improved healing/system strain', 1],
+  ['Grip Feet', 'Cling to surfaces; climb', 1],
+  ['Prosthetic Limb', 'Replacement limb, integral tool', 1],
 ];
 
-// [name, discipline, level, notes, damage?, save?, damageType?, heal?]
-type P = [string, string, number, string, string?, string?, string?, boolean?];
+// [name, discipline, level, notes, damage?, save?, damageType?, heal?, rangeFt?]
+type P = [string, string, number, string, string?, string?, string?, boolean?, number?];
 const POWERS: P[] = [
   ['Sense Danger', 'Precognition', 1, 'Sixth sense for imminent threats'],
   ['See Future Prospects', 'Precognition', 2, 'Divine likely outcome of a plan'],
@@ -92,18 +92,18 @@ const POWERS: P[] = [
   ['Telekinetic Grip', 'Telekinesis', 1, 'Move objects with your mind'],
   ['Telekinetic Manipulation', 'Telekinesis', 2, 'Fine manipulation at range'],
   ['Kinetic Barrier', 'Telekinesis', 2, 'Deflect incoming attacks'],
-  ['Telekinetic Ram', 'Telekinesis', 3, 'Blast a target: 2d8 kinetic', '2d8', undefined, 'kinetic'],
+  ['Telekinetic Ram', 'Telekinesis', 3, 'Blast a target: 2d8 kinetic', '2d8', undefined, 'kinetic', false, 200],
   ['Personal Apport', 'Teleportation', 1, 'Blink a short distance'],
   ['Astral Wandering', 'Teleportation', 2, 'Project awareness elsewhere'],
   ['Rift Step', 'Teleportation', 3, 'Teleport with allies'],
   ['Banishment', 'Teleportation', 4, 'Fling a target far away'],
-  ['Healing Touch', 'Biopsionics', 1, 'Heal wounds; treat one subject'],
+  ['Healing Touch', 'Biopsionics', 1, 'Heal 1d6+2 with a touch', '1d6+2', undefined, undefined, true, 5],
   ['Purge Toxin', 'Biopsionics', 2, 'Neutralize poison/disease'],
   ['Bio-Aegis', 'Biopsionics', 3, 'Regenerate; resist harm'],
   ['Revivification', 'Biopsionics', 4, 'Restore the recently dead'],
   ['Psychic Static', 'Metapsionics', 1, 'Disrupt hostile psychics'],
   ['Amplify Power', 'Metapsionics', 2, 'Boost another psionic effect'],
-  ['Psionic Assault', 'Metapsionics', 3, 'Mental attack: 3d6 vs Mental save', '3d6', 'mental'],
+  ['Psionic Assault', 'Metapsionics', 3, 'Mental attack: 3d6 vs Mental save', '3d6', 'mental', undefined, false, 300],
   ['Suppress Discipline', 'Metapsionics', 4, 'Shut down a subject\'s powers'],
 ];
 
@@ -124,14 +124,16 @@ export const CONTENT_SWN: ContentEntry[] = [
     id: contentSlug('swn', 'gear', name),
     system: 'swn', kind: 'gear', name, category, order: i, subtitle,
   })),
-  ...CYBER.map(([name, subtitle], i): ContentEntry => ({
+  ...CYBER.map(([name, subtitle, strain, initBonus], i): ContentEntry => ({
     id: contentSlug('swn', 'gear', 'cyber-' + name),
-    system: 'swn', kind: 'magicitem', name, category: 'Cyberware', order: i, subtitle,
+    system: 'swn', kind: 'magicitem', name, category: 'Cyberware', order: i,
+    subtitle: `${subtitle} · strain ${strain}`,
+    gear: { strain, ...(initBonus ? { initBonus } : {}) },
   })),
-  ...POWERS.map(([name, discipline, level, notes, damage, save, damageType, heal], i): ContentEntry => ({
+  ...POWERS.map(([name, discipline, level, notes, damage, save, damageType, heal, rangeFt], i): ContentEntry => ({
     id: contentSlug('swn', 'power', name),
     system: 'swn', kind: 'power', name, category: `Psionics: ${discipline}`, order: level * 100 + i,
     subtitle: `${discipline} · Level ${level} · ${notes}`,
-    power: { discipline, level, notes, damage, save, damageType, heal },
+    power: { discipline, level, notes, damage, save, damageType, heal, ...(rangeFt !== undefined ? { rangeFt } : {}) },
   })),
 ];

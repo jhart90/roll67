@@ -104,6 +104,10 @@ export interface CombatAction {
   ppCost?: number;
   /** SWADE: armor piercing — reduces the target's ranged-armor soak. */
   ap?: number;
+  /** SWN: shock — this much damage lands even on a MISS against targets
+   *  whose AC is at or below shockAc (the "shock N/AC M" weapon tag). */
+  shockDamage?: number;
+  shockAc?: number;
   /** SWADE: the to-hit roll beats this fixed target number (4) instead of
    *  the target's AC/Parry; beating it by 4+ is a raise (+1d6! damage). */
   fixedTn?: number;

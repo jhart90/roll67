@@ -708,7 +708,35 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
       }, !hit && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });
-      if (!hit) return;
+      if (!hit) {
+        // SWN Shock: a shock weapon still deals its flat shock damage on a
+        // MISS against targets whose AC is at or below its threshold — the
+        // rule that makes melee dangerous. Lands after the miss card's dice
+        // settle, with its own undoable chat line and floating number.
+        if (action.shockDamage && action.shockAc && targetChar) {
+          const targetAc = Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0);
+          if (targetAc > 0 && targetAc <= action.shockAc) {
+            const targetId = targetChar.id;
+            setTimeout(() => {
+              const fresh = characters.byId(targetId);
+              if (!fresh) return;
+              const dmg = applyDamageMultiplier(action.shockDamage!, damageMultiplier(fresh.sheet, action.damageType));
+              if (dmg <= 0) return;
+              applyHpDelta(io, d.campaignId, fresh, -dmg, `${action.label} (shock)`);
+              const after = characters.byId(targetId)!;
+              const { hp, maxHp } = systemFor(after.system).hp(after.sheet);
+              const shockMsg = chat.add(d.campaignId, {
+                userId: d.userId, fromName: d.username, kind: 'system',
+                text: `${action.label} misses, but its shock still lands on ${tgt.name}: ${dmg} damage (${tgt.name} ${hp}/${maxHp})`,
+                roll: null, recipients: null,
+              }, [{ t: 'hp', characterId: targetId, delta: -dmg }]);
+              io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: shockMsg });
+              floatHp(io, d.campaignId, src.mapId, tgt.id, -dmg, 'melee', action.damageType);
+            }, diceSettleDelayMs(attackBreakdown.dice.length));
+          }
+        }
+        return;
+      }
       setTimeout(resolveDamage, diceSettleDelayMs(attackBreakdown.dice.length));
       return;
     }

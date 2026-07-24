@@ -22,7 +22,7 @@ export { dnd5e, SKILLS_5E } from './dnd5e.js';
 export {
   swn, swnMod, PSYCHIC_DISCIPLINES_SWN,
   bestPsychicSkillLevel, effortMaxFor, hasDiscipline, isPsychicMishap, rollMishap, type PsychicMishap,
-  hasFocus, swnDerivedAc, swnEncumbrance, cyberwareStrainTotal,
+  hasFocus, swnDerivedAc, swnEncumbrance, cyberwareStrainTotal, cyberInitBonus,
 } from './swn.js';
 export {
   swade, ATTRIBUTES_SWADE, SKILLS_SWADE, RANKS_SWADE, ARCANE_BACKGROUNDS_SWADE, ANCESTRIES_SWADE,

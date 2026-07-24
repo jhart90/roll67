@@ -120,29 +120,42 @@ function ironhideNaturalAc(sheet: SheetData): number {
 }
 
 /** Sum of AC/save bonuses from equipped (checked) gear, e.g. Dermal Plating
- *  ("+1 armor") or an attuned protective trinket. */
+ *  ("+1 armor") or an attuned protective trinket — installed cyberware's
+ *  AC bonus counts too (implants are always "on"). */
 function equippedItemBonuses(sheet: SheetData): { ac: number; save: number } {
-  return rows(sheet, 'inventory')
+  const inv = rows(sheet, 'inventory')
     .filter((i) => i.equipped === true)
     .reduce<{ ac: number; save: number }>(
       (acc, i) => ({ ac: acc.ac + num(i, 'acBonus', 0), save: acc.save + num(i, 'saveBonus', 0) }),
       { ac: 0, save: 0 },
     );
+  const cyberAc = rows(sheet, 'cyberware').reduce((sum, c) => sum + num(c, 'acBonus', 0), 0);
+  return { ac: inv.ac + cyberAc, save: inv.save };
+}
+
+/** Installed cyberware's initiative bonus (Boosted Reflexes). */
+export function cyberInitBonus(sheet: SheetData): number {
+  return rows(sheet, 'cyberware').reduce((sum, c) => sum + num(c, 'initBonus', 0), 0);
 }
 
 /**
  * Derived AC: an equipped armor row wins over the manually-typed AC field
  * (Phase 7's armor→AC auto-calc); Ironhide's natural AC is a floor under
  * that (it doesn't stack with worn armor — bounded by taking the max, not
- * adding); Alert adds a flat +1 (its real trigger is "first round of
- * combat only", simplified here to always-on since derive() has no access
- * to initiative-round state); equipped gear (cyberware, trinkets) adds its
- * AC bonus on top of whichever base is in play.
+ * adding); an equipped SHIELD row is AC 13 on its own or +1 on top of any
+ * better base (the free-edition shield rule); Alert adds a flat +1 (its
+ * real trigger is "first round of combat only", simplified here to
+ * always-on since derive() has no access to initiative-round state);
+ * equipped gear (cyberware, trinkets) adds its AC bonus on top.
  */
 export function swnDerivedAc(sheet: SheetData): number {
-  const equipped = rows(sheet, 'armor').find((a) => a.equipped === true);
+  const armorRows = rows(sheet, 'armor');
+  const equipped = armorRows.find((a) => a.equipped === true && a.shield !== true);
   const base = equipped ? num(equipped, 'ac', 10) : num(sheet, 'ac', 10);
-  const withNatural = Math.max(base, ironhideNaturalAc(sheet));
+  let withNatural = Math.max(base, ironhideNaturalAc(sheet));
+  if (armorRows.some((a) => a.equipped === true && a.shield === true)) {
+    withNatural = withNatural >= 13 ? withNatural + 1 : 13;
+  }
   return withNatural + (hasFocus(sheet, 'alert', 1) ? 1 : 0) + equippedItemBonuses(sheet).ac;
 }
 
@@ -283,6 +296,7 @@ const gearTab: SheetTab = {
         { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6' },
         { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', 'kinetic', 'energy'] },
         { id: 'shock', label: 'Shock', type: 'number', width: 'sixth', default: 0 },
+        { id: 'shockAc', label: 'Shock vs AC ≤', type: 'number', width: 'sixth', default: 0 },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
@@ -293,6 +307,7 @@ const gearTab: SheetTab = {
       columns: [
         { id: 'name', label: 'Armor', type: 'text', width: 'third' },
         { id: 'ac', label: 'AC', type: 'number', width: 'sixth', default: 10 },
+        { id: 'shield', label: 'Shield', type: 'checkbox', width: 'sixth' },
         { id: 'equipped', label: 'Worn', type: 'checkbox', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
@@ -331,7 +346,9 @@ const gearTab: SheetTab = {
       columns: [
         { id: 'name', label: 'Implant', type: 'text', width: 'third' },
         { id: 'strain', label: 'System strain', type: 'number', width: 'sixth', default: 1 },
-        { id: 'notes', label: 'Notes', type: 'text', width: 'half' },
+        { id: 'acBonus', label: 'AC bonus', type: 'number', width: 'sixth', default: 0 },
+        { id: 'initBonus', label: 'Init bonus', type: 'number', width: 'sixth', default: 0 },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },
   ],
@@ -504,7 +521,7 @@ export const swn: SystemSchema = {
 
   initiativeExpr(sheet: SheetData): string {
     const alertBonus = hasFocus(sheet, 'alert', 2) ? 2 : 0;
-    return `1d8${fmtMod(swnMod(num(sheet, 'dex', 10)) + alertBonus)}`;
+    return `1d8${fmtMod(swnMod(num(sheet, 'dex', 10)) + alertBonus + cyberInitBonus(sheet))}`;
   },
 
   hp(sheet: SheetData): { hp: number; maxHp: number } {

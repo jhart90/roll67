@@ -56,8 +56,10 @@ export type AttackRow = [string, number, string, string?, SpecialAttackMeta?];
 /** Resolves a plain weapon strike's name to its real range/damage type from
  *  a system's compendium. Passed in by each NPC data file (5e/SWN both call
  *  attackRows with their own compendium's weapons) rather than imported here,
- *  so this file stays free of any compendium dependency. */
-export type WeaponLookup = (name: string) => { range: number; dtype: string } | null;
+ *  so this file stays free of any compendium dependency. `blast` marks area
+ *  weapons (grenades) — the row becomes a sphere template with an
+ *  Evasion-for-half save instead of a single-target throw. */
+export type WeaponLookup = (name: string) => { range: number; dtype: string; blast?: boolean } | null;
 
 export function attackRows(attacks: AttackRow[], lookupWeapon?: WeaponLookup): Array<Record<string, unknown>> {
   return attacks.map(([name, bonus, damage, notes, special]) => {
@@ -81,6 +83,7 @@ export function attackRows(attacks: AttackRow[], lookupWeapon?: WeaponLookup): A
         : selfOrigin ? { range: 0 }
           : weapon ? { range: weapon.range } : {}),
       ...(special?.dtype ? { dtype: special.dtype } : weapon ? { dtype: weapon.dtype } : {}),
+      ...(weapon?.blast ? { aoeShape: 'sphere', aoeSize: 20, save: 'evasion', onSave: 'half' } : {}),
       ...(special?.save ? { save: special.save, onSave: special.onSave ?? 'half', saveDc: special.dc ?? 13 } : {}),
       ...(special?.aoeShape ? { aoeShape: special.aoeShape, aoeSize: special.aoeSize ?? 0, aoeWidth: special.aoeWidth ?? 0 } : {}),
       ...(special?.condition ? {

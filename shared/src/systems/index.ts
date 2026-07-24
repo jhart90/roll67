@@ -20,7 +20,7 @@ export * from './namedPicks5e.js';
 export * from './swnData.js';
 export { dnd5e, SKILLS_5E } from './dnd5e.js';
 export {
-  swn, swnMod, PSYCHIC_DISCIPLINES_SWN,
+  swn, swnMod, PSYCHIC_DISCIPLINES_SWN, SKILLS_SWN, SPECIES_SWN, BACKGROUNDS_SWN,
   bestPsychicSkillLevel, effortMaxFor, hasDiscipline, isPsychicMishap, rollMishap, type PsychicMishap,
   hasFocus, swnDerivedAc, swnEncumbrance, cyberwareStrainTotal, cyberInitBonus,
   swnReloadCheck, type SwnReloadCheck,
@@ -29,7 +29,10 @@ export {
   swade, ATTRIBUTES_SWADE, SKILLS_SWADE, RANKS_SWADE, ARCANE_BACKGROUNDS_SWADE, ANCESTRIES_SWADE,
   TRAIT_DICE, dieSides, traitExpr, woundPenalty, swadeParry, swadeToughness,
   swadeRangedArmor, swadeArcaneExpr, gearTraitBonus,
+  FREE_SKILLS_SWADE, SKILL_ATTR_SWADE, dieStepIndex, stepDie,
 } from './swade.js';
+export * from './swadeCreation.js';
+export * from './swnCreation.js';
 
 export const SYSTEMS: Record<GameSystem, SystemSchema> = { dnd5e, swn, swade };
 

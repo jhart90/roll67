@@ -8,7 +8,7 @@ import {
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
   type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type Shop,
-  type VisibilityLitMask,
+  type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
 } from 'shared';
@@ -16,6 +16,7 @@ import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain';
+export type DockTab = 'chat' | 'initiative' | 'world';
 
 export type TerrainBrush = 'brush' | 'rect' | 'circle';
 
@@ -92,6 +93,18 @@ interface GameState {
   /** SWADE: the just-drawn action card, for the flip animation overlay. */
   cardDrawFlash: (InitCardDrawnPayload & { seq: number }) | null;
   clearCardFlash(): void;
+  /** Which of the right-hand dock's tabs is showing. Lives in the store
+   *  (rather than local component state) so any dice-producing action,
+   *  wherever it's triggered from, can jump the user to Chat to see it land. */
+  dockTab: DockTab;
+  setDockTab(tab: DockTab): void;
+  /** Guided character-creation wizard (SWADE/SWN): open, and a one-shot
+   *  guard so the auto-open-for-a-new-player effect only fires once per
+   *  campaign join, not on every store update while it's deciding. */
+  showCharacterCreator: boolean;
+  setShowCharacterCreator(show: boolean): void;
+  characterCreatorPrompted: boolean;
+  setCharacterCreatorPrompted(prompted: boolean): void;
   viewingAs: string | null;
   dragGhosts: Record<string, { x: number; y: number }>;
   pings: Array<PingShownPayload & { id: number }>;
@@ -232,6 +245,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   openObjectInspector(inspectedObjectId) { set({ inspectedObjectId }); },
   cardDrawFlash: null,
   clearCardFlash() { set({ cardDrawFlash: null }); },
+  dockTab: 'world',
+  setDockTab(dockTab) { set({ dockTab }); },
+  showCharacterCreator: false,
+  setShowCharacterCreator(showCharacterCreator) { set({ showCharacterCreator }); },
+  characterCreatorPrompted: false,
+  setCharacterCreatorPrompted(characterCreatorPrompted) { set({ characterCreatorPrompted }); },
   viewingAs: null,
   dragGhosts: {},
   pings: [],
@@ -268,6 +287,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   resolveTarget(targetTokenId) {
     const t = get().targeting;
     if (!t) return;
+    set({ dockTab: 'chat' });
     socket.emit(C2S.COMBAT_ACTION, {
       characterId: t.characterId, actionId: t.action.id,
       sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv,
@@ -316,6 +336,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         originHex: t.originHex, aimHex: t.aimHex, active: false,
       });
     }
+    set({ dockTab: 'chat' });
     socket.emit(C2S.CAST_AOE, {
       characterId: t.characterId, actionId: t.action.id, sourceTokenId: t.sourceTokenId,
       originHex: t.originHex, aimHex: t.aimHex, adv: t.adv,
@@ -336,7 +357,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   castSpell(characterId, rollableId, slotLevel) {
     socket.emit(C2S.CAST_SPELL, { characterId, rollableId, slotLevel });
-    set({ castPrompt: null });
+    set({ castPrompt: null, dockTab: 'chat' });
   },
   cancelCast() { set({ castPrompt: null }); },
 
@@ -388,7 +409,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       // ruler from campaign A rendering over campaign B's map, a stale error
       // toast, a presented shop, last session's initiative order.
       measures: {}, pings: [], diceAnim: null, errorToast: null, presentedShopId: null,
-      initiativeState: { entries: [], turnIdx: 0, round: 1, active: false }, cardDrawFlash: null,
+      initiativeState: { entries: [], turnIdx: 0, round: 1, active: false }, cardDrawFlash: null, dockTab: 'world',
+      showCharacterCreator: false, characterCreatorPrompted: false,
       shopList: [], locationList: [], worldFolderList: [], tableList: [], assetFolders: [], assetList: [],
       audioTracks: [], audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
       directory: null,
@@ -925,6 +947,18 @@ export function wireSocket(): void {
 
 // ---------- intent emitters ----------
 
+/** Jump the right-hand dock to the Chat tab — called by every intent that
+ *  causes a die to actually get rolled, so the roller always sees it land. */
+function jumpToChat(): void {
+  useGameStore.getState().setDockTab('chat');
+}
+
+/** Chat slash-commands that resolve to an actual dice roll: /r, /roll, /gr. */
+const CHAT_ROLL_PREFIX = /^\/(r|roll|gr)\b/i;
+function isRollCommand(text: string): boolean {
+  return CHAT_ROLL_PREFIX.test(text.trim());
+}
+
 export const intents = {
   switchMap: (mapId: string) => socket.emit(C2S.SWITCH_ACTIVE_MAP, { mapId }),
   viewMap: (mapId: string | null) => socket.emit(C2S.VIEW_MAP, { mapId }),
@@ -970,8 +1004,11 @@ export const intents = {
   dragToken: (tokenId: string, x: number, y: number, done = false) =>
     socket.emit(C2S.DRAG_TOKEN, { tokenId, x, y, done }),
 
-  createCharacter: (name: string, system: GameSystem, ownerUserId?: string | null, initialClass?: string) =>
-    socket.emit(C2S.CREATE_CHARACTER, { name, system, ownerUserId, initialClass }),
+  createCharacter: (
+    name: string, system: GameSystem, ownerUserId?: string | null, initialClass?: string,
+    opts?: { sheetPatch?: SheetData; placeToken?: boolean },
+  ) =>
+    socket.emit(C2S.CREATE_CHARACTER, { name, system, ownerUserId, initialClass, ...opts }),
   createNpc: (libraryId: string, name?: string) => socket.emit(C2S.CREATE_NPC, { libraryId, name }),
   saveToCompendium: (characterId: string) => socket.emit(C2S.SAVE_TO_COMPENDIUM, { characterId }),
   deleteCustomNpc: (customNpcId: string) => socket.emit(C2S.DELETE_CUSTOM_NPC, { customNpcId }),
@@ -982,12 +1019,19 @@ export const intents = {
   /** DM-only: reassign who controls a character. null = DM-only NPC. */
   setCharacterOwner: (characterId: string, ownerUserId: string | null) =>
     socket.emit(C2S.UPDATE_CHARACTER, { characterId, patch: {}, ownerUserId }),
-  levelUpRoll: (p: { characterId: string; patch: Record<string, unknown>; hitDie: number; conMod: number; avgHp: number; label: string }) =>
-    socket.emit(C2S.LEVEL_UP_ROLL, p),
-  sheetRoll: (characterId: string, rollableId: string, adv?: 'adv' | 'dis' | null) =>
-    socket.emit(C2S.SHEET_ROLL, { characterId, rollableId, adv }),
+  levelUpRoll: (p: { characterId: string; patch: Record<string, unknown>; hitDie: number; conMod: number; avgHp: number; label: string }) => {
+    jumpToChat();
+    socket.emit(C2S.LEVEL_UP_ROLL, p);
+  },
+  sheetRoll: (characterId: string, rollableId: string, adv?: 'adv' | 'dis' | null) => {
+    jumpToChat();
+    socket.emit(C2S.SHEET_ROLL, { characterId, rollableId, adv });
+  },
 
-  chat: (text: string) => socket.emit(C2S.CHAT, { text }),
+  chat: (text: string) => {
+    if (isRollCommand(text)) jumpToChat();
+    socket.emit(C2S.CHAT, { text });
+  },
   setDiceColor: (color: string | null) => socket.emit(C2S.SET_DICE_COLOR, { color }),
   setDiceTextColor: (color: string | null) => socket.emit(C2S.SET_DICE_TEXT_COLOR, { color }),
   setPlayerColor: (color: string | null) => socket.emit(C2S.SET_PLAYER_COLOR, { color }),
@@ -996,15 +1040,20 @@ export const intents = {
     socket.emit(C2S.SAVE_MACRO, { macro }),
   reorderMacros: (macroIds: string[]) => socket.emit(C2S.REORDER_MACROS, { macroIds }),
   deleteMacro: (macroId: string) => socket.emit(C2S.DELETE_MACRO, { macroId }),
-  castSpell: (characterId: string, rollableId: string, slotLevel: number) =>
-    socket.emit(C2S.CAST_SPELL, { characterId, rollableId, slotLevel }),
-  usePower: (characterId: string, powerIndex: number) =>
-    socket.emit(C2S.USE_POWER, { characterId, powerIndex }),
+  usePower: (characterId: string, powerIndex: number) => {
+    jumpToChat();
+    socket.emit(C2S.USE_POWER, { characterId, powerIndex });
+  },
   reloadWeapon: (characterId: string, attackIndex: number) =>
     socket.emit(C2S.RELOAD_WEAPON, { characterId, attackIndex }),
-  deathSave: (characterId: string) => socket.emit(C2S.DEATH_SAVE, { characterId }),
-  requestSave: (p: { tokenIds: string[]; saveId: string; dc: number; damageExpr?: string; onSave: 'half' | 'negate'; damageType?: string; label?: string }) =>
-    socket.emit(C2S.REQUEST_SAVE, p),
+  deathSave: (characterId: string) => {
+    jumpToChat();
+    socket.emit(C2S.DEATH_SAVE, { characterId });
+  },
+  requestSave: (p: { tokenIds: string[]; saveId: string; dc: number; damageExpr?: string; onSave: 'half' | 'negate'; damageType?: string; label?: string }) => {
+    jumpToChat();
+    socket.emit(C2S.REQUEST_SAVE, p);
+  },
   moderateMessage: (messageId: number, action: 'hide' | 'unhide' | 'hideUndo') =>
     socket.emit(C2S.MODERATE_MESSAGE, { messageId, action }),
   runMacro: (macroId: string) => {
@@ -1012,7 +1061,9 @@ export const intents = {
     const m = s.macroList.find((x) => x.id === macroId);
     if (!m) return;
     const char = m.characterId ? s.characters.find((c) => c.id === m.characterId) : undefined;
-    // Combat-action pill (usable item / attack): begin targeting.
+    // Combat-action pill (usable item / attack): begin targeting. The
+    // eventual roll happens on resolveTarget/confirmAoeTargeting, which
+    // jump to Chat themselves — no need to do it here too.
     if (m.characterId && m.actionId && char) {
       const action = combatActions(char).find((a) => a.id === m.actionId);
       if (!action) { s.clearError(); useGameStore.setState({ errorToast: `${m.name} is not available right now.` }); return; }
@@ -1022,11 +1073,12 @@ export const intents = {
       else s.beginTargeting(char.id, src.id, action, null);
       return;
     }
-    // Spell-roll pill that costs a slot: run the cast flow.
+    // Spell-roll pill that costs a slot: run the cast flow (castSpell itself jumps to Chat).
     if (m.characterId && m.rollableId && char) {
       const r = systemFor(char.system).rollables(char.sheet).find((x) => x.id === m.rollableId);
       if (r?.slotLevel) { s.beginCast(char.id, m.rollableId, r.slotLevel, r.label); return; }
     }
+    jumpToChat();
     if (m.characterId && m.rollableId) socket.emit(C2S.SHEET_ROLL, { characterId: m.characterId, rollableId: m.rollableId });
     else socket.emit(C2S.CHAT, { text: m.command });
   },
@@ -1034,19 +1086,29 @@ export const intents = {
   updateTable: (tableId: string, fields: { name?: string; playersCanRoll?: boolean; items?: Array<{ text: string; weight?: number }> }) =>
     socket.emit(C2S.UPDATE_TABLE, { tableId, ...fields }),
   deleteTable: (tableId: string) => socket.emit(C2S.DELETE_TABLE, { tableId }),
-  rollTable: (tableId: string) => socket.emit(C2S.ROLL_TABLE, { tableId }),
+  rollTable: (tableId: string) => {
+    jumpToChat();
+    socket.emit(C2S.ROLL_TABLE, { tableId });
+  },
 
-  initAdd: (p: { tokenId?: string | null; name?: string; value?: number; roll?: boolean; hidden?: boolean }) =>
-    socket.emit(C2S.INIT_ADD, p),
+  initAdd: (p: { tokenId?: string | null; name?: string; value?: number; roll?: boolean; hidden?: boolean }) => {
+    if (p.roll) jumpToChat();
+    socket.emit(C2S.INIT_ADD, p);
+  },
   initRemove: (entryId: string) => socket.emit(C2S.INIT_REMOVE, { entryId }),
-  initUpdate: (entryId: string, fields: { value?: number; hidden?: boolean; name?: string; reroll?: boolean }) =>
-    socket.emit(C2S.INIT_UPDATE, { entryId, ...fields }),
+  initUpdate: (entryId: string, fields: { value?: number; hidden?: boolean; name?: string; reroll?: boolean }) => {
+    if (fields.reroll) jumpToChat();
+    socket.emit(C2S.INIT_UPDATE, { entryId, ...fields });
+  },
   initNext: () => socket.emit(C2S.INIT_NEXT),
   initPrev: () => socket.emit(C2S.INIT_PREV),
   initSort: () => socket.emit(C2S.INIT_SORT),
   initClear: () => socket.emit(C2S.INIT_CLEAR),
   initSetActive: (active: boolean) => socket.emit(C2S.INIT_SET_ACTIVE, { active }),
-  initRollMap: (mapId: string, includeGm: boolean) => socket.emit(C2S.INIT_ROLL_MAP, { mapId, includeGm }),
+  initRollMap: (mapId: string, includeGm: boolean) => {
+    jumpToChat();
+    socket.emit(C2S.INIT_ROLL_MAP, { mapId, includeGm });
+  },
   initCardCall: (mapId: string, includeGm: boolean) => socket.emit(C2S.INIT_CARD_CALL, { mapId, includeGm }),
   initCardDraw: (tokenId: string) => socket.emit(C2S.INIT_CARD_DRAW, { tokenId }),
 

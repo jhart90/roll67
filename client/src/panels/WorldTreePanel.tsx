@@ -79,6 +79,7 @@ function buildNodes(
 
 export function WorldTreePanel() {
   const you = useGameStore((s) => s.you);
+  const campaign = useGameStore((s) => s.campaign);
   const characters = useGameStore((s) => s.characters);
   const locations = useGameStore((s) => s.locationList);
   const shops = useGameStore((s) => s.shopList);
@@ -351,6 +352,11 @@ export function WorldTreePanel() {
           <button className="btn btn-sm" onClick={() => intents.createWorldFolder('New folder', null)}>+ Folder</button>
           <button className="btn btn-sm" onClick={() => intents.createWorldFolder('Chest', null, { displayKind: 'chest' })}>+ Chest</button>
           <button className="btn btn-sm" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
+        </div>
+      )}
+      {!isDm && (campaign?.system === 'swade' || campaign?.system === 'swn') && (
+        <div className="wt-toolbar">
+          <button className="btn btn-sm" onClick={() => useGameStore.getState().setShowCharacterCreator(true)}>🧙 Create a Character</button>
         </div>
       )}
 

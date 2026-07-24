@@ -41,8 +41,18 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const name = payload.name?.trim() || 'Unnamed';
     const sheet = systemFor(payload.system).defaultSheet();
     if (payload.initialClass) sheet.class = payload.initialClass;
+    // A guided creator (e.g. the SWADE character wizard) hands over a fully
+    // assembled sheet — merged over the defaults, not replacing them, so any
+    // field the wizard didn't touch still gets the system's normal default.
+    if (payload.sheetPatch) Object.assign(sheet, payload.sheetPatch);
     const character = characters.create(d.campaignId, owner, name, payload.system, sheet);
     emitCharacter(io, d.campaignId, character);
+    // Drop the new character's token onto its owner's current map (visible
+    // layer — placeCharacterToken only puts unowned NPCs on the GM layer).
+    if (payload.placeToken && character.ownerUserId) {
+      const mapId = campaigns.viewMapIdFor(d.campaignId, character.ownerUserId);
+      if (mapId) placeCharacterToken(io, d.campaignId, character, mapId);
+    }
     broadcastDirectory(io, d.campaignId);
   }, 'CREATE_CHARACTER'));
 

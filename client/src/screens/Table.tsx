@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { intents, useGameStore, wireSocket, type Tool, type TerrainBrush } from '../store/game';
+import { intents, useGameStore, wireSocket, type DockTab, type Tool, type TerrainBrush } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { MapStage } from '../table/MapStage';
 import { MapManager } from '../table/dm/MapManager';
@@ -25,6 +25,8 @@ import { Toolbar } from '../table/Toolbar';
 import { AudioPlayer } from '../table/AudioPlayer';
 import { Jukebox } from '../panels/Jukebox';
 import { WindowHost } from '../window/WindowHost';
+import { SwadeCharacterCreator } from '../panels/SwadeCharacterCreator';
+import { SwnCharacterCreator } from '../panels/SwnCharacterCreator';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -43,13 +45,12 @@ const DM_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'terrain', icon: '🏔️', label: 'Paint rough terrain' },
 ];
 
-type DockTab = 'chat' | 'initiative' | 'world';
-
 export function Table({ campaignId, onExit }: { campaignId: string; onExit: () => void }) {
   const you = useGameStore((s) => s.you);
   const campaign = useGameStore((s) => s.campaign);
   const map = useGameStore((s) => s.map);
   const members = useGameStore((s) => s.members);
+  const characters = useGameStore((s) => s.characters);
   const tool = useGameStore((s) => s.tool);
   const viewingAs = useGameStore((s) => s.viewingAs);
   const targeting = useGameStore((s) => s.targeting);
@@ -67,13 +68,30 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const [showMaps, setShowMaps] = useState(false);
   const [showDice, setShowDice] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
-  const [dockTab, setDockTab] = useState<DockTab>('world');
+  const dockTab = useGameStore((s) => s.dockTab);
+  const setDockTab = useGameStore((s) => s.setDockTab);
+  const showCharacterCreator = useGameStore((s) => s.showCharacterCreator);
+  const characterCreatorPrompted = useGameStore((s) => s.characterCreatorPrompted);
 
   useEffect(() => {
     wireSocket();
     useGameStore.getState().join(campaignId);
     return () => useGameStore.getState().leave();
   }, [campaignId]);
+
+  // First-time-onboarding: a player who joins a SWADE/SWN campaign with no
+  // character of their own yet gets the guided creator automatically. Fires
+  // once per join (characterCreatorPrompted guards it) — dismissing without
+  // finishing just means it won't auto-reopen until their next fresh join,
+  // but the World tab's "Create Character" button always relaunches it.
+  useEffect(() => {
+    if (characterCreatorPrompted || !you || !campaign) return;
+    if (you.role !== 'player' || (campaign.system !== 'swade' && campaign.system !== 'swn')) return;
+    useGameStore.getState().setCharacterCreatorPrompted(true);
+    if (!characters.some((c) => c.ownerUserId === you.userId)) {
+      useGameStore.getState().setShowCharacterCreator(true);
+    }
+  }, [characterCreatorPrompted, you, campaign, characters]);
 
   const isDm = you?.role === 'dm';
   const players = members.filter((m) => m.role === 'player');
@@ -317,6 +335,12 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <TargetPopup />
         <CastLevelPopup />
         <LootPopup />
+        {showCharacterCreator && campaign.system === 'swade' && (
+          <SwadeCharacterCreator onClose={() => useGameStore.getState().setShowCharacterCreator(false)} />
+        )}
+        {showCharacterCreator && campaign.system === 'swn' && (
+          <SwnCharacterCreator onClose={() => useGameStore.getState().setShowCharacterCreator(false)} />
+        )}
       </div>
 
       {targeting && targeting.action.source === 'attack' && (

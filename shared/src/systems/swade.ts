@@ -46,6 +46,37 @@ export const ANCESTRIES_SWADE = [
   'Human', 'Android', 'Aquarian', 'Avion', 'Dwarf', 'Elf', 'Half-Elf', 'Half-Folk', 'Rakashan', 'Saurian',
 ];
 
+/** Every SWADE character starts with a free d4 in these five skills — no
+ *  points spent (Adventure Edition core rules). Character creation math
+ *  (see swadeCreation.ts) treats these as an already-paid baseline. */
+export const FREE_SKILLS_SWADE = ['Athletics', 'Common Knowledge', 'Notice', 'Persuasion', 'Stealth'];
+
+/** Each core skill's linked attribute — buying a skill die up to and
+ *  including this attribute's die costs 1 build point/step; beyond it,
+ *  2 points/step (Adventure Edition character creation rules). */
+export const SKILL_ATTR_SWADE: Record<string, string> = {
+  Academics: 'smarts', Athletics: 'agility', Battle: 'smarts', Boating: 'agility',
+  'Common Knowledge': 'smarts', Driving: 'agility', Faith: 'spirit', Fighting: 'agility',
+  Focus: 'spirit', Gambling: 'smarts', Hacking: 'smarts', Healing: 'smarts',
+  Intimidation: 'spirit', Language: 'smarts', Notice: 'smarts', Occult: 'smarts',
+  Performance: 'spirit', Persuasion: 'spirit', Piloting: 'agility', Psionics: 'smarts',
+  Repair: 'smarts', Research: 'smarts', Riding: 'agility', Science: 'smarts',
+  Shooting: 'agility', Spellcasting: 'smarts', Stealth: 'agility', Survival: 'smarts',
+  Taunt: 'smarts', Thievery: 'agility', 'Weird Science': 'smarts',
+};
+
+/** Trait-die step index (0 = d4 … 4 = d12); -1 for an empty/unrecognized die. */
+export function dieStepIndex(die: string): number {
+  return TRAIT_DICE.indexOf(die);
+}
+
+/** Step a die up or down by a signed number of steps, clamped to d4..d12. */
+export function stepDie(die: string, steps: number): string {
+  const idx = dieStepIndex(die);
+  const base = idx === -1 ? 0 : idx;
+  return TRAIT_DICE[Math.max(0, Math.min(TRAIT_DICE.length - 1, base + steps))];
+}
+
 /** The die a skill/attribute row holds, or 0 sides when untrained/absent. */
 function skillDie(sheet: SheetData, name: string): number {
   const row = rows(sheet, 'skills').find((sk) => str(sk, 'name', '').toLowerCase() === name.toLowerCase());
@@ -342,8 +373,7 @@ export const swade: SystemSchema = {
       }
     }
     // Every SWADE character starts with the core skills at d4.
-    sheet.skills = ['Athletics', 'Common Knowledge', 'Notice', 'Persuasion', 'Stealth']
-      .map((name) => ({ name, die: 'd4', notes: '' }));
+    sheet.skills = FREE_SKILLS_SWADE.map((name) => ({ name, die: 'd4', notes: '' }));
     return sheet;
   },
 

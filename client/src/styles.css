@@ -1534,6 +1534,34 @@ button.link:hover { text-decoration: underline; }
 .lu-skill input { width: auto; margin: 0; }
 .lu-features { margin: 4px 0 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
 
+/* guided character creator (SWADE / SWN) */
+.swc-wizard { width: 560px; }
+.swc-steps { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 10px; }
+.swc-steps button { font-size: 11px; padding: 4px 8px; background: transparent; border: 1px solid transparent; color: var(--text-dim); }
+.swc-steps button.active { color: var(--text); border-color: var(--border); background: var(--panel-2); }
+.swc-steps button:disabled { opacity: 0.4; }
+.swc-budget { font-size: 12px; padding: 6px 10px; border-radius: 6px; background: var(--panel-2); margin: 8px 0; }
+.swc-budget.full { color: var(--accent-2); }
+.swc-budget.over { color: #e06060; font-weight: 600; }
+.swc-trait-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 8px 0; }
+.swc-trait { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; }
+.swc-trait.on { background: var(--panel-2); border-color: var(--accent); }
+.swc-trait.drawback .swc-trait-cost { color: #7ec98a; }
+.swc-trait-head { display: flex; align-items: center; gap: 6px; }
+.swc-trait-head input { width: auto; margin: 0; }
+.swc-trait-name { flex: 1; font-weight: 600; }
+.swc-trait-cost { font-weight: 700; }
+.swc-trait-desc { font-size: 11px; }
+.swc-hindrance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 8px 0; }
+.swc-hindrance-cols h5 { margin: 4px 0; font-size: 12px; }
+.swc-spend-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 0; }
+.swc-attr-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--panel-2); }
+.swc-attr-label { flex: 1; }
+.swc-die { min-width: 32px; text-align: center; font-weight: 700; color: var(--accent-2); }
+.swc-skill-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 12px; max-height: 320px; overflow-y: auto; }
+.swc-review { display: flex; flex-direction: column; gap: 6px; }
+.swc-review-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+
 /* cast-level popup */
 .cast-popup { width: 300px; padding: 14px 16px; }
 .cast-levels { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

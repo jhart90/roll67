@@ -227,6 +227,13 @@ export interface CreateCharacterPayload {
   ownerUserId?: string | null;
   /** Seed the new sheet's class field (e.g. "New player character" rows). */
   initialClass?: string;
+  /** Merged over the system's default sheet (e.g. a guided character
+   *  creator's finished build) — takes precedence over initialClass. */
+  sheetPatch?: SheetData;
+  /** Drop a token for this character onto its owner's currently-viewed map
+   *  (visible layer), right after creation. Only takes effect when the new
+   *  character has an owner (a player's own PC, or one the DM assigns). */
+  placeToken?: boolean;
 }
 export interface CreateNpcPayload {
   /** Id from the shared pre-built NPC library. */

@@ -67,7 +67,7 @@ interface PowerMech {
 type P = [string, number, string, string, PowerMech?];
 const POWERS: P[] = [
   ['Arcane Protection', 1, 'Novice', 'Foes suffer a penalty to affect you with powers'],
-  ['Armor', 1, 'Novice', '+2 Armor (or +4 with a raise) for 5 rounds'],
+  ['Armor', 1, 'Novice', '+2 Armor for 5 rounds — toggle "Armor" on the sheet while maintained'],
   // Medium Blast Template ≈ 24 ft across; no dodging it by the book.
   ['Blast', 3, 'Seasoned', 'Medium blast template of damage', { damage: '2d6!', rangeFt: 144, aoe: { shape: 'sphere', sizeFt: 24 } }],
   // Direct missile: arcane skill vs TN 4 to hit (raise = +1d6!).
@@ -77,7 +77,7 @@ const POWERS: P[] = [
   // Cone Template ≈ 54 ft long; Evasion (Agility) avoids it entirely.
   ['Burst', 2, 'Novice', 'Cone template of damage', { damage: '2d6!', save: 'agility', onSave: 'negate', aoe: { shape: 'cone', sizeFt: 54 } }],
   ['Confusion', 1, 'Novice', 'Target must make a Smarts roll or be Distracted', { rangeFt: 72, save: 'smarts', onSave: 'negate', condition: 'distracted' }],
-  ['Deflection', 3, 'Novice', 'Attacks against you suffer −2 (−4 with a raise)'],
+  ['Deflection', 3, 'Novice', 'Attacks against you suffer −2 — toggle "Deflection" on the sheet while maintained'],
   ['Detect/Conceal Arcana', 2, 'Novice', 'Sense or hide the supernatural'],
   ['Dispel', 1, 'Seasoned', 'Cancel an enemy power'],
   ['Empathy', 1, 'Novice', 'Read emotions; bonus to social rolls'],
@@ -88,20 +88,21 @@ const POWERS: P[] = [
   // One Wound's worth in the default 15-HP pool abstraction.
   ['Healing', 3, 'Novice', 'Heal a Wound (two with a raise) within the golden hour', { damage: '5', heal: true, rangeFt: 5 }],
   ['Illusion', 3, 'Novice', 'Create a visual illusion'],
-  ['Invisibility', 5, 'Seasoned', '−4 to be hit or noticed (−6 with a raise)'],
+  ['Invisibility', 5, 'Seasoned', 'Turn a willing target invisible (harder to hit or notice)', { heal: true, rangeFt: 5, condition: 'invisible' }],
   ['Light/Darkness', 1, 'Novice', 'Create or extinguish light'],
-  ['Protection', 1, 'Novice', '+2 Toughness (or +4 with a raise)'],
+  ['Protection', 1, 'Novice', '+2 Toughness — toggle "Protection" on the sheet while maintained'],
   ['Puppet', 3, 'Veteran', 'Control a target’s actions (opposed by Spirit)'],
   ['Relief', 1, 'Novice', 'Remove Fatigue or Shaken'],
-  ['Smite', 2, 'Novice', 'A weapon gains +2 damage (+4 with a raise)'],
+  ['Smite', 2, 'Novice', 'A weapon gains +2 damage — toggle "Smite" + mark the weapon wielded'],
   ['Speed', 2, 'Novice', 'Double a target’s Pace'],
   ['Stun', 2, 'Novice', 'Target makes a Vigor roll or is Stunned', { rangeFt: 72, save: 'vigor', onSave: 'negate', condition: 'stunned' }],
   ['Telekinesis', 5, 'Seasoned', 'Move objects or creatures with your mind'],
   ['Teleport', 2, 'Seasoned', 'Instantly move up to 12″ (double with a raise)'],
 ];
 
-// [name, subtitle]
-type G = [string, string];
+// [name, subtitle, traitBonus?] — a trait bonus becomes a live "+N to trait"
+// on the sheet once the item is marked equipped.
+type G = [string, string, { trait: string; amount: number }?];
 const GEAR: G[] = [
   ['Backpack', 'Standard load carrier'],
   ['Bedroll', 'Sleeping kit'],
@@ -113,13 +114,13 @@ const GEAR: G[] = [
   ['Flint & Steel', 'Start fires'],
   ['Canteen', 'A day of water'],
   ['Rations (5 days)', 'Trail food'],
-  ['First Aid Kit', 'Basic supplies; regain 2d4+2 hit points and negate a wound penalty'],
-  ['Lockpicks', '+1 to Thievery to open locks'],
-  ['Crowbar', '+1 Strength to force things open'],
+  ['First Aid Kit', 'Basic supplies; regain 2d4+2 hit points; +1 Healing while equipped', { trait: 'Healing', amount: 1 }],
+  ['Lockpicks', '+1 to Thievery to open locks', { trait: 'Thievery', amount: 1 }],
+  ['Crowbar', '+1 Strength to force things open', { trait: 'Strength', amount: 1 }],
   ['Binoculars', 'See distant detail'],
   ['Gas Mask', 'Protects against inhaled toxins'],
   ['Cell Phone', 'Modern communication'],
-  ['Climbing Gear', '+2 to Athletics (climbing)'],
+  ['Climbing Gear', '+2 to Athletics (climbing)', { trait: 'Athletics', amount: 2 }],
   ['Whetstone', 'Weapon maintenance'],
   ['Quiver (20 arrows)', 'Ammunition for bows'],
   ['Bullets (50)', 'Ammunition, small caliber'],
@@ -146,17 +147,18 @@ export const CONTENT_SWADE: ContentEntry[] = [
     subtitle: `${cost} PP · ${rank} · ${subtitle}`,
     power: {
       discipline: rank, level: cost, notes: subtitle,
-      ...(mech?.damage ? { damage: mech.damage, heal: mech.heal === true } : {}),
+      ...(mech?.damage ? { damage: mech.damage } : {}),
+      ...(mech?.heal !== undefined ? { heal: mech.heal } : {}),
       ...(mech?.rangeFt !== undefined ? { rangeFt: mech.rangeFt } : {}),
       ...(mech?.save ? { save: mech.save, onSave: mech.onSave ?? 'negate' } : {}),
       ...(mech?.aoe ? { aoe: mech.aoe } : {}),
       ...(mech?.condition ? { condition: mech.condition } : {}),
     },
   })),
-  ...GEAR.map(([name, subtitle], i): ContentEntry => ({
+  ...GEAR.map(([name, subtitle, traitBonus], i): ContentEntry => ({
     id: contentSlug('swade', 'gear', name),
     system: 'swade', kind: 'gear', name, category: 'Gear', order: i,
     subtitle,
-    gear: {},
+    gear: traitBonus ? { traitBonus } : {},
   })),
 ];

@@ -10,7 +10,16 @@ import type { SheetData } from '../types.js';
 
 type Attrs = [string, string, string, string, string]; // agility, smarts, spirit, strength, vigor
 type Skill = [string, string];                          // name, die
-type Attack = [string, 'Fighting' | 'Shooting' | 'Athletics', string, string, number]; // name, skill, damage, dtype, range ft
+/** Optional mechanics: a forced trait roll (with outcome + inflicted state)
+ *  and/or an area template — resolved by the generic attack pipeline. */
+interface AttackMeta {
+  save?: 'agility' | 'smarts' | 'spirit' | 'strength' | 'vigor';
+  onSave?: 'half' | 'negate';
+  condition?: string;
+  aoeShape?: 'cone' | 'sphere' | 'line';
+  aoeSize?: number;
+}
+type Attack = [string, 'Fighting' | 'Shooting' | 'Athletics', string, string, number, AttackMeta?]; // name, skill, damage, dtype, range ft
 type Armor = [string, number, number];                  // name, armor, parryBonus
 
 interface Row {
@@ -24,6 +33,10 @@ interface Row {
   armor?: Armor[];
   hp: number;
   pace?: number;
+  /** Comma list of damage types the engine halves (sheet `resist` field). */
+  resist?: string;
+  /** Comma list of damage types the engine zeroes (sheet `immune` field). */
+  immune?: string;
   note?: string;
 }
 
@@ -46,20 +59,20 @@ const ROWS: Row[] = [
   { name: 'Wolf', category: 'Creatures', tier: 1, wild: false, attrs: ['d8', 'd4', 'd6', 'd6', 'd6'], skills: [['Fighting', 'd6'], ['Notice', 'd10'], ['Athletics', 'd8']], attacks: [['Bite', 'Fighting', '1d6!+1d4!', 'piercing', 5]], hp: 10, pace: 8, note: 'Go for the Throat: attacks the least-armored spot on a raise.' },
   { name: 'Bear', category: 'Creatures', tier: 3, wild: false, attrs: ['d6', 'd4', 'd8', 'd12', 'd10'], skills: [['Fighting', 'd8'], ['Notice', 'd8'], ['Athletics', 'd8']], attacks: [['Claws', 'Fighting', '1d12!+1d6!', 'slashing', 5], ['Bite', 'Fighting', '1d12!+1d4!', 'piercing', 5]], hp: 20, note: 'Size 2 — large and hard to put down.' },
   { name: 'Lion', category: 'Creatures', tier: 2, wild: false, attrs: ['d8', 'd6', 'd10', 'd12', 'd8'], skills: [['Fighting', 'd8'], ['Notice', 'd8'], ['Athletics', 'd10'], ['Stealth', 'd8']], attacks: [['Claws & Bite', 'Fighting', '1d12!+1d6!', 'slashing', 5]], hp: 16, pace: 8, note: 'Pounce: +4 damage on a leaping attack.' },
-  { name: 'Giant Spider', category: 'Creatures', tier: 2, wild: false, attrs: ['d10', 'd4', 'd6', 'd10', 'd6'], skills: [['Fighting', 'd8'], ['Stealth', 'd10'], ['Athletics', 'd10']], attacks: [['Bite', 'Fighting', '1d10!+1d4!', 'piercing', 5], ['Web', 'Athletics', '0', '', 36]], hp: 12, pace: 8, note: 'Poison: Vigor roll on a Shaken/wound result or take Fatigue. Webs Entangle.' },
+  { name: 'Giant Spider', category: 'Creatures', tier: 2, wild: false, attrs: ['d10', 'd4', 'd6', 'd10', 'd6'], skills: [['Fighting', 'd8'], ['Stealth', 'd10'], ['Athletics', 'd10']], attacks: [['Bite', 'Fighting', '1d10!+1d4!', 'piercing', 5], ['Web', 'Athletics', '0', '', 36, { save: 'agility', onSave: 'negate', condition: 'entangled' }]], hp: 12, pace: 8, note: 'Poison: Vigor roll on a Shaken/wound result or take Fatigue.' },
   { name: 'Orc', category: 'Creatures', tier: 1, wild: false, attrs: ['d6', 'd4', 'd6', 'd8', 'd8'], skills: [['Fighting', 'd6'], ['Shooting', 'd6'], ['Intimidation', 'd8'], ['Notice', 'd6']], attacks: [['Battle Axe', 'Fighting', '1d8!+1d8!', 'slashing', 5]], armor: [['Leather Armor', 2, 0]], hp: 12, note: 'Size 1; brutish humanoid.' },
   { name: 'Orc Chieftain', category: 'Creatures', tier: 3, wild: true, attrs: ['d8', 'd6', 'd8', 'd10', 'd10'], skills: [['Fighting', 'd10'], ['Intimidation', 'd10'], ['Battle', 'd6'], ['Notice', 'd6']], attacks: [['Great Sword', 'Fighting', '1d10!+1d10!', 'slashing', 5]], armor: [['Chain Mail', 3, 0]], hp: 30, note: 'Wild Card. Sweep; Command.' },
   { name: 'Goblin', category: 'Creatures', tier: 0, wild: false, attrs: ['d8', 'd6', 'd6', 'd4', 'd6'], skills: [['Fighting', 'd6'], ['Shooting', 'd8'], ['Stealth', 'd10'], ['Notice', 'd6']], attacks: [['Spear', 'Fighting', '1d4!+1d6!', 'piercing', 10], ['Sling', 'Shooting', '1d4!', 'bludgeoning', 24]], hp: 8, note: 'Size −1; sneaky.' },
   { name: 'Ogre', category: 'Creatures', tier: 3, wild: false, attrs: ['d6', 'd4', 'd6', 'd12', 'd12'], skills: [['Fighting', 'd8'], ['Intimidation', 'd8'], ['Notice', 'd4']], attacks: [['Massive Club', 'Fighting', '1d12!+1d8!', 'bludgeoning', 10]], hp: 22, note: 'Size 3; Sweep.' },
   { name: 'Troll', category: 'Creatures', tier: 4, wild: false, attrs: ['d8', 'd4', 'd8', 'd12', 'd10'], skills: [['Fighting', 'd8'], ['Notice', 'd6'], ['Athletics', 'd8']], attacks: [['Claws', 'Fighting', '1d12!+1d6!', 'slashing', 10]], armor: [['Rubbery Hide', 1, 0]], hp: 26, note: 'Size 2; Fast Regeneration (Vigor roll each round to heal) — fire stops it.' },
-  { name: 'Young Dragon', category: 'Creatures', tier: 5, wild: true, attrs: ['d8', 'd8', 'd10', 'd12', 'd12'], skills: [['Fighting', 'd10'], ['Notice', 'd8'], ['Intimidation', 'd12'], ['Athletics', 'd8']], attacks: [['Claws & Bite', 'Fighting', '1d12!+1d8!', 'slashing', 10], ['Fiery Breath', 'Athletics', '3d6!', 'fire', 0]], armor: [['Scaly Hide', 4, 0]], hp: 40, pace: 8, note: 'Wild Card. Size 6; flight; breath weapon uses the cone template.' },
+  { name: 'Young Dragon', category: 'Creatures', tier: 5, wild: true, attrs: ['d8', 'd8', 'd10', 'd12', 'd12'], skills: [['Fighting', 'd10'], ['Notice', 'd8'], ['Intimidation', 'd12'], ['Athletics', 'd8']], attacks: [['Claws & Bite', 'Fighting', '1d12!+1d8!', 'slashing', 10], ['Fiery Breath', 'Athletics', '3d6!', 'fire', 0, { save: 'agility', onSave: 'half', aoeShape: 'cone', aoeSize: 54 }]], armor: [['Scaly Hide', 4, 0]], hp: 40, pace: 8, note: 'Wild Card. Size 6; flight.' },
 
   // ---------- Undead & Horrors ----------
-  { name: 'Skeleton', category: 'Undead & Horrors', tier: 1, wild: false, attrs: ['d8', 'd4', 'd4', 'd6', 'd6'], skills: [['Fighting', 'd6'], ['Shooting', 'd6'], ['Notice', 'd4'], ['Intimidation', 'd6']], attacks: [['Rusty Sword', 'Fighting', '1d6!+1d6!', 'slashing', 5], ['Bony Claws', 'Fighting', '1d6!+1d4!', 'slashing', 5]], hp: 10, note: 'Undead: +2 Toughness, no wound penalties; piercing does half damage.' },
-  { name: 'Zombie', category: 'Undead & Horrors', tier: 1, wild: false, attrs: ['d6', 'd4', 'd4', 'd6', 'd6'], skills: [['Fighting', 'd6'], ['Notice', 'd4'], ['Intimidation', 'd6']], attacks: [['Claws & Bite', 'Fighting', '1d6!+1d4!', 'slashing', 5]], hp: 12, pace: 4, note: 'Undead: +2 Toughness, no wound penalties; slow but relentless.' },
-  { name: 'Ghost', category: 'Undead & Horrors', tier: 3, wild: false, attrs: ['d8', 'd6', 'd10', 'd6', 'd6'], skills: [['Fighting', 'd6'], ['Notice', 'd10'], ['Stealth', 'd12'], ['Intimidation', 'd10']], attacks: [['Chilling Touch', 'Fighting', '1d6!+1d4!', 'cold', 5]], hp: 14, note: 'Ethereal: only magic or the supernatural can hurt it. Causes Fear checks.' },
+  { name: 'Skeleton', category: 'Undead & Horrors', tier: 1, wild: false, attrs: ['d8', 'd4', 'd4', 'd6', 'd6'], skills: [['Fighting', 'd6'], ['Shooting', 'd6'], ['Notice', 'd4'], ['Intimidation', 'd6']], attacks: [['Rusty Sword', 'Fighting', '1d6!+1d6!', 'slashing', 5], ['Bony Claws', 'Fighting', '1d6!+1d4!', 'slashing', 5]], armor: [['Undead Resilience', 2, 0]], hp: 10, resist: 'piercing', note: 'Undead: no wound penalties.' },
+  { name: 'Zombie', category: 'Undead & Horrors', tier: 1, wild: false, attrs: ['d6', 'd4', 'd4', 'd6', 'd6'], skills: [['Fighting', 'd6'], ['Notice', 'd4'], ['Intimidation', 'd6']], attacks: [['Claws & Bite', 'Fighting', '1d6!+1d4!', 'slashing', 5]], armor: [['Undead Resilience', 2, 0]], hp: 12, pace: 4, note: 'Undead: no wound penalties; slow but relentless.' },
+  { name: 'Ghost', category: 'Undead & Horrors', tier: 3, wild: false, attrs: ['d8', 'd6', 'd10', 'd6', 'd6'], skills: [['Fighting', 'd6'], ['Notice', 'd10'], ['Stealth', 'd12'], ['Intimidation', 'd10']], attacks: [['Chilling Touch', 'Fighting', '1d6!+1d4!', 'cold', 5]], hp: 14, immune: 'slashing, piercing, bludgeoning, kinetic', note: 'Ethereal: mundane weapons pass through (immunities set); magic hurts it. Causes Fear checks.' },
   { name: 'Werewolf', category: 'Undead & Horrors', tier: 4, wild: true, attrs: ['d10', 'd6', 'd8', 'd12', 'd10'], skills: [['Fighting', 'd10'], ['Notice', 'd10'], ['Stealth', 'd8'], ['Intimidation', 'd10']], attacks: [['Claws', 'Fighting', '1d12!+1d6!', 'slashing', 5], ['Bite', 'Fighting', '1d12!+1d4!', 'piercing', 5]], hp: 30, pace: 8, note: 'Wild Card. Invulnerable except to silver; Infection on a bite.' },
-  { name: 'Vampire', category: 'Undead & Horrors', tier: 5, wild: true, attrs: ['d10', 'd8', 'd10', 'd12', 'd10'], skills: [['Fighting', 'd10'], ['Notice', 'd8'], ['Stealth', 'd10'], ['Intimidation', 'd12'], ['Persuasion', 'd10']], attacks: [['Claws', 'Fighting', '1d12!+1d6!', 'slashing', 5], ['Bite', 'Fighting', '1d12!+1d4!', 'piercing', 5]], hp: 35, note: 'Wild Card. Undead; Charm; weakness: sunlight, stake, holy symbols.' },
+  { name: 'Vampire', category: 'Undead & Horrors', tier: 5, wild: true, attrs: ['d10', 'd8', 'd10', 'd12', 'd10'], skills: [['Fighting', 'd10'], ['Notice', 'd8'], ['Stealth', 'd10'], ['Intimidation', 'd12'], ['Persuasion', 'd10']], attacks: [['Claws', 'Fighting', '1d12!+1d6!', 'slashing', 5], ['Bite', 'Fighting', '1d12!+1d4!', 'piercing', 5]], armor: [['Undead Resilience', 2, 0]], hp: 35, note: 'Wild Card. Undead; Charm; weakness: sunlight, stake, holy symbols.' },
 ];
 
 function sheetFor(r: Row): SheetData {
@@ -69,8 +82,15 @@ function sheetFor(r: Row): SheetData {
     concept: r.name, wildCard: r.wild, agility, smarts, spirit, strength, vigor,
     hp: r.hp, maxHp: r.hp, pace: r.pace ?? 6, bennies: r.wild ? 2 : 0,
     skills: r.skills.map(([name, die]) => ({ name, die, notes: '' })),
-    attacks: r.attacks.map(([name, skill, damage, dtype, range]) => ({ name, skill, damage, dtype, range, notes: '' })),
+    attacks: r.attacks.map(([name, skill, damage, dtype, range, meta]) => ({
+      name, skill, damage, dtype, range, notes: '',
+      ...(meta?.save ? { save: meta.save, onSave: meta.onSave ?? 'negate', saveDc: 4 } : {}),
+      ...(meta?.condition ? { condition: meta.condition } : {}),
+      ...(meta?.aoeShape && meta.aoeSize ? { aoeShape: meta.aoeShape, aoeSize: meta.aoeSize } : {}),
+    })),
     armor: (r.armor ?? []).map(([name, armor, parryBonus]) => ({ name, armor, parryBonus, equipped: true, notes: '' })),
+    ...(r.resist ? { resist: r.resist } : {}),
+    ...(r.immune ? { immune: r.immune } : {}),
     notes: r.note ?? '',
   });
   return sheet;

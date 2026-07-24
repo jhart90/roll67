@@ -428,11 +428,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // for both instead of hard-coding "vs DC" around the 5e-only casterDc.
       deferredSave = { total: attackBreakdown.total, threshold: sc.threshold, label: sc.label, passed };
     } else if (action.attackExpr) {
-      // Net advantage folds the roller's choice with attacker/target conditions.
-      const netAdv = action.attackExpr.toLowerCase().startsWith('1d20')
-        ? attackAdvantage(p.adv ?? null, attackerConditions, targetConditions, action.ranged)
-        : null;
-      const expr = applyAdv(action.attackExpr, netAdv);
+      // Net advantage folds the roller's choice with attacker/target
+      // conditions. On 1d20 systems that becomes advantage/disadvantage
+      // dice; on SWADE trait rolls it becomes the book's flat ±2 (Vulnerable
+      // grants +2 to hit its bearer, Distracted takes −2 on its own rolls).
+      const isD20 = action.attackExpr.toLowerCase().startsWith('1d20');
+      const netAdv = attackAdvantage(p.adv ?? null, attackerConditions, targetConditions, action.ranged);
+      let expr = action.attackExpr;
+      let advTag = '';
+      if (isD20) {
+        expr = applyAdv(expr, netAdv);
+        advTag = netAdv === 'adv' ? ' [adv]' : netAdv === 'dis' ? ' [dis]' : '';
+      } else if (netAdv) {
+        expr = `${expr}${netAdv === 'adv' ? '+2' : '-2'}`;
+        advTag = netAdv === 'adv' ? ' [+2]' : ' [−2]';
+      }
       attackBreakdown = roll(expr);
       const d20s = attackBreakdown.dice.filter((x) => x.sides === 20 && x.kept);
       // Champion Improved Critical lowers the crit threshold (19, or 18 at 15).
@@ -442,12 +452,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // Prefer the derived AC (folds in toggles like Dual Wielder's +1) over
       // the raw sheet field, which stays the DM/player's manually-typed base.
       // SWADE powers (Bolt) beat a fixed TN of 4 instead of the target's
-      // Parry — and beating it by 4+ is a raise (+1d6! bonus damage below).
+      // Parry; any SWADE to-hit that beats its number by 4+ is a raise
+      // (+1d6! bonus damage below) — weapon attacks vs Parry included.
       const ac = action.fixedTn
         ?? (targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0);
       hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
-      raise = hit && action.fixedTn !== undefined && attackBreakdown.total >= action.fixedTn + 4;
-      const advTag = netAdv === 'adv' ? ' [adv]' : netAdv === 'dis' ? ' [dis]' : '';
+      raise = hit && actor.system === 'swade' && ac > 0 && attackBreakdown.total >= ac + 4;
       hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
     }
 
@@ -556,11 +566,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         }
         // SWADE shields: armor that counts only vs ranged attacks (a Medium/
         // Large Shield's +2) soaks that much off any ranged hit automatically.
+        // The weapon's AP (armor piercing) eats through that soak first.
         if (action.ranged && targetChar.system === 'swade') {
-          const dr = swadeRangedArmor(targetChar.sheet);
+          const dr = Math.max(0, swadeRangedArmor(targetChar.sheet) - (action.ap ?? 0));
           if (dr > 0 && magnitude > 0) {
             magnitude = Math.max(0, magnitude - dr);
             resistTag += ` (shield −${dr} vs ranged)`;
+          } else if (swadeRangedArmor(targetChar.sheet) > 0 && (action.ap ?? 0) > 0) {
+            resistTag += ` (AP ${action.ap} pierces shield)`;
           }
         }
       }

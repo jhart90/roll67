@@ -102,6 +102,8 @@ export interface CombatAction {
   disciplineId?: string;
   /** SWADE: spends this many Power Points on use. */
   ppCost?: number;
+  /** SWADE: armor piercing — reduces the target's ranged-armor soak. */
+  ap?: number;
   /** SWADE: the to-hit roll beats this fixed target number (4) instead of
    *  the target's AC/Parry; beating it by 4+ is a raise (+1d6! damage). */
   fixedTn?: number;

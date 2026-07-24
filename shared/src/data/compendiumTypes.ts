@@ -71,6 +71,8 @@ export interface GearData {
   weight?: number;
   cost?: string;
   notes?: string;
+  /** SWADE: equipped-gear bonus to a named trait ("Thievery", "Athletics", "Strength"). */
+  traitBonus?: { trait: string; amount: number };
 }
 
 export interface ContentEntry {
@@ -248,15 +250,26 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       // Melee damage is Strength die + weapon die, all acing; ranged weapons
       // roll their own dice alone. The attack roll itself comes from the
       // sheet's Fighting/Shooting/Athletics trait (the row's skill column).
+      // Mechanical props become live columns: "AP n" pierces ranged armor,
+      // "±1 Parry" feeds derived Parry once the weapon is marked wielded,
+      // and "mag n" pre-fills the server-enforced ammo counter.
       const melee = w.ability === 'str';
       const strDie = /^d\d+$/.test(String(sheet.strength ?? '')) ? String(sheet.strength) : 'd6';
       const damage = melee ? (w.damage ? `1${strDie}!+${w.damage}` : `1${strDie}!`) : w.damage;
+      const propText = w.props.join(', ');
+      const ap = Number(propText.match(/\bAP (\d+)/i)?.[1] ?? 0);
+      const parryUp = propText.match(/\+(\d+) Parry/i);
+      const parryDown = propText.match(/Parry [−-](\d+)/i);
+      const parryBonus = parryUp ? Number(parryUp[1]) : parryDown ? -Number(parryDown[1]) : 0;
+      const mag = propText.match(/\bmag (\d+)/i);
       return {
         listId: 'attacks',
         row: {
           name: entry.name, skill: melee ? 'Fighting' : 'Shooting', damage,
           dtype: w.damageType, range: melee ? 5 : weaponRangeFtSwn(w.props),
-          notes: w.props.join(', '),
+          ap, parryBonus, wielded: false,
+          ...(mag ? { ammo: Number(mag[1]) } : {}),
+          notes: propText,
         },
         label: `${entry.name} added to weapons`,
       };
@@ -396,9 +409,22 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
     const usable = heal ? { effect: 'heal', amount: heal, range: 5 } : {};
     const bonus = entry.kind === 'magicitem' ? parseAcSaveBonus(entry.subtitle) : { ac: 0, save: 0 };
     const equip = { equipped: false, acBonus: bonus.ac, saveBonus: bonus.save };
+    if (isSwade) {
+      const tb = entry.gear?.traitBonus;
+      return {
+        listId: 'inventory',
+        row: {
+          name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, ...usable,
+          equipped: false,
+          bonusSkill: tb?.trait ?? '', bonusAmt: tb?.amount ?? 0,
+          notes: entry.subtitle,
+        },
+        label: `${entry.name} added to inventory`,
+      };
+    }
     return {
       listId: 'inventory',
-      row: is5e || isSwade
+      row: is5e
         ? { name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, ...usable, ...equip, notes: entry.subtitle }
         : { name: entry.name, qty: 1, enc: 1, ...usable, ...equip, notes: entry.subtitle },
       label: `${entry.name} added to inventory`,

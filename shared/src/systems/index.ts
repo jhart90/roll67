@@ -27,7 +27,7 @@ export {
 export {
   swade, ATTRIBUTES_SWADE, SKILLS_SWADE, RANKS_SWADE, ARCANE_BACKGROUNDS_SWADE, ANCESTRIES_SWADE,
   TRAIT_DICE, dieSides, traitExpr, woundPenalty, swadeParry, swadeToughness,
-  swadeRangedArmor, swadeArcaneExpr,
+  swadeRangedArmor, swadeArcaneExpr, gearTraitBonus,
 } from './swade.js';
 
 export const SYSTEMS: Record<GameSystem, SystemSchema> = { dnd5e, swn, swade };

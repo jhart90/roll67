@@ -252,6 +252,99 @@ describe('SWADE library & compendium', () => {
     expect(action.ppCost).toBe(3);
   });
 
+  it('weapon props become live columns: AP, Parry mods, magazine → ammo', () => {
+    const entries = contentForSystem('swade');
+    const sheet = swade.defaultSheet();
+    expect(applyEntry(entries.find((c) => c.name === 'Crossbow')!, sheet)!.row).toMatchObject({ ap: 2 });
+    expect(applyEntry(entries.find((c) => c.name === 'Assault Rifle')!, sheet)!.row).toMatchObject({ ap: 2, ammo: 30 });
+    expect(applyEntry(entries.find((c) => c.name === 'Rapier')!, sheet)!.row).toMatchObject({ parryBonus: 1, wielded: false });
+    expect(applyEntry(entries.find((c) => c.name === 'Great Sword')!, sheet)!.row).toMatchObject({ parryBonus: -1 });
+  });
+
+  it('a wielded Rapier and a maintained Deflection raise Parry; Armor/Protection raise Toughness', () => {
+    const sheet = {
+      ...swade.defaultSheet(),
+      skills: [{ name: 'Fighting', die: 'd8' }],
+      attacks: [{ name: 'Rapier', skill: 'Fighting', damage: '1d6!+1d4!', parryBonus: 1, wielded: true }],
+    };
+    expect(swadeParry(sheet)).toBe(2 + 4 + 1);
+    expect(swadeParry({ ...sheet, deflectionActive: true })).toBe(2 + 4 + 1 + 2);
+    // Un-wielded weapons contribute nothing.
+    expect(swadeParry({ ...sheet, attacks: [{ ...sheet.attacks[0], wielded: false }] })).toBe(2 + 4);
+    const base = swadeToughness(sheet);
+    expect(swadeToughness({ ...sheet, armorActive: true, protectionActive: true })).toBe(base + 4);
+  });
+
+  it('AP flows into the combat action for the server DR math', () => {
+    const character = {
+      id: 'c', campaignId: 'x', ownerUserId: null, name: 'Sniper', system: 'swade',
+      sheet: {
+        ...swade.defaultSheet(),
+        skills: [{ name: 'Shooting', die: 'd8' }],
+        attacks: [{ name: 'Sniper Rifle', skill: 'Shooting', damage: '2d10!', ap: 4, range: 300 }],
+      },
+    } as unknown as Character;
+    expect(combatActions(character).find((a) => a.id === 'attack:0')?.ap).toBe(4);
+  });
+
+  it('equipped gear boosts the matching trait roll (Lockpicks → Thievery)', () => {
+    const picks = contentForSystem('swade').find((c) => c.name === 'Lockpicks')!;
+    const base = { ...swade.defaultSheet(), skills: [{ name: 'Thievery', die: 'd8' }] };
+    const row = applyEntry(picks, base)!.row;
+    const sheet = { ...base, inventory: [{ ...row, equipped: true }] };
+    const rollExpr = swade.rollables(sheet).find((r) => r.id === 'skill_0')!.expr;
+    expect(rollExpr).toBe('best(1d8!, 1d6!)+1');
+    // Unequipped: no bonus.
+    const stashed = { ...base, inventory: [{ ...row, equipped: false }] };
+    expect(swade.rollables(stashed).find((r) => r.id === 'skill_0')!.expr).toBe('best(1d8!, 1d6!)');
+  });
+
+  it('a maintained Smite adds +2 to the wielded weapon damage roll', () => {
+    const sheet = {
+      ...swade.defaultSheet(), smiteActive: true,
+      skills: [{ name: 'Fighting', die: 'd8' }],
+      attacks: [
+        { name: 'Long Sword', skill: 'Fighting', damage: '1d8!+1d6!', wielded: true },
+        { name: 'Dagger', skill: 'Fighting', damage: '1d4!+1d6!', wielded: false },
+      ],
+    };
+    const rolls = swade.rollables(sheet);
+    expect(rolls.find((r) => r.id === 'damage_0')!.expr).toBe('1d8!+1d6!+2');
+    expect(rolls.find((r) => r.id === 'damage_1')!.expr).toBe('1d4!+1d6!');
+  });
+
+  it('Invisibility applies the real invisible condition as a buff', () => {
+    const inv = contentForSystem('swade').find((c) => c.name === 'Invisibility')!;
+    const sheet = { ...swade.defaultSheet(), arcaneSkill: 'Spellcasting', skills: [{ name: 'Spellcasting', die: 'd8' }] };
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet: { ...sheet, powers: [applyEntry(inv, sheet)!.row] } } as unknown as Character;
+    const action = combatActions(character).find((a) => a.id === 'power:0')!;
+    expect(action.effect).toBe('heal'); // buff semantics: self/ally targetable
+    expect(action.appliesCondition).toBe('invisible');
+    expect(action.ppCost).toBe(5);
+  });
+
+  it('bestiary attacks carry real mechanics: spider web entangles, dragon breath is a cone', () => {
+    const spider = NPCS_SWADE.find((n) => n.name === 'Giant Spider')!;
+    const spiderChar = { id: 's', campaignId: 'x', ownerUserId: null, name: 'Spider', system: 'swade', sheet: spider.sheet } as unknown as Character;
+    const web = combatActions(spiderChar).find((a) => a.label === 'Web')!;
+    expect(web.saveId).toBe('agility');
+    expect(web.appliesCondition).toBe('entangled');
+    const dragon = NPCS_SWADE.find((n) => n.name === 'Young Dragon')!;
+    const dragonChar = { id: 'd', campaignId: 'x', ownerUserId: null, name: 'Dragon', system: 'swade', sheet: dragon.sheet } as unknown as Character;
+    const breath = combatActions(dragonChar).find((a) => a.label === 'Fiery Breath')!;
+    expect(breath.aoe).toEqual({ shape: 'cone', sizeFt: 54 });
+    expect(breath.saveId).toBe('agility');
+    expect(breath.onSave).toBe('half');
+  });
+
+  it('undead carry their +2 Toughness as a real armor row; the ghost is immune to mundane damage', () => {
+    const skeleton = NPCS_SWADE.find((n) => n.name === 'Skeleton')!;
+    expect(swadeToughness(skeleton.sheet)).toBe(2 + 3 + 2); // vigor d6 + resilience
+    expect(skeleton.sheet.resist).toBe('piercing');
+    const ghost = NPCS_SWADE.find((n) => n.name === 'Ghost')!;
+    expect(String(ghost.sheet.immune)).toContain('slashing');
+  });
+
   it('random SWADE NPCs have trait dice, core skills, and a working attack', () => {
     const npc = generateNpc('swade', seededRng(12));
     expect(String(npc.sheet.agility)).toMatch(/^d\d+$/);

@@ -101,16 +101,38 @@ export function swadeArcaneExpr(sheet: SheetData): string | null {
   return traitExpr(sheet, sides);
 }
 
-/** Parry: 2 + half Fighting die (2 flat when untrained) + equipped shields. */
-export function swadeParry(sheet: SheetData): number {
-  const fighting = skillDie(sheet, 'Fighting');
-  return 2 + Math.floor(fighting / 2) + equippedGearBonuses(sheet).parry;
+/** Parry modifier from wielded weapons (a Rapier's +1, a Great Sword's −1). */
+function wieldedWeaponParry(sheet: SheetData): number {
+  return rows(sheet, 'attacks')
+    .filter((a) => a.wielded === true)
+    .reduce((sum, a) => sum + num(a, 'parryBonus', 0), 0);
 }
 
-/** Toughness: 2 + half Vigor die + equipped armor. */
+/** Parry: 2 + half Fighting die (2 flat when untrained) + equipped shields
+ *  + wielded weapon modifiers + a maintained Deflection power (−2 to be hit,
+ *  carried here as +2 Parry). */
+export function swadeParry(sheet: SheetData): number {
+  const fighting = skillDie(sheet, 'Fighting');
+  return 2 + Math.floor(fighting / 2) + equippedGearBonuses(sheet).parry
+    + wieldedWeaponParry(sheet) + (sheet.deflectionActive === true ? 2 : 0);
+}
+
+/** Toughness: 2 + half Vigor die + equipped armor + maintained Armor /
+ *  Protection powers (+2 each while toggled on). */
 export function swadeToughness(sheet: SheetData): number {
   const vigor = dieSides(str(sheet, 'vigor', 'd6'));
-  return 2 + Math.floor(vigor / 2) + equippedGearBonuses(sheet).armor;
+  return 2 + Math.floor(vigor / 2) + equippedGearBonuses(sheet).armor
+    + (sheet.armorActive === true ? 2 : 0) + (sheet.protectionActive === true ? 2 : 0);
+}
+
+/** Bonus to a named trait (skill or attribute) from equipped gear — a
+ *  Lockpick's +1 Thievery, Climbing Gear's +2 Athletics. */
+export function gearTraitBonus(sheet: SheetData, traitName: string): number {
+  const want = traitName.trim().toLowerCase();
+  if (!want) return 0;
+  return rows(sheet, 'inventory')
+    .filter((i) => i.equipped === true)
+    .reduce((sum, i) => (str(i, 'bonusSkill', '').trim().toLowerCase() === want ? sum + num(i, 'bonusAmt', 0) : sum), 0);
 }
 
 // ---------- Tab 1: Core ----------
@@ -203,8 +225,11 @@ const gearTab: SheetTab = {
         { id: 'damage', label: 'Damage', type: 'text', width: 'sixth', default: '1d6!' },
         { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
+        { id: 'ap', label: 'AP', type: 'number', width: 'sixth', default: 0 },
+        { id: 'parryBonus', label: 'Parry mod', type: 'number', width: 'sixth', default: 0 },
+        { id: 'wielded', label: 'Wielded', type: 'checkbox', width: 'sixth' },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },
-        { id: 'notes', label: 'Notes (AP, RoF…)', type: 'text', width: 'sixth' },
+        { id: 'notes', label: 'Notes (RoF…)', type: 'text', width: 'sixth' },
       ],
     },
     {
@@ -230,6 +255,9 @@ const gearTab: SheetTab = {
         { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
         { id: 'effect', label: 'Use', type: 'select', width: 'sixth', options: ['none', 'heal', 'damage'], default: 'none' },
         { id: 'amount', label: 'Amount', type: 'text', width: 'sixth' },
+        { id: 'equipped', label: 'Equipped', type: 'checkbox', width: 'sixth' },
+        { id: 'bonusSkill', label: 'Boosts trait', type: 'text', width: 'sixth', suggestions: [...SKILLS_SWADE, 'Strength', 'Agility', 'Smarts', 'Spirit', 'Vigor'] },
+        { id: 'bonusAmt', label: '+', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },
@@ -259,6 +287,19 @@ const powersTab: SheetTab = {
       ],
     },
     {
+      // Self-buff powers with an ongoing stat effect: toggle while maintained
+      // (spend/track the PP by hand — durations aren't clocked). The effects
+      // are live: Armor/Protection raise Toughness, Deflection raises Parry,
+      // Smite adds +2 to wielded weapon damage.
+      kind: 'fields', id: 'maintainedPowers', title: 'Maintained Powers (toggle while active; PP by hand)',
+      fields: [
+        { id: 'armorActive', label: 'Armor (+2 Toughness)', type: 'checkbox', width: 'sixth', default: false },
+        { id: 'protectionActive', label: 'Protection (+2 Toughness)', type: 'checkbox', width: 'sixth', default: false },
+        { id: 'deflectionActive', label: 'Deflection (+2 Parry)', type: 'checkbox', width: 'sixth', default: false },
+        { id: 'smiteActive', label: 'Smite (+2 wielded dmg)', type: 'checkbox', width: 'sixth', default: false },
+      ],
+    },
+    {
       kind: 'list', id: 'powers', title: 'Powers',
       columns: [
         { id: 'name', label: 'Power', type: 'text', width: 'third' },
@@ -271,7 +312,7 @@ const powersTab: SheetTab = {
         { id: 'onSave', label: 'On success', type: 'select', width: 'sixth', default: 'negate', options: ['negate', 'half'] },
         { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', 'sphere', 'cone', 'line', 'cube'] },
         { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
-        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', 'shaken', 'distracted', 'vulnerable', 'entangled', 'bound', 'stunned', 'frightened', 'blinded', 'prone', 'unconscious'] },
+        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', 'shaken', 'distracted', 'vulnerable', 'entangled', 'bound', 'stunned', 'frightened', 'blinded', 'invisible', 'prone', 'unconscious'] },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -327,10 +368,11 @@ export const swade: SystemSchema = {
     const out: Rollable[] = [];
     for (const a of ATTRIBUTES_SWADE) {
       const sides = dieSides(str(sheet, a.id, 'd6'));
+      const gear = gearTraitBonus(sheet, a.label);
       out.push({
         id: `trait_${a.id}`,
-        label: `${a.label} (d${sides || 4})`,
-        expr: traitExpr(sheet, sides),
+        label: `${a.label} (d${sides || 4})${gear ? ` [gear ${fmtMod(gear)}]` : ''}`,
+        expr: traitExpr(sheet, sides, gear),
         group: 'Attributes',
         d20: false,
       });
@@ -338,10 +380,11 @@ export const swade: SystemSchema = {
     rows(sheet, 'skills').forEach((sk, i) => {
       const name = str(sk, 'name', `Skill ${i + 1}`);
       const sides = dieSides(str(sk, 'die', 'd4'));
+      const gear = gearTraitBonus(sheet, name);
       out.push({
         id: `skill_${i}`,
-        label: `${name} (d${sides || 4})`,
-        expr: traitExpr(sheet, sides),
+        label: `${name} (d${sides || 4})${gear ? ` [gear ${fmtMod(gear)}]` : ''}`,
+        expr: traitExpr(sheet, sides, gear),
         group: 'Skills',
         d20: false,
       });
@@ -357,7 +400,9 @@ export const swade: SystemSchema = {
         group: 'Attacks',
         d20: false,
       });
-      const dmg = str(atk, 'damage', '').trim();
+      let dmg = str(atk, 'damage', '').trim();
+      // A maintained Smite adds +2 damage to the wielded weapon.
+      if (dmg && sheet.smiteActive === true && atk.wielded === true) dmg = `${dmg}+2`;
       if (dmg) {
         out.push({ id: `damage_${i}`, label: `${name} (damage)`, expr: dmg, group: 'Attacks', d20: false });
       }

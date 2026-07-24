@@ -18,6 +18,7 @@ import { MapObjectInspector } from '../table/MapObjectInspector';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { InitiativeFloat } from '../table/InitiativeFloat';
+import { CardDrawOverlay } from '../table/CardDrawOverlay';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -309,6 +310,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <DiceOverlay />
         <Toolbar />
         <InitiativeFloat />
+        <CardDrawOverlay />
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />

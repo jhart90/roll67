@@ -6,6 +6,8 @@ import {
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries,
+  type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -63,10 +65,18 @@ function emitAoeBurst(
   io.to(campaignRoom(campaignId)).emit(S2C.AOE_BURST, { mapId, shape, sizeFt, widthFt, originHex, aimHex, damageType, flightMs });
 }
 
-/** Players never receive hidden entries; the DM sees everything. */
+/** Players never receive hidden entries; the DM sees everything. The card
+ *  deck's remaining contents never leave the server for ANYONE — clients get
+ *  only the count (knowing the next card up would spoil the draw). */
 export function initiativeViewFor(state: InitiativeState, isDm: boolean): InitiativeState {
-  if (isDm) return state;
-  return { ...state, entries: state.entries.filter((e) => !e.hidden) };
+  const { deck, drawCounter, ...rest } = state;
+  const view: InitiativeState = { ...rest, ...(state.cardMode ? { deckRemaining: deck?.length ?? 0 } : {}) };
+  if (isDm) return view;
+  return {
+    ...view,
+    entries: view.entries.filter((e) => !e.hidden),
+    pendingDraws: view.pendingDraws?.filter((p) => !p.hidden),
+  };
 }
 
 export function broadcastInitiative(io: Server, campaignId: string): void {
@@ -1067,7 +1077,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
-    state.entries.sort((a, b) => b.value - a.value);
+    if (state.cardMode) state.entries.sort(compareCardEntries);
+    else state.entries.sort((a, b) => b.value - a.value);
     state.turnIdx = 0;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
@@ -1125,4 +1136,93 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_SET_ACTIVE'));
+
+  // ----- SWADE action-deck initiative -----
+
+  // DM calls for cards: shuffle a fresh 54-card deck (jokers included) and
+  // put every token on the map on the owes-a-draw list. Player-owned tokens
+  // are drawn by their player (a deck button pops on their screen); unowned
+  // (NPC) tokens are drawn by the DM.
+  socket.on(C2S.INIT_CARD_CALL, safe(socket, ({ mapId, includeGm }: InitCardCallPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM deals action cards.'); return; }
+    const campaign = campaigns.byId(d.campaignId)!;
+    if (campaign.system !== 'swade') { emitError(socket, 'Action-deck initiative is a Savage Worlds thing.'); return; }
+    const map = maps.byId(mapId);
+    if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
+
+    const pendingDraws: PendingCardDraw[] = [];
+    for (const t of tokens.forMap(mapId)) {
+      if (t.layer === 'gm' && !includeGm) continue;
+      const character = t.characterId ? characters.byId(t.characterId) : undefined;
+      pendingDraws.push({
+        tokenId: t.id, name: t.name,
+        ownerUserId: character?.ownerUserId ?? null,
+        hidden: t.layer === 'gm',
+      });
+    }
+    if (pendingDraws.length === 0) { emitError(socket, 'No tokens on this map to deal to.'); return; }
+
+    const state: InitiativeState = {
+      entries: [], turnIdx: 0, round: 1, active: false,
+      cardMode: true, deck: shuffleDeck(buildDeck()), pendingDraws, drawCounter: 0,
+    };
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `🂠 The DM deals action cards — ${pendingDraws.filter((p) => !p.hidden).length} combatant(s) draw for initiative!`,
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'INIT_CARD_CALL'));
+
+  // One combatant draws the top card. Players draw for their own tokens; the
+  // DM can draw for anyone (NPCs, or an AFK player's token).
+  socket.on(C2S.INIT_CARD_DRAW, safe(socket, ({ tokenId }: InitCardDrawPayload) => {
+    const d = requireCampaign(socket);
+    const state = initiative.get(d.campaignId);
+    if (!state.cardMode) { emitError(socket, 'No card draw is in progress.'); return; }
+    const idx = (state.pendingDraws ?? []).findIndex((p) => p.tokenId === tokenId);
+    if (idx < 0) { emitError(socket, 'That combatant has already drawn (or was never dealt in).'); return; }
+    const pending = state.pendingDraws![idx];
+    if (d.role !== 'dm' && pending.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only draw for your own character.');
+      return;
+    }
+
+    // The 54-card deck outlasts any normal encounter, but never dead-end:
+    // reshuffle a fresh deck if it somehow runs dry.
+    if (!state.deck || state.deck.length === 0) {
+      state.deck = shuffleDeck(buildDeck());
+      const msg = chat.add(d.campaignId, {
+        userId: null, fromName: 'System', kind: 'system',
+        text: '🂠 The action deck is reshuffled.', roll: null, recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    }
+    const card = state.deck.shift()!;
+    state.drawCounter = (state.drawCounter ?? 0) + 1;
+    state.pendingDraws!.splice(idx, 1);
+    state.entries.push({
+      id: newId(), tokenId: pending.tokenId, name: pending.name,
+      value: card.rank, hidden: pending.hidden,
+      card, drawSeq: state.drawCounter,
+    });
+    // Stack-rank as the cards come in: highest card on top, rank ties broken
+    // by who drew first (lower drawSeq). Whoever is up next is always row 0.
+    state.entries.sort(compareCardEntries);
+    state.turnIdx = 0;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+
+    const room = pending.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId);
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'system',
+      text: `🂠 ${pending.name} draws the ${cardName(card)} ${cardShort(card)}${card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''}`,
+      roll: null, recipients: null,
+    });
+    io.to(room).emit(S2C.CHAT, { msg });
+    io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId: pending.tokenId, name: pending.name, card, byUserId: d.userId });
+  }, 'INIT_CARD_DRAW'));
 }

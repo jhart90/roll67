@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../store/game';
+import { CardChip } from '../util/PlayingCardView';
 
 const DEFAULT_POS = { x: 16, y: 140 }; // from the bottom-left corner
 
@@ -58,7 +59,7 @@ export function InitiativeFloat() {
       <ol className="init-list">
         {state.entries.map((e, i) => (
           <li key={e.id} className={`${i === state.turnIdx ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''}`}>
-            <span className="init-value">{e.value}</span>
+            {e.card ? <CardChip card={e.card} /> : <span className="init-value">{e.value}</span>}
             <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}</span>
           </li>
         ))}

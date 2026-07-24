@@ -105,9 +105,11 @@ export function MapObjectLayer() {
   const isDm = useGameStore((s) => s.you?.role === 'dm');
   const lootKind = useGameStore((s) => s.lootKind);
   const stage = useStage();
-  const objects = Object.values(mapObjects);
 
   if (!map) return null;
+  // The store holds every map's objects (for the world tree) — render only
+  // the ones placed on the map being viewed.
+  const objects = Object.values(mapObjects).filter((o) => o.mapId === map.id);
 
   const { width, height } = mapPixelSize(map);
 

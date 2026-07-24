@@ -4,7 +4,7 @@ import {
   type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type CustomItem, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
   type Door, type DoorType, type Drawing, type DrawingLayerName, type GameSystem, type GridConfig, type Handout, type Hex,
-  type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
+  type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
   type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type Shop,
@@ -89,6 +89,9 @@ interface GameState {
   /** Map object whose DM edit inspector is open (right-click). */
   inspectedObjectId: string | null;
   openObjectInspector(id: string | null): void;
+  /** SWADE: the just-drawn action card, for the flip animation overlay. */
+  cardDrawFlash: (InitCardDrawnPayload & { seq: number }) | null;
+  clearCardFlash(): void;
   viewingAs: string | null;
   dragGhosts: Record<string, { x: number; y: number }>;
   pings: Array<PingShownPayload & { id: number }>;
@@ -227,6 +230,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   lootPopupId: null,
   inspectedObjectId: null,
   openObjectInspector(inspectedObjectId) { set({ inspectedObjectId }); },
+  cardDrawFlash: null,
+  clearCardFlash() { set({ cardDrawFlash: null }); },
   viewingAs: null,
   dragGhosts: {},
   pings: [],
@@ -383,7 +388,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // ruler from campaign A rendering over campaign B's map, a stale error
       // toast, a presented shop, last session's initiative order.
       measures: {}, pings: [], diceAnim: null, errorToast: null, presentedShopId: null,
-      initiativeState: { entries: [], turnIdx: 0, round: 1, active: false },
+      initiativeState: { entries: [], turnIdx: 0, round: 1, active: false }, cardDrawFlash: null,
       shopList: [], locationList: [], worldFolderList: [], tableList: [], assetFolders: [], assetList: [],
       audioTracks: [], audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
       directory: null,
@@ -506,6 +511,7 @@ export function wireSocket(): void {
       macroList: p.macros,
       initiativeState: p.initiative,
       chatLog: p.chatTail,
+      mapObjects: mapObjectsById(p.mapObjects ?? []),
     });
   });
 
@@ -540,7 +546,13 @@ export function wireSocket(): void {
       inspectorTokenId: null,
       inspectedObjectId: null,
       lootPopupId: null,
-      mapObjects: mapObjectsById(p.mapObjects),
+      // The store holds every map's objects (seeded by CAMPAIGN_STATE, so the
+      // world tree can nest loot under all maps) — merge this map's fresh
+      // list over the rest instead of replacing the whole record.
+      mapObjects: {
+        ...Object.fromEntries(Object.entries(s.mapObjects).filter(([, o]) => o.mapId !== p.map.id)),
+        ...mapObjectsById(p.mapObjects),
+      },
       measures: {},
       aoePreviews: {},
       targetPreviews: {},
@@ -817,6 +829,13 @@ export function wireSocket(): void {
     useGameStore.setState({ initiativeState: state });
   });
 
+  // SWADE action-deck draw: drives the card-flip animation overlay (seq keeps
+  // back-to-back draws distinct so each one restarts the flip).
+  socket.on(S2C.INIT_CARD_DRAWN, (p: InitCardDrawnPayload) => {
+    const s = useGameStore.getState();
+    useGameStore.setState({ cardDrawFlash: { seq: (s.cardDrawFlash?.seq ?? 0) + 1, ...p } });
+  });
+
   socket.on(S2C.HANDOUTS, ({ handouts }: { handouts: Handout[] }) => {
     useGameStore.setState({ handoutList: handouts });
   });
@@ -1026,6 +1045,8 @@ export const intents = {
   initClear: () => socket.emit(C2S.INIT_CLEAR),
   initSetActive: (active: boolean) => socket.emit(C2S.INIT_SET_ACTIVE, { active }),
   initRollMap: (mapId: string, includeGm: boolean) => socket.emit(C2S.INIT_ROLL_MAP, { mapId, includeGm }),
+  initCardCall: (mapId: string, includeGm: boolean) => socket.emit(C2S.INIT_CARD_CALL, { mapId, includeGm }),
+  initCardDraw: (tokenId: string) => socket.emit(C2S.INIT_CARD_DRAW, { tokenId }),
 
   draw: (mapId: string, layer: DrawingLayerName, shape: Drawing['shape']) =>
     socket.emit(C2S.DRAW, { mapId, layer, shape }),

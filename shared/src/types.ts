@@ -1,5 +1,7 @@
 // Core domain types shared by server and client.
 
+import type { PlayingCard } from './systems/cards.js';
+
 // ---------- Accounts & campaigns ----------
 
 export type GameSystem = 'dnd5e' | 'swn' | 'swade';
@@ -303,6 +305,20 @@ export interface InitiativeEntry {
   value: number;
   /** Hidden entries are visible only to the DM. */
   hidden: boolean;
+  /** SWADE card mode: the action card this combatant drew. */
+  card?: PlayingCard;
+  /** SWADE card mode: draw order (earlier draw wins rank ties). */
+  drawSeq?: number;
+}
+
+/** SWADE card mode: a combatant who still owes a draw. */
+export interface PendingCardDraw {
+  tokenId: string;
+  name: string;
+  /** The player who draws for this token; null = the DM draws. */
+  ownerUserId: string | null;
+  /** Hidden (GM-layer) token — its eventual entry stays DM-only. */
+  hidden: boolean;
 }
 
 export interface InitiativeState {
@@ -310,6 +326,17 @@ export interface InitiativeState {
   turnIdx: number;
   round: number;
   active: boolean;
+  /** SWADE action-deck mode (deal cards instead of rolling). */
+  cardMode?: boolean;
+  /** Server-only: the shuffled cards still in the deck. Stripped before
+   *  sending to ANY client (see initiativeViewFor) — clients get deckRemaining. */
+  deck?: PlayingCard[];
+  /** How many cards are left in the deck (client-facing). */
+  deckRemaining?: number;
+  /** Combatants who haven't drawn yet this deal. */
+  pendingDraws?: PendingCardDraw[];
+  /** Server-only counter behind each entry's drawSeq. */
+  drawCounter?: number;
 }
 
 // ---------- Drawings, pings, measurement ----------

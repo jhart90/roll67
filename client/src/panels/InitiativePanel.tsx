@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { intents, useGameStore } from '../store/game';
+import { CardChip } from '../util/PlayingCardView';
 import { SavePrompt } from './SavePrompt';
 
 export function InitiativePanel() {
@@ -7,10 +8,14 @@ export function InitiativePanel() {
   const state = useGameStore((s) => s.initiativeState);
   const selected = useGameStore((s) => (s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined));
   const map = useGameStore((s) => s.map);
+  const campaign = useGameStore((s) => s.campaign);
   const [saving, setSaving] = useState(false);
 
   if (!you) return null;
   const isDm = you.role === 'dm';
+  const swade = campaign?.system === 'swade';
+  const cardMode = !!state.cardMode;
+  const pending = state.pendingDraws ?? [];
 
   return (
     <div className="dock-panel">
@@ -26,7 +31,9 @@ export function InitiativePanel() {
       <ol className="init-list">
         {state.entries.map((e, i) => (
           <li key={e.id} className={`${i === state.turnIdx && state.active ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''}`}>
-            {isDm ? (
+            {e.card ? (
+              <CardChip card={e.card} />
+            ) : isDm ? (
               <input
                 key={`${e.id}:${e.value}`}
                 type="number"
@@ -44,9 +51,11 @@ export function InitiativePanel() {
             <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}</span>
             {isDm && (
               <span className="init-actions">
-                <button className="link" title="Re-roll this entry's initiative" onClick={() => intents.initUpdate(e.id, { reroll: true })}>
-                  🎲
-                </button>
+                {!cardMode && (
+                  <button className="link" title="Re-roll this entry's initiative" onClick={() => intents.initUpdate(e.id, { reroll: true })}>
+                    🎲
+                  </button>
+                )}
                 <button className="link" title={e.hidden ? 'Reveal to players' : 'Hide from players'}
                   onClick={() => intents.initUpdate(e.id, { hidden: !e.hidden })}>
                   {e.hidden ? '👁' : '🕶'}
@@ -56,13 +65,39 @@ export function InitiativePanel() {
             )}
           </li>
         ))}
-        {state.entries.length === 0 && <p className="dim">Nobody in initiative yet.</p>}
+        {state.entries.length === 0 && !cardMode && <p className="dim">Nobody in initiative yet.</p>}
       </ol>
+
+      {cardMode && pending.length > 0 && (
+        <div className="init-pending">
+          <span className="dim">Waiting on:</span>
+          {pending.map((p) => (
+            <span key={p.tokenId} className="init-pending-chip">
+              {p.name}{p.hidden ? ' 🕶' : ''}
+              {(isDm || p.ownerUserId === you.userId) && (
+                <button className="link" title={`Draw a card for ${p.name}`} onClick={() => intents.initCardDraw(p.tokenId)}>🂠</button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      {cardMode && pending.length === 0 && state.entries.length === 0 && (
+        <p className="dim">Deck shuffled — nobody dealt in yet.</p>
+      )}
 
       {isDm && map && (
         <div className="row" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => intents.initRollMap(map.id, false)}>Roll all tokens</button>
-          <button onClick={() => intents.initRollMap(map.id, true)}>+ hidden NPCs</button>
+          {swade ? (
+            <>
+              <button title="Shuffle a fresh 54-card action deck; every token on the map draws" onClick={() => intents.initCardCall(map.id, false)}>🂠 Deal action cards</button>
+              <button title="Also deal to hidden (GM-layer) tokens" onClick={() => intents.initCardCall(map.id, true)}>+ hidden NPCs</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => intents.initRollMap(map.id, false)}>Roll all tokens</button>
+              <button onClick={() => intents.initRollMap(map.id, true)}>+ hidden NPCs</button>
+            </>
+          )}
           <button onClick={() => setSaving(true)}>⚑ Call for save</button>
         </div>
       )}
@@ -77,19 +112,21 @@ export function InitiativePanel() {
         </div>
       )}
 
-      <div className="stack" style={{ marginTop: 12 }}>
-        {selected && (
-          <button onClick={() => intents.initAdd({ tokenId: selected.id, roll: true })}>
-            Roll initiative: {selected.name}
-          </button>
-        )}
-        {!selected && <p className="dim" style={{ fontSize: 12 }}>Select a token to roll it into initiative.</p>}
-        {isDm && selected && (
-          <button onClick={() => intents.initAdd({ tokenId: selected.id, roll: true, hidden: true })}>
-            Roll hidden: {selected.name}
-          </button>
-        )}
-      </div>
+      {!cardMode && (
+        <div className="stack" style={{ marginTop: 12 }}>
+          {selected && (
+            <button onClick={() => intents.initAdd({ tokenId: selected.id, roll: true })}>
+              Roll initiative: {selected.name}
+            </button>
+          )}
+          {!selected && <p className="dim" style={{ fontSize: 12 }}>Select a token to roll it into initiative.</p>}
+          {isDm && selected && (
+            <button onClick={() => intents.initAdd({ tokenId: selected.id, roll: true, hidden: true })}>
+              Roll hidden: {selected.name}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

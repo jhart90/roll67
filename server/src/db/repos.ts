@@ -1263,6 +1263,12 @@ export const mapObjects = {
   forMap(mapId: string) {
     return (stmt('SELECT * FROM map_objects WHERE map_id = ? ORDER BY created_at').all(mapId) as MapObjectRow[]).map(toMapObject);
   },
+  forCampaign(campaignId: string) {
+    return (stmt(
+      `SELECT mo.* FROM map_objects mo JOIN maps m ON m.id = mo.map_id
+       WHERE m.campaign_id = ? ORDER BY mo.created_at`,
+    ).all(campaignId) as MapObjectRow[]).map(toMapObject);
+  },
   byId(id: string) {
     const row = stmt('SELECT * FROM map_objects WHERE id = ?').get(id) as MapObjectRow | undefined;
     return row ? toMapObject(row) : undefined;

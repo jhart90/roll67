@@ -46,6 +46,7 @@ export function buildCampaignState(campaignId: string, userId: string, username:
     macros: macros.forUser(userId, campaignId),
     initiative: initiativeViewFor(initiative.get(campaignId), isDm),
     chatTail: chat.tailFor(campaignId, userId, username, isDm, CHAT_TAIL),
+    mapObjects: mapObjects.forCampaign(campaignId),
   };
 }
 

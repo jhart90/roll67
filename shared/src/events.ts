@@ -9,6 +9,7 @@ import type {
   RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
+import type { PlayingCard } from './systems/cards.js';
 
 // ---------- Client -> server intents ----------
 
@@ -97,6 +98,10 @@ export const C2S = {
   INIT_CLEAR: 'initClear',
   INIT_SET_ACTIVE: 'initSetActive',
   INIT_ROLL_MAP: 'initRollMap',
+  /** SWADE: DM deals a fresh action deck — everyone owes a card draw. */
+  INIT_CARD_CALL: 'initCardCall',
+  /** SWADE: draw the top card for one pending combatant. */
+  INIT_CARD_DRAW: 'initCardDraw',
   // table
   DRAW: 'draw',
   ERASE_DRAWING: 'eraseDrawing',
@@ -444,6 +449,19 @@ export interface InitUpdatePayload {
   reroll?: boolean;
 }
 
+/** SWADE: DM calls for action cards for every token on a map. */
+export interface InitCardCallPayload { mapId: string; includeGm?: boolean }
+/** SWADE: draw the top card for one pending combatant's token. */
+export interface InitCardDrawPayload { tokenId: string }
+/** SWADE: a card was drawn — drives the flip animation + chat framing. */
+export interface InitCardDrawnPayload {
+  tokenId: string;
+  name: string;
+  card: PlayingCard;
+  /** The user who clicked the deck (their client plays the big flip). */
+  byUserId: string;
+}
+
 export interface DrawPayload { mapId: string; layer: DrawingLayerName; shape: Drawing['shape'] }
 export interface EraseDrawingPayload { drawingId: string }
 export interface ClearDrawingsPayload { mapId: string; layer: DrawingLayerName }
@@ -577,6 +595,7 @@ export const S2C = {
   CHAT: 'chatMsg',
   MACROS: 'macros',
   INITIATIVE: 'initiativeState',
+  INIT_CARD_DRAWN: 'initCardDrawn',
   DRAWING_ADDED: 'drawingAdded',
   DRAWING_REMOVED: 'drawingRemoved',
   DRAWINGS_CLEARED: 'drawingsCleared',
@@ -621,6 +640,9 @@ export interface CampaignStatePayload {
   macros: Macro[];
   initiative: InitiativeState;
   chatTail: ChatMessage[];
+  /** Loot/chest/shop markers across ALL maps (so the world tree can nest
+   *  them under every map, not just the one being viewed). */
+  mapObjects: MapObject[];
 }
 
 /**

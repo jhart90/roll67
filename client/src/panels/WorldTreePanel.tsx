@@ -55,18 +55,16 @@ function buildNodes(
       out.push({ kind: 'light', id: light.id, name, parentId: mapId, sub, lightMapId: mapId });
     }
   }
-  // Loot & chests placed on the current map appear nested under that map
+  // Loot & chests appear nested under whichever map they're placed on
   // (shop markers are skipped — the shop itself is already a tree node).
-  if (mapId) {
-    for (const obj of mapObjects) {
-      if (obj.kind === 'shop') continue;
-      const sub = obj.items.length ? `${obj.items.length} item${obj.items.length === 1 ? '' : 's'}` : '';
-      out.push({
-        kind: 'mapobject', id: obj.id,
-        name: obj.name || (obj.kind === 'chest' ? 'Chest' : 'Loot'),
-        parentId: mapId, sub, mapObjectKind: obj.kind,
-      });
-    }
+  for (const obj of mapObjects) {
+    if (obj.kind === 'shop') continue;
+    const sub = obj.items.length ? `${obj.items.length} item${obj.items.length === 1 ? '' : 's'}` : '';
+    out.push({
+      kind: 'mapobject', id: obj.id,
+      name: obj.name || (obj.kind === 'chest' ? 'Chest' : 'Loot'),
+      parentId: obj.mapId, sub, mapObjectKind: obj.kind,
+    });
   }
   // Token-carried lights appear under their character
   for (const tok of Object.values(allTokens)) {

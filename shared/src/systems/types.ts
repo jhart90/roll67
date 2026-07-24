@@ -100,6 +100,11 @@ export interface CombatAction {
   effortCost?: number;
   /** SWN: the power's discipline, for skill-check/mishap resolution. */
   disciplineId?: string;
+  /** SWADE: spends this many Power Points on use. */
+  ppCost?: number;
+  /** SWADE: the to-hit roll beats this fixed target number (4) instead of
+   *  the target's AC/Parry; beating it by 4+ is a raise (+1d6! damage). */
+  fixedTn?: number;
   /** Area this action affects, if it hits a zone rather than one target. */
   aoe?: AoeSpec;
   /** A save DC baked into the stat block (monster breath weapons) rather

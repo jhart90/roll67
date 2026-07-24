@@ -1,7 +1,7 @@
 import type { AoeShape, Character } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
-import { swade } from './swade.js';
+import { swade, swadeArcaneExpr } from './swade.js';
 import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
 const SYSTEMS = { dnd5e, swn, swade };
@@ -112,12 +112,58 @@ export function combatActions(character: Character): CombatAction[] {
   spellAction('cantrips', 'cantrip', false);
   spellAction('spells', 'spell', true);
 
-  // Psychic powers with an amount become targeted actions too, gated on the
-  // character actually having the discipline trained (a skill row by that
+  // SWADE powers ride the same machinery as 5e spells: a Bolt is a to-hit
+  // action (arcane trait roll vs TN 4, projectile animation for free), a
+  // Burst/Blast carries an AoE spec (cone/sphere templates, group resolution),
+  // and resisted powers force a trait roll (Evasion etc.). Power Points are
+  // spent server-side via ppCost, like spell slots / SWN Effort.
+  if (character.system === 'swade') {
+    const arcane = swadeArcaneExpr(sheet);
+    rows(sheet, 'powers').forEach((pw, i) => {
+      const amount = str(pw, 'damage', '').trim();
+      const condition = str(pw, 'condition', '');
+      const hasAmount = !!amount && usableAmount(amount);
+      // Like condition-only spells (Hold Person): a power that inflicts a
+      // state still becomes a targeted action even with no damage roll.
+      if (!hasAmount && !condition) return;
+      const name = str(pw, 'name', '').trim() || `Power ${i + 1}`;
+      const effect = str(pw, 'effect', 'damage') === 'heal' ? 'heal' as const : 'damage' as const;
+      const save = str(pw, 'save', '');
+      const onSave = str(pw, 'onSave', 'negate') === 'half' ? 'half' as const : 'negate' as const;
+      const rangeFt = Math.max(0, num(pw, 'range', 0));
+      const aoeShape = str(pw, 'aoeShape', '');
+      const aoeSize = num(pw, 'aoeSize', 0);
+      const isAoe = !!aoeShape && aoeSize > 0;
+      // A direct damaging power with no save and no area rolls the arcane
+      // skill to hit vs the fixed TN 4 (a raise adds +1d6! server-side).
+      const attackExpr = effect === 'damage' && !save && !isAoe && arcane ? arcane : null;
+      out.push({
+        id: `power:${i}`,
+        label: name,
+        effect,
+        attackExpr,
+        amountExpr: hasAmount ? amount : '0',
+        rangeFt,
+        damageType: str(pw, 'dtype', ''),
+        ranged: rangeFt > 5,
+        consumesItem: false,
+        source: 'power',
+        index: i,
+        ppCost: Math.max(0, num(pw, 'cost', 1)),
+        ...(attackExpr ? { fixedTn: 4 } : {}),
+        ...(save && effect === 'damage' ? { saveId: save, onSave } : {}),
+        ...(isAoe ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize } } : {}),
+        ...(condition ? { appliesCondition: condition } : {}),
+      });
+    });
+  }
+
+  // SWN psychic powers with an amount become targeted actions too, gated on
+  // the character actually having the discipline trained (a skill row by that
   // name) — untrained disciplines simply don't offer the power as an action.
   // Effort cost defaults to the power's level (SWN's usual convention) unless
   // an explicit Effort column value is set.
-  rows(sheet, 'powers').forEach((pw, i) => {
+  if (character.system === 'swn') rows(sheet, 'powers').forEach((pw, i) => {
     const amount = str(pw, 'damage', '').trim();
     if (!amount || !usableAmount(amount)) return;
     const discipline = str(pw, 'discipline', '');

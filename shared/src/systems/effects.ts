@@ -85,7 +85,7 @@ export const CONDITIONS: ConditionDef[] = [
   { id: 'blinded', label: 'Blinded', icon: '🕶️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, selfAttackDis: true, desc: "Can't see; attacks against have advantage, its attacks have disadvantage." },
   { id: 'charmed', label: 'Charmed', icon: '💗', systems: ['dnd5e'], desc: "Can't attack the charmer; the charmer has advantage on social checks." },
   { id: 'deafened', label: 'Deafened', icon: '🔇', systems: ['dnd5e', 'swn'], desc: "Can't hear; fails hearing-based checks." },
-  { id: 'frightened', label: 'Frightened', icon: '😱', systems: ['dnd5e', 'swn'], selfAttackDis: true, desc: 'Disadvantage on attacks/checks while the source is in sight; can’t move closer.' },
+  { id: 'frightened', label: 'Frightened', icon: '😱', systems: ['dnd5e', 'swn', 'swade'], selfAttackDis: true, desc: 'Disadvantage on attacks/checks while the source is in sight; can’t move closer.' },
   { id: 'grappled', label: 'Grappled', icon: '✊', systems: ['dnd5e', 'swn'], desc: 'Speed 0; ends if the grappler is incapacitated.' },
   { id: 'incapacitated', label: 'Incapacitated', icon: '💫', systems: ['dnd5e', 'swn'], incapacitated: true, desc: "Can't take actions or reactions." },
   { id: 'invisible', label: 'Invisible', icon: '👻', systems: ['dnd5e'], grantsAttackDis: true, selfAttackAdv: true, desc: 'Attacks against have disadvantage; its attacks have advantage.' },

@@ -37,40 +37,56 @@ const WEAPONS: W[] = [
   ['Frag Grenade', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast']],
 ];
 
-// [name, category, bonus, notes] — category 'Shield' means the bonus is Parry.
-type A = [string, string, number, string];
+// [name, category, bonus, rangedArmor, notes] — category 'Shield' means the
+// bonus is Parry; rangedArmor applies only against ranged attacks that hit.
+type A = [string, string, number, number, string];
 const ARMOR: A[] = [
-  ['Leather Jacket', 'Armor', 1, 'Covers torso/arms'],
-  ['Leather Armor', 'Armor', 2, 'Covers torso/arms/legs'],
-  ['Chain Mail', 'Armor', 3, 'Flexible metal links'],
-  ['Plate Corselet', 'Armor', 4, 'Rigid breastplate'],
-  ['Kevlar Vest', 'Armor', 2, 'Modern ballistic vest; negates 4 AP from bullets'],
-  ['Kevlar Vest w/ Inserts', 'Armor', 4, 'Ceramic plate inserts'],
-  ['Small Shield', 'Shield', 1, '+1 Parry'],
-  ['Medium Shield', 'Shield', 2, '+2 Parry, +2 Armor vs ranged that hits'],
-  ['Large Shield', 'Shield', 3, '+3 Parry, +2 Armor vs ranged that hits'],
+  ['Leather Jacket', 'Armor', 1, 0, 'Covers torso/arms'],
+  ['Leather Armor', 'Armor', 2, 0, 'Covers torso/arms/legs'],
+  ['Chain Mail', 'Armor', 3, 0, 'Flexible metal links'],
+  ['Plate Corselet', 'Armor', 4, 0, 'Rigid breastplate'],
+  ['Kevlar Vest', 'Armor', 2, 0, 'Modern ballistic vest; negates 4 AP from bullets'],
+  ['Kevlar Vest w/ Inserts', 'Armor', 4, 0, 'Ceramic plate inserts'],
+  ['Small Shield', 'Shield', 1, 0, '+1 Parry'],
+  ['Medium Shield', 'Shield', 2, 2, '+2 Parry, +2 Armor vs ranged that hits'],
+  ['Large Shield', 'Shield', 3, 2, '+3 Parry, +2 Armor vs ranged that hits'],
 ];
 
-// [name, ppCost, rankReq, subtitle, damage?, heal?, rangeFt?]
-type P = [string, number, string, string, string?, boolean?, number?];
+// [name, ppCost, rankReq, subtitle, mech?]
+// mech carries the machine-usable bits: damage/heal, range, resistance trait,
+// area template, inflicted condition. Powers without mech stay descriptive.
+interface PowerMech {
+  damage?: string;
+  heal?: boolean;
+  rangeFt?: number;
+  save?: string;
+  onSave?: 'half' | 'negate';
+  aoe?: { shape: 'sphere' | 'cone' | 'line' | 'cube'; sizeFt: number };
+  condition?: string;
+}
+type P = [string, number, string, string, PowerMech?];
 const POWERS: P[] = [
   ['Arcane Protection', 1, 'Novice', 'Foes suffer a penalty to affect you with powers'],
   ['Armor', 1, 'Novice', '+2 Armor (or +4 with a raise) for 5 rounds'],
-  ['Blast', 3, 'Seasoned', 'Medium blast template of damage', '2d6!', false, 288],
-  ['Bolt', 1, 'Novice', 'A missile of arcane energy', '2d6!', false, 288],
+  // Medium Blast Template ≈ 24 ft across; no dodging it by the book.
+  ['Blast', 3, 'Seasoned', 'Medium blast template of damage', { damage: '2d6!', rangeFt: 144, aoe: { shape: 'sphere', sizeFt: 24 } }],
+  // Direct missile: arcane skill vs TN 4 to hit (raise = +1d6!).
+  ['Bolt', 1, 'Novice', 'A missile of arcane energy', { damage: '2d6!', rangeFt: 144 }],
   ['Boost/Lower Trait', 2, 'Novice', 'Raise or lower a target trait one die type'],
   ['Burrow', 2, 'Novice', 'Meld into and move through earth'],
-  ['Burst', 2, 'Novice', 'Cone template of damage', '2d6!', false, 0],
-  ['Confusion', 1, 'Novice', 'Target must make a Smarts roll or be Distracted & Vulnerable'],
+  // Cone Template ≈ 54 ft long; Evasion (Agility) avoids it entirely.
+  ['Burst', 2, 'Novice', 'Cone template of damage', { damage: '2d6!', save: 'agility', onSave: 'negate', aoe: { shape: 'cone', sizeFt: 54 } }],
+  ['Confusion', 1, 'Novice', 'Target must make a Smarts roll or be Distracted', { rangeFt: 72, save: 'smarts', onSave: 'negate', condition: 'distracted' }],
   ['Deflection', 3, 'Novice', 'Attacks against you suffer −2 (−4 with a raise)'],
   ['Detect/Conceal Arcana', 2, 'Novice', 'Sense or hide the supernatural'],
   ['Dispel', 1, 'Seasoned', 'Cancel an enemy power'],
   ['Empathy', 1, 'Novice', 'Read emotions; bonus to social rolls'],
-  ['Entangle', 2, 'Novice', 'Target is Entangled (Bound with a raise)'],
+  ['Entangle', 2, 'Novice', 'Target is Entangled (Bound with a raise)', { rangeFt: 72, save: 'agility', onSave: 'negate', condition: 'entangled' }],
   ['Environmental Protection', 2, 'Novice', 'Breathe/operate in a hostile environment'],
-  ['Fear', 2, 'Novice', 'Target makes a Fear check (Spirit roll)'],
+  ['Fear', 2, 'Novice', 'Target makes a Spirit roll or panics', { rangeFt: 72, save: 'spirit', onSave: 'negate', condition: 'frightened' }],
   ['Fly', 3, 'Veteran', 'Fly at Pace 12'],
-  ['Healing', 3, 'Novice', 'Heal a Wound (two with a raise) within the golden hour', '1', true, 5],
+  // One Wound's worth in the default 15-HP pool abstraction.
+  ['Healing', 3, 'Novice', 'Heal a Wound (two with a raise) within the golden hour', { damage: '5', heal: true, rangeFt: 5 }],
   ['Illusion', 3, 'Novice', 'Create a visual illusion'],
   ['Invisibility', 5, 'Seasoned', '−4 to be hit or noticed (−6 with a raise)'],
   ['Light/Darkness', 1, 'Novice', 'Create or extinguish light'],
@@ -79,7 +95,7 @@ const POWERS: P[] = [
   ['Relief', 1, 'Novice', 'Remove Fatigue or Shaken'],
   ['Smite', 2, 'Novice', 'A weapon gains +2 damage (+4 with a raise)'],
   ['Speed', 2, 'Novice', 'Double a target’s Pace'],
-  ['Stun', 2, 'Novice', 'Target makes a Vigor roll or is Stunned'],
+  ['Stun', 2, 'Novice', 'Target makes a Vigor roll or is Stunned', { rangeFt: 72, save: 'vigor', onSave: 'negate', condition: 'stunned' }],
   ['Telekinesis', 5, 'Seasoned', 'Move objects or creatures with your mind'],
   ['Teleport', 2, 'Seasoned', 'Instantly move up to 12″ (double with a raise)'],
 ];
@@ -116,20 +132,25 @@ export const CONTENT_SWADE: ContentEntry[] = [
     subtitle: `${damage ? `${ability === 'str' ? `Str+${damage}` : damage} ${damageType}` : `Str ${damageType}`}${props.length ? ` · ${props.join(', ')}` : ''}`,
     weapon: { damage, damageType, ability, props },
   })),
-  ...ARMOR.map(([name, category, baseAc, notes], i): ContentEntry => ({
+  ...ARMOR.map(([name, category, baseAc, rangedArmor, notes], i): ContentEntry => ({
     id: contentSlug('swade', 'armor', name),
     system: 'swade', kind: 'armor', name, category, order: i,
-    subtitle: category === 'Shield' ? `+${baseAc} Parry` : `+${baseAc} Armor`,
-    armor: { baseAc, addDex: false, notes },
+    subtitle: category === 'Shield'
+      ? `+${baseAc} Parry${rangedArmor ? `, +${rangedArmor} Armor vs ranged` : ''}`
+      : `+${baseAc} Armor`,
+    armor: { baseAc, addDex: false, rangedArmor, notes },
   })),
-  ...POWERS.map(([name, cost, rank, subtitle, damage, heal, rangeFt], i): ContentEntry => ({
+  ...POWERS.map(([name, cost, rank, subtitle, mech], i): ContentEntry => ({
     id: contentSlug('swade', 'power', name),
     system: 'swade', kind: 'power', name, category: rank, order: i,
     subtitle: `${cost} PP · ${rank} · ${subtitle}`,
     power: {
       discipline: rank, level: cost, notes: subtitle,
-      ...(damage ? { damage, heal: heal === true } : {}),
-      ...(rangeFt !== undefined ? { rangeFt } : {}),
+      ...(mech?.damage ? { damage: mech.damage, heal: mech.heal === true } : {}),
+      ...(mech?.rangeFt !== undefined ? { rangeFt: mech.rangeFt } : {}),
+      ...(mech?.save ? { save: mech.save, onSave: mech.onSave ?? 'negate' } : {}),
+      ...(mech?.aoe ? { aoe: mech.aoe } : {}),
+      ...(mech?.condition ? { condition: mech.condition } : {}),
     },
   })),
   ...GEAR.map(([name, subtitle], i): ContentEntry => ({

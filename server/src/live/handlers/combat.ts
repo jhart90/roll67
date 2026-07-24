@@ -6,7 +6,7 @@ import {
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
-  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries,
+  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
@@ -383,13 +383,22 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (Object.keys(actorPatch).length > 0) actor = persistSheet(io, d.campaignId, actor, actorPatch);
     }
 
-    // Activating a psychic power commits Effort up front and rolls the
-    // discipline's activation check (see activatePsychicPower).
-    if (action.source === 'power') {
+    // Activating a SWN psychic power commits Effort up front and rolls the
+    // discipline's activation check (see activatePsychicPower). SWADE powers
+    // instead spend Power Points, like a spell slot.
+    if (action.source === 'power' && action.disciplineId) {
       const result = activatePsychicPower(io, d.campaignId, d, socket, actor, action.effortCost ?? 1, action.disciplineId ?? '', action.label);
       if (!result) return;
       actor = result.actor;
       undo.push(result.undo);
+    } else if (action.source === 'power' && action.ppCost) {
+      const pp = num(actor.sheet, 'pp', 0);
+      if (pp < action.ppCost) {
+        emitError(socket, `Not enough Power Points (${pp} left, ${action.label} costs ${action.ppCost}).`);
+        return;
+      }
+      undo.push({ t: 'field', characterId: actor.id, key: 'pp', value: pp });
+      actor = persistSheet(io, d.campaignId, actor, { pp: pp - action.ppCost });
     }
 
     // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;
@@ -399,6 +408,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // only once that first roll's own dice animation has had time to settle.
     let hit = true;
     let crit = false;
+    let raise = false;
     let saveScale = 1;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
     let hitLabel = '';
@@ -431,10 +441,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const nat1 = d20s.some((x) => x.value === 1);
       // Prefer the derived AC (folds in toggles like Dual Wielder's +1) over
       // the raw sheet field, which stays the DM/player's manually-typed base.
-      const ac = targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0;
+      // SWADE powers (Bolt) beat a fixed TN of 4 instead of the target's
+      // Parry — and beating it by 4+ is a raise (+1d6! bonus damage below).
+      const ac = action.fixedTn
+        ?? (targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0);
       hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
+      raise = hit && action.fixedTn !== undefined && attackBreakdown.total >= action.fixedTn + 4;
       const advTag = netAdv === 'adv' ? ' [adv]' : netAdv === 'dis' ? ' [dis]' : '';
-      hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
+      hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
     }
 
     // Consume a used item (decrement the actor's inventory row) and/or ammo
@@ -514,8 +528,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // card's dice have settled.
     const resolveDamage = (): void => {
       // A crit doubles the dice. Resistance/vulnerability/immunity from the
-      // target's sheet then scales the total.
-      const dmgExpr = crit ? critDamageExpr(action.amountExpr) : action.amountExpr;
+      // target's sheet then scales the total. A SWADE raise (beating TN 4 by
+      // 4+) adds a bonus d6 that aces, per the book.
+      const dmgExpr = crit ? critDamageExpr(action.amountExpr)
+        : raise ? `${action.amountExpr}+1d6!` : action.amountExpr;
       let amountRoll = roll(dmgExpr);
       // Savage Attacker: once per round, reroll a melee hit's damage and keep
       // the higher total (auto-applied — no reason to ever decline it).
@@ -537,6 +553,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (mult !== 1) {
           magnitude = applyDamageMultiplier(magnitude, mult);
           resistTag = ` (${multiplierLabel(mult)})`;
+        }
+        // SWADE shields: armor that counts only vs ranged attacks (a Medium/
+        // Large Shield's +2) soaks that much off any ranged hit automatically.
+        if (action.ranged && targetChar.system === 'swade') {
+          const dr = swadeRangedArmor(targetChar.sheet);
+          if (dr > 0 && magnitude > 0) {
+            magnitude = Math.max(0, magnitude - dr);
+            resistTag += ` (shield −${dr} vs ranged)`;
+          }
         }
       }
       const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
@@ -749,8 +774,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
 
     // Casting a spell spends a slot (leveled) and sets concentration on the
-    // caster before resolving the effect — mirrors C2S.COMBAT_ACTION.
+    // caster before resolving the effect — mirrors C2S.COMBAT_ACTION. SWADE
+    // area powers (Burst/Blast) spend Power Points the same way.
     const actorPatch: SheetData = {};
+    if (action.source === 'power' && action.ppCost) {
+      const pp = num(actor.sheet, 'pp', 0);
+      if (pp < action.ppCost) {
+        emitError(socket, `Not enough Power Points (${pp} left, ${action.label} costs ${action.ppCost}).`);
+        return;
+      }
+      actorPatch.pp = pp - action.ppCost;
+    }
     let castLevel: number | null = null;
     if (action.slotLevel) {
       // Upcast: spend the lowest available slot at or above the spell's own

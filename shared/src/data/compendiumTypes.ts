@@ -11,9 +11,11 @@ export interface WeaponData {
 }
 
 export interface ArmorData {
-  baseAc: number;         // e.g. 14 for scale mail; SWN AC directly
+  baseAc: number;         // e.g. 14 for scale mail; SWN AC directly; SWADE armor/Parry bonus
   addDex: boolean;        // 5e: add Dex mod
   maxDex?: number;        // 5e: cap on Dex (e.g. 2 for medium)
+  /** SWADE: extra armor that counts only against ranged attacks (shields). */
+  rangedArmor?: number;
   notes?: string;
 }
 
@@ -57,6 +59,12 @@ export interface PowerData {
   damageType?: string;
   /** SWADE: the power's range in feet. */
   rangeFt?: number;
+  /** SWADE: outcome of a successful resistance roll. */
+  onSave?: 'half' | 'negate';
+  /** SWADE: area template (Burst's cone, Blast's sphere). */
+  aoe?: { shape: AoeShape; sizeFt: number; widthFt?: number };
+  /** SWADE: status condition the power inflicts (effects.ts CONDITIONS id). */
+  condition?: string;
 }
 
 export interface GearData {
@@ -325,6 +333,10 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           damage: p.damage ?? '',
           dtype: p.heal ? '' : (p.damageType ?? ''),
           range: p.rangeFt ?? 0,
+          save: p.save ?? '',
+          onSave: p.onSave ?? 'negate',
+          ...(p.aoe ? { aoeShape: p.aoe.shape, aoeSize: p.aoe.sizeFt } : { aoeShape: '', aoeSize: 0 }),
+          condition: p.condition ?? '',
         },
         label: `${entry.name} added to powers`,
       };
@@ -353,6 +365,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           name: entry.name,
           armor: shield ? 0 : entry.armor.baseAc,
           parryBonus: shield ? entry.armor.baseAc : 0,
+          rangedArmor: entry.armor.rangedArmor ?? 0,
           equipped: false, notes: entry.armor.notes ?? '',
         },
         label: `${entry.name} added to armor`,

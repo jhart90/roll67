@@ -68,14 +68,37 @@ export function traitExpr(sheet: SheetData, sides: number, mod = 0): string {
   return wild ? `best(1d${sides}!, 1d6!)${tail}` : `1d${sides}!${tail}`;
 }
 
-/** Equipped shield Parry bonus + equipped armor Toughness bonus. */
-function equippedGearBonuses(sheet: SheetData): { parry: number; armor: number } {
+/** Equipped shield Parry bonus + equipped armor Toughness bonus + armor that
+ *  only counts against ranged attacks (a Medium/Large Shield's +2). */
+function equippedGearBonuses(sheet: SheetData): { parry: number; armor: number; rangedArmor: number } {
   return rows(sheet, 'armor')
     .filter((a) => a.equipped === true)
-    .reduce<{ parry: number; armor: number }>(
-      (acc, a) => ({ parry: acc.parry + num(a, 'parryBonus', 0), armor: acc.armor + num(a, 'armor', 0) }),
-      { parry: 0, armor: 0 },
+    .reduce<{ parry: number; armor: number; rangedArmor: number }>(
+      (acc, a) => ({
+        parry: acc.parry + num(a, 'parryBonus', 0),
+        armor: acc.armor + num(a, 'armor', 0),
+        rangedArmor: acc.rangedArmor + num(a, 'rangedArmor', 0),
+      }),
+      { parry: 0, armor: 0, rangedArmor: 0 },
     );
+}
+
+/** Extra armor that applies only against ranged attacks (equipped shields).
+ *  The combat engine subtracts it from incoming ranged weapon damage. */
+export function swadeRangedArmor(sheet: SheetData): number {
+  return equippedGearBonuses(sheet).rangedArmor;
+}
+
+/** Trait-roll expression for the sheet's arcane skill, or null if none is
+ *  set/trained — powers activate with this roll (vs TN 4). */
+export function swadeArcaneExpr(sheet: SheetData): string | null {
+  const skill = str(sheet, 'arcaneSkill', '');
+  if (!skill) return null;
+  const sides = dieSides(str(
+    rows(sheet, 'skills').find((sk) => str(sk, 'name', '').toLowerCase() === skill.toLowerCase()) ?? {},
+    'die', '',
+  ));
+  return traitExpr(sheet, sides);
 }
 
 /** Parry: 2 + half Fighting die (2 flat when untrained) + equipped shields. */
@@ -135,6 +158,7 @@ const coreTab: SheetTab = {
       items: [
         { key: 'parry', label: 'Parry' },
         { key: 'toughness', label: 'Toughness (incl. armor)' },
+        { key: 'toughnessRanged', label: 'Toughness vs ranged' },
         { key: 'traitPenalty', label: 'Wound/Fatigue penalty' },
       ],
     },
@@ -189,6 +213,7 @@ const gearTab: SheetTab = {
         { id: 'name', label: 'Item', type: 'text', width: 'third' },
         { id: 'armor', label: 'Armor (+Toughness)', type: 'number', width: 'sixth', default: 0 },
         { id: 'parryBonus', label: 'Parry (+shield)', type: 'number', width: 'sixth', default: 0 },
+        { id: 'rangedArmor', label: 'Armor vs ranged', type: 'number', width: 'sixth', default: 0 },
         { id: 'equipped', label: 'Worn', type: 'checkbox', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
@@ -242,6 +267,11 @@ const powersTab: SheetTab = {
         { id: 'damage', label: 'Amount', type: 'text', width: 'sixth' },
         { id: 'dtype', label: 'Type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'save', label: 'Resisted by', type: 'select', width: 'sixth', default: '', options: ['', 'agility', 'smarts', 'spirit', 'strength', 'vigor'] },
+        { id: 'onSave', label: 'On success', type: 'select', width: 'sixth', default: 'negate', options: ['negate', 'half'] },
+        { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', 'sphere', 'cone', 'line', 'cube'] },
+        { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', 'shaken', 'distracted', 'vulnerable', 'entangled', 'bound', 'stunned', 'frightened', 'blinded', 'prone', 'unconscious'] },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -283,6 +313,7 @@ export const swade: SystemSchema = {
     }
     out.parry = swadeParry(sheet);
     out.toughness = swadeToughness(sheet);
+    out.toughnessRanged = swadeToughness(sheet) + swadeRangedArmor(sheet);
     // The combat engine resolves attack rolls against derived `ac`: in SWADE
     // that target number is Parry (ranged attacks vs a stationary TN 4 are
     // left to the DM's judgment — Parry is the safe common case).

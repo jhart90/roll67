@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dieSides, swade, swadeParry, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
+import { dieSides, swade, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
 import { combatResources, conditionsFor } from '../src/systems/effects.js';
 import { generateNpc } from '../src/data/npcGen.js';
@@ -171,6 +171,85 @@ describe('SWADE library & compendium', () => {
     expect(shield.row).toMatchObject({ armor: 0, parryBonus: 2 });
     const mail = applyEntry(entries.find((c) => c.name === 'Chain Mail')!, swade.defaultSheet())!;
     expect(mail.row).toMatchObject({ armor: 3, parryBonus: 0 });
+  });
+
+  it('ranged-only armor (shields) is tracked separately from Toughness armor', () => {
+    const sheet = {
+      ...swade.defaultSheet(), vigor: 'd8',
+      armor: [
+        { name: 'Chain Mail', armor: 3, parryBonus: 0, rangedArmor: 0, equipped: true },
+        { name: 'Large Shield', armor: 0, parryBonus: 3, rangedArmor: 2, equipped: true },
+        { name: 'Spare Shield', armor: 0, parryBonus: 3, rangedArmor: 2, equipped: false },
+      ],
+    };
+    expect(swadeRangedArmor(sheet)).toBe(2); // only the equipped shield
+    const d = swade.derive(sheet);
+    expect(d.toughness).toBe(2 + 4 + 3);
+    expect(d.toughnessRanged).toBe(2 + 4 + 3 + 2);
+    expect(swadeParry(sheet)).toBe(2 + 0 + 3); // untrained Fighting + shield
+  });
+
+  it('Large Shield from the compendium carries Parry + ranged armor onto the sheet', () => {
+    const shield = contentForSystem('swade').find((c) => c.name === 'Large Shield')!;
+    const applied = applyEntry(shield, swade.defaultSheet())!;
+    expect(applied.row).toMatchObject({ armor: 0, parryBonus: 3, rangedArmor: 2 });
+  });
+
+  it('Bolt becomes a to-hit power action: arcane roll vs fixed TN 4, PP cost, projectile range', () => {
+    const bolt = contentForSystem('swade').find((c) => c.name === 'Bolt')!;
+    const sheet = {
+      ...swade.defaultSheet(), arcaneSkill: 'Spellcasting', pp: 10,
+      skills: [{ name: 'Spellcasting', die: 'd10' }],
+    };
+    const applied = applyEntry(bolt, sheet)!;
+    expect(applied.listId).toBe('powers');
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet: { ...sheet, powers: [applied.row] } } as unknown as Character;
+    const action = combatActions(character).find((a) => a.id === 'power:0')!;
+    expect(action.attackExpr).toBe('best(1d10!, 1d6!)');
+    expect(action.fixedTn).toBe(4);
+    expect(action.ppCost).toBe(1);
+    expect(action.amountExpr).toBe('2d6!');
+    expect(action.ranged).toBe(true);
+    expect(action.aoe).toBeUndefined();
+  });
+
+  it('Burst becomes a cone-template action with an Agility (Evasion) save', () => {
+    const burst = contentForSystem('swade').find((c) => c.name === 'Burst')!;
+    const sheet = { ...swade.defaultSheet(), arcaneSkill: 'Spellcasting', skills: [{ name: 'Spellcasting', die: 'd8' }] };
+    const applied = applyEntry(burst, sheet)!;
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet: { ...sheet, powers: [applied.row] } } as unknown as Character;
+    const action = combatActions(character).find((a) => a.id === 'power:0')!;
+    expect(action.aoe).toEqual({ shape: 'cone', sizeFt: 54 });
+    expect(action.saveId).toBe('agility');
+    expect(action.onSave).toBe('negate');
+    expect(action.attackExpr).toBeNull();
+    expect(action.ppCost).toBe(2);
+  });
+
+  it('Blast is a no-save sphere template; Stun is a save-or-condition action', () => {
+    const entries = contentForSystem('swade');
+    const sheet = { ...swade.defaultSheet(), arcaneSkill: 'Spellcasting', skills: [{ name: 'Spellcasting', die: 'd8' }] };
+    const blastRow = applyEntry(entries.find((c) => c.name === 'Blast')!, sheet)!.row;
+    const stunRow = applyEntry(entries.find((c) => c.name === 'Stun')!, sheet)!.row;
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet: { ...sheet, powers: [blastRow, stunRow] } } as unknown as Character;
+    const actions = combatActions(character);
+    const blast = actions.find((a) => a.label === 'Blast')!;
+    expect(blast.aoe).toEqual({ shape: 'sphere', sizeFt: 24 });
+    expect(blast.saveId).toBeUndefined();
+    const stun = actions.find((a) => a.label === 'Stun')!;
+    expect(stun.saveId).toBe('vigor');
+    expect(stun.appliesCondition).toBe('stunned');
+    expect(stun.amountExpr).toBe('0'); // condition-only, no damage roll
+  });
+
+  it('Healing auto-applies as a heal action costing 3 PP', () => {
+    const heal = contentForSystem('swade').find((c) => c.name === 'Healing')!;
+    const sheet = { ...swade.defaultSheet(), arcaneSkill: 'Faith', skills: [{ name: 'Faith', die: 'd8' }] };
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Priest', system: 'swade', sheet: { ...sheet, powers: [applyEntry(heal, sheet)!.row] } } as unknown as Character;
+    const action = combatActions(character).find((a) => a.id === 'power:0')!;
+    expect(action.effect).toBe('heal');
+    expect(action.attackExpr).toBeNull();
+    expect(action.ppCost).toBe(3);
   });
 
   it('random SWADE NPCs have trait dice, core skills, and a working attack', () => {

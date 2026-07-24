@@ -93,6 +93,24 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
     onClose();
   }
 
+  // Players get a clean read-only view — no fields, no save/delete, just the
+  // handout and a close button. (It's already in their World tab: presenting
+  // a handout shares it, and shared handouts populate the player's tree.)
+  if (!isDm) {
+    if (!handout) return null;
+    return (
+      <div className="panel levelup handout-window">
+        <div className="dock-header">
+          <h3>{handout.title}</h3>
+          <span className="spacer" />
+          <button className="link" onClick={onClose}>close</button>
+        </div>
+        {handout.imageUrl && <img className="handout-img" src={handout.imageUrl} alt={handout.title} />}
+        {handout.bodyMd && <p className="handout-body">{handout.bodyMd}</p>}
+      </div>
+    );
+  }
+
   return (
       <div className="panel levelup handout-window">
         <div className="dock-header">

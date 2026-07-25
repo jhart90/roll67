@@ -8,6 +8,7 @@ import {
   type RequestSavePayload, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
+  type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -76,6 +77,7 @@ export function initiativeViewFor(state: InitiativeState, isDm: boolean): Initia
     ...view,
     entries: view.entries.filter((e) => !e.hidden),
     pendingDraws: view.pendingDraws?.filter((p) => !p.hidden),
+    pendingRolls: view.pendingRolls?.filter((p) => !p.hidden),
   };
 }
 
@@ -1247,6 +1249,81 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_SET_ACTIVE'));
+
+  // ----- roll-your-own initiative (5e / SWN) -----
+
+  // The DM calls for initiative: instead of the server silently rolling for
+  // everyone, each combatant is put on the hook for their own roll. Players
+  // get a prompt for their characters; the DM covers NPCs. Mirrors the SWADE
+  // action-deck flow so both systems feel the same at the table.
+  socket.on(C2S.INIT_ROLL_CALL, safe(socket, ({ mapId, includeGm }: InitRollCallPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM calls for initiative.'); return; }
+    const map = maps.byId(mapId);
+    if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
+
+    const pendingRolls: PendingInitiative[] = [];
+    for (const t of tokens.forMap(mapId)) {
+      if (t.layer === 'gm' && !includeGm) continue;
+      const character = t.characterId ? characters.byId(t.characterId) : undefined;
+      pendingRolls.push({
+        tokenId: t.id, name: t.name,
+        ownerUserId: character?.ownerUserId ?? null,
+        hidden: t.layer === 'gm',
+      });
+    }
+    if (pendingRolls.length === 0) { emitError(socket, 'No tokens on this map to roll for.'); return; }
+
+    // A fresh call clears the previous order — same as dealing a new deck.
+    const state: InitiativeState = {
+      entries: [], turnIdx: 0, round: 1, active: false, pendingRolls,
+    };
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `🎲 The DM calls for initiative — ${pendingRolls.filter((p) => !p.hidden).length} combatant(s) roll!`,
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'INIT_ROLL_CALL'));
+
+  // One combatant rolls their own initiative. Players roll for the characters
+  // they own; the DM can roll for anyone (NPCs, or an absent player's token).
+  // Each roll posts its own chat card, so the table sees every result land.
+  socket.on(C2S.INIT_ROLL_MINE, safe(socket, ({ tokenId }: InitRollMinePayload) => {
+    const d = requireCampaign(socket);
+    const state = initiative.get(d.campaignId);
+    const idx = (state.pendingRolls ?? []).findIndex((p) => p.tokenId === tokenId);
+    if (idx < 0) { emitError(socket, 'That combatant has already rolled (or was never called on).'); return; }
+    const pending = state.pendingRolls![idx];
+    if (d.role !== 'dm' && pending.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only roll for your own character.');
+      return;
+    }
+
+    const token = tokens.byId(pending.tokenId);
+    const character = token?.characterId ? characters.byId(token.characterId) : undefined;
+    const expr = character ? systemFor(character.system).initiativeExpr(character.sheet) : '1d20';
+    const breakdown = roll(expr);
+
+    state.pendingRolls!.splice(idx, 1);
+    state.entries.push({
+      id: newId(), tokenId: pending.tokenId, name: pending.name,
+      value: breakdown.total, hidden: pending.hidden,
+    });
+    // Keep the order live as results come in: highest first, next up on top.
+    state.entries.sort((a, b) => b.value - a.value);
+    state.turnIdx = 0;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'roll',
+      text: `${pending.name}: initiative`, roll: breakdown, recipients: null,
+    });
+    io.to(pending.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'INIT_ROLL_MINE'));
 
   // ----- SWADE action-deck initiative -----
 

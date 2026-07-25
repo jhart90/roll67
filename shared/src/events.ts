@@ -104,6 +104,10 @@ export const C2S = {
   INIT_CARD_CALL: 'initCardCall',
   /** SWADE: draw the top card for one pending combatant. */
   INIT_CARD_DRAW: 'initCardDraw',
+  /** 5e/SWN: DM calls for initiative — every combatant owes their own roll. */
+  INIT_ROLL_CALL: 'initRollCall',
+  /** 5e/SWN: roll initiative for one pending combatant. */
+  INIT_ROLL_MINE: 'initRollMine',
   // table
   DRAW: 'draw',
   ERASE_DRAWING: 'eraseDrawing',
@@ -466,6 +470,10 @@ export interface InitUpdatePayload {
 
 /** SWADE: DM calls for action cards for every token on a map. */
 export interface InitCardCallPayload { mapId: string; includeGm?: boolean }
+/** 5e/SWN: DM calls every token on a map to roll its own initiative. */
+export interface InitRollCallPayload { mapId: string; includeGm?: boolean }
+/** 5e/SWN: roll initiative for one pending combatant's token. */
+export interface InitRollMinePayload { tokenId: string }
 /** SWADE: draw the top card for one pending combatant's token. */
 export interface InitCardDrawPayload { tokenId: string }
 /** SWADE: a card was drawn — drives the flip animation + chat framing. */

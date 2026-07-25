@@ -19,6 +19,7 @@ import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { InitiativeFloat } from '../table/InitiativeFloat';
 import { CardDrawOverlay } from '../table/CardDrawOverlay';
+import { InitiativeRollPrompt } from '../table/InitiativeRollPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -330,6 +331,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <Toolbar />
         <InitiativeFloat />
         <CardDrawOverlay />
+        <InitiativeRollPrompt />
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />

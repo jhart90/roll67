@@ -16,6 +16,7 @@ export function InitiativePanel() {
   const swade = campaign?.system === 'swade';
   const cardMode = !!state.cardMode;
   const pending = state.pendingDraws ?? [];
+  const pendingRolls = state.pendingRolls ?? [];
 
   return (
     <div className="dock-panel">
@@ -85,6 +86,20 @@ export function InitiativePanel() {
         <p className="dim">Deck shuffled — nobody dealt in yet.</p>
       )}
 
+      {pendingRolls.length > 0 && (
+        <div className="init-pending">
+          <span className="dim">Waiting on rolls:</span>
+          {pendingRolls.map((p) => (
+            <span key={p.tokenId} className="init-pending-chip">
+              {p.name}{p.hidden ? ' 🕶' : ''}
+              {(isDm || p.ownerUserId === you.userId) && (
+                <button className="link" title={`Roll initiative for ${p.name}`} onClick={() => intents.initRollMine(p.tokenId)}>🎲</button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
       {isDm && map && (
         <div className="row" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
           {swade ? (
@@ -94,8 +109,9 @@ export function InitiativePanel() {
             </>
           ) : (
             <>
-              <button onClick={() => intents.initRollMap(map.id, false)}>Roll all tokens</button>
-              <button onClick={() => intents.initRollMap(map.id, true)}>+ hidden NPCs</button>
+              <button title="Every combatant rolls their own initiative on their own screen" onClick={() => intents.initRollCall(map.id, false)}>🎲 Call for initiative</button>
+              <button title="Also call on hidden (GM-layer) tokens" onClick={() => intents.initRollCall(map.id, true)}>+ hidden NPCs</button>
+              <button title="Skip the prompts and roll for every token yourself" onClick={() => intents.initRollMap(map.id, true)}>Roll all myself</button>
             </>
           )}
           <button onClick={() => setSaving(true)}>⚑ Call for save</button>

@@ -312,14 +312,19 @@ export interface InitiativeEntry {
 }
 
 /** SWADE card mode: a combatant who still owes a draw. */
-export interface PendingCardDraw {
+/** A combatant who still owes their own initiative — a SWADE card draw, or
+ *  a d20/2d6 roll in the systems that roll for it. Identical either way. */
+export interface PendingInitiative {
   tokenId: string;
   name: string;
-  /** The player who draws for this token; null = the DM draws. */
+  /** The player who resolves this one; null = the DM does (NPCs). */
   ownerUserId: string | null;
   /** Hidden (GM-layer) token — its eventual entry stays DM-only. */
   hidden: boolean;
 }
+
+/** Historical name kept for the SWADE card path. */
+export type PendingCardDraw = PendingInitiative;
 
 export interface InitiativeState {
   entries: InitiativeEntry[];
@@ -337,6 +342,9 @@ export interface InitiativeState {
   pendingDraws?: PendingCardDraw[];
   /** Server-only counter behind each entry's drawSeq. */
   drawCounter?: number;
+  /** Non-card systems: combatants the DM has called on who still owe their
+   *  own initiative roll. Each player rolls for their own character. */
+  pendingRolls?: PendingInitiative[];
 }
 
 // ---------- Drawings, pings, measurement ----------

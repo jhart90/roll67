@@ -249,6 +249,10 @@ export interface DieRoll {
   /** Bonus die earned by a SWADE raise (beating the target number by 4+).
    *  Rendered in raise green so it reads as earned, not part of the base. */
   raise?: boolean;
+  /** A Wild Die — the second arm of SWADE's `best(trait!, 1d6!)`. Rendered in
+   *  the roller's own colour so the two arms are told apart by hue rather than
+   *  by dimming the loser, which would spoil aces that have yet to be thrown. */
+  wild?: boolean;
 }
 
 export interface RollBreakdown {

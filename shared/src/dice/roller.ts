@@ -69,9 +69,16 @@ function evalNode(node: DiceNode, rng: RNG, allDice: DieRoll[]): EvalResult {
         return { ...res, dice };
       });
       const winner = arms.reduce((a, b) => (b.total > a.total ? b : a));
-      for (const arm of arms) {
-        for (const die of arm.dice) allDice.push(arm === winner ? die : { ...die, kept: false });
-      }
+      arms.forEach((arm, armIdx) => {
+        for (const die of arm.dice) {
+          // Arms past the first are the Wild Die in SWADE's best(trait, wild).
+          // Tagging them lets the renderer tell the arms apart by colour; it
+          // must not lean on `kept`, which is only known once every arm has
+          // finished acing and would give away rolls still to come.
+          const tagged = armIdx > 0 ? { ...die, wild: true } : die;
+          allDice.push(arm === winner ? tagged : { ...tagged, kept: false });
+        }
+      });
       const detail = arms.map((a) => (a === winner ? a.detail : `~${a.detail}~`)).join(' | ');
       return { total: winner.total, detail: `best(${detail})` };
     }

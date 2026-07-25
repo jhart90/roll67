@@ -189,3 +189,44 @@ describe('raise bonus die', () => {
     expect(merged.outcome).toBeUndefined();
   });
 });
+
+describe('wild die tagging', () => {
+  it('tags only the second arm of best(trait, wild)', () => {
+    for (let i = 0; i < 60; i++) {
+      const r = roll('best(1d8!, 1d6!)', seededRng(i));
+      const wild = r.dice.filter((d) => d.wild);
+      const trait = r.dice.filter((d) => !d.wild);
+      expect(trait.length).toBeGreaterThan(0);
+      expect(wild.length).toBeGreaterThan(0);
+      // The trait arm is a d8 chain; the wild arm is a d6 chain.
+      expect(trait.every((d) => d.sides === 8)).toBe(true);
+      expect(wild.every((d) => d.sides === 6)).toBe(true);
+    }
+  });
+
+  it('tags the whole wild chain when the Wild Die aces', () => {
+    let r = roll('best(1d4!, 1d6!)');
+    for (let i = 0; i < 300 && r.dice.filter((d) => d.wild).length < 2; i++) r = roll('best(1d4!, 1d6!)');
+    const wild = r.dice.filter((d) => d.wild);
+    if (wild.length < 2) return; // no ace turned up; nothing to assert
+    expect(wild.every((d) => d.sides === 6)).toBe(true);
+  });
+
+  it('tags the wild arm whether or not it wins', () => {
+    // Both outcomes must tag identically — otherwise the tag itself would leak
+    // which arm won, exactly what the colour scheme is meant to avoid.
+    const seen = new Set<boolean>();
+    for (let i = 0; i < 120 && seen.size < 2; i++) {
+      const r = roll('best(1d8!, 1d6!)', seededRng(i));
+      const wild = r.dice.filter((d) => d.wild);
+      seen.add(wild.some((d) => d.kept));
+      expect(wild.length).toBeGreaterThan(0);
+    }
+    expect(seen.size).toBe(2); // saw the wild arm both win and lose
+  });
+
+  it('leaves ordinary rolls untagged', () => {
+    const r = roll('2d6+3', seededRng(4));
+    expect(r.dice.some((d) => d.wild)).toBe(false);
+  });
+});

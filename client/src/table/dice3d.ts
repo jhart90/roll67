@@ -307,6 +307,8 @@ export const ACE_GAP_MS = ACE_FLASH_MS + ACE_READ_PAUSE_MS;
 const WAVE_STAGGER_MS = 110;
 /** Bonus dice earned by a SWADE raise, so they stand out from the base roll. */
 const RAISE_DIE_COLOR = '#1f9d55';
+/** Wild Die colour for a roller who has not picked one of their own. */
+const WILD_DIE_FALLBACK = '#8b5cf6';
 
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
@@ -346,15 +348,22 @@ export function buildSims(
       y: target.y + 120 + Math.random() * 160,
     };
     const geom = geometryFor(die.sides);
-    // A raise's bonus die always reads green with white pips, whatever the
-    // player's chosen dice colour — it was earned, not part of the base roll.
-    const rgb = die.raise
-      ? hexToRgb(RAISE_DIE_COLOR)
-      : hexToRgb(customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3');
+    // Three schemes, told apart by hue rather than by dimming the losing arm:
+    //   raise — always green, it was earned rather than rolled for
+    //   wild  — the roller's own colour, marking SWADE's second arm
+    //   trait — the neutral by-sides palette
+    // Dimming used to mark the arm that lost, but `kept` is only known once
+    // every arm has finished acing, so it announced the result of dice that
+    // had not been thrown yet.
+    const rgb = die.raise ? hexToRgb(RAISE_DIE_COLOR)
+      : die.wild ? hexToRgb(customColor ?? WILD_DIE_FALLBACK)
+        : hexToRgb(DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3');
+    // Pips have to stay legible against whatever colour the player picked.
+    const contrasting = luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb';
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
-      textColor: die.raise ? '#ffffff' : (customTextColor ?? (luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb')),
+      textColor: die.raise ? '#ffffff' : die.wild ? contrasting : (customTextColor ?? contrasting),
       size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
       start, target,
       delay: timing[i].delay,
@@ -436,8 +445,10 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
   const pop = sinceSettle > 0 && sinceSettle < 260 ? 1 + 0.14 * Math.sin((sinceSettle / 260) * Math.PI) : 1;
   const size = sim.size * pop;
 
-  const dropped = !sim.die.kept;
-  ctx.globalAlpha = dropped ? 0.45 : 1;
+  // Every die renders at full strength. The losing arm is identified by its
+  // colour, never by fading it out — fading is only knowable after all the
+  // aces have resolved, and would spoil them.
+  ctx.globalAlpha = 1;
 
   // An aced die announces itself the moment it lands: a bright halo that
   // pulses while the bonus die is being readied, so the table can see
@@ -470,7 +481,7 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
       ctx.fill();
     }
     ctx.restore();
-    ctx.globalAlpha = dropped ? 0.45 : 1;
+    ctx.globalAlpha = 1; // restore after the ace flash's own fades
   }
 
   // Ground shadow, tied to the table position (not the airborne die).

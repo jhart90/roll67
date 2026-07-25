@@ -140,7 +140,7 @@ describe('applyAdvance produces a correct patch', () => {
     const s = sheet({ agility: 'd6', skills: [{ name: 'Fighting', die: 'd6' }] });
     const res = applyAdvance(s, { kind: 'skillHigh', skill: 'Fighting' });
     expect((res.patch.skills as SheetData[])[0].die).toBe('d8');
-    expect(res.showcase).toEqual({ label: 'Fighting', die: 'd8' });
+    expect(res.showcase).toEqual({ label: 'Fighting', die: 'd8', kind: 'skill' });
   });
 
   it('raises two low skills on one Advance', () => {

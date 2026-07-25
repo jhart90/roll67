@@ -245,8 +245,10 @@ export interface AdvanceResult {
   patch: SheetData;
   /** Human-readable summary for the chat log. */
   summary: string;
-  /** Trait die worth showing off with a roll afterwards, when one changed. */
-  showcase?: { label: string; die: string };
+  /** Trait die worth showing off with a roll afterwards, when one changed.
+   *  `kind` lets the caller name it naturally: a skill reads "Battle Skill
+   *  roll", an attribute just "Agility roll". */
+  showcase?: { label: string; die: string; kind: 'skill' | 'attribute' };
 }
 
 /** Raise one skill row a die type, adding it at d4 if absent. */
@@ -291,7 +293,7 @@ export function applyAdvance(sheet: SheetData, choice: AdvanceChoice): AdvanceRe
     patch.skills = withSkillRaised(skills, choice.skill, false);
     const after = stepDie(before, 1);
     summary = `raises ${choice.skill} from ${before} to ${after}`;
-    showcase = { label: choice.skill, die: after };
+    showcase = { label: choice.skill, die: after, kind: 'skill' };
   } else if (choice.kind === 'skillsLow') {
     let next = skills;
     const parts: string[] = [];
@@ -305,7 +307,7 @@ export function applyAdvance(sheet: SheetData, choice: AdvanceChoice): AdvanceRe
   } else if (choice.kind === 'newSkill') {
     patch.skills = withSkillRaised(skills, choice.skill, true);
     summary = `learns ${choice.skill} at d4`;
-    showcase = { label: choice.skill, die: 'd4' };
+    showcase = { label: choice.skill, die: 'd4', kind: 'skill' };
   } else {
     const attr = ATTRIBUTES_SWADE.find((a) => a.id === choice.attrId);
     const before = attributeDie(sheet, choice.attrId);
@@ -313,7 +315,7 @@ export function applyAdvance(sheet: SheetData, choice: AdvanceChoice): AdvanceRe
     patch[choice.attrId] = after;
     patch.attrRaisedAtRank = rankIndexForAdvances(advances);
     summary = `raises ${attr?.label ?? choice.attrId} from ${before} to ${after}`;
-    showcase = { label: attr?.label ?? choice.attrId, die: after };
+    showcase = { label: attr?.label ?? choice.attrId, die: after, kind: 'attribute' };
   }
 
   if (advanceRanksUp(advances - 1)) {

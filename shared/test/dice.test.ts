@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DiceParseError, parseDice } from '../src/dice/parser.js';
-import { roll, seededRng, withRaiseDie } from '../src/dice/roller.js';
+import { roll, seededRng, splitRollLabel, withRaiseDie } from '../src/dice/roller.js';
 
 describe('dice parser', () => {
   it('parses plain dice and numbers', () => {
@@ -228,5 +228,32 @@ describe('wild die tagging', () => {
   it('leaves ordinary rolls untagged', () => {
     const r = roll('2d6+3', seededRng(4));
     expect(r.dice.some((d) => d.wild)).toBe(false);
+  });
+});
+
+describe('splitRollLabel', () => {
+  it('returns the whole argument as the expression when there is no label', () => {
+    expect(splitRollLabel('1d20+3')).toEqual({ expr: '1d20+3', label: '' });
+  });
+
+  it('splits on the first # and trims both sides', () => {
+    expect(splitRollLabel('1d20+3  #  Stealth check ')).toEqual({ expr: '1d20+3', label: 'Stealth check' });
+  });
+
+  it('lets a label contain further # characters', () => {
+    expect(splitRollLabel('2d6 # roll #2')).toEqual({ expr: '2d6', label: 'roll #2' });
+  });
+
+  it('keeps a SWADE best() expression intact', () => {
+    const { expr, label } = splitRollLabel('best(1d12!, 1d6!) # Example Battle Skill roll');
+    expect(expr).toBe('best(1d12!, 1d6!)');
+    expect(label).toBe('Example Battle Skill roll');
+    expect(() => roll(expr)).not.toThrow();
+  });
+
+  it('yields an empty expression for a label-only argument, which roll() rejects', () => {
+    const { expr } = splitRollLabel('# just a label');
+    expect(expr).toBe('');
+    expect(() => roll(expr)).toThrow();
   });
 });

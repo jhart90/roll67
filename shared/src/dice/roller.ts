@@ -128,3 +128,17 @@ export function withRaiseDie(base: RollBreakdown, bonus: RollBreakdown): RollBre
     ...(base.outcome ? { outcome: base.outcome } : {}),
   };
 }
+
+/**
+ * Split a chat roll argument into its dice expression and an optional label:
+ * `"1d20+3 # Stealth check"` → `{ expr: '1d20+3', label: 'Stealth check' }`.
+ *
+ * Only the first `#` separates; later ones belong to the label, so a label may
+ * contain one. A roll with no `#` keeps an empty label, which is how every
+ * existing `/r` behaves.
+ */
+export function splitRollLabel(arg: string): { expr: string; label: string } {
+  const at = arg.indexOf('#');
+  if (at === -1) return { expr: arg.trim(), label: '' };
+  return { expr: arg.slice(0, at).trim(), label: arg.slice(at + 1).trim() };
+}

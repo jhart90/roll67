@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, str, systemFor,
+  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, splitRollLabel, str, systemFor,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
   type ModerateMessagePayload, type ReorderMacrosPayload, type SaveMacroPayload,
   type SheetData, type SheetRollPayload, type UndoEntry,
@@ -237,9 +237,12 @@ function handleChatText(
   const rollMatch = text.match(/^\/r(?:oll)?\s+(.+)$/i);
   if (rollMatch) {
     try {
-      const breakdown = roll(rollMatch[1]);
+      // "/r 1d20+3 # Stealth check" — anything after the first # labels the
+      // roll, so a bare expression isn't the only thing the table sees.
+      const { expr, label } = splitRollLabel(rollMatch[1]);
+      const breakdown = roll(expr);
       const msg = chat.add(campaignId, {
-        userId, fromName: username, kind: 'roll', text: '', roll: breakdown, recipients: null,
+        userId, fromName: username, kind: 'roll', text: label, roll: breakdown, recipients: null,
       });
       deliver(io, campaignId, msg);
     } catch (err) {
@@ -253,10 +256,11 @@ function handleChatText(
   const gmRollMatch = text.match(/^\/gr\s+(.+)$/i);
   if (gmRollMatch) {
     try {
-      const breakdown = roll(gmRollMatch[1]);
+      const { expr, label } = splitRollLabel(gmRollMatch[1]);
+      const breakdown = roll(expr);
       const dmNames = campaigns.members(campaignId).filter((m) => m.role === 'dm').map((m) => m.username);
       const msg = chat.add(campaignId, {
-        userId, fromName: username, kind: 'whisper', text: '(GM roll)', roll: breakdown,
+        userId, fromName: username, kind: 'whisper', text: label ? `(GM roll) ${label}` : '(GM roll)', roll: breakdown,
         recipients: dmNames,
       });
       deliver(io, campaignId, msg);
@@ -285,7 +289,7 @@ function handleChatText(
   }
 
   if (text.startsWith('/')) {
-    emitError(socket, 'Commands: /r <dice>, /gr <dice>, /w <player> <message>, #macro');
+    emitError(socket, 'Commands: /r <dice> [# label], /gr <dice> [# label], /w <player> <message>, #macro');
     return;
   }
 

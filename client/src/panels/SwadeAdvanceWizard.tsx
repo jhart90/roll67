@@ -84,7 +84,10 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
     // the server rolls it, so it lands in chat with everyone's 3D dice.
     if (result.showcase) {
       const sides = dieSides(result.showcase.die);
-      intents.chat(`/roll ${traitExpr({ ...sheet, ...result.patch }, sides)}`);
+      // Label it, or the card is a bare expression with no hint of what the
+      // wizard just rolled or why.
+      const what = `${result.showcase.label}${result.showcase.kind === 'skill' ? ' Skill' : ''}`;
+      intents.chat(`/roll ${traitExpr({ ...sheet, ...result.patch }, sides)} # Example ${what} roll`);
     }
     onClose();
   }

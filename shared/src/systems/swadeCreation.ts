@@ -19,6 +19,7 @@ import {
 } from './swade.js';
 import { DAMAGE_TYPES } from './effects.js';
 import { CONTENT_SWADE } from '../data/contentSwade.js';
+import { contentSlug, type ContentEntry, type TraitData } from '../data/compendiumTypes.js';
 
 export type SwadeAttrId = 'agility' | 'smarts' | 'spirit' | 'strength' | 'vigor';
 
@@ -264,6 +265,58 @@ export function maxTakesOf(trait: CustomRaceTrait): number {
 export function raceTraitPointTotal(picks: RaceTraitPick[]): number {
   return picks.reduce((sum, p) => sum + raceTraitPickCost(p), 0);
 }
+
+/**
+ * The whole Making Races table as compendium entries, so a racial ability can
+ * also be granted after creation (a GM handing out a mutation, a setting
+ * where characters change). One entry per priced tier, and the same
+ * mechanical payload the creator uses — natural weapons carry weapon data so
+ * they become real attacks, everything else carries its modifier columns.
+ */
+export const RACE_TRAIT_CONTENT_SWADE: ContentEntry[] = CUSTOM_RACE_TRAITS.flatMap((trait, order) => {
+  const tierCount = trait.tiers?.length ?? 1;
+  return Array.from({ length: tierCount }, (_, ti) => {
+    const tier = pickTier(trait, ti);
+    // Some tier labels already lead with the ability's name ("Claws (d6)"),
+    // so don't nest it a second time.
+    const name = !trait.tiers ? trait.name
+      : tier.label.toLowerCase().startsWith(trait.name.toLowerCase()) ? tier.label
+        : `${trait.name} (${tier.label})`;
+    const positive = (trait.category ?? 'positive') === 'positive';
+    const effect = tier.effect;
+    const base = {
+      // Keyed off the stable trait id, not the display name — "Size +1" and
+      // "Size −1" would otherwise slug to the same thing.
+      id: contentSlug('swade', 'racialtrait', trait.tiers ? `${trait.id}-${ti}` : trait.id),
+      system: 'swade' as const,
+      kind: 'racialTrait' as const,
+      name,
+      category: positive ? 'Positive Racial Ability' : 'Negative Racial Ability',
+      order: order * 10 + ti,
+      subtitle: tier.desc,
+      detail: `${tier.cost >= 0 ? '+' : ''}${tier.cost} racial build points.`,
+    };
+    if (effect.kind === 'naturalWeapon') {
+      return {
+        ...base,
+        weapon: {
+          damage: /d\d+/.exec(effect.damage)?.[0] ?? 'd4',
+          damageType: '', ability: 'str' as const,
+          props: effect.ap ? [`AP ${effect.ap}`] : [],
+        },
+      };
+    }
+    const mods: TraitData = {};
+    if (effect.kind === 'armor' || effect.kind === 'toughness' || effect.kind === 'size') mods.toughnessBonus = effect.amount;
+    if (effect.kind === 'parry') mods.parryBonus = effect.amount;
+    if (effect.kind === 'pace') {
+      mods.paceBonus = effect.amount;
+      if (effect.skill) { mods.bonusSkill = effect.skill; mods.bonusAmt = effect.skillAmount ?? 0; }
+    }
+    if (effect.kind === 'skillBonus' && effect.skill) { mods.bonusSkill = effect.skill; mods.bonusAmt = effect.amount; }
+    return { ...base, trait: mods };
+  });
+});
 
 /** Environmental effects the Resistance/Weakness/Dependency abilities name. */
 export const RACE_ENVIRONMENTS = [

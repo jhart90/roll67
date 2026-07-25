@@ -4,10 +4,13 @@ import { ITEMS_5E } from './items5e.js';
 import { SPELLS_5E } from './spells5e.js';
 import { CONTENT_SWN } from './contentSwn.js';
 import { CONTENT_SWADE } from './contentSwade.js';
+import { RACE_TRAIT_CONTENT_SWADE } from '../systems/swadeCreation.js';
 
 export * from './compendiumTypes.js';
 
-export const ALL_CONTENT: ContentEntry[] = [...ITEMS_5E, ...SPELLS_5E, ...CONTENT_SWN, ...CONTENT_SWADE];
+export const ALL_CONTENT: ContentEntry[] = [
+  ...ITEMS_5E, ...SPELLS_5E, ...CONTENT_SWN, ...CONTENT_SWADE, ...RACE_TRAIT_CONTENT_SWADE,
+];
 
 const byId = new Map(ALL_CONTENT.map((c) => [c.id, c]));
 
@@ -20,7 +23,7 @@ export function contentForSystem(system: GameSystem): ContentEntry[] {
 }
 
 /** Distinct kinds present for a system, in a sensible display order. */
-const KIND_ORDER: ContentKind[] = ['weapon', 'armor', 'spell', 'power', 'edge', 'hindrance', 'gear', 'magicitem'];
+const KIND_ORDER: ContentKind[] = ['weapon', 'armor', 'spell', 'power', 'edge', 'hindrance', 'racialTrait', 'gear', 'magicitem'];
 export const KIND_LABEL: Record<ContentKind, string> = {
   weapon: 'Weapons',
   armor: 'Armor',
@@ -28,6 +31,7 @@ export const KIND_LABEL: Record<ContentKind, string> = {
   power: 'Powers',
   edge: 'Edges',
   hindrance: 'Hindrances',
+  racialTrait: 'Racial Abilities',
   gear: 'Gear',
   magicitem: 'Magic Items',
 };

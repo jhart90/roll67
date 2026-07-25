@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyEntry, contentForSystem } from '../src/data/compendium.js';
+import { applyEntry, contentForSystem, shopItemFromEntry } from '../src/data/compendium.js';
 import { swade, swadeParry, swadeToughness, swadePace, gearTraitBonus } from '../src/systems/swade.js';
 import { buildSwadeCharacterSheet } from '../src/systems/swadeCreation.js';
 import { swn, swnDerivedAc } from '../src/systems/swn.js';
@@ -160,6 +160,58 @@ describe('Edges taken at character creation are mechanically live', () => {
 
   it('Hindrances taken at creation carry their penalties too', () => {
     expect(gearTraitBonus(build([], ['clueless']), 'Common Knowledge')).toBe(-1);
+  });
+});
+
+describe('racial abilities are addable from the compendium after creation', () => {
+  it('the whole Making Races table is present, one entry per priced tier', () => {
+    const traits = contentForSystem('swade').filter((e) => e.kind === 'racialTrait');
+    // 45 abilities, several of which expose 2–3 tiers.
+    expect(traits.length).toBeGreaterThanOrEqual(55);
+    expect(traits.some((t) => t.name === 'Hardy')).toBe(true);
+    expect(traits.some((t) => t.name === 'Flight (Fly Pace 24)')).toBe(true);
+    expect(traits.some((t) => t.name === 'Claws (d6, AP 2)')).toBe(true);
+    expect(traits.some((t) => t.category === 'Positive Racial Ability')).toBe(true);
+    expect(traits.some((t) => t.category === 'Negative Racial Ability')).toBe(true);
+    // The build-point cost is surfaced for the GM's benefit.
+    expect(traits.find((t) => t.name === 'Hardy')!.detail).toContain('+2 racial build points');
+  });
+
+  /** Apply a racial ability by name — several share a name with a power. */
+  function addRacial(name: string) {
+    const entry = contentForSystem('swade').find((e) => e.kind === 'racialTrait' && e.name === name);
+    if (!entry) throw new Error(`no racial ability named ${name}`);
+    const base = swade.defaultSheet();
+    const applied = applyEntry(entry, base)!;
+    const list = Array.isArray(base[applied.listId]) ? [...(base[applied.listId] as SheetData[])] : [];
+    return { listId: applied.listId, sheet: { ...base, [applied.listId]: [...list, applied.row as SheetData] } };
+  }
+
+  it('adding one lands in Ancestry Traits and moves the stat it should', () => {
+    const plain = swade.defaultSheet();
+    const armor = addRacial('Armor');
+    expect(armor.listId).toBe('racialTraits');
+    expect(swadeToughness(armor.sheet)).toBe(swadeToughness(plain) + 2);
+    expect(swadeParry(addRacial('Parry').sheet)).toBe(swadeParry(plain) + 1);
+    expect(swadePace(addRacial('Reduced Pace (−1 Pace)').sheet)).toBe(swadePace(plain) - 1);
+    expect(swadeToughness(addRacial('Frail').sheet)).toBe(swadeToughness(plain) - 1);
+  });
+
+  it('natural weapons arrive as real attacks using the character’s Strength die', () => {
+    const entry = contentForSystem('swade').find((e) => e.name === 'Claws (d6, AP 2)')!;
+    const sheet = { ...swade.defaultSheet(), strength: 'd10' };
+    const applied = applyEntry(entry, sheet)!;
+    expect(applied.listId).toBe('attacks');
+    expect(applied.row).toMatchObject({ damage: '1d10!+1d6!', ap: 2, skill: 'Fighting' });
+    // …and it is immediately usable as a combat action.
+    const character = charWith('swade', { ...sheet, attacks: [applied.row as SheetData] });
+    expect(combatActions(character).some((a) => a.label.startsWith('Claws'))).toBe(true);
+  });
+
+  it('they never leak into shop stock', () => {
+    for (const e of contentForSystem('swade').filter((x) => x.kind === 'racialTrait')) {
+      expect(shopItemFromEntry(e).price, e.name).toBe(0);
+    }
   });
 });
 

@@ -1,6 +1,6 @@
 import type { AoeShape, GameSystem, SheetData } from '../types.js';
 
-export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power' | 'edge' | 'hindrance';
+export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power' | 'edge' | 'hindrance' | 'racialTrait';
 
 /** SWADE Edges and Hindrances: a character trait with live sheet modifiers. */
 export interface TraitData {
@@ -227,8 +227,8 @@ function parseAcSaveBonus(text: string): { ac: number; save: number } {
 /** Rough default shop prices by kind; the DM can adjust after adding. */
 const KIND_PRICE: Record<ContentKind, number> = {
   weapon: 25, armor: 75, gear: 10, magicitem: 150, spell: 25, power: 0,
-  // Edges and Hindrances are character traits, never shop stock.
-  edge: 0, hindrance: 0,
+  // Edges, Hindrances, and racial abilities are character traits, never stock.
+  edge: 0, hindrance: 0, racialTrait: 0,
 };
 
 /**
@@ -446,6 +446,39 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
         equipped: false, notes: entry.armor.notes ?? '',
       },
       label: `${entry.name} added to armor`,
+    };
+  }
+
+  // A racial ability picked up after creation. Natural weapons (Bite, Claws,
+  // Horns) become real attacks with the character's own Strength die folded
+  // in; everything else lands in the Ancestry Traits list with whatever live
+  // modifier columns it carries.
+  if (entry.kind === 'racialTrait') {
+    if (entry.weapon) {
+      const strDie = /^d\d+$/.test(String(sheet.strength ?? '')) ? String(sheet.strength) : 'd6';
+      const props = entry.weapon.props.join(', ');
+      return {
+        listId: 'attacks',
+        row: {
+          name: entry.name, skill: 'Fighting',
+          damage: `1${strDie}!+1${entry.weapon.damage}!`,
+          dtype: entry.weapon.damageType, range: 5,
+          ap: Number(props.match(/\bAP (\d+)/i)?.[1] ?? 0),
+          parryBonus: 0, wielded: false, notes: 'Natural weapon',
+        },
+        label: `${entry.name} added to weapons`,
+      };
+    }
+    const t = entry.trait ?? {};
+    return {
+      listId: 'racialTraits',
+      row: {
+        name: entry.name,
+        bonusSkill: t.bonusSkill ?? '', bonusAmt: t.bonusAmt ?? 0,
+        parryBonus: t.parryBonus ?? 0, toughnessBonus: t.toughnessBonus ?? 0,
+        paceBonus: t.paceBonus ?? 0, notes: entry.subtitle,
+      },
+      label: `${entry.name} added to Ancestry Traits`,
     };
   }
 

@@ -20,7 +20,7 @@ describe('SWADE bestiary', () => {
 
   it('covers the genre categories the table actually needs', () => {
     const cats = new Set(NPCS_SWADE.map((n) => n.category));
-    for (const c of ['People', 'Soldiers & Lawmen', 'Creatures', 'Undead & Horrors', 'Animals', 'Machines', 'Vehicles']) {
+    for (const c of ['People', 'Soldiers & Lawmen', 'Creatures', 'Undead & Horrors', 'Animals', 'Machines', 'Vehicles', 'Dinosaurs', 'Robo-Dinosaurs']) {
       expect(cats, `missing category ${c}`).toContain(c);
     }
   });
@@ -73,6 +73,42 @@ describe('SWADE bestiary', () => {
     const labels = new Set(NPCS_SWADE.map((n) => n.challengeLabel));
     expect(labels).toEqual(new Set(['Wild Card', 'Extra']));
     expect(NPCS_SWADE.filter((n) => n.challengeLabel === 'Wild Card').length).toBeGreaterThan(5);
+  });
+
+  it('keeps most dinosaurs inside Novice-party reach', () => {
+    const dinos = NPCS_SWADE.filter((n) => n.category === 'Dinosaurs');
+    expect(dinos.length).toBeGreaterThanOrEqual(15);
+    // The bulk of the roster should be tier 0-2 so a starting party has real choices.
+    const novice = dinos.filter((n) => n.challenge <= 2);
+    expect(novice.length).toBeGreaterThan(dinos.length / 2);
+    for (const d of novice) {
+      expect(d.hp, `${d.name} is too tough for Novices`).toBeLessThanOrEqual(18);
+      const armor = (d.sheet.armor ?? []) as Array<{ armor?: number }>;
+      const worst = Math.max(0, ...armor.map((a) => a.armor ?? 0));
+      expect(worst, `${d.name} armor outclasses Novice damage`).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('pitches robo-dinosaurs above their organic counterparts', () => {
+    const robos = NPCS_SWADE.filter((n) => n.category === 'Robo-Dinosaurs');
+    expect(robos.length).toBeGreaterThanOrEqual(8);
+    for (const r of robos) {
+      expect(r.sheet.armor, `${r.name} needs plating`).toBeTruthy();
+      expect(String(r.sheet.immune ?? ''), `${r.name} should be a construct`).toMatch(/poison/);
+    }
+    const avg = (xs: typeof NPCS_SWADE) => xs.reduce((s, n) => s + n.challenge, 0) / xs.length;
+    expect(avg(robos)).toBeGreaterThan(avg(NPCS_SWADE.filter((n) => n.category === 'Dinosaurs')));
+  });
+
+  it('gives the Robo T-Rex boss the full boss kit', () => {
+    const boss = NPCS_SWADE.find((n) => n.name === 'Robo T-Rex');
+    expect(boss, 'Robo T-Rex should exist').toBeTruthy();
+    expect(boss!.challengeLabel).toBe('Wild Card');
+    const attacks = (boss!.sheet.attacks ?? []) as Array<{ name: string; damage: string }>;
+    // A melee threat, an area attack, a ranged option and a fear effect.
+    expect(attacks.length).toBeGreaterThanOrEqual(4);
+    expect(boss!.hp).toBeGreaterThan(35);
+    expect(String(boss!.sheet.notes ?? '')).toMatch(/[Ww]eak point/);
   });
 
   it('builds vehicles as spawnable tokens with armor and a crew note', () => {

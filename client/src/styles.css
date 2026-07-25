@@ -1565,6 +1565,11 @@ button.link:hover { text-decoration: underline; }
 /* glossary term tooltips (character creators) */
 .term { border-bottom: 1px dotted var(--text-dim); cursor: help; }
 .term:focus { outline: none; border-bottom-color: var(--accent); }
+/* When a Term wraps a chip or a button, the element already reads as
+   interactive — skip the dotted underline and keep it a flex-friendly box. */
+.term:has(> button), .term:has(> .cf-chip) { border-bottom: none; display: inline-flex; }
+/* Sheet table headers get the hint without the extra underline weight. */
+th > .term { border-bottom-style: dotted; }
 .term-tip {
   position: fixed;
   transform: translate(-50%, -100%);

@@ -7,6 +7,7 @@ import {
 } from 'shared';
 import { intents } from '../store/game';
 import { FeatPicker } from './FeatPicker';
+import { Term } from '../util/Term';
 
 type PickModal = null | 'invocations' | 'metamagic' | 'infusions';
 
@@ -188,7 +189,7 @@ export function ClassFeatures({ character, editable }: { character: Character; e
 
       <div className="cf-feats">
         <span className="cf-feats-label">Feats</span>
-        {feats.map((ft) => <span key={ft.id} className="cf-chip" title={ft.desc}>{ft.name}</span>)}
+        {feats.map((ft) => <Term key={ft.id} desc={ft.desc}><span className="cf-chip">{ft.name}</span></Term>)}
         {feats.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
         {editable && <button className="link cf-add-feat" onClick={() => setShowFeats(true)}>+ Feat</button>}
       </div>
@@ -198,7 +199,7 @@ export function ClassFeatures({ character, editable }: { character: Character; e
           <span className="cf-feats-label">Invocations</span>
           {invocations.map((id) => {
             const p = INVOCATIONS_5E.find((x) => x.id === id);
-            return p ? <span key={id} className="cf-chip" title={p.desc}>{p.name}</span> : null;
+            return p ? <Term key={id} desc={p.desc}><span className="cf-chip">{p.name}</span></Term> : null;
           })}
           {invocations.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
           {editable && <button className="link cf-add-feat" onClick={() => setPickModal('invocations')}>+ Invocation</button>}
@@ -210,7 +211,7 @@ export function ClassFeatures({ character, editable }: { character: Character; e
           <span className="cf-feats-label">Metamagic</span>
           {metamagic.map((id) => {
             const p = METAMAGIC_5E.find((x) => x.id === id);
-            return p ? <span key={id} className="cf-chip" title={p.desc}>{p.name}</span> : null;
+            return p ? <Term key={id} desc={p.desc}><span className="cf-chip">{p.name}</span></Term> : null;
           })}
           {metamagic.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
           {editable && <button className="link cf-add-feat" onClick={() => setPickModal('metamagic')}>+ Metamagic</button>}
@@ -222,7 +223,7 @@ export function ClassFeatures({ character, editable }: { character: Character; e
           <span className="cf-feats-label">Infusions</span>
           {infusions.map((id) => {
             const p = INFUSIONS_5E.find((x) => x.id === id);
-            return p ? <span key={id} className="cf-chip" title={p.desc}>{p.name}</span> : null;
+            return p ? <Term key={id} desc={p.desc}><span className="cf-chip">{p.name}</span></Term> : null;
           })}
           {infusions.length === 0 && <span className="dim" style={{ fontSize: 11 }}>none</span>}
           {editable && <button className="link cf-add-feat" onClick={() => setPickModal('infusions')}>+ Infusion</button>}

@@ -27,6 +27,7 @@ import { Jukebox } from '../panels/Jukebox';
 import { WindowHost } from '../window/WindowHost';
 import { SwadeCharacterCreator } from '../panels/SwadeCharacterCreator';
 import { SwnCharacterCreator } from '../panels/SwnCharacterCreator';
+import { Dnd5eCharacterCreator } from '../panels/Dnd5eCharacterCreator';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -79,14 +80,14 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
     return () => useGameStore.getState().leave();
   }, [campaignId]);
 
-  // First-time-onboarding: a player who joins a SWADE/SWN campaign with no
-  // character of their own yet gets the guided creator automatically. Fires
+  // First-time-onboarding: a player who joins a campaign with no character
+  // of their own yet gets that system's guided creator automatically. Fires
   // once per join (characterCreatorPrompted guards it) — dismissing without
   // finishing just means it won't auto-reopen until their next fresh join,
   // but the World tab's "Create Character" button always relaunches it.
   useEffect(() => {
     if (characterCreatorPrompted || !you || !campaign) return;
-    if (you.role !== 'player' || (campaign.system !== 'swade' && campaign.system !== 'swn')) return;
+    if (you.role !== 'player') return;
     useGameStore.getState().setCharacterCreatorPrompted(true);
     if (!characters.some((c) => c.ownerUserId === you.userId)) {
       useGameStore.getState().setShowCharacterCreator(true);
@@ -340,6 +341,9 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         )}
         {showCharacterCreator && campaign.system === 'swn' && (
           <SwnCharacterCreator onClose={() => useGameStore.getState().setShowCharacterCreator(false)} />
+        )}
+        {showCharacterCreator && campaign.system === 'dnd5e' && (
+          <Dnd5eCharacterCreator onClose={() => useGameStore.getState().setShowCharacterCreator(false)} />
         )}
       </div>
 

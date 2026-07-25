@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Character, SheetData } from 'shared';
+import type { Character, GameSystem, SheetData } from 'shared';
 import {
   canEditCharacter, castableLevels, combatActions, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
@@ -13,13 +13,15 @@ import { ClassFeatures } from './ClassFeatures';
 import { SwnLevelUpWizard } from './SwnLevelUpWizard';
 import { SwnFeatures } from './SwnFeatures';
 import { CombatStatus } from './CombatStatus';
+import { SheetTerm } from '../util/Term';
 
 type AdvMode = null | 'adv' | 'dis';
 
 function FieldInput({
-  field, sheet, derived, readOnly, onPatch, onEditImage,
+  field, system, sheet, derived, readOnly, onPatch, onEditImage,
 }: {
   field: FieldDef;
+  system: GameSystem;
   sheet: SheetData;
   derived: Record<string, number | string>;
   readOnly: boolean;
@@ -33,7 +35,7 @@ function FieldInput({
     const url = typeof value === 'string' ? value : '';
     return (
       <div className={`sheet-field w-${field.width ?? 'half'} image-field`}>
-        <span>{field.label}</span>
+        <span><SheetTerm system={system} label={field.label} /></span>
         <div className="image-slot">
           {url ? <img src={url} alt={field.label} /> : <div className="image-empty">No image</div>}
           {!readOnly && (
@@ -53,7 +55,7 @@ function FieldInput({
           disabled={readOnly}
           onChange={(e) => onPatch({ [field.id]: e.target.checked })}
         />
-        <span>{field.label}</span>
+        <span><SheetTerm system={system} label={field.label} /></span>
         {derivedBadge && <span className="derived-badge">{derivedBadge}</span>}
       </label>
     );
@@ -62,7 +64,7 @@ function FieldInput({
   if (field.type === 'select') {
     return (
       <label className={`sheet-field w-${field.width ?? 'third'}`}>
-        <span>{field.label}{derivedBadge && <span className="derived-badge">{derivedBadge}</span>}</span>
+        <span><SheetTerm system={system} label={field.label} />{derivedBadge && <span className="derived-badge">{derivedBadge}</span>}</span>
         <select
           value={typeof value === 'string' ? value : String(field.default ?? '')}
           disabled={readOnly}
@@ -77,7 +79,7 @@ function FieldInput({
   if (field.type === 'textarea') {
     return (
       <label className={`sheet-field w-full`}>
-        <span>{field.label}</span>
+        <span><SheetTerm system={system} label={field.label} /></span>
         <textarea
           rows={8}
           defaultValue={typeof value === 'string' ? value : ''}
@@ -94,7 +96,7 @@ function FieldInput({
   const listId = field.suggestions ? `dl-${field.id}` : undefined;
   return (
     <label className={`sheet-field w-${field.width ?? 'third'}`}>
-      <span>{field.label}{derivedBadge && <span className="derived-badge">{derivedBadge}</span>}</span>
+      <span><SheetTerm system={system} label={field.label} />{derivedBadge && <span className="derived-badge">{derivedBadge}</span>}</span>
       <input
         type={field.type === 'number' ? 'number' : 'text'}
         key={`${field.id}-${String(value)}`}
@@ -121,9 +123,10 @@ function FieldInput({
 const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoeSize', 'aoeWidth', 'condition', 'conditionSave', 'conditionDc']);
 
 function ListEditor({
-  section, sheet, readOnly, onPatch,
+  section, system, sheet, readOnly, onPatch,
 }: {
   section: ListSection;
+  system: GameSystem;
   sheet: SheetData;
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
@@ -207,7 +210,7 @@ function ListEditor({
       <table>
         <thead>
           <tr>
-            {mainCols.map((c) => <th key={c.id}>{c.label}</th>)}
+            {mainCols.map((c) => <th key={c.id}><SheetTerm system={system} label={c.label} /></th>)}
             {hasDetail && <th />}
             {!readOnly && <th />}
           </tr>
@@ -256,7 +259,7 @@ function ListEditor({
           <div className="attack-detail-grid">
             {section.columns.map((col) => (
               <label key={col.id} className={`${ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}${col.width === 'full' ? ' detail-full' : ''}`}>
-                {col.label}
+                <SheetTerm system={system} label={col.label} />
                 {col.width === 'full' ? (
                   <textarea
                     defaultValue={detailRow[col.id] === undefined ? '' : String(detailRow[col.id])}
@@ -281,9 +284,10 @@ function ListEditor({
 }
 
 function DerivedBlocks({
-  section, derived,
+  section, system, derived,
 }: {
   section: DerivedSection;
+  system: GameSystem;
   derived: Record<string, number | string>;
 }) {
   return (
@@ -291,7 +295,7 @@ function DerivedBlocks({
       {section.items.map((item) => (
         <div key={item.key} className="stat-block">
           <span className="stat-value">{derived[item.key] ?? '—'}</span>
-          <span className="stat-label">{item.label}</span>
+          <span className="stat-label"><SheetTerm system={system} label={item.label} /></span>
         </div>
       ))}
     </div>
@@ -299,9 +303,10 @@ function DerivedBlocks({
 }
 
 function Section({
-  section, sheet, derived, readOnly, onPatch, onEditImage,
+  section, system, sheet, derived, readOnly, onPatch, onEditImage,
 }: {
   section: SectionDef;
+  system: GameSystem;
   sheet: SheetData;
   derived: Record<string, number | string>;
   readOnly: boolean;
@@ -314,14 +319,14 @@ function Section({
       {section.kind === 'fields' && (
         <div className="sheet-grid">
           {section.fields.map((f) => (
-            <FieldInput key={f.id} field={f} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} onEditImage={onEditImage} />
+            <FieldInput key={f.id} field={f} system={system} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} onEditImage={onEditImage} />
           ))}
         </div>
       )}
       {section.kind === 'list' && (
-        <ListEditor section={section} sheet={sheet} readOnly={readOnly} onPatch={onPatch} />
+        <ListEditor section={section} system={system} sheet={sheet} readOnly={readOnly} onPatch={onPatch} />
       )}
-      {section.kind === 'derived' && <DerivedBlocks section={section} derived={derived} />}
+      {section.kind === 'derived' && <DerivedBlocks section={section} system={system} derived={derived} />}
     </section>
   );
 }
@@ -592,6 +597,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
               <Section
                 key={s.id}
                 section={s}
+                system={character.system}
                 sheet={character.sheet}
                 derived={derived}
                 readOnly={!editable}

@@ -1,6 +1,15 @@
 import type { Character, SheetData } from 'shared';
 import { bool, combatResources, conditionsFor, conditionsOf, resetsCleared } from 'shared';
 import { intents } from '../store/game';
+import { Term } from '../util/Term';
+
+/** When a pool refreshes, spelled out for its tooltip. */
+const RESET_DESC: Record<string, string> = {
+  round: 'Refreshes at the start of each round.',
+  scene: 'Refreshes at the end of each scene or encounter.',
+  short: 'Refreshes on a short rest.',
+  long: 'Refreshes on a long rest.',
+};
 
 /** Shared "effect engine" panel on the Core tab: status conditions, the
  *  downed/death-save block, and universal reaction/reroll trackers. */
@@ -64,15 +73,15 @@ export function CombatStatus({ character, editable }: { character: Character; ed
 
       <div className="cs-conditions">
         {list.map((c) => (
-          <button
-            key={c.id}
-            className={`cs-cond ${active.includes(c.id) ? 'on' : ''}`}
-            title={c.desc}
-            disabled={!editable}
-            onClick={() => toggle(c.id)}
-          >
-            {c.icon} {c.label}
-          </button>
+          <Term key={c.id} desc={c.desc}>
+            <button
+              className={`cs-cond ${active.includes(c.id) ? 'on' : ''}`}
+              disabled={!editable}
+              onClick={() => toggle(c.id)}
+            >
+              {c.icon} {c.label}
+            </button>
+          </Term>
         ))}
       </div>
 
@@ -88,7 +97,12 @@ export function CombatStatus({ character, editable }: { character: Character; ed
           </div>
           {resources.map((r) => (
             <div key={r.id} className="cf-res">
-              <span className="cf-res-name">{r.name}{r.note ? <span className="dim"> · {r.note}</span> : null}</span>
+              <span className="cf-res-name">
+                <Term desc={`${r.note ? `${r.note[0].toUpperCase()}${r.note.slice(1)}. ` : ''}${RESET_DESC[r.reset] ?? ''}`.trim()}>
+                  {r.name}
+                </Term>
+                {r.note ? <span className="dim"> · {r.note}</span> : null}
+              </span>
               <span className="cf-res-track">
                 <span className="cf-pips">
                   {Array.from({ length: r.max }).map((_, i) => (

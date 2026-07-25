@@ -354,7 +354,7 @@ export function WorldTreePanel() {
           <button className="btn btn-sm" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
       )}
-      {!isDm && (campaign?.system === 'swade' || campaign?.system === 'swn') && (
+      {!isDm && campaign && (
         <div className="wt-toolbar">
           <button className="btn btn-sm" onClick={() => useGameStore.getState().setShowCharacterCreator(true)}>🧙 Create a Character</button>
         </div>

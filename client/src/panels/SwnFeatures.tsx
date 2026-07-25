@@ -2,9 +2,10 @@ import { useState } from 'react';
 import type { Character } from 'shared';
 import {
   applyBackground, applyFocus, applyPackage, bestPsychicSkillLevel, effortMaxFor, getSwnClass,
-  hasDiscipline, hasFocus, num, rows, str, SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
+  hasDiscipline, hasFocus, num, rows, str, termDesc, SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
 } from 'shared';
 import { intents } from '../store/game';
+import { Term } from '../util/Term';
 
 type Modal = null | 'focus' | 'background' | 'package';
 
@@ -62,8 +63,8 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
       <h4>Class & Foci</h4>
 
       <div className="cf-notes">
-        {cls && <span className="cf-chip" title={cls.ability}>{cls.name}</span>}
-        <span className="cf-chip">Attack bonus +{attackBonus}</span>
+        {cls && <Term desc={cls.ability}><span className="cf-chip">{cls.name}</span></Term>}
+        <Term desc={termDesc('swn', 'Attack bonus')}><span className="cf-chip">Attack bonus +{attackBonus}</span></Term>
         {isPsychic && (
           <span className="cf-chip">
             Effort {effortMax - effortCommitted}/{effortMax}
@@ -94,8 +95,10 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
             const trained = discipline !== '' && hasDiscipline(sheet, discipline);
             const affordable = effortCommitted + cost <= effortMax;
             return (
-              <span key={i} className="cf-chip" title={str(pw, 'notes', '')}>
-                {str(pw, 'name', 'Power')} ({discipline || '?'}, {cost} Effort)
+              <span key={i} className="cf-chip">
+                <Term desc={str(pw, 'notes', '') || termDesc('swn', 'Power')}>
+                  {str(pw, 'name', 'Power')} ({discipline || '?'}, {cost} Effort)
+                </Term>
                 {editable && (
                   <button
                     className="link"
@@ -116,9 +119,11 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
       <div className="cf-feats">
         <span className="cf-feats-label">Foci</span>
         {foci.filter((f) => !String(f.id ?? '').startsWith('class-')).map((f, i) => (
-          <span key={i} className="cf-chip" title={String(f.notes ?? '')}>
-            {String(f.name ?? 'Focus')}{Number(f.level) >= 2 ? ' II' : ''}
-          </span>
+          <Term key={i} desc={String(f.notes ?? '') || termDesc('swn', 'Focus')}>
+            <span className="cf-chip">
+              {String(f.name ?? 'Focus')}{Number(f.level) >= 2 ? ' II' : ''}
+            </span>
+          </Term>
         ))}
         {foci.filter((f) => !String(f.id ?? '').startsWith('class-')).length === 0 && (
           <span className="dim" style={{ fontSize: 11 }}>none</span>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { DAMAGE_TYPES, systemFor } from 'shared';
+import { DAMAGE_TYPES, systemFor, termDesc } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { Term } from '../util/Term';
 
 /** DM "call for save": pick targets on the current map, a save + DC, and an
  *  optional damage roll applied fully on a fail / halved on a save. */
@@ -47,11 +48,16 @@ export function SavePrompt({ onClose }: { onClose: () => void }) {
         </div>
 
         <label className="lu-field">
-          Save
+          <Term desc={campaign ? termDesc(campaign.system, 'Save') : undefined}>Save</Term>
           <select value={saveId} onChange={(e) => setSaveId(e.target.value)}>
             {saveIds.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>
+        {campaign && termDesc(campaign.system, saveIds.find((s) => s.id === saveId)?.label.replace(/ (save|roll)$/i, '') ?? '') && (
+          <p className="dim" style={{ fontSize: 12 }}>
+            {termDesc(campaign.system, saveIds.find((s) => s.id === saveId)!.label.replace(/ (save|roll)$/i, ''))}
+          </p>
+        )}
 
         {!targetNumber && (
           <label className="lu-field">

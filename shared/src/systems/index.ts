@@ -8,6 +8,7 @@ export * from './types.js';
 export * from './cards.js';
 export * from './combat.js';
 export * from './glossary.js';
+export * from './dnd5eCreation.js';
 export * from './currency.js';
 export * from './spells.js';
 export * from './classes5e.js';
@@ -19,7 +20,7 @@ export * from './subclassFeatures5e.js';
 export * from './effects.js';
 export * from './namedPicks5e.js';
 export * from './swnData.js';
-export { dnd5e, SKILLS_5E } from './dnd5e.js';
+export { dnd5e, SKILLS_5E, ALIGNMENTS, CLASSES_5E, RACES_5E, BACKGROUNDS_5E, SUBCLASSES_5E } from './dnd5e.js';
 export {
   swn, swnMod, PSYCHIC_DISCIPLINES_SWN, SKILLS_SWN, SPECIES_SWN, BACKGROUNDS_SWN,
   bestPsychicSkillLevel, effortMaxFor, hasDiscipline, isPsychicMishap, rollMishap, type PsychicMishap,

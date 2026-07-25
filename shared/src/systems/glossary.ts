@@ -151,19 +151,278 @@ const SWN_CONCEPTS: Record<string, string> = {
   Species: 'Your origin stock. Mechanically neutral in this wizard — the flavor drives roleplay and GM rulings.',
 };
 
-const TERMS_SWN: Record<string, string> = {
-  ...SWN_ATTRIBUTES, ...SWN_SKILLS, ...SWN_SPECIES, ...SWN_CONCEPTS,
+const SWN_SHEET: Record<string, string> = {
+  'Attack bonus': 'Your class attack bonus, added to every attack roll (1d20 + attack bonus + skill + modifier vs the target’s AC).',
+  'Hit bonus': 'A bonus specific to this weapon, on top of your class attack bonus.',
+  Shock: 'Damage a weapon inflicts even on a miss, against targets whose AC is at or below its shock threshold.',
+  'Shock vs AC ≤': 'The highest AC that still takes this weapon’s shock damage on a miss.',
+  'Ammo left': 'Rounds remaining in the magazine. Firing spends one; at zero the weapon can’t fire until reloaded.',
+  'Mag size': 'The weapon’s full magazine — what a reload refills it to.',
+  'Reload item': 'The inventory item a reload consumes (a Spare Magazine or a Type A Cell).',
+  Effort: 'A psychic’s reserve of power. Committed to activate disciplines, and returned when the power ends or the scene closes.',
+  'Max Effort': 'Your Effort capacity: 1 + the best of your highest psychic skill, Wisdom modifier, or Constitution modifier.',
+  Committed: 'Effort currently spent on active powers — unavailable until those powers end.',
+  'System strain': 'Physical toll from cyberware, psychic mishaps, and hard healing. At your maximum you can take no more.',
+  Implant: 'Installed cyberware. Each implant costs System Strain but grants a permanent benefit.',
+  'Init bonus': 'Added to your initiative roll (1d8 + Dexterity modifier + bonuses).',
+  Physical: 'The Physical saving throw — resisting poison, disease, and bodily trauma. Roll d20 at or above the target number.',
+  Evasion: 'The Evasion saving throw — dodging blasts, traps, and area effects. Roll d20 at or above the target number.',
+  Mental: 'The Mental saving throw — resisting psychic intrusion, fear, and mind-affecting effects. Roll d20 at or above the target number.',
+  Discipline: 'The psychic discipline a power belongs to — you must be trained in it to use the power.',
+  Enc: 'Encumbrance: how much this item weighs against your carrying capacity (6 + 3 × Strength modifier).',
+  Carried: 'Total encumbrance you’re hauling right now.',
+  Capacity: 'How much you can carry before being slowed: 6 + 3 × your Strength modifier.',
+  'Effective AC': 'Your final Armor Class after worn armor, natural armor, shields, and gear bonuses — what attackers actually roll against.',
+  Credits: 'The interstellar currency. Spend them in shops or via the compendium.',
+  Goal: 'What your character is chasing — a hook for your GM to build on.',
+  STR: 'Strength — melee punch, carrying capacity, and feats of might.',
+  DEX: 'Dexterity — ranged accuracy, Armor Class, and initiative.',
+  CON: 'Constitution — bonus hit points per level and physical resilience.',
+  INT: 'Intelligence — technical skills, memory, and analysis.',
+  WIS: 'Wisdom — perception, willpower, and Mental saves.',
+  CHA: 'Charisma — presence, leadership, and winning people over.',
+  Attribute: 'Which of the six attributes this skill rolls with — its modifier is added to the check.',
+  Armor: 'Worn protection. Equipping an armor row sets your Armor Class from its value.',
+  'AC bonus': 'A flat bonus this item or implant adds to your Armor Class.',
+  'Save bonus': 'A flat bonus this item adds to your saving throws while equipped.',
+  Save: 'Which saving throw resists this effect: Physical, Evasion, or Mental. Roll d20 at or above the target number.',
+  Skill: 'A trained ability. Level-0 is competent and level-1 professional; the die is 2d6 + level + attribute modifier.',
+  Weapon: 'A weapon you can attack with — use it from the Actions list to target a foe on the map.',
+  Power: 'A psychic power. Activating it commits Effort and rolls its discipline’s skill check.',
+  Level: 'Your character level: it drives hit points, attack bonus, and skill points.',
+  Remaining: 'Effort still available to commit to new powers.',
+  XP: 'Experience points earned from adventuring — they drive your level-ups.',
+  'Adventurer: 2nd class': 'An Adventurer blends two callings — pick the second class whose perks you also gain.',
 };
+
+const TERMS_SWN: Record<string, string> = {
+  ...SWN_ATTRIBUTES, ...SWN_SKILLS, ...SWN_SPECIES, ...SWN_CONCEPTS, ...SWN_SHEET,
+};
+
+// ---------- SWADE sheet-only labels ----------
+
+const SWADE_SHEET: Record<string, string> = {
+  Wounds: 'Injuries taken. Each Wound is −1 to every trait roll (max −3); a fourth takes a Wild Card out of the fight.',
+  Fatigue: 'Exhaustion from strain, poison, or cold. Each level is −1 to trait rolls; two levels leave you Incapacitated.',
+  'Wound/Fatigue penalty': 'The running total your Wounds and Fatigue subtract from every trait roll — applied automatically.',
+  Advances: 'Earned improvements. Every Advance raises a skill, an attribute, or grants a new Edge; four Advances raise your Rank.',
+  'Arcane Background': 'The source of your powers — Magic, Miracles, Psionics, Weird Science, or Gifted. It sets your arcane skill.',
+  'Arcane skill': 'The skill you roll to activate powers: Spellcasting, Faith, Psionics, Weird Science, or Focus.',
+  AP: 'Armor Piercing: this much of the target’s armor is ignored when the attack hits.',
+  'Parry mod': 'This weapon’s effect on your Parry while wielded — a Rapier adds +1, a Great Sword subtracts 1.',
+  Wielded: 'Check while this weapon is in hand: its Parry modifier applies and Smite can enhance its damage.',
+  'Armor vs ranged': 'Extra armor that counts only against ranged attacks — a Medium or Large Shield’s +2.',
+  'Toughness vs ranged': 'Your effective Toughness against ranged attacks, including any shield bonus.',
+  'Ammo left': 'Shots remaining. Firing spends one; at zero the weapon can’t fire until reloaded.',
+  'Running die': 'The die added to your Pace when you run — d6 for most characters. Running is a free action.',
+  'Boosts trait': 'While equipped, this item adds its bonus to the named skill or attribute roll.',
+  'Resisted by': 'The trait the target rolls to resist this power. Success negates or halves the effect.',
+  'On success': 'What happens when the target resists: the effect is negated entirely, or damage is halved.',
+  Severity: 'Minor Hindrances are worth 1 build point, Major ones 2 — and Major flaws bite harder in play.',
+  Concept: 'A one-line summary of who your character is — pure flavor, but it anchors everything else.',
+  'Currency ($)': 'Your cash on hand for buying gear.',
+  Unskilled: 'Rolling a trait you have no die in: d4−2 instead of your usual die.',
+  HP: 'A simplified hit-point pool standing in for the wound track — damage subtracts from it directly.',
+  PP: 'Power Points: the pool that fuels your powers. Each power costs its listed Points to activate.',
+  'Max HP': 'The top of your hit-point pool — what healing restores you toward.',
+  Die: 'The trait die you roll for this skill: d4 through d12. Bigger is better, and the die aces (explodes) on its max.',
+  Skill: 'A trained ability, rated as a die from d4 to d12. Untrained skills roll d4−2 instead.',
+  Weapon: 'A weapon you can attack with — use it from the Actions list to target a foe on the map.',
+  Power: 'A power fueled by Power Points. Activating it rolls your arcane skill against target number 4.',
+  Armor: 'Protective gear. Worn armor adds to your Toughness; shields add to Parry instead.',
+  'Armor (+Toughness)': 'How much this armor adds to your Toughness while worn.',
+  'Armor (+2 Toughness)': 'The Armor power: while maintained, it grants +2 Toughness. Toggle it on for the duration.',
+  'Protection (+2 Toughness)': 'The Protection power: while maintained, it grants +2 Toughness. Toggle it on for the duration.',
+  'Deflection (+2 Parry)': 'The Deflection power: attacks against you suffer −2, tracked here as +2 Parry while maintained.',
+  'Smite (+2 wielded dmg)': 'The Smite power: your wielded weapon deals +2 damage while maintained.',
+};
+
+// ---------- D&D 5e ----------
+
+const DND_ABILITIES: Record<string, string> = {
+  STR: 'Strength — raw physical power. Sets melee attack and damage, Athletics, and carrying capacity.',
+  DEX: 'Dexterity — agility and reflexes. Sets Armor Class, initiative, ranged attacks, and finesse weapons.',
+  CON: 'Constitution — health and stamina. Adds hit points every level and resists poison and exhaustion.',
+  INT: 'Intelligence — reasoning and memory. Powers wizard spellcasting and knowledge skills.',
+  WIS: 'Wisdom — perception and insight. Powers cleric and druid spellcasting, Perception, and Insight.',
+  CHA: 'Charisma — force of personality. Powers bard, sorcerer, warlock, and paladin magic and all social skills.',
+};
+
+const DND_SKILLS: Record<string, string> = {
+  Acrobatics: 'Dexterity — balance, tumbling, and staying on your feet in a tricky spot.',
+  'Animal Handling': 'Wisdom — calming, driving, or reading the intentions of animals.',
+  Arcana: 'Intelligence — recalling lore about spells, magic items, and planes of existence.',
+  Athletics: 'Strength — climbing, jumping, swimming, and grappling.',
+  Deception: 'Charisma — convincing lies, disguises, and misleading a mark.',
+  History: 'Intelligence — recalling past events, legends, kingdoms, and wars.',
+  Insight: 'Wisdom — reading body language to sense a lie or true intention.',
+  Intimidation: 'Charisma — threats, hostile displays, and forcing cooperation through fear.',
+  Investigation: 'Intelligence — searching for clues and making deductions from evidence.',
+  Medicine: 'Wisdom — stabilizing the dying and diagnosing illness.',
+  Nature: 'Intelligence — knowledge of terrain, plants, animals, and weather.',
+  Perception: 'Wisdom — spotting, hearing, or otherwise noticing something.',
+  Performance: 'Charisma — delighting an audience with music, dance, acting, or storytelling.',
+  Persuasion: 'Charisma — influencing others with tact, social grace, or good nature.',
+  Religion: 'Intelligence — knowledge of deities, rites, holy symbols, and cults.',
+  'Sleight of Hand': 'Dexterity — pickpocketing, palming objects, and manual trickery.',
+  Stealth: 'Dexterity — hiding, moving silently, and escaping notice.',
+  Survival: 'Wisdom — tracking, foraging, navigating, and predicting the weather.',
+};
+
+const DND_CONCEPTS: Record<string, string> = {
+  AC: 'Armor Class: the number an attack roll must meet or beat to hit you. Set by armor, Dexterity, and shields.',
+  'Base AC': 'The armor’s own AC value before Dexterity and other bonuses are added.',
+  'Effective AC': 'Your final Armor Class after armor, Dexterity, shields, and item bonuses — what attackers actually roll against.',
+  'Add Dex': 'Whether this armor adds your Dexterity modifier to AC (light: full, medium: capped, heavy: none).',
+  HP: 'Hit points: how much damage you can take. At 0 you fall unconscious and start making death saving throws.',
+  'Max HP': 'Your hit point maximum — the full total you heal back up to.',
+  'Temp HP': 'Temporary hit points: a buffer spent before real HP. They don’t stack and don’t heal you.',
+  'Hit Dice': 'Dice spent on a short rest to heal — one per level, sized by your class.',
+  Initiative: 'A d20 + Dexterity modifier roll that sets turn order at the start of combat.',
+  Proficiency: 'Your proficiency bonus (+2 at level 1, rising to +6) added to attacks, saves, and skills you’re trained in.',
+  Inspiration: 'A GM-granted reward: spend it to roll one d20 with advantage.',
+  'Death Saves ✓': 'Successful death saving throws. Three successes stabilize you at 0 HP.',
+  'Death Saves ✗': 'Failed death saving throws. Three failures and your character dies.',
+  'Save DC': 'The number a target must beat on their saving throw to resist your effect.',
+  'Spell Attack': 'Your bonus for spells that require an attack roll: proficiency + spellcasting ability.',
+  'Passive Perc.': 'Passive Perception: 10 + your Perception bonus. The GM compares it against hidden things without a roll.',
+  'Spellcasting Class': 'Which class’s spellcasting rules you use — it sets your spell slots and casting ability.',
+  Prep: 'Whether this spell is currently prepared and therefore castable.',
+  'Conc.': 'Concentration: this spell ends if you cast another concentration spell or fail a Constitution save after taking damage.',
+  Alignment: 'Your moral and ethical outlook, from Lawful Good to Chaotic Evil.',
+  Background: 'Your life before adventuring — grants skill proficiencies, tools, and a roleplaying feature.',
+  Race: 'Your ancestry: elf, dwarf, human, and so on. It grants ability bonuses, speed, and racial traits.',
+  Subclass: 'Your class specialization, chosen as you level — it grants the features that most define your build.',
+  'Fighting Style': 'A combat specialization (Archery, Defense, Dueling…) that grants a passive bonus.',
+  XP: 'Experience points earned from adventuring — they drive your level-ups.',
+  'Divine Smite': 'A paladin’s signature strike: spend a spell slot on a melee hit for a burst of radiant damage.',
+  'Unarmed Strike': 'Attacking with fists, feet, or head — a monk’s Martial Arts die makes it a real weapon.',
+};
+
+const DND_SHEET: Record<string, string> = {
+  Ability: 'Which ability score this roll keys off — its modifier is added to the total.',
+  'Atk bonus': 'The total added to this weapon’s attack roll: ability modifier plus proficiency if you’re trained.',
+  'AC bonus': 'A flat bonus this item adds to your Armor Class while equipped.',
+  'Save bonus': 'A flat bonus this item adds to all your saving throws while equipped.',
+  Save: 'A saving throw: d20 + ability modifier (+ proficiency if proficient) against the effect’s DC.',
+  'Rider save': 'An extra saving throw the target makes after being hit, to resist a tacked-on condition.',
+  'Rider DC': 'The DC for that follow-up save.',
+  'Area width ft': 'How wide the area is — used by lines and cones.',
+  Armor: 'Worn protection. Equipping a body armor sets your AC from its base value plus any allowed Dexterity.',
+  'Max Dex': 'The most Dexterity modifier this armor lets you add to AC (−1 means no limit).',
+  Class: 'Your character class — it drives hit dice, proficiencies, spellcasting, and your feature progression.',
+  Level: 'Your character level: it sets proficiency bonus, hit points, spell slots, and class features.',
+  Lvl: 'The spell’s level. Casting it spends a slot of that level or higher; level 0 means a cantrip.',
+  PP: 'Platinum pieces — worth 10 gold each.',
+  GP: 'Gold pieces — the standard coin of the realm.',
+  EP: 'Electrum pieces — worth half a gold each.',
+  SP: 'Silver pieces — ten to the gold.',
+  CP: 'Copper pieces — a hundred to the gold.',
+  'Personality Traits': 'Small habits and mannerisms that make your character feel like a person.',
+  Ideals: 'The beliefs and principles your character will not compromise.',
+  Bonds: 'The people, places, and things your character is tied to.',
+  Flaws: 'The weakness, vice, or fear that gets your character into trouble.',
+  Backstory: 'Where your character came from and what brought them to adventuring.',
+  'Proficiencies & Languages': 'Tools, weapons, armor, and tongues your character has trained in.',
+};
+
+const SPELL_SLOT_DESC = 'Spell slots of this level. Casting a leveled spell spends one; they come back on a long rest.';
+for (let lvl = 1; lvl <= 9; lvl++) DND_SHEET[`L${lvl}`] = SPELL_SLOT_DESC;
+
+const TERMS_5E: Record<string, string> = { ...DND_ABILITIES, ...DND_SKILLS, ...DND_CONCEPTS, ...DND_SHEET };
+
+// ---------- terms every system's sheet shares ----------
+
+const COMMON: Record<string, string> = {
+  Resistances: 'Damage types you take half damage from — list them comma-separated (e.g. "fire, cold").',
+  Vulnerabilities: 'Damage types you take double damage from.',
+  Immunities: 'Damage types that don’t affect you at all.',
+  'Dmg type': 'The kind of damage dealt — it interacts with the target’s resistances, vulnerabilities, and immunities.',
+  'Range ft': 'How far away this can reach, in feet. Targets beyond it can’t be picked.',
+  'Area ft': 'The size of the area template this effect covers.',
+  'Vision range': 'How far this character can see in normal light, in hexes.',
+  Darkvision: 'How far this character sees in darkness, in hexes, when normal sight fails.',
+  'Low-light / IR': 'How far this character sees in darkness, in hexes, when normal sight fails.',
+  'Low-light / infravision': 'How far this character sees in darkness, in hexes, when normal sight fails.',
+  Equipped: 'Check to wear or wield this item — only equipped gear applies its bonuses.',
+  Worn: 'Check while this armor is worn — only worn armor contributes to your defense.',
+  Shield: 'A shield adds to your defense while worn, on top of body armor.',
+  Speed: 'How far this character moves on their turn.',
+  'Forces save': 'The saving throw the target rolls against this effect instead of you rolling to hit.',
+  'On save': 'What a successful save does: halve the damage, or negate the effect entirely.',
+  Inflicts: 'A status condition applied to the target when this effect lands.',
+  Concentration: 'Maintaining an ongoing effect. Starting a new one ends the old, and damage can break it.',
+  Damage: 'The dice rolled for damage when this hits — the server rolls them and applies the result.',
+  Amount: 'How much this heals or harms: a dice expression like 2d6, or a flat number.',
+  Effect: 'What using this does — deal damage, heal, or nothing mechanical.',
+  Area: 'The template this effect covers: a sphere, cone, line, or cube aimed on the map.',
+  Weight: 'How heavy this item is, counting against what you can carry.',
+};
+
+/** Labels that are pure flavor or UI plumbing rather than rules terms —
+ *  they intentionally have no tooltip. Exported so the coverage test can
+ *  assert that everything *else* is documented. */
+export const NON_RULES_LABELS = new Set(
+  ['+', 'Age', 'Appearance', 'Description', 'Detail / portrait', 'Eyes', 'Hair', 'Height',
+    'Item', 'Name', 'Notes', 'Notes (RoF…)', 'Qty', 'Skin', 'Source', 'Token image', 'Type', 'Use',
+  ].map((s) => s.toLowerCase()),
+);
 
 // ---------- lookup ----------
 
-const LOWER_SWADE = new Map(Object.entries(TERMS_SWADE).map(([k, v]) => [k.toLowerCase(), v]));
-const LOWER_SWN = new Map(Object.entries(TERMS_SWN).map(([k, v]) => [k.toLowerCase(), v]));
+type GlossarySystem = 'dnd5e' | 'swn' | 'swade';
+
+function lowerMap(...sets: Array<Record<string, string>>): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const set of sets) for (const [k, v] of Object.entries(set)) m.set(k.toLowerCase(), v);
+  return m;
+}
+
+const LOWER: Record<GlossarySystem, Map<string, string>> = {
+  swade: lowerMap(COMMON, TERMS_SWADE, SWADE_SHEET),
+  swn: lowerMap(COMMON, TERMS_SWN),
+  dnd5e: lowerMap(COMMON, TERMS_5E),
+};
 
 /** Case-insensitive glossary lookup. Returns undefined for unknown terms so
  *  callers can render plain text instead of an empty tooltip. */
-export function termDesc(system: 'swade' | 'swn', term: string): string | undefined {
-  return (system === 'swade' ? LOWER_SWADE : LOWER_SWN).get(term.trim().toLowerCase());
+export function termDesc(system: GlossarySystem, term: string): string | undefined {
+  return LOWER[system]?.get(term.trim().toLowerCase());
+}
+
+/**
+ * Glossary lookup for a *sheet label*, which often decorates the bare term
+ * with units or a reminder — "Toughness (incl. armor)", "HP (pool)",
+ * "Wounds (0–3)", "Notes (RoF…)", "Max PP". Tries the label as written,
+ * then progressively simpler forms, so schemas don't have to be rewritten
+ * to match glossary keys.
+ */
+export function sheetTermDesc(system: GlossarySystem, label: string): string | undefined {
+  for (const candidate of labelCandidates(label)) {
+    const hit = termDesc(system, candidate);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+function labelCandidates(label: string): string[] {
+  const out: string[] = [];
+  const push = (s: string) => {
+    const t = s.trim();
+    if (t && !out.includes(t)) out.push(t);
+  };
+  push(label);
+  // "Toughness (incl. armor)" -> "Toughness"; "HP (pool)" -> "HP"
+  push(label.replace(/\s*\([^)]*\)\s*/g, ' '));
+  for (const base of [...out]) {
+    push(base.replace(/[…:.]+$/, ''));           // "Notes…" -> "Notes"
+    push(base.replace(/\s*\(.*$/, ''));           // unclosed paren
+  }
+  for (const base of [...out]) {
+    const max = /^max\s+(.+)$/i.exec(base);       // "Max PP" -> "PP"
+    if (max) push(max[1]);
+  }
+  return out;
 }
 
 /** Every SWADE skill/ancestry/attribute name must have a glossary entry —

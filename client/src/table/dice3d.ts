@@ -309,6 +309,9 @@ const WAVE_STAGGER_MS = 110;
 const RAISE_DIE_COLOR = '#1f9d55';
 /** Wild Die colour for a roller who has not picked one of their own. */
 const WILD_DIE_FALLBACK = '#8b5cf6';
+/** Trait dice: black with white pips. Kept a shade off pure black so the
+ *  bevels and shadow still read against the dark overlay. */
+const TRAIT_DIE_COLOR = '#14171d';
 
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
@@ -351,19 +354,19 @@ export function buildSims(
     // Three schemes, told apart by hue rather than by dimming the losing arm:
     //   raise — always green, it was earned rather than rolled for
     //   wild  — the roller's own colour, marking SWADE's second arm
-    //   trait — the neutral by-sides palette
+    //   trait — black with white pips
     // Dimming used to mark the arm that lost, but `kept` is only known once
     // every arm has finished acing, so it announced the result of dice that
     // had not been thrown yet.
     const rgb = die.raise ? hexToRgb(RAISE_DIE_COLOR)
       : die.wild ? hexToRgb(customColor ?? WILD_DIE_FALLBACK)
-        : hexToRgb(DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3');
+        : hexToRgb(TRAIT_DIE_COLOR);
     // Pips have to stay legible against whatever colour the player picked.
     const contrasting = luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb';
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
-      textColor: die.raise ? '#ffffff' : die.wild ? contrasting : (customTextColor ?? contrasting),
+      textColor: die.raise ? '#ffffff' : die.wild ? contrasting : '#ffffff',
       size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
       start, target,
       delay: timing[i].delay,

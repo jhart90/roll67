@@ -295,6 +295,14 @@ const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
 /** How long an aced die sits flashing before its bonus die is thrown. */
 export const ACE_FLASH_MS = 750;
+/**
+ * Quiet beat after the flash finishes, before the next die in a chain is
+ * thrown. The die is settled and motionless here so the table can actually
+ * read what it rolled instead of the next throw stealing their attention.
+ */
+export const ACE_READ_PAUSE_MS = 500;
+/** Total gap between one chained die landing and the next being thrown. */
+export const ACE_GAP_MS = ACE_FLASH_MS + ACE_READ_PAUSE_MS;
 /** Stagger between dice thrown in the same wave. */
 const WAVE_STAGGER_MS = 110;
 
@@ -307,9 +315,9 @@ export function buildSims(
   const spacing = 96;
   const cx = w / 2, cy = h / 2;
   // Timing: ordinary dice are thrown together in one quick staggered wave.
-  // An exploding die's bonus die instead waits for the die that spawned it
-  // to land and finish flashing, so a chain of aces plays out as
-  // roll → flash → roll → flash → roll with the earlier dice sitting still.
+  // An exploding die's bonus die instead waits for the die that spawned it to
+  // land, finish flashing, and then sit readable for a beat, so a chain of aces
+  // plays out as roll → flash → read → roll with the earlier dice sitting still.
   // Chains only serialise against themselves, so several dice acing at once
   // still resolve side by side rather than queueing up behind each other.
   const settleAt: number[] = [];
@@ -317,7 +325,7 @@ export function buildSims(
   const timing = dice.map((_, i) => {
     const dur = 1450 + Math.random() * 250;
     const continuesAnAce = i > 0 && dice[i - 1].ace === true;
-    const delay = continuesAnAce ? settleAt[i - 1] + ACE_FLASH_MS : (waveDelay += i === 0 ? 0 : WAVE_STAGGER_MS);
+    const delay = continuesAnAce ? settleAt[i - 1] + ACE_GAP_MS : (waveDelay += i === 0 ? 0 : WAVE_STAGGER_MS);
     settleAt[i] = delay + dur;
     return { delay, dur };
   });
@@ -371,12 +379,13 @@ export function estimateDiceAnimMs(dice: DieRoll[]): number {
   let latest = 0;
   dice.forEach((_, i) => {
     const continuesAnAce = i > 0 && dice[i - 1].ace === true;
-    const delay = continuesAnAce ? settleAt[i - 1] + ACE_FLASH_MS : (waveDelay += i === 0 ? 0 : WAVE_STAGGER_MS);
+    const delay = continuesAnAce ? settleAt[i - 1] + ACE_GAP_MS : (waveDelay += i === 0 ? 0 : WAVE_STAGGER_MS);
     settleAt[i] = delay + MAX_DUR;
     latest = Math.max(latest, settleAt[i]);
   });
   // However wild the chain, never leave the chat waiting on the dice forever.
-  return Math.min(latest, 15000);
+  // The read pause makes long chains slower, so the ceiling has room to match.
+  return Math.min(latest, 20000);
 }
 
 // ---------- rendering ----------

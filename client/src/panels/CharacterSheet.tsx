@@ -12,6 +12,7 @@ import { NpcBoostWizard } from './NpcBoostWizard';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnLevelUpWizard } from './SwnLevelUpWizard';
 import { SwnFeatures } from './SwnFeatures';
+import { SwadeAdvanceWizard } from './SwadeAdvanceWizard';
 import { CombatStatus } from './CombatStatus';
 import { SheetTerm } from '../util/Term';
 
@@ -568,16 +569,22 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
           />
           <span className="dim">{schema.name}{character.ownerUserId ? '' : ' · NPC'}</span>
           <span className="spacer" />
-          {editable && character.system !== 'swade' && <button className="link" onClick={() => setShowLevelUp(true)}>⬆ Level Up</button>}
+          {editable && (
+            <button className="link" onClick={() => setShowLevelUp(true)}>
+              {character.system === 'swade' ? '⬆ Advance' : '⬆ Level Up'}
+            </button>
+          )}
           {editable && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
         </div>
 
         {showCompendium && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
-        {showLevelUp && (character.system === 'swn'
-          ? <SwnLevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />
-          : needsNpcBoost(String(character.sheet.class ?? ''))
-            ? <NpcBoostWizard character={character} onClose={() => setShowLevelUp(false)} />
-            : <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />)}
+        {showLevelUp && (character.system === 'swade'
+          ? <SwadeAdvanceWizard character={character} onClose={() => setShowLevelUp(false)} />
+          : character.system === 'swn'
+            ? <SwnLevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />
+            : needsNpcBoost(String(character.sheet.class ?? ''))
+              ? <NpcBoostWizard character={character} onClose={() => setShowLevelUp(false)} />
+              : <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />)}
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (

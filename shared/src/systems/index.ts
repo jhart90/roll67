@@ -9,6 +9,7 @@ export * from './cards.js';
 export * from './combat.js';
 export * from './glossary.js';
 export * from './dnd5eCreation.js';
+export * from './swadeAdvancement.js';
 export * from './currency.js';
 export * from './spells.js';
 export * from './classes5e.js';

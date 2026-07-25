@@ -5,10 +5,17 @@ import {
   MAX_MAJOR_HINDRANCES, MAX_MINOR_HINDRANCES, RESISTIBLE_DAMAGE_TYPES, SKILL_ATTR_SWADE, SKILLS_SWADE,
   SKILL_POINTS, TRAIT_DICE,
   attributePointsSpent, buildSwadeCharacterSheet, dieStepIndex, finalAttributeDice, hindrancePoints,
-  raceTraitPointTotal, skillPointCost, stepDie, swadeParry, swadeToughness, totalSkillPointsSpent,
+  raceTraitPointTotal, skillPointCost, stepDie, swadeParry, swadeToughness, termDesc, totalSkillPointsSpent,
   type SwadeAttrId, type SwadeCreationInput,
 } from 'shared';
 import { intents } from '../store/game';
+import { Term } from '../util/Term';
+
+/** Glossary tooltip shorthand for this wizard's system. */
+function T({ children, term, desc }: { children?: React.ReactNode; term?: string; desc?: string }) {
+  const label = children ?? term;
+  return <Term desc={desc ?? termDesc('swade', term ?? String(label))}>{label}</Term>;
+}
 
 type Step = 'concept' | 'ancestry' | 'hindrances' | 'attributes' | 'skills' | 'edges' | 'review';
 const STEPS: Array<{ id: Step; label: string }> = [
@@ -200,7 +207,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
               <input value={concept} onChange={(e) => setConcept(e.target.value)} placeholder="e.g. Disgraced marshal chasing one last bounty" />
             </label>
             <p className="dim" style={{ fontSize: 12 }}>
-              Every Savage Worlds hero is a Wild Card — you'll roll a Wild Die alongside your trait rolls and start with 3 Bennies to reroll fate itself.
+              Every Savage Worlds hero is a <T>Wild Card</T> — you'll roll a <T>Wild Die</T> alongside your <T term="Trait">trait</T> rolls and start with 3 <T>Bennies</T> to reroll fate itself.
             </p>
           </>
         )}
@@ -212,12 +219,17 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
               Build a custom ancestry
             </label>
             {!isCustom ? (
-              <label className="lu-field">
-                Ancestry
-                <select value={ancestryName} onChange={(e) => setAncestryName(e.target.value)}>
-                  {ANCESTRIES_SWADE.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </label>
+              <>
+                <label className="lu-field">
+                  <T>Ancestry</T>
+                  <select value={ancestryName} onChange={(e) => setAncestryName(e.target.value)}>
+                    {ANCESTRIES_SWADE.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </label>
+                {termDesc('swade', ancestryName) && (
+                  <p className="dim" style={{ fontSize: 12 }}>{termDesc('swade', ancestryName)}</p>
+                )}
+              </>
             ) : (
               <>
                 <label className="lu-field">
@@ -238,7 +250,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
                       <label key={t.id} className={`swc-trait ${checked ? 'on' : ''} ${t.cost < 0 ? 'drawback' : ''}`}>
                         <div className="swc-trait-head">
                           <input type="checkbox" checked={checked} onChange={() => toggleCustomTrait(t.id)} />
-                          <span className="swc-trait-name">{t.name}</span>
+                          <span className="swc-trait-name"><T desc={t.desc}>{t.name}</T></span>
                           <span className="swc-trait-cost">{t.cost >= 0 ? `+${t.cost}` : t.cost}</span>
                         </div>
                         <span className="dim swc-trait-desc">{t.desc}</span>
@@ -269,7 +281,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
         {step === 'hindrances' && (
           <>
             <p className="dim" style={{ fontSize: 12 }}>
-              Take up to {MAX_MINOR_HINDRANCES} Minor and {MAX_MAJOR_HINDRANCES} Major Hindrance. Each Minor is worth 1 point, each Major 2 — spend them below.
+              Take up to {MAX_MINOR_HINDRANCES} Minor and {MAX_MAJOR_HINDRANCES} Major <T>Hindrance</T>. Each Minor is worth 1 point, each Major 2 — spend them below.
             </p>
             <div className="swc-hindrance-cols">
               <div>
@@ -277,7 +289,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
                 {CURATED_HINDRANCES_SWADE.filter((h) => h.severity === 'Minor').map((h) => (
                   <label key={h.id} className={`lu-skill ${hindranceIds.includes(h.id) ? 'on' : ''}`}>
                     <input type="checkbox" checked={hindranceIds.includes(h.id)} onChange={() => toggleHindrance(h.id)} />
-                    <span title={h.desc}>{h.name}</span>
+                    <span><T desc={h.desc}>{h.name}</T></span>
                   </label>
                 ))}
               </div>
@@ -286,7 +298,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
                 {CURATED_HINDRANCES_SWADE.filter((h) => h.severity === 'Major').map((h) => (
                   <label key={h.id} className={`lu-skill ${hindranceIds.includes(h.id) ? 'on' : ''}`}>
                     <input type="checkbox" checked={hindranceIds.includes(h.id)} onChange={() => toggleHindrance(h.id)} />
-                    <span title={h.desc}>{h.name}</span>
+                    <span><T desc={h.desc}>{h.name}</T></span>
                   </label>
                 ))}
               </div>
@@ -296,19 +308,19 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
               Hindrance points: {hindSpent} / {earnedHindrancePts} spent{!hindOk && <span> — over budget.</span>}
             </div>
             <div className="swc-spend-row">
-              <span>Starting funds (+$500 each)</span>
+              <span><T>Starting funds</T> (+$500 each)</span>
               <Stepper value={hindFundsUnits} onChange={setHindFundsUnits} step={1} canIncrement={hindRemaining >= 1} />
             </div>
             <div className="swc-spend-row">
-              <span>Attribute pool (+1 point each, 2 Hindrance pts)</span>
+              <span><T desc="Extra points for the Attributes step — each raises one attribute a die type.">Attribute pool</T> (+1 point each, 2 Hindrance pts)</span>
               <Stepper value={hindAttrUnits} onChange={setHindAttrUnits} step={1} canIncrement={hindRemaining >= 2} />
             </div>
             <div className="swc-spend-row">
-              <span>Skill pool (+1 point each)</span>
+              <span><T desc="Extra points for the Skills step — each raises a skill die a step (2 if past its linked attribute).">Skill pool</T> (+1 point each)</span>
               <Stepper value={hindSkillUnits} onChange={setHindSkillUnits} step={1} canIncrement={hindRemaining >= 1} />
             </div>
             <div className="swc-spend-row">
-              <span>Edge slot (+1 Edge, 2 Hindrance pts)</span>
+              <span><T term="Edge">Edge slot</T> (+1 Edge, 2 Hindrance pts)</span>
               <Stepper value={hindEdgeUnits} onChange={setHindEdgeUnits} step={1} canIncrement={hindRemaining >= 2} />
             </div>
           </>
@@ -324,7 +336,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
               const idx = attributeSteps[id] ?? 0;
               return (
                 <div key={id} className="swc-attr-row">
-                  <span className="swc-attr-label">{a.label}</span>
+                  <span className="swc-attr-label"><T>{a.label}</T></span>
                   <button className="icon-btn" disabled={idx <= 0} onClick={() => attrStep(id, -1)}>−</button>
                   <span className="swc-die">{TRAIT_DICE[idx]}</span>
                   <button className="icon-btn" disabled={idx >= 4 || attrSpent >= attrPool} onClick={() => attrStep(id, 1)}>+</button>
@@ -350,9 +362,11 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
                 const die = idx >= 0 ? TRAIT_DICE[idx] : '—';
                 const isFree = FREE_SKILLS_SWADE.includes(name);
                 const upCost = idx < 4 ? skillStepCost(name, idx, idx + 1) : null;
+                const linked = SKILL_ATTR_SWADE[name] ?? 'smarts';
+                const skillTip = `${termDesc('swade', name) ?? ''} Linked attribute: ${linked[0].toUpperCase()}${linked.slice(1)}.`.trim();
                 return (
                   <div key={name} className="swc-attr-row">
-                    <span className="swc-attr-label" title={`Linked: ${SKILL_ATTR_SWADE[name] ?? 'smarts'}`}>{name}</span>
+                    <span className="swc-attr-label"><T desc={skillTip}>{name}</T></span>
                     <button className="icon-btn" disabled={idx <= (isFree ? 0 : -1)} onClick={() => skillStep(name, -1)}>−</button>
                     <span className="swc-die">{die}</span>
                     <button
@@ -382,7 +396,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
                     disabled={!edgeIds.includes(e.id) && edgeIds.length >= hindEdgeUnits}
                     onChange={() => toggleEdge(e.id)}
                   />
-                  <span title={e.desc}><strong>{e.name}</strong> — {e.desc}</span>
+                  <span><T desc={e.desc}><strong>{e.name}</strong></T> — {e.desc}</span>
                 </label>
               ))}
             </div>
@@ -392,29 +406,33 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
         {step === 'review' && previewSheet && (
           <div className="swc-review">
             <p className="lu-summary">
-              <strong>{name}</strong>{concept ? ` — ${concept}` : ''} · {String(previewSheet.ancestry)}
+              <strong>{name}</strong>{concept ? ` — ${concept}` : ''} · <T>{String(previewSheet.ancestry)}</T>
             </p>
             <div className="swc-review-grid">
               {ATTRIBUTES_SWADE.map((a) => (
-                <span key={a.id} className="cf-chip">{a.label} {String(previewSheet[a.id])}</span>
+                <span key={a.id} className="cf-chip"><T>{a.label}</T> {String(previewSheet[a.id])}</span>
               ))}
             </div>
             <p className="dim" style={{ fontSize: 12 }}>
-              Parry {swadeParry(previewSheet)} · Toughness {swadeToughness(previewSheet)} · Pace {String(previewSheet.pace)} · ${String(previewSheet.dollars)}
+              <T>Parry</T> {swadeParry(previewSheet)} · <T>Toughness</T> {swadeToughness(previewSheet)} · <T>Pace</T> {String(previewSheet.pace)} · ${String(previewSheet.dollars)}
             </p>
             <div className="swc-review-grid">
               {(previewSheet.skills as Array<{ name: string; die: string }>).map((s) => (
-                <span key={s.name} className="cf-chip">{s.name} {s.die}</span>
+                <span key={s.name} className="cf-chip"><T>{s.name}</T> {s.die}</span>
               ))}
             </div>
             {(previewSheet.hindrances as Array<{ name: string }>).length > 0 && (
               <p className="dim" style={{ fontSize: 12 }}>
-                Hindrances: {(previewSheet.hindrances as Array<{ name: string }>).map((h) => h.name).join(', ')}
+                <T>Hindrance</T>s: {(previewSheet.hindrances as Array<{ name: string }>).map((h, i) => (
+                  <span key={h.name}>{i > 0 && ', '}<T desc={CURATED_HINDRANCES_SWADE.find((x) => x.name === h.name)?.desc}>{h.name}</T></span>
+                ))}
               </p>
             )}
-            {(previewSheet.edges as Array<{ name: string }>).length > 0 && (
+            {(previewSheet.edges as Array<{ name: string; notes?: string }>).length > 0 && (
               <p className="dim" style={{ fontSize: 12 }}>
-                Edges: {(previewSheet.edges as Array<{ name: string }>).map((e) => e.name).join(', ')}
+                <T>Edge</T>s: {(previewSheet.edges as Array<{ name: string; notes?: string }>).map((e, i) => (
+                  <span key={e.name}>{i > 0 && ', '}<T desc={CURATED_EDGES_SWADE.find((x) => x.name === e.name)?.desc ?? e.notes}>{e.name}</T></span>
+                ))}
               </p>
             )}
             <p className="dim" style={{ fontSize: 12 }}>

@@ -7,6 +7,7 @@ import { swade } from './swade.js';
 export * from './types.js';
 export * from './cards.js';
 export * from './combat.js';
+export * from './glossary.js';
 export * from './currency.js';
 export * from './spells.js';
 export * from './classes5e.js';

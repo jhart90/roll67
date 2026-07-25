@@ -1562,6 +1562,30 @@ button.link:hover { text-decoration: underline; }
 .swc-review { display: flex; flex-direction: column; gap: 6px; }
 .swc-review-grid { display: flex; flex-wrap: wrap; gap: 4px; }
 
+/* glossary term tooltips (character creators) */
+.term { border-bottom: 1px dotted var(--text-dim); cursor: help; }
+.term:focus { outline: none; border-bottom-color: var(--accent); }
+.term-tip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  width: 320px;
+  max-width: 90vw;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #171a22;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.65);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  z-index: 200;
+  pointer-events: none;
+}
+.term-tip.below { transform: translate(-50%, 0); }
+
 /* cast-level popup */
 .cast-popup { width: 300px; padding: 14px 16px; }
 .cast-levels { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

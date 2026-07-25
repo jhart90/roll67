@@ -1,9 +1,16 @@
 import { useMemo, useState } from 'react';
 import {
   SWN_ATTR_IDS, SWN_BACKGROUNDS, SWN_CLASS_LIST, SWN_FOCI, SWN_PACKAGES, SKILLS_SWN, SPECIES_SWN,
-  buildSwnCharacterSheet, roll3d6, swn, swnMod, type SwnAttrId, type SwnCreationInput,
+  buildSwnCharacterSheet, roll3d6, swn, swnMod, termDesc, type SwnAttrId, type SwnCreationInput,
 } from 'shared';
 import { intents } from '../store/game';
+import { Term } from '../util/Term';
+
+/** Glossary tooltip shorthand for this wizard's system. */
+function T({ children, term, desc }: { children?: React.ReactNode; term?: string; desc?: string }) {
+  const label = children ?? term;
+  return <Term desc={desc ?? termDesc('swn', term ?? String(label))}>{label}</Term>;
+}
 
 type Step = 'concept' | 'attributes' | 'class' | 'background' | 'skills' | 'gear' | 'review';
 const STEPS: Array<{ id: Step; label: string }> = [
@@ -133,13 +140,14 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
               <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="e.g. Kess Rin" />
             </label>
             <label className="lu-field">
-              Species
+              <T>Species</T>
               <select value={species} onChange={(e) => setSpecies(e.target.value)}>
                 {SPECIES_SWN.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </label>
+            {termDesc('swn', species) && <p className="dim" style={{ fontSize: 12 }}>{termDesc('swn', species)}</p>}
             <label className="lu-field">
-              Homeworld
+              <T>Homeworld</T>
               <input value={homeworld} onChange={(e) => setHomeworld(e.target.value)} placeholder="e.g. Halcyon" />
             </label>
             <label className="lu-field">
@@ -151,11 +159,11 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
 
         {step === 'attributes' && (
           <>
-            <p className="dim" style={{ fontSize: 12 }}>Classic SWN generation: 3d6 per attribute, straight down. Reroll as many times as you like before moving on.</p>
+            <p className="dim" style={{ fontSize: 12 }}>Classic SWN generation: 3d6 per <T term="Attributes">attribute</T>, straight down. Reroll as many times as you like before moving on.</p>
             <button className="btn btn-sm" onClick={rollAll}>{rolled ? '🎲 Reroll all' : '🎲 Roll attributes'}</button>
             {rolled && SWN_ATTR_IDS.map((id) => (
               <div key={id} className="swc-attr-row">
-                <span className="swc-attr-label">{ATTR_LABEL[id]}</span>
+                <span className="swc-attr-label"><T>{ATTR_LABEL[id]}</T></span>
                 <input
                   type="number" min={3} max={18} value={attributes[id]}
                   onChange={(e) => setAttributes((a) => ({ ...a, [id]: Math.max(3, Math.min(18, Number(e.target.value) || 10)) }))}
@@ -170,7 +178,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
         {step === 'class' && (
           <>
             <label className="lu-field">
-              Class
+              <T>Class</T>
               <select value={classId} onChange={(e) => setClassId(e.target.value)}>
                 {SWN_CLASS_LIST.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -193,7 +201,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
 
         {step === 'background' && (
           <>
-            <p className="dim" style={{ fontSize: 12 }}>Grants a free skill at level 0.</p>
+            <p className="dim" style={{ fontSize: 12 }}>A <T>Background</T> grants a free skill at level 0.</p>
             <div className="swc-hindrance-cols" style={{ gridTemplateColumns: '1fr' }}>
               <label className="lu-skill">
                 <input type="radio" checked={backgroundId === ''} onChange={() => setBackgroundId('')} />
@@ -202,7 +210,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
               {SWN_BACKGROUNDS.map((b) => (
                 <label key={b.id} className={`lu-skill ${backgroundId === b.id ? 'on' : ''}`}>
                   <input type="radio" checked={backgroundId === b.id} onChange={() => setBackgroundId(b.id)} />
-                  <span title={b.desc}><strong>{b.name}</strong> — free {b.freeSkill}</span>
+                  <span><T desc={b.desc}><strong>{b.name}</strong></T> — free <T>{b.freeSkill}</T></span>
                 </label>
               ))}
             </div>
@@ -212,7 +220,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
         {step === 'skills' && (
           <>
             <label className="lu-field">
-              Focus (optional — most SWN characters take one at 1st level; more can be added later)
+              <span><T>Focus</T> (optional — most SWN characters take one at 1st level; more can be added later)</span>
               <select value={focusId} onChange={(e) => setFocusId(e.target.value)}>
                 <option value="">None</option>
                 {SWN_FOCI.map((f) => <option key={f.id} value={f.id}>{f.name}{f.grantsSkill ? ` (${f.grantsSkill})` : ''}</option>)}
@@ -221,7 +229,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
             {focusId && <p className="dim" style={{ fontSize: 12 }}>{SWN_FOCI.find((f) => f.id === focusId)?.level1}</p>}
 
             <div className={`swc-budget ${skillSpent > skillPool ? 'over' : skillSpent === skillPool ? 'full' : ''}`}>
-              Skill points: {skillSpent} / {skillPool}
+              <T term="Skill points">Skill points</T>: {skillSpent} / {skillPool}
             </div>
             <input placeholder="Filter skills…" value={skillSearch} onChange={(e) => setSkillSearch(e.target.value)} style={{ marginBottom: 8 }} />
             <div className="swc-skill-grid">
@@ -229,7 +237,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
                 const level = skillLevelOf(s);
                 return (
                   <div key={s} className="swc-attr-row">
-                    <span className="swc-attr-label">{s}</span>
+                    <span className="swc-attr-label"><T>{s}</T></span>
                     <button className="icon-btn" disabled={level <= 0} onClick={() => stepSkill(s, 'int', -1)}>−</button>
                     <span className="swc-die">{level}</span>
                     <button className="icon-btn" disabled={level >= 1 || skillSpent >= skillPool} onClick={() => stepSkill(s, 'int', 1)}>+</button>
@@ -242,7 +250,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
 
         {step === 'gear' && (
           <>
-            <p className="dim" style={{ fontSize: 12 }}>An equipment package outfits you with starting weapons, armor, and gear.</p>
+            <p className="dim" style={{ fontSize: 12 }}>An <T term="Equipment package">equipment package</T> outfits you with starting weapons, armor, and gear.</p>
             <div className="swc-hindrance-cols" style={{ gridTemplateColumns: '1fr' }}>
               <label className="lu-skill">
                 <input type="radio" checked={packageId === ''} onChange={() => setPackageId('')} />
@@ -251,7 +259,11 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
               {SWN_PACKAGES.map((p) => (
                 <label key={p.id} className={`lu-skill ${packageId === p.id ? 'on' : ''}`}>
                   <input type="radio" checked={packageId === p.id} onChange={() => setPackageId(p.id)} />
-                  <span title={p.desc}><strong>{p.name}</strong> — {p.desc} ({p.credits} cr)</span>
+                  <span>
+                    <T desc={`${p.desc} Contents: ${[...p.weapons.map((w) => w.name), ...p.armor.map((a) => a.name), ...p.items.map((it) => it.name)].join(', ')} — plus ${p.credits} credits.`}>
+                      <strong>{p.name}</strong>
+                    </T> — {p.desc} ({p.credits} cr)
+                  </span>
                 </label>
               ))}
             </div>
@@ -261,25 +273,27 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
         {step === 'review' && previewSheet && (
           <div className="swc-review">
             <p className="lu-summary">
-              <strong>{name}</strong> · {species} · Level 1 {String(previewSheet.class)}
+              <strong>{name}</strong> · <T>{species}</T> · Level 1 <T term="Class">{String(previewSheet.class)}</T>
               {previewSheet.secondaryClass ? `/${previewSheet.secondaryClass}` : ''}
             </p>
             <div className="swc-review-grid">
               {SWN_ATTR_IDS.map((id) => (
-                <span key={id} className="cf-chip">{ATTR_LABEL[id].slice(0, 3)} {String(previewSheet[id])}</span>
+                <span key={id} className="cf-chip"><T term={ATTR_LABEL[id]}>{ATTR_LABEL[id].slice(0, 3)}</T> {String(previewSheet[id])}</span>
               ))}
             </div>
             <p className="dim" style={{ fontSize: 12 }}>
-              HP {String(previewSheet.hp)}/{String(previewSheet.maxHp)} · AC {String(swn.derive(previewSheet).ac)} · {String(previewSheet.credits ?? 0)} credits
+              <T>HP</T> {String(previewSheet.hp)}/{String(previewSheet.maxHp)} · <T>AC</T> {String(swn.derive(previewSheet).ac)} · {String(previewSheet.credits ?? 0)} <T term="Credits">credits</T>
             </p>
             <div className="swc-review-grid">
               {(previewSheet.skills as Array<{ name: string; level: number }>).map((s) => (
-                <span key={s.name} className="cf-chip">{s.name} {s.level}</span>
+                <span key={s.name} className="cf-chip"><T>{s.name}</T> {s.level}</span>
               ))}
             </div>
             {(previewSheet.foci as Array<{ name: string }>).filter((f) => !String((f as { id?: string }).id ?? '').startsWith('class-')).length > 0 && (
               <p className="dim" style={{ fontSize: 12 }}>
-                Foci: {(previewSheet.foci as Array<{ name: string; id?: string }>).filter((f) => !String(f.id ?? '').startsWith('class-')).map((f) => f.name).join(', ')}
+                <T term="Focus">Foci</T>: {(previewSheet.foci as Array<{ name: string; id?: string }>).filter((f) => !String(f.id ?? '').startsWith('class-')).map((f, i) => (
+                  <span key={f.name}>{i > 0 && ', '}<T desc={SWN_FOCI.find((x) => x.name === f.name)?.level1}>{f.name}</T></span>
+                ))}
               </p>
             )}
           </div>

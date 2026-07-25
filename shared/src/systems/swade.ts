@@ -145,7 +145,8 @@ function wieldedWeaponParry(sheet: SheetData): number {
 export function swadeParry(sheet: SheetData): number {
   const fighting = skillDie(sheet, 'Fighting');
   return 2 + Math.floor(fighting / 2) + equippedGearBonuses(sheet).parry
-    + wieldedWeaponParry(sheet) + (sheet.deflectionActive === true ? 2 : 0);
+    + wieldedWeaponParry(sheet) + (sheet.deflectionActive === true ? 2 : 0)
+    + traitLineBonuses(sheet).parry;
 }
 
 /** Toughness: 2 + half Vigor die + equipped armor + maintained Armor /
@@ -153,17 +154,41 @@ export function swadeParry(sheet: SheetData): number {
 export function swadeToughness(sheet: SheetData): number {
   const vigor = dieSides(str(sheet, 'vigor', 'd6'));
   return 2 + Math.floor(vigor / 2) + equippedGearBonuses(sheet).armor
-    + (sheet.armorActive === true ? 2 : 0) + (sheet.protectionActive === true ? 2 : 0);
+    + (sheet.armorActive === true ? 2 : 0) + (sheet.protectionActive === true ? 2 : 0)
+    + traitLineBonuses(sheet).toughness;
 }
 
-/** Bonus to a named trait (skill or attribute) from equipped gear — a
- *  Lockpick's +1 Thievery, Climbing Gear's +2 Athletics. */
+/**
+ * Bonus to a named trait (skill or attribute) from everything that can grant
+ * one: equipped gear (a Lockpick's +1 Thievery), Edges (Alertness's +2
+ * Notice), and Hindrances (Clueless's −2 Common Knowledge). Gear only counts
+ * while equipped; Edges and Hindrances are always on.
+ */
 export function gearTraitBonus(sheet: SheetData, traitName: string): number {
   const want = traitName.trim().toLowerCase();
   if (!want) return 0;
-  return rows(sheet, 'inventory')
-    .filter((i) => i.equipped === true)
-    .reduce((sum, i) => (str(i, 'bonusSkill', '').trim().toLowerCase() === want ? sum + num(i, 'bonusAmt', 0) : sum), 0);
+  const matches = (r: SheetData) => str(r, 'bonusSkill', '').trim().toLowerCase() === want;
+  const sum = (list: SheetData[]) => list.reduce((n, r) => (matches(r) ? n + num(r, 'bonusAmt', 0) : n), 0);
+  return sum(rows(sheet, 'inventory').filter((i) => i.equipped === true))
+    + sum(rows(sheet, 'edges'))
+    + sum(rows(sheet, 'hindrances'));
+}
+
+/** Flat Parry / Toughness / Pace modifiers granted by Edges and Hindrances. */
+function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number; pace: number } {
+  return [...rows(sheet, 'edges'), ...rows(sheet, 'hindrances')].reduce<{ parry: number; toughness: number; pace: number }>(
+    (acc, r) => ({
+      parry: acc.parry + num(r, 'parryBonus', 0),
+      toughness: acc.toughness + num(r, 'toughnessBonus', 0),
+      pace: acc.pace + num(r, 'paceBonus', 0),
+    }),
+    { parry: 0, toughness: 0, pace: 0 },
+  );
+}
+
+/** Pace after Edge/Hindrance modifiers (Fleet-Footed +2, Slow −2). */
+export function swadePace(sheet: SheetData): number {
+  return Math.max(1, num(sheet, 'pace', 6) + traitLineBonuses(sheet).pace);
 }
 
 // ---------- Tab 1: Core ----------
@@ -212,6 +237,7 @@ const coreTab: SheetTab = {
         { key: 'parry', label: 'Parry' },
         { key: 'toughness', label: 'Toughness (incl. armor)' },
         { key: 'toughnessRanged', label: 'Toughness vs ranged' },
+        { key: 'pace', label: 'Pace' },
         { key: 'traitPenalty', label: 'Wound/Fatigue penalty' },
       ],
     },
@@ -225,9 +251,17 @@ const coreTab: SheetTab = {
       ],
     },
     {
+      // Edges carry live modifier columns so a taken Edge actually moves the
+      // sheet: Alertness raises Notice rolls, Brawny raises Toughness,
+      // Fleet-Footed raises Pace, and so on — no manual bookkeeping.
       kind: 'list', id: 'edges', title: 'Edges',
       columns: [
         { id: 'name', label: 'Edge', type: 'text', width: 'third' },
+        { id: 'bonusSkill', label: 'Boosts trait', type: 'text', width: 'sixth', suggestions: [...SKILLS_SWADE, 'Strength', 'Agility', 'Smarts', 'Spirit', 'Vigor'] },
+        { id: 'bonusAmt', label: '+', type: 'number', width: 'sixth', default: 0 },
+        { id: 'parryBonus', label: 'Parry', type: 'number', width: 'sixth', default: 0 },
+        { id: 'toughnessBonus', label: 'Toughness', type: 'number', width: 'sixth', default: 0 },
+        { id: 'paceBonus', label: 'Pace', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Effect', type: 'text', width: 'half' },
       ],
     },
@@ -236,6 +270,11 @@ const coreTab: SheetTab = {
       columns: [
         { id: 'name', label: 'Hindrance', type: 'text', width: 'third' },
         { id: 'severity', label: 'Severity', type: 'select', width: 'sixth', options: ['Minor', 'Major'], default: 'Minor' },
+        { id: 'bonusSkill', label: 'Affects trait', type: 'text', width: 'sixth', suggestions: [...SKILLS_SWADE, 'Strength', 'Agility', 'Smarts', 'Spirit', 'Vigor'] },
+        { id: 'bonusAmt', label: '±', type: 'number', width: 'sixth', default: 0 },
+        { id: 'parryBonus', label: 'Parry', type: 'number', width: 'sixth', default: 0 },
+        { id: 'toughnessBonus', label: 'Toughness', type: 'number', width: 'sixth', default: 0 },
+        { id: 'paceBonus', label: 'Pace', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Effect', type: 'text', width: 'third' },
       ],
     },
@@ -385,6 +424,7 @@ export const swade: SystemSchema = {
     out.parry = swadeParry(sheet);
     out.toughness = swadeToughness(sheet);
     out.toughnessRanged = swadeToughness(sheet) + swadeRangedArmor(sheet);
+    out.pace = swadePace(sheet);
     // The combat engine resolves attack rolls against derived `ac`: in SWADE
     // that target number is Parry (ranged attacks vs a stationary TN 4 are
     // left to the DM's judgment — Parry is the safe common case).

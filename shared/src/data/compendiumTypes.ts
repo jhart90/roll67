@@ -1,6 +1,20 @@
 import type { AoeShape, GameSystem, SheetData } from '../types.js';
 
-export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power';
+export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power' | 'edge' | 'hindrance';
+
+/** SWADE Edges and Hindrances: a character trait with live sheet modifiers. */
+export interface TraitData {
+  /** Hindrances only. */
+  severity?: 'Minor' | 'Major';
+  /** A flat bonus (or penalty) to a named skill/attribute roll. */
+  bonusSkill?: string;
+  bonusAmt?: number;
+  parryBonus?: number;
+  toughnessBonus?: number;
+  paceBonus?: number;
+  /** Requirements, for the compendium's subtitle. */
+  requires?: string;
+}
 
 export interface WeaponData {
   damage: string;         // base dice, e.g. "1d8"
@@ -97,6 +111,7 @@ export interface ContentEntry {
   spell?: SpellData;
   power?: PowerData;
   gear?: GearData;
+  trait?: TraitData;
 }
 
 export function contentSlug(system: string, kind: string, name: string): string {
@@ -212,6 +227,8 @@ function parseAcSaveBonus(text: string): { ac: number; save: number } {
 /** Rough default shop prices by kind; the DM can adjust after adding. */
 const KIND_PRICE: Record<ContentKind, number> = {
   weapon: 25, armor: 75, gear: 10, magicitem: 150, spell: 25, power: 0,
+  // Edges and Hindrances are character traits, never shop stock.
+  edge: 0, hindrance: 0,
 };
 
 /**
@@ -430,6 +447,28 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       },
       label: `${entry.name} added to armor`,
     };
+  }
+
+  // SWADE Edges / Hindrances land in their own lists carrying live modifier
+  // columns, so taking one immediately moves Parry, Toughness, Pace, or the
+  // affected trait roll — no manual bookkeeping.
+  if (entry.kind === 'edge' || entry.kind === 'hindrance') {
+    const t = entry.trait ?? {};
+    const mods = {
+      bonusSkill: t.bonusSkill ?? '',
+      bonusAmt: t.bonusAmt ?? 0,
+      parryBonus: t.parryBonus ?? 0,
+      toughnessBonus: t.toughnessBonus ?? 0,
+      paceBonus: t.paceBonus ?? 0,
+      notes: entry.subtitle,
+    };
+    return entry.kind === 'edge'
+      ? { listId: 'edges', row: { name: entry.name, ...mods }, label: `${entry.name} added to Edges` }
+      : {
+        listId: 'hindrances',
+        row: { name: entry.name, severity: t.severity ?? 'Minor', ...mods },
+        label: `${entry.name} added to Hindrances`,
+      };
   }
 
   // SWN cyberware installs into the cyberware list: strain feeds the strain

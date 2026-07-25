@@ -216,6 +216,7 @@ const SWADE_SHEET: Record<string, string> = {
   'Ammo left': 'Shots remaining. Firing spends one; at zero the weapon can’t fire until reloaded.',
   'Running die': 'The die added to your Pace when you run — d6 for most characters. Running is a free action.',
   'Boosts trait': 'While equipped, this item adds its bonus to the named skill or attribute roll.',
+  'Affects trait': 'The skill or attribute this Hindrance modifies — its penalty folds into that roll automatically.',
   'Resisted by': 'The trait the target rolls to resist this power. Success negates or halves the effect.',
   'On success': 'What happens when the target resists: the effect is negated entirely, or damage is halved.',
   Severity: 'Minor Hindrances are worth 1 build point, Major ones 2 — and Major flaws bite harder in play.',
@@ -363,7 +364,7 @@ const COMMON: Record<string, string> = {
  *  they intentionally have no tooltip. Exported so the coverage test can
  *  assert that everything *else* is documented. */
 export const NON_RULES_LABELS = new Set(
-  ['+', 'Age', 'Appearance', 'Description', 'Detail / portrait', 'Eyes', 'Hair', 'Height',
+  ['+', '±', 'Age', 'Appearance', 'Description', 'Detail / portrait', 'Eyes', 'Hair', 'Height',
     'Item', 'Name', 'Notes', 'Notes (RoF…)', 'Qty', 'Skin', 'Source', 'Token image', 'Type', 'Use',
   ].map((s) => s.toLowerCase()),
 );

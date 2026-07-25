@@ -1,0 +1,199 @@
+import { describe, expect, it } from 'vitest';
+import { applyEntry, contentForSystem } from '../src/data/compendium.js';
+import { swade, swadeParry, swadeToughness, swadePace, gearTraitBonus } from '../src/systems/swade.js';
+import { swn, swnDerivedAc } from '../src/systems/swn.js';
+import { dnd5e } from '../src/systems/dnd5e.js';
+import { combatActions } from '../src/systems/combat.js';
+import { roll, seededRng } from '../src/dice/roller.js';
+import type { Character, GameSystem, SheetData } from '../src/types.js';
+
+const SYSTEM_SHEET: Record<GameSystem, () => SheetData> = {
+  swade: () => swade.defaultSheet(),
+  swn: () => swn.defaultSheet(),
+  dnd5e: () => dnd5e.defaultSheet(),
+};
+
+function charWith(system: GameSystem, sheet: SheetData): Character {
+  return { id: 'c', campaignId: 'x', ownerUserId: null, name: 'T', system, sheet } as unknown as Character;
+}
+
+/** Apply an entry onto a fresh sheet and hand back the resulting sheet. */
+function sheetAfter(system: GameSystem, entryName: string): { sheet: SheetData; listId: string; row: SheetData } {
+  const entry = contentForSystem(system).find((e) => e.name === entryName);
+  if (!entry) throw new Error(`no ${system} entry named ${entryName}`);
+  const base = SYSTEM_SHEET[system]();
+  const applied = applyEntry(entry, base);
+  if (!applied) throw new Error(`${entryName} did not apply`);
+  const list = Array.isArray(base[applied.listId]) ? [...(base[applied.listId] as SheetData[])] : [];
+  list.push(applied.row as SheetData);
+  return { sheet: { ...base, [applied.listId]: list }, listId: applied.listId, row: applied.row as SheetData };
+}
+
+describe('every compendium entry applies cleanly', () => {
+  for (const system of ['dnd5e', 'swn', 'swade'] as const) {
+    it(`${system}: applyEntry returns a usable row for every entry`, () => {
+      const entries = contentForSystem(system);
+      expect(entries.length).toBeGreaterThan(80);
+      for (const entry of entries) {
+        const applied = applyEntry(entry, SYSTEM_SHEET[system]());
+        expect(applied, `${entry.id} produced nothing`).toBeTruthy();
+        expect(applied!.listId, `${entry.id} listId`).toBeTruthy();
+        expect(applied!.row, `${entry.id} row`).toBeTruthy();
+        expect(String((applied!.row as SheetData).name ?? ''), `${entry.id} name`).not.toBe('');
+      }
+    });
+
+    it(`${system}: entries land on lists the sheet schema actually defines`, () => {
+      const listIds = new Set<string>();
+      for (const tab of (system === 'swade' ? swade : system === 'swn' ? swn : dnd5e).tabs) {
+        for (const sec of tab.sections) if (sec.kind === 'list') listIds.add(sec.id);
+      }
+      for (const entry of contentForSystem(system)) {
+        const applied = applyEntry(entry, SYSTEM_SHEET[system]())!;
+        expect(listIds.has(applied.listId), `${entry.id} -> unknown list "${applied.listId}"`).toBe(true);
+      }
+    });
+
+    it(`${system}: every applied weapon/power rolls without throwing`, () => {
+      for (const entry of contentForSystem(system).filter((e) => e.kind === 'weapon' || e.kind === 'power' || e.kind === 'spell')) {
+        const { sheet } = sheetAfter(system, entry.name);
+        const schema = system === 'swade' ? swade : system === 'swn' ? swn : dnd5e;
+        for (const r of schema.rollables(sheet)) {
+          if (r.expr === '0') continue;
+          expect(() => roll(r.expr, seededRng(3)), `${entry.id}: ${r.expr}`).not.toThrow();
+        }
+        for (const a of combatActions(charWith(system, sheet))) {
+          if (a.attackExpr) expect(() => roll(a.attackExpr!, seededRng(4)), `${entry.id} atk`).not.toThrow();
+          if (a.amountExpr && a.amountExpr !== '0') {
+            expect(() => roll(a.amountExpr, seededRng(5)), `${entry.id} dmg`).not.toThrow();
+          }
+        }
+      }
+    });
+  }
+});
+
+describe('SWADE Edges and Hindrances are mechanically live', () => {
+  it('are present in the compendium in useful numbers', () => {
+    const list = contentForSystem('swade');
+    expect(list.filter((e) => e.kind === 'edge').length).toBeGreaterThanOrEqual(40);
+    expect(list.filter((e) => e.kind === 'hindrance').length).toBeGreaterThanOrEqual(40);
+  });
+
+  it('Alertness raises the Notice roll it grants', () => {
+    const { sheet } = sheetAfter('swade', 'Alertness');
+    expect(gearTraitBonus(sheet, 'Notice')).toBe(2);
+    const withSkill = { ...sheet, skills: [{ name: 'Notice', die: 'd6' }] };
+    expect(swade.rollables(withSkill).find((r) => r.id === 'skill_0')!.expr).toBe('best(1d6!, 1d6!)+2');
+  });
+
+  it('Brawny raises Toughness and Fleet-Footed raises Pace', () => {
+    const base = swade.defaultSheet();
+    const brawny = sheetAfter('swade', 'Brawny').sheet;
+    expect(swadeToughness(brawny)).toBe(swadeToughness(base) + 1);
+    const fleet = sheetAfter('swade', 'Fleet-Footed').sheet;
+    expect(swadePace(fleet)).toBe(swadePace(base) + 2);
+    expect(Number(swade.derive(fleet).pace)).toBe(swadePace(base) + 2);
+  });
+
+  it('Block raises Parry; Improved Block raises it more', () => {
+    const base = swadeParry(swade.defaultSheet());
+    expect(swadeParry(sheetAfter('swade', 'Block').sheet)).toBe(base + 1);
+    expect(swadeParry(sheetAfter('swade', 'Improved Block').sheet)).toBe(base + 2);
+  });
+
+  it('Hindrances apply their penalties and carry their severity', () => {
+    const clumsy = sheetAfter('swade', 'Clumsy');
+    expect(clumsy.row.severity).toBe('Major');
+    expect(gearTraitBonus(clumsy.sheet, 'Athletics')).toBe(-2);
+    const obese = sheetAfter('swade', 'Obese');
+    expect(obese.row.severity).toBe('Minor');
+    // Obese: slower but sturdier — both sides land.
+    expect(swadePace(obese.sheet)).toBe(swadePace(swade.defaultSheet()) - 1);
+    expect(swadeToughness(obese.sheet)).toBe(swadeToughness(swade.defaultSheet()) + 1);
+    const small = sheetAfter('swade', 'Small');
+    expect(swadeToughness(small.sheet)).toBe(swadeToughness(swade.defaultSheet()) - 1);
+  });
+
+  it('Edges land in the edges list and Hindrances in the hindrances list', () => {
+    expect(sheetAfter('swade', 'Luck').listId).toBe('edges');
+    expect(sheetAfter('swade', 'Bad Luck').listId).toBe('hindrances');
+  });
+});
+
+describe('expanded SWADE gear and weapons stay automated', () => {
+  it('new healing gear becomes a usable heal item', () => {
+    for (const [name, amount] of [['Healing Potion', '2d6'], ['Medkit (Modern)', '2d6'], ['Antitoxin', '1d6']] as const) {
+      const { row } = sheetAfter('swade', name);
+      expect(row.effect, name).toBe('heal');
+      expect(row.amount, name).toBe(amount);
+    }
+  });
+
+  it('new gear with a trait bonus boosts that trait once equipped', () => {
+    const { sheet } = sheetAfter('swade', 'Surgical Kit');
+    const equipped = { ...sheet, inventory: (sheet.inventory as SheetData[]).map((i) => ({ ...i, equipped: true })) };
+    expect(gearTraitBonus(equipped, 'Healing')).toBe(2);
+  });
+
+  it('new weapons parse AP, Parry mods, and magazines', () => {
+    expect(sheetAfter('swade', 'Vibro-Blade').row.ap).toBe(4);
+    expect(sheetAfter('swade', 'Rapier (Main Gauche)').row.parryBonus).toBe(1);
+    expect(sheetAfter('swade', 'Combat Shotgun').row.ammo).toBe(8);
+    expect(sheetAfter('swade', 'Laser Rifle').row.ap).toBe(4);
+  });
+
+  it('new save-or-condition powers become targeted actions', () => {
+    const { sheet } = sheetAfter('swade', 'Blind');
+    const withSkill = { ...sheet, arcaneSkill: 'Spellcasting', skills: [{ name: 'Spellcasting', die: 'd8' }] };
+    const action = combatActions(charWith('swade', withSkill)).find((a) => a.label === 'Blind')!;
+    expect(action.saveId).toBe('agility');
+    expect(action.appliesCondition).toBe('blinded');
+  });
+});
+
+describe('expanded SWN content stays automated', () => {
+  it('new weapons carry shock thresholds, magazines, and blast areas', () => {
+    expect(sheetAfter('swn', 'Vibro-sword').row.shock).toBe(3);
+    expect(sheetAfter('swn', 'Vibro-sword').row.shockAc).toBe(15);
+    expect(sheetAfter('swn', 'Machine Pistol').row.ammo).toBe(20);
+    const emp = sheetAfter('swn', 'EMP Grenade').row;
+    expect(emp.aoeShape).toBe('sphere');
+    expect(emp.save).toBe('evasion');
+  });
+
+  it('new armor sets AC, and shields keep the shield rule', () => {
+    const plate = sheetAfter('swn', 'Plate Harness');
+    expect(plate.row.ac).toBe(16);
+    const worn = { ...plate.sheet, armor: [{ ...plate.row, equipped: true }] };
+    expect(swnDerivedAc(worn)).toBe(16);
+    const riot = sheetAfter('swn', 'Riot Shield').row;
+    expect(riot.shield).toBe(true);
+    expect(riot.ac).toBe(13);
+  });
+
+  it('new cyberware installs with strain and live bonuses', () => {
+    const subdermal = sheetAfter('swn', 'Subdermal Armor');
+    expect(subdermal.listId).toBe('cyberware');
+    expect(subdermal.row.strain).toBe(2);
+    expect(subdermal.row.acBonus).toBe(2);
+    const reflex = sheetAfter('swn', 'Reflex Booster (Advanced)');
+    expect(reflex.row.initBonus).toBe(2);
+    expect(swn.initiativeExpr(reflex.sheet)).toBe('1d8+2');
+  });
+
+  it('new healing gear and cyberware become usable heal items', () => {
+    expect(sheetAfter('swn', 'Trauma Pack').row.amount).toBe('2d6');
+    expect(sheetAfter('swn', 'Trauma Kit (Pretech)').row.amount).toBe('3d6');
+  });
+
+  it('new psychic powers carry damage, saves, and ranges', () => {
+    const assault = sheetAfter('swn', 'Telepathic Assault').row;
+    expect(assault.damage).toBe('2d10');
+    expect(assault.save).toBe('mental');
+    expect(assault.range).toBe(200);
+    const medicine = sheetAfter('swn', 'Field Medicine').row;
+    expect(medicine.effect).toBe('heal');
+    expect(medicine.damage).toBe('1d6');
+  });
+});

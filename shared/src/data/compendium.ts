@@ -20,12 +20,14 @@ export function contentForSystem(system: GameSystem): ContentEntry[] {
 }
 
 /** Distinct kinds present for a system, in a sensible display order. */
-const KIND_ORDER: ContentKind[] = ['weapon', 'armor', 'spell', 'power', 'gear', 'magicitem'];
+const KIND_ORDER: ContentKind[] = ['weapon', 'armor', 'spell', 'power', 'edge', 'hindrance', 'gear', 'magicitem'];
 export const KIND_LABEL: Record<ContentKind, string> = {
   weapon: 'Weapons',
   armor: 'Armor',
   spell: 'Spells',
-  power: 'Psychic Powers',
+  power: 'Powers',
+  edge: 'Edges',
+  hindrance: 'Hindrances',
   gear: 'Gear',
   magicitem: 'Magic Items',
 };

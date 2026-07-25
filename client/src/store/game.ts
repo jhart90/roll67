@@ -26,9 +26,23 @@ import { estimateDiceAnimMs } from '../table/dice3d';
  * waits its turn, which keeps the log from getting ahead of the dice and
  * spoiling a result that is still bouncing around on screen.
  */
-const ROLL_GAP_MS = 1000;
-/** How long a finished roll's dice linger before the overlay clears them. */
-const OVERLAY_LINGER_MS = 3000;
+/**
+ * A following ROLL waits this long after the previous one's dice have landed.
+ * Long, deliberately: an attack and its damage are two separate results and
+ * the table needs to read the first before the second starts throwing.
+ */
+const ROLL_TO_ROLL_GAP_MS = 2000;
+/**
+ * Everything else — a projectile, a chat line — waits this much instead. It
+ * only has to clear the dice, not give them time to be read.
+ */
+const POST_ROLL_GAP_MS = 1000;
+/**
+ * How long a finished roll's dice linger before the overlay clears them. Sits
+ * above ROLL_TO_ROLL_GAP_MS so a roll that ends a sequence stays readable
+ * rather than vanishing the moment the gap elapses.
+ */
+const OVERLAY_LINGER_MS = 4000;
 
 type DiceAnimState = NonNullable<GameState['diceAnim']>;
 type QueueItem = {
@@ -39,14 +53,27 @@ type QueueItem = {
 const chatQueue: QueueItem[] = [];
 let activeRoll: QueueItem | null = null;
 let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+let gapTimer: ReturnType<typeof setTimeout> | null = null;
+/** When the last roll's dice finished landing; the gaps are measured from it. */
+let lastRollEndedAt = 0;
 
 function pumpChatQueue(): void {
   if (activeRoll) return; // a roll is still on screen
-  const next = chatQueue.shift();
+  const next = chatQueue[0];
   if (!next) return;
+  // Measured against the clock rather than a one-shot timer, so an item that
+  // arrives during the gap still waits its turn instead of jumping the queue.
+  const wait = lastRollEndedAt + (next.roll ? ROLL_TO_ROLL_GAP_MS : POST_ROLL_GAP_MS) - Date.now();
+  if (wait > 0) {
+    if (gapTimer === null) {
+      gapTimer = setTimeout(() => { gapTimer = null; pumpChatQueue(); }, wait);
+    }
+    return;
+  }
+  chatQueue.shift();
   if (!next.roll) {
-    // Plain message: nothing to animate, so it lands immediately and we keep
-    // draining until we hit a roll or run dry.
+    // Nothing to animate, so it lands now and we keep draining until we hit a
+    // roll or run dry.
     next.append();
     pumpChatQueue();
     return;
@@ -64,13 +91,14 @@ function finishRoll(id: number): void {
   if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
   const done = activeRoll;
   activeRoll = null;
+  lastRollEndedAt = Date.now();
   done.append(); // the dice have landed, so the total is safe to show
   setTimeout(() => {
     const cur = useGameStore.getState();
     if (cur.diceAnim?.id === id) useGameStore.setState({ diceAnim: null });
   }, OVERLAY_LINGER_MS);
-  // Let the finished dice sit before the next roll takes the screen.
-  setTimeout(pumpChatQueue, ROLL_GAP_MS);
+  // pump works out how long this particular next item has to wait.
+  pumpChatQueue();
 }
 
 /** Called by the dice overlay once a roll's animation has fully played. */
@@ -81,8 +109,10 @@ export function diceAnimationFinished(id: number): void {
 /** Drop anything queued — used when leaving a room so stale rolls don't fire. */
 function resetChatQueue(): void {
   if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+  if (gapTimer) { clearTimeout(gapTimer); gapTimer = null; }
   chatQueue.length = 0;
   activeRoll = null;
+  lastRollEndedAt = 0;
 }
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain';

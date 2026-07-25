@@ -246,6 +246,9 @@ export interface DieRoll {
   /** This die aced (rolled its max on an exploding die) and spawned the die
    *  immediately after it. Drives the sequenced roll-flash-roll animation. */
   ace?: boolean;
+  /** Bonus die earned by a SWADE raise (beating the target number by 4+).
+   *  Rendered in raise green so it reads as earned, not part of the base. */
+  raise?: boolean;
 }
 
 export interface RollBreakdown {

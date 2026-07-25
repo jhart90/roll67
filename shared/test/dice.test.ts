@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DiceParseError, parseDice } from '../src/dice/parser.js';
-import { roll, seededRng } from '../src/dice/roller.js';
+import { roll, seededRng, withRaiseDie } from '../src/dice/roller.js';
 
 describe('dice parser', () => {
   it('parses plain dice and numbers', () => {
@@ -157,5 +157,35 @@ describe('dice roller', () => {
     const r = roll('best(1d8!, 1d6!)-2', seededRng(9));
     const keptSum = r.dice.filter((d) => d.kept).reduce((a, d) => a + d.value, 0);
     expect(r.total).toBe(keptSum - 2);
+  });
+});
+
+describe('raise bonus die', () => {
+  it('folds the bonus into the base roll and tags only the bonus dice', () => {
+    const base = roll('1d4!+1d4!', seededRng(7));
+    const bonus = roll('1d6!', seededRng(11));
+    const merged = withRaiseDie(base, bonus);
+    expect(merged.total).toBe(base.total + bonus.total);
+    expect(merged.dice.length).toBe(base.dice.length + bonus.dice.length);
+    // Base dice stay untagged; every bonus die is marked.
+    expect(merged.dice.slice(0, base.dice.length).every((d) => !d.raise)).toBe(true);
+    expect(merged.dice.slice(base.dice.length).every((d) => d.raise === true)).toBe(true);
+    expect(merged.expression).toBe('1d4!+1d4!+1d6!');
+    expect(merged.detail).toContain('raise');
+  });
+
+  it('tags an acing raise die across its whole chain', () => {
+    // A d6 that rolls 6 aces, so the bonus contributes several dice — all of
+    // which must read as part of the raise, not the base damage.
+    let bonus = roll('1d6!');
+    for (let i = 0; i < 200 && bonus.dice.length < 2; i++) bonus = roll('1d6!');
+    if (bonus.dice.length < 2) return; // vanishingly unlikely; nothing to assert
+    const merged = withRaiseDie(roll('1d8!'), bonus);
+    expect(merged.dice.filter((d) => d.raise).length).toBe(bonus.dice.length);
+  });
+
+  it('does not invent an outcome the base roll never had', () => {
+    const merged = withRaiseDie(roll('1d4!'), roll('1d6!'));
+    expect(merged.outcome).toBeUndefined();
   });
 });

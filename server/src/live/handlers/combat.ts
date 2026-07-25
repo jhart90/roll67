@@ -5,8 +5,8 @@ import {
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type RequestSavePayload, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
-  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck,
+  type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative,
 } from 'shared';
@@ -542,15 +542,22 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // A crit doubles the dice. Resistance/vulnerability/immunity from the
       // target's sheet then scales the total. A SWADE raise (beating TN 4 by
       // 4+) adds a bonus d6 that aces, per the book.
-      const dmgExpr = crit ? critDamageExpr(action.amountExpr)
-        : raise ? `${action.amountExpr}+1d6!` : action.amountExpr;
-      let amountRoll = roll(dmgExpr);
+      // The raise's bonus d6 is rolled separately from the base damage so its
+      // dice can be tagged — otherwise it just shows up as a mystery third die
+      // in the breakdown with nothing marking it as earned.
+      const rollDamage = (): RollBreakdown => {
+        if (crit) return roll(critDamageExpr(action.amountExpr));
+        const base = roll(action.amountExpr);
+        if (!raise) return base;
+        return withRaiseDie(base, roll('1d6!'));
+      };
+      let amountRoll = rollDamage();
       // Savage Attacker: once per round, reroll a melee hit's damage and keep
       // the higher total (auto-applied — no reason to ever decline it).
       if (hit && action.source === 'attack' && !action.ranged && hasSavageAttacker(actor.sheet)) {
         const used = num(actor.sheet, 'res_savageAttacker', 0);
         if (used < 1) {
-          const reroll = roll(dmgExpr);
+          const reroll = rollDamage();
           if (reroll.total > amountRoll.total) amountRoll = reroll;
           undo.push({ t: 'field', characterId: actor.id, key: 'res_savageAttacker', value: used });
           actor = persistSheet(io, d.campaignId, actor, { res_savageAttacker: used + 1 });
@@ -631,7 +638,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const verb = action.effect === 'heal' ? 'uses' : 'attacks';
       const outcome = action.effect === 'heal'
         ? `heals ${applied}`
-        : hit ? `${applied} damage${resistTag}` : 'no damage';
+        // Name the bonus die's source, so an extra die in the breakdown reads
+        // as a reward rather than a bug.
+        : hit ? `${applied} damage${crit ? ' (crit ×2 dice)' : raise ? ' (raise +1d6)' : ''}${resistTag}` : 'no damage';
       // A to-hit or save roll already posted its own card above (see the
       // dispatch below) — this card is damage-only, not a restatement of
       // the attack/target line. Only a no-roll action (e.g. a plain heal)

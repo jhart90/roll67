@@ -305,6 +305,8 @@ export const ACE_READ_PAUSE_MS = 500;
 export const ACE_GAP_MS = ACE_FLASH_MS + ACE_READ_PAUSE_MS;
 /** Stagger between dice thrown in the same wave. */
 const WAVE_STAGGER_MS = 110;
+/** Bonus dice earned by a SWADE raise, so they stand out from the base roll. */
+const RAISE_DIE_COLOR = '#1f9d55';
 
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
@@ -344,11 +346,15 @@ export function buildSims(
       y: target.y + 120 + Math.random() * 160,
     };
     const geom = geometryFor(die.sides);
-    const rgb = hexToRgb(customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3');
+    // A raise's bonus die always reads green with white pips, whatever the
+    // player's chosen dice colour — it was earned, not part of the base roll.
+    const rgb = die.raise
+      ? hexToRgb(RAISE_DIE_COLOR)
+      : hexToRgb(customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3');
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
-      textColor: customTextColor ?? (luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb'),
+      textColor: die.raise ? '#ffffff' : (customTextColor ?? (luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb')),
       size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
       start, target,
       delay: timing[i].delay,

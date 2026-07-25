@@ -103,3 +103,21 @@ export function seededRng(seed: number): RNG {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/**
+ * Fold a SWADE raise's bonus d6 into a base damage roll.
+ *
+ * The bonus is rolled separately rather than appended to the expression so its
+ * dice can be tagged: an untagged extra die in the breakdown just looks like a
+ * bug to whoever is reading chat. Tagged dice render in raise green, and the
+ * detail string names where the extra die came from.
+ */
+export function withRaiseDie(base: RollBreakdown, bonus: RollBreakdown): RollBreakdown {
+  return {
+    expression: `${base.expression}+${bonus.expression}`,
+    total: base.total + bonus.total,
+    dice: [...base.dice, ...bonus.dice.map((d) => ({ ...d, raise: true }))],
+    detail: `${base.detail} + raise ${bonus.detail}`,
+    ...(base.outcome ? { outcome: base.outcome } : {}),
+  };
+}

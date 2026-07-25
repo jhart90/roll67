@@ -17,22 +17,72 @@ import { closeWindow, openWindow, useWindowManager } from './windowManager';
 import { estimateDiceAnimMs } from '../table/dice3d';
 
 /**
- * Roll chat entries waiting on their dice to finish. Keyed by the dice-anim
- * id so the overlay can flush exactly its own roll the moment the last die
- * lands, rather than everyone guessing from a timer.
+ * Serialized chat pipeline.
+ *
+ * A single action can produce several rolls back to back — an attack and then
+ * its damage. Each needs the screen to itself: playing them at once (or worse,
+ * letting the second replace the first mid-throw) means nobody can read either.
+ * So dice animations run one at a time, and every chat entry — roll or not —
+ * waits its turn, which keeps the log from getting ahead of the dice and
+ * spoiling a result that is still bouncing around on screen.
  */
-const pendingRollChat = new Map<number, () => void>();
+const ROLL_GAP_MS = 1000;
+/** How long a finished roll's dice linger before the overlay clears them. */
+const OVERLAY_LINGER_MS = 3000;
 
-function flushRollChat(id: number): void {
-  const append = pendingRollChat.get(id);
-  if (!append) return;
-  pendingRollChat.delete(id);
-  append();
+type DiceAnimState = NonNullable<GameState['diceAnim']>;
+type QueueItem = {
+  append: () => void;
+  roll?: { id: number; dice: DieRoll[]; anim: DiceAnimState };
+};
+
+const chatQueue: QueueItem[] = [];
+let activeRoll: QueueItem | null = null;
+let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+function pumpChatQueue(): void {
+  if (activeRoll) return; // a roll is still on screen
+  const next = chatQueue.shift();
+  if (!next) return;
+  if (!next.roll) {
+    // Plain message: nothing to animate, so it lands immediately and we keep
+    // draining until we hit a roll or run dry.
+    next.append();
+    pumpChatQueue();
+    return;
+  }
+  activeRoll = next;
+  useGameStore.setState({ diceAnim: next.roll.anim });
+  // The overlay reports the true finish via diceAnimationFinished(); this only
+  // covers the case where no overlay is mounted to report back.
+  const animMs = estimateDiceAnimMs(next.roll.dice);
+  fallbackTimer = setTimeout(() => finishRoll(next.roll!.id), animMs + 500);
+}
+
+function finishRoll(id: number): void {
+  if (activeRoll?.roll?.id !== id) return; // already finished, or not the active one
+  if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+  const done = activeRoll;
+  activeRoll = null;
+  done.append(); // the dice have landed, so the total is safe to show
+  setTimeout(() => {
+    const cur = useGameStore.getState();
+    if (cur.diceAnim?.id === id) useGameStore.setState({ diceAnim: null });
+  }, OVERLAY_LINGER_MS);
+  // Let the finished dice sit before the next roll takes the screen.
+  setTimeout(pumpChatQueue, ROLL_GAP_MS);
 }
 
 /** Called by the dice overlay once a roll's animation has fully played. */
 export function diceAnimationFinished(id: number): void {
-  flushRollChat(id);
+  finishRoll(id);
+}
+
+/** Drop anything queued — used when leaving a room so stale rolls don't fire. */
+function resetChatQueue(): void {
+  if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+  chatQueue.length = 0;
+  activeRoll = null;
 }
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain';
@@ -418,6 +468,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   leave() {
     socket.emit(C2S.LEAVE_CAMPAIGN);
+    // Queued rolls belong to the campaign being left; firing them into the next
+    // one would append stray entries to a fresh log.
+    resetChatQueue();
     set({
       you: null, campaign: null, members: [], characters: [], mapsMeta: [],
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
@@ -777,33 +830,27 @@ export function wireSocket(): void {
       useGameStore.setState({ chatLog: [...cur.chatLog.slice(-499), msg] });
     };
     // Any dice roll triggers the 3D dice animation (capped so a 100d6
-    // doesn't fill the screen).
+    // doesn't fill the screen). Both rolls and plain messages go through the
+    // same queue so an attack finishes throwing — aces and all — before its
+    // damage roll starts, and neither total reaches the log early.
     if (msg.roll && msg.roll.dice.length > 0) {
       const shown = msg.roll.dice.slice(0, 12);
       const id = ++pingCounter;
-      useGameStore.setState({
-        diceAnim: {
-          id, dice: shown, byName: msg.fromName,
-          byUserId: msg.fromUserId, total: msg.roll.total, expression: msg.roll.expression,
+      chatQueue.push({
+        append: appendToLog,
+        roll: {
+          id,
+          dice: shown,
+          anim: {
+            id, dice: shown, byName: msg.fromName,
+            byUserId: msg.fromUserId, total: msg.roll.total, expression: msg.roll.expression,
+          },
         },
       });
-      // The chat entry spoils the total, so it waits for the dice — which
-      // matters most for an exploding (acing) roll, where the bonus dice are
-      // thrown one after another and the result isn't known until the last
-      // one lands. The overlay reports when it has actually finished
-      // (diceSettled); the estimate is only a fallback for when no overlay
-      // is on screen to report back. Either way the entry is queued, never
-      // dropped, so ordering holds.
-      pendingRollChat.set(id, appendToLog);
-      const animMs = estimateDiceAnimMs(shown);
-      setTimeout(() => flushRollChat(id), animMs + 500);
-      setTimeout(() => {
-        const cur = useGameStore.getState();
-        if (cur.diceAnim?.id === id) useGameStore.setState({ diceAnim: null });
-      }, animMs + 3500);
     } else {
-      appendToLog();
+      chatQueue.push({ append: appendToLog });
     }
+    pumpChatQueue();
   });
 
   socket.on(S2C.CHAT_UPDATED, ({ msg }: { msg: ChatMessage }) => {

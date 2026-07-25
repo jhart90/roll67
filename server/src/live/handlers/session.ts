@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
-  type JoinCampaignPayload, type SetDiceColorPayload, type SetDiceTextColorPayload,
+  type JoinCampaignPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -91,6 +91,9 @@ export function broadcastPresence(io: Server, campaignId: string): void {
       mapId: campaigns.viewMapIdFor(campaignId, m.userId),
       diceColor: m.diceColor,
       diceTextColor: m.diceTextColor,
+      diceTraitColor: m.diceTraitColor,
+      diceWildColor: m.diceWildColor,
+      diceRaiseColor: m.diceRaiseColor,
       playerColor: m.playerColor,
     });
   }
@@ -164,6 +167,17 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     users.setDiceTextColor(d.userId, clean);
     broadcastPresence(io, d.campaignId);
   }, 'SET_DICE_TEXT_COLOR'));
+
+  // SWADE colours dice by their role in the roll (trait / Wild Die / raise
+  // bonus) rather than by die size, so each role gets its own slot.
+  socket.on(C2S.SET_DICE_ROLE_COLOR, safe(socket, ({ role, color }: SetDiceRoleColorPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (role !== 'trait' && role !== 'wild' && role !== 'raise') return;
+    const clean = color === null || /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : null;
+    users.setDiceRoleColor(d.userId, role, clean);
+    broadcastPresence(io, d.campaignId);
+  }, 'SET_DICE_ROLE_COLOR'));
 
   // Your presence-dot color, and the color your player-controlled token
   // names get bolded in in chat (client/src/panels/ChatPanel.tsx).

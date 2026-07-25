@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DieRoll } from 'shared';
 import { diceAnimationFinished, useGameStore } from '../store/game';
-import { buildSims, drawFrame, simsSettleTime } from './dice3d';
+import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette } from './dice3d';
 
-function DiceCanvas({ animId, dice, byName, total, expression, color, textColor }: {
-  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null;
+function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette }: {
+  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [settled, setSettled] = useState(false);
@@ -23,7 +23,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor 
     canvas.style.height = `${h}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const sims = buildSims(dice, w, h, color, textColor);
+    const sims = buildSims(dice, w, h, color, textColor, palette);
     const settleAt = simsSettleTime(sims);
     const t0 = performance.now();
     let raf = 0;
@@ -64,10 +64,20 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor 
 export function DiceOverlay() {
   const anim = useGameStore((s) => s.diceAnim);
   const members = useGameStore((s) => s.members);
+  const system = useGameStore((s) => s.campaign?.system);
   if (!anim) return null;
   const member = anim.byUserId ? members.find((m) => m.userId === anim.byUserId) : undefined;
   const color = member?.diceColor ?? null;
   const textColor = member?.diceTextColor ?? null;
+  // Only SWADE distinguishes trait / Wild Die / raise; every other system keeps
+  // the by-size colours and the single-colour override.
+  const palette: DicePalette | null = system === 'swade'
+    ? {
+      trait: member?.diceTraitColor ?? DICE_ROLE_DEFAULTS.trait,
+      wild: member?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild,
+      raise: member?.diceRaiseColor ?? DICE_ROLE_DEFAULTS.raise,
+    }
+    : null;
   return (
     <DiceCanvas
       key={anim.id}
@@ -78,6 +88,7 @@ export function DiceOverlay() {
       expression={anim.expression}
       color={color}
       textColor={textColor}
+      palette={palette}
     />
   );
 }

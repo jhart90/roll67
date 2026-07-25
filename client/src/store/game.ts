@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type Shop,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type Shop,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -1002,10 +1002,12 @@ export function wireSocket(): void {
     useGameStore.setState({ targetPreviews });
   });
 
-  socket.on(S2C.MEMBER_PRESENCE, ({ userId, username, online, mapId, diceColor, diceTextColor, playerColor }: MemberPresencePayload) => {
+  socket.on(S2C.MEMBER_PRESENCE, ({ userId, username, online, mapId, diceColor, diceTextColor, diceTraitColor, diceWildColor, diceRaiseColor, playerColor }: MemberPresencePayload) => {
     const s = useGameStore.getState();
     useGameStore.setState({
-      members: s.members.map((m) => (m.userId === userId ? { ...m, username, online, mapId, diceColor, diceTextColor, playerColor } : m)),
+      members: s.members.map((m) => (m.userId === userId
+        ? { ...m, username, online, mapId, diceColor, diceTextColor, diceTraitColor, diceWildColor, diceRaiseColor, playerColor }
+        : m)),
     });
   });
 
@@ -1114,6 +1116,7 @@ export const intents = {
     socket.emit(C2S.CHAT, { text });
   },
   setDiceColor: (color: string | null) => socket.emit(C2S.SET_DICE_COLOR, { color }),
+  setDiceRoleColor: (role: DiceRole, color: string | null) => socket.emit(C2S.SET_DICE_ROLE_COLOR, { role, color }),
   setDiceTextColor: (color: string | null) => socket.emit(C2S.SET_DICE_TEXT_COLOR, { color }),
   setPlayerColor: (color: string | null) => socket.emit(C2S.SET_PLAYER_COLOR, { color }),
   setUsername: (username: string) => socket.emit(C2S.SET_USERNAME, { username }),

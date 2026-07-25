@@ -305,16 +305,18 @@ export const ACE_READ_PAUSE_MS = 500;
 export const ACE_GAP_MS = ACE_FLASH_MS + ACE_READ_PAUSE_MS;
 /** Stagger between dice thrown in the same wave. */
 const WAVE_STAGGER_MS = 110;
-/** Bonus dice earned by a SWADE raise, so they stand out from the base roll. */
-const RAISE_DIE_COLOR = '#1f9d55';
-/** Wild Die colour for a roller who has not picked one of their own. */
-const WILD_DIE_FALLBACK = '#8b5cf6';
-/** Trait dice: black with white pips. Kept a shade off pure black so the
- *  bevels and shadow still read against the dark overlay. */
-const TRAIT_DIE_COLOR = '#14171d';
+/**
+ * SWADE colours dice by their role in the roll instead of by die size, because
+ * the arms of a `best(trait!, wild!)` have to be told apart while they are
+ * still bouncing. Defaults below; each slot is overridable per player.
+ * Trait black is a shade off pure black so bevels and shadow still read.
+ */
+export const DICE_ROLE_DEFAULTS = { trait: '#14171d', wild: '#8b5cf6', raise: '#1f9d55' };
+export type DicePalette = { trait: string; wild: string; raise: string };
 
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
+  palette: DicePalette | null = null,
 ): DieSim[] {
   const n = dice.length;
   const cols = Math.min(n, 6);
@@ -351,22 +353,21 @@ export function buildSims(
       y: target.y + 120 + Math.random() * 160,
     };
     const geom = geometryFor(die.sides);
-    // Three schemes, told apart by hue rather than by dimming the losing arm:
-    //   raise — always green, it was earned rather than rolled for
-    //   wild  — the roller's own colour, marking SWADE's second arm
-    //   trait — black with white pips
-    // Dimming used to mark the arm that lost, but `kept` is only known once
-    // every arm has finished acing, so it announced the result of dice that
-    // had not been thrown yet.
-    const rgb = die.raise ? hexToRgb(RAISE_DIE_COLOR)
-      : die.wild ? hexToRgb(customColor ?? WILD_DIE_FALLBACK)
-        : hexToRgb(TRAIT_DIE_COLOR);
+    // With a role palette (SWADE) dice are told apart by hue: raise, Wild Die,
+    // and trait each get their own colour. Never by dimming the losing arm —
+    // `kept` is only known once every arm has finished acing, so fading it
+    // would announce the result of dice that have not been thrown yet.
+    // Without a palette, every other system keeps the by-size colours and the
+    // player's own single-colour override.
+    const rgb = hexToRgb(palette
+      ? (die.raise ? palette.raise : die.wild ? palette.wild : palette.trait)
+      : (customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3'));
     // Pips have to stay legible against whatever colour the player picked.
     const contrasting = luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb';
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
-      textColor: die.raise ? '#ffffff' : die.wild ? contrasting : '#ffffff',
+      textColor: palette ? contrasting : (customTextColor ?? contrasting),
       size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
       start, target,
       delay: timing[i].delay,

@@ -6,6 +6,27 @@ import type {
 } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
+/** SWADE's dice roles, and the column each one persists to. */
+export type DiceRole = 'trait' | 'wild' | 'raise';
+const DICE_ROLE_COLUMNS: Record<DiceRole, string> = {
+  trait: 'dice_trait_color',
+  wild: 'dice_wild_color',
+  raise: 'dice_raise_color',
+};
+
+export interface MemberRow {
+  userId: string;
+  username: string;
+  role: Role;
+  mapId: string | null;
+  diceColor: string | null;
+  diceTextColor: string | null;
+  diceTraitColor: string | null;
+  diceWildColor: string | null;
+  diceRaiseColor: string | null;
+  playerColor: string | null;
+}
+
 /**
  * JSON.parse that survives a corrupt row: one bad *_json column must degrade
  * to its empty default (and a loud log), not throw out of every read of that
@@ -47,6 +68,12 @@ export const users = {
   },
   setDiceTextColor(userId: string, color: string | null): void {
     stmt('UPDATE users SET dice_text_color = ? WHERE id = ?').run(color, userId);
+  },
+  /** SWADE's per-role dice colours. The column is picked from a fixed map, so
+   *  an unknown role can never reach the SQL. */
+  setDiceRoleColor(userId: string, role: DiceRole, color: string | null): void {
+    const col = DICE_ROLE_COLUMNS[role];
+    stmt(`UPDATE users SET ${col} = ? WHERE id = ?`).run(color, userId);
   },
   setPlayerColor(userId: string, color: string | null): void {
     stmt('UPDATE users SET player_color = ? WHERE id = ?').run(color, userId);
@@ -154,11 +181,15 @@ export const campaigns = {
       .get(campaignId, userId) as { role: Role } | undefined;
     return row?.role;
   },
-  members(campaignId: string): Array<{ userId: string; username: string; role: Role; mapId: string | null; diceColor: string | null; diceTextColor: string | null; playerColor: string | null }> {
+  members(campaignId: string): MemberRow[] {
     return (stmt(
-      `SELECT m.user_id as userId, u.username, m.role, m.map_id as mapId, u.dice_color as diceColor, u.dice_text_color as diceTextColor, u.player_color as playerColor FROM campaign_members m
+      `SELECT m.user_id as userId, u.username, m.role, m.map_id as mapId,
+              u.dice_color as diceColor, u.dice_text_color as diceTextColor,
+              u.dice_trait_color as diceTraitColor, u.dice_wild_color as diceWildColor,
+              u.dice_raise_color as diceRaiseColor, u.player_color as playerColor
+       FROM campaign_members m
        JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ?`,
-    ).all(campaignId) as Array<{ userId: string; username: string; role: Role; mapId: string | null; diceColor: string | null; diceTextColor: string | null; playerColor: string | null }>);
+    ).all(campaignId) as MemberRow[]);
   },
   setActiveMap(campaignId: string, mapId: string | null): void {
     stmt('UPDATE campaigns SET active_map_id = ? WHERE id = ?').run(mapId, campaignId);

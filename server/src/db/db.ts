@@ -80,6 +80,11 @@ ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
 ensureColumn('maps', 'terrain_json', "terrain_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
+// SWADE colours dice by their role in the roll rather than by die size, so it
+// gets its own three-slot palette. Null in any slot falls back to the default.
+ensureColumn('users', 'dice_trait_color', 'dice_trait_color TEXT');
+ensureColumn('users', 'dice_wild_color', 'dice_wild_color TEXT');
+ensureColumn('users', 'dice_raise_color', 'dice_raise_color TEXT');
 ensureColumn('users', 'player_color', 'player_color TEXT');
 // Chest-folder unification: folders can be placed on maps as chests
 ensureColumn('world_folders', 'items_json', "items_json TEXT NOT NULL DEFAULT '[]'");

@@ -1,5 +1,7 @@
 import { intents, useGameStore } from '../store/game';
 import { DieShape } from './DiceShapes';
+import { DICE_ROLE_DEFAULTS } from './dice3d';
+import type { DiceRole } from 'shared';
 
 const DICE_TYPES = [2, 4, 6, 8, 10, 12, 20, 100];
 const COUNTS = [1, 2, 3, 4, 5, 6];
@@ -85,8 +87,67 @@ function DiceTextColorPicker() {
   );
 }
 
+/**
+ * SWADE colours dice by their role in the roll — trait die, Wild Die, and the
+ * bonus die a raise earns — so each gets its own slot. Shown only for SWADE;
+ * every other system uses the single-colour picker above.
+ */
+const DICE_ROLES: Array<{ role: DiceRole; label: string; hint: string }> = [
+  { role: 'trait', label: 'Trait', hint: 'Your skill or attribute die' },
+  { role: 'wild', label: 'Wild', hint: 'The d6 Wild Die a Wild Card rolls alongside it' },
+  { role: 'raise', label: 'Raise', hint: 'The bonus d6 earned by beating the target number by 4+' },
+];
+
+function SwadeDicePalettePicker() {
+  const you = useGameStore((s) => s.you);
+  const members = useGameStore((s) => s.members);
+  const me = you ? members.find((m) => m.userId === you.userId) : undefined;
+  const currentOf = (role: DiceRole): string | null =>
+    role === 'trait' ? me?.diceTraitColor ?? null
+      : role === 'wild' ? me?.diceWildColor ?? null
+        : me?.diceRaiseColor ?? null;
+
+  return (
+    <>
+      {DICE_ROLES.map(({ role, label, hint }) => {
+        const current = currentOf(role);
+        return (
+          <div className="dice-color-row" key={role}>
+            <span className="dim" style={{ fontSize: 11 }} title={hint}>{label} dice:</span>
+            <button
+              className={`link ${current === null ? 'active' : ''}`}
+              style={{ fontSize: 11 }}
+              title={`Use the default ${label.toLowerCase()} colour (${DICE_ROLE_DEFAULTS[role]})`}
+              onClick={() => intents.setDiceRoleColor(role, null)}
+            >
+              default
+            </button>
+            {DICE_PALETTE.map((c) => (
+              <button
+                key={c}
+                className={`dice-color-swatch ${current === c ? 'active' : ''}`}
+                style={{ background: c }}
+                title={c}
+                onClick={() => intents.setDiceRoleColor(role, c)}
+              />
+            ))}
+            <input
+              type="color"
+              className="dice-color-custom"
+              value={current ?? DICE_ROLE_DEFAULTS[role]}
+              title={`Custom ${label.toLowerCase()} colour`}
+              onChange={(e) => intents.setDiceRoleColor(role, e.target.value)}
+            />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 /** Quick-roll panel: click to roll 1-6 dice of any standard type. */
 export function DiceRoller({ onClose }: { onClose: () => void }) {
+  const isSwade = useGameStore((s) => s.campaign?.system) === 'swade';
   return (
     <div className="dice-panel">
       <div className="dock-header">
@@ -122,8 +183,12 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
           ))}
         </tbody>
       </table>
-      <DiceColorPicker />
-      <DiceTextColorPicker />
+      {isSwade ? <SwadeDicePalettePicker /> : (
+        <>
+          <DiceColorPicker />
+          <DiceTextColorPicker />
+        </>
+      )}
       <p className="dim" style={{ fontSize: 11, margin: '6px 0 0' }}>
         Rolls go to chat for everyone. Use /r in chat for modifiers (e.g. /r 2d6+3).
       </p>

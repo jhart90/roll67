@@ -6,10 +6,11 @@ import {
   type AddAudioPayload, type AudioControlPayload, type AudioState,
   type CreateFolderPayload, type DeleteAssetPayload, type DeleteFolderPayload,
   type MoveAssetPayload, type MoveHandoutPayload, type RemoveAudioPayload,
+  type SetSoundboardSlotPayload, type ClearSoundboardSlotPayload, type PlaySfxPayload,
   type RenameAssetPayload, type RenameFolderPayload,
 } from 'shared';
 import { UPLOADS_DIR } from '../../config.js';
-import { assetFolders, assets, audioTracks, campaigns, handouts } from '../../db/repos.js';
+import { assetFolders, assets, audioTracks, campaigns, handouts, soundboard, SOUNDBOARD_SLOTS } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata } from '../hub.js';
 import { broadcastHandouts } from './table.js';
 
@@ -32,6 +33,14 @@ export function broadcastAudio(io: Server, campaignId: string): void {
   io.to(campaignRoom(campaignId)).emit(S2C.AUDIO_TRACKS, { tracks: audioTracks.forCampaign(campaignId) });
   io.to(campaignRoom(campaignId)).emit(S2C.AUDIO_STATE, { state: getAudioState(campaignId) });
 }
+
+/** The grid is DM-only, so it goes to the DM room rather than the campaign. */
+export function broadcastSoundboard(io: Server, campaignId: string): void {
+  io.to(dmRoom(campaignId)).emit(S2C.SOUNDBOARD, { slots: soundboard.forCampaign(campaignId) });
+}
+
+const validSlot = (i: unknown): i is number =>
+  Number.isInteger(i) && (i as number) >= 0 && (i as number) < SOUNDBOARD_SLOTS;
 
 function requireDm(socket: Socket) {
   const d = sdata(socket);
@@ -158,4 +167,34 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     audioStates.set(d.campaignId, next);
     io.to(campaignRoom(d.campaignId)).emit(S2C.AUDIO_STATE, { state: next });
   }, 'AUDIO_CONTROL'));
+
+  // ---- soundboard (DM-only grid; the sounds themselves reach everyone) ----
+
+  socket.on(C2S.SET_SOUNDBOARD_SLOT, safe(socket, ({ slotIndex, assetId, label }: SetSoundboardSlotPayload) => {
+    const d = requireDm(socket);
+    if (!validSlot(slotIndex)) throw new Error('Bad soundboard slot.');
+    const a = assets.byId(assetId);
+    if (!a || a.campaign_id !== d.campaignId || a.kind !== 'audio') throw new Error('Not an audio asset.');
+    soundboard.set(d.campaignId, slotIndex, assetId, label?.trim() || a.filename);
+    broadcastSoundboard(io, d.campaignId);
+  }, 'SET_SOUNDBOARD_SLOT'));
+
+  socket.on(C2S.CLEAR_SOUNDBOARD_SLOT, safe(socket, ({ slotIndex }: ClearSoundboardSlotPayload) => {
+    const d = requireDm(socket);
+    if (!validSlot(slotIndex)) return;
+    soundboard.clear(d.campaignId, slotIndex);
+    broadcastSoundboard(io, d.campaignId);
+  }, 'CLEAR_SOUNDBOARD_SLOT'));
+
+  // Fire-and-forget: the URL is resolved server-side from the slot so a client
+  // can't ask everyone to play an arbitrary file. Sent as its own event rather
+  // than through AudioState, so an effect never interrupts the music.
+  socket.on(C2S.PLAY_SFX, safe(socket, ({ slotIndex }: PlaySfxPayload) => {
+    const d = requireDm(socket);
+    if (!validSlot(slotIndex)) return;
+    const url = soundboard.urlAt(d.campaignId, slotIndex);
+    if (!url) return; // empty square
+    const label = soundboard.forCampaign(d.campaignId).find((s) => s.slotIndex === slotIndex)?.label ?? '';
+    io.to(campaignRoom(d.campaignId)).emit(S2C.SFX_PLAY, { url, label });
+  }, 'PLAY_SFX'));
 }

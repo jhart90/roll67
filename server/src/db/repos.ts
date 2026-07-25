@@ -2,7 +2,7 @@ import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta,
-  RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, Token, Wall, WorldFolder,
+  RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
@@ -514,6 +514,38 @@ export const audioTracks = {
   },
   remove(id: string): void {
     stmt('DELETE FROM audio_tracks WHERE id = ?').run(id);
+  },
+};
+
+// ---------- soundboard ----------
+
+export const SOUNDBOARD_SLOTS = 16; // 4x4 grid
+
+export const soundboard = {
+  forCampaign(campaignId: string): SoundboardSlot[] {
+    const rows = stmt(
+      `SELECT s.slot_index as slotIndex, s.label, a.ext, a.id as assetId FROM soundboard_slots s
+       JOIN assets a ON a.id = s.asset_id WHERE s.campaign_id = ? ORDER BY s.slot_index`,
+    ).all(campaignId) as Array<{ slotIndex: number; label: string; ext: string; assetId: string }>;
+    return rows.map((r) => ({ slotIndex: r.slotIndex, label: r.label, url: `/uploads/${r.assetId}.${r.ext}` }));
+  },
+  /** One slot's playable URL, scoped to the campaign so a stray index can't
+   *  reach another table's sounds. */
+  urlAt(campaignId: string, slotIndex: number): string | undefined {
+    const r = stmt(
+      `SELECT a.ext, a.id as assetId FROM soundboard_slots s
+       JOIN assets a ON a.id = s.asset_id WHERE s.campaign_id = ? AND s.slot_index = ?`,
+    ).get(campaignId, slotIndex) as { ext: string; assetId: string } | undefined;
+    return r ? `/uploads/${r.assetId}.${r.ext}` : undefined;
+  },
+  /** Assigning to an occupied slot replaces what was there. */
+  set(campaignId: string, slotIndex: number, assetId: string, label: string): void {
+    stmt('DELETE FROM soundboard_slots WHERE campaign_id = ? AND slot_index = ?').run(campaignId, slotIndex);
+    stmt('INSERT INTO soundboard_slots (id, campaign_id, asset_id, label, slot_index) VALUES (?, ?, ?, ?, ?)')
+      .run(newId(), campaignId, assetId, label, slotIndex);
+  },
+  clear(campaignId: string, slotIndex: number): void {
+    stmt('DELETE FROM soundboard_slots WHERE campaign_id = ? AND slot_index = ?').run(campaignId, slotIndex);
   },
 };
 

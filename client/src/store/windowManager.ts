@@ -10,6 +10,7 @@ export type WindowKind =
   | 'npcLibrary'
   | 'randomizeNpc'
   | 'assetLibrary'
+  | 'soundboard'
   | 'accountDetails';
 
 export interface WindowInstance {

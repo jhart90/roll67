@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type Shop,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type SfxPlayPayload, type Shop, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -119,6 +119,8 @@ interface GameState {
   assetList: AssetInfo[];
   audioTracks: AudioTrack[];
   audioState: AudioState;
+  /** DM soundboard grid; only filled squares are present. DM-only. */
+  soundboardSlots: SoundboardSlot[];
   shopList: Shop[];
   locationList: LocationNode[];
   worldFolderList: WorldFolder[];
@@ -285,6 +287,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   assetList: [],
   audioTracks: [],
   audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
+  soundboardSlots: [],
   shopList: [],
   locationList: [],
   worldFolderList: [],
@@ -485,7 +488,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       initiativeState: { entries: [], turnIdx: 0, round: 1, active: false }, cardDrawFlash: null, dockTab: 'world',
       showCharacterCreator: false, characterCreatorPrompted: false,
       shopList: [], locationList: [], worldFolderList: [], tableList: [], assetFolders: [], assetList: [],
-      audioTracks: [], audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
+      audioTracks: [], audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 }, soundboardSlots: [],
       directory: null,
     });
     // Any windows still open (character sheets, handouts, shops) belong to
@@ -888,6 +891,22 @@ export function wireSocket(): void {
     useGameStore.setState({ audioState: state });
   });
 
+  socket.on(S2C.SOUNDBOARD, ({ slots }: SoundboardPayload) => {
+    useGameStore.setState({ soundboardSlots: slots });
+  });
+
+  // One-shot effect. Each gets its own Audio element so overlapping hits stack
+  // rather than cutting each other off, and so the music track is untouched.
+  socket.on(S2C.SFX_PLAY, ({ url }: SfxPlayPayload) => {
+    if (useGameStore.getState().clientMuted) return;
+    const el = new Audio(url);
+    el.volume = 1;
+    // Autoplay can be blocked until the user has interacted with the page;
+    // a failed effect is not worth surfacing, the music player already
+    // carries the "click to enable audio" affordance.
+    void el.play().catch(() => {});
+  });
+
   socket.on(S2C.SHOPS, ({ shops }: { shops: Shop[] }) => {
     useGameStore.setState({ shopList: shops });
   });
@@ -1223,6 +1242,10 @@ export const intents = {
   deleteAsset: (assetId: string) => socket.emit(C2S.DELETE_ASSET, { assetId }),
   moveHandout: (handoutId: string, folderId: string | null) => socket.emit(C2S.MOVE_HANDOUT, { handoutId, folderId }),
 
+  setSoundboardSlot: (slotIndex: number, assetId: string, label: string) =>
+    socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),
+  clearSoundboardSlot: (slotIndex: number) => socket.emit(C2S.CLEAR_SOUNDBOARD_SLOT, { slotIndex }),
+  playSfx: (slotIndex: number) => socket.emit(C2S.PLAY_SFX, { slotIndex }),
   addAudio: (assetId: string, title: string) => socket.emit(C2S.ADD_AUDIO, { assetId, title }),
   removeAudio: (trackId: string) => socket.emit(C2S.REMOVE_AUDIO, { trackId }),
   audioControl: (p: { trackId?: string; action: 'play' | 'stop' | 'pause'; loop?: boolean; volume?: number }) =>

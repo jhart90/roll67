@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
+import { openWindow } from '../store/windowManager';
 
 /** DM jukebox controls; players see now-playing + a local mute. */
 export function Jukebox({ onClose }: { onClose: () => void }) {
@@ -43,6 +44,15 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
     <div className="dock-panel jukebox">
       <div className="dock-header">
         <h3>Jukebox</h3>
+        {isDm && (
+          <button
+            className="link"
+            title="Open the sound effects board"
+            onClick={() => openWindow('soundboard', 'main', {}, 'Soundboard')}
+          >
+            🔊 soundboard
+          </button>
+        )}
         <button className="link" onClick={onClose}>close</button>
       </div>
 

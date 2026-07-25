@@ -174,6 +174,18 @@ CREATE TABLE IF NOT EXISTS audio_tracks (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- DM soundboard: a fixed 4x4 grid of one-shot sound effects. Deliberately
+-- separate from audio_tracks, which backs the jukebox playlist -- SFX must not
+-- show up as music, and firing one must not disturb the playing track.
+CREATE TABLE IF NOT EXISTS soundboard_slots (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  slot_index INTEGER NOT NULL,
+  UNIQUE (campaign_id, slot_index)
+);
+
 CREATE TABLE IF NOT EXISTS shops (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,

@@ -6,7 +6,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
   MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  RollableTable, SheetData, Shop, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
+  RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
 import type { PlayingCard } from './systems/cards.js';
@@ -135,6 +135,9 @@ export const C2S = {
   ADD_AUDIO: 'addAudio',
   REMOVE_AUDIO: 'removeAudio',
   AUDIO_CONTROL: 'audioControl',
+  SET_SOUNDBOARD_SLOT: 'setSoundboardSlot',
+  CLEAR_SOUNDBOARD_SLOT: 'clearSoundboardSlot',
+  PLAY_SFX: 'playSfx',
   // auto-trace
   AUTO_TRACE_WALLS: 'autoTraceWalls',
   // custom compendium
@@ -639,6 +642,8 @@ export const S2C = {
   ASSETS: 'assets',
   AUDIO_TRACKS: 'audioTracks',
   AUDIO_STATE: 'audioState',
+  SOUNDBOARD: 'soundboard',
+  SFX_PLAY: 'sfxPlay',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -791,6 +796,16 @@ export interface WorldFoldersPayload { folders: WorldFolder[] }
 export interface AssetsPayload { folders: AssetFolder[]; assets: AssetInfo[] }
 export interface AudioTracksPayload { tracks: AudioTrack[] }
 export interface AudioStatePayload { state: AudioState }
+/** The DM's soundboard grid; only filled squares appear. */
+export interface SoundboardPayload { slots: SoundboardSlot[] }
+/** Assign an uploaded sound to one square (replaces whatever was there). */
+export interface SetSoundboardSlotPayload { slotIndex: number; assetId: string; label: string }
+export interface ClearSoundboardSlotPayload { slotIndex: number }
+/** DM fires a square; the server resolves the URL and broadcasts SFX_PLAY. */
+export interface PlaySfxPayload { slotIndex: number }
+/** One-shot sound for every client to play. Deliberately not part of
+ *  AudioState -- an effect must not interrupt the music track. */
+export interface SfxPlayPayload { url: string; label: string }
 
 /** Campaign-wide shared reference of everything introduced so far. */
 export interface DirectoryPayload {

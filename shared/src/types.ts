@@ -475,6 +475,16 @@ export interface AudioState {
   startedAt: number;
 }
 
+/**
+ * One filled square of the DM's 4x4 soundboard. Empty squares simply have no
+ * entry, so the grid is rebuilt by indexing rather than by padding.
+ */
+export interface SoundboardSlot {
+  slotIndex: number;   // 0..15
+  label: string;
+  url: string;
+}
+
 // ---------- Merchant / shops ----------
 
 export interface ShopItem {

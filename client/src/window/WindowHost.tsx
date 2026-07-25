@@ -12,6 +12,7 @@ import { NpcLibrary } from '../panels/NpcLibrary';
 import { RandomizeNpcModal } from '../panels/RandomizeNpcModal';
 import { AssetLibrary } from '../panels/AssetLibrary';
 import { AccountDetails } from '../panels/AccountDetails';
+import { Soundboard } from '../panels/Soundboard';
 
 /** Mounted once at the top level: renders every open window instance,
  *  each in its own draggable/poppable WindowFrame, so multiple windows
@@ -29,6 +30,9 @@ export function WindowHost() {
         const onClose = () => closeWindow(w.id);
         let content: ReactNode = null;
         switch (w.kind) {
+          case 'soundboard':
+            content = <Soundboard onClose={onClose} />;
+            break;
           case 'characterSheet':
             content = <CharacterSheetWindow characterId={w.key} onClose={onClose} />;
             break;

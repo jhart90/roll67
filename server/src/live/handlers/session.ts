@@ -9,7 +9,7 @@ import { CHAT_TAIL } from '../../config.js';
 import { validUsername } from '../../auth.js';
 import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings,
-  handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, users, worldFolders,
+  handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders,
 } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
@@ -137,6 +137,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     }
     if (role === 'dm') {
       socket.emit(S2C.ASSETS, { folders: assetFolders.forCampaign(campaignId), assets: assets.forCampaign(campaignId) });
+      socket.emit(S2C.SOUNDBOARD, { slots: soundboard.forCampaign(campaignId) });
       const camp = campaigns.byId(campaignId);
       if (camp) emitCustomNpcs(socket, d.userId, camp.system);
     }

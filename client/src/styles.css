@@ -1795,6 +1795,28 @@ th > .term { border-bottom-style: dotted; }
 /* ---------- jukebox ---------- */
 
 .jukebox { padding: 12px; }
+
+/* DM soundboard: a fixed 4x4 pad grid. Pads stay square via aspect-ratio so
+   the grid keeps its shape as the window is resized. */
+.soundboard { padding: 12px; min-width: 300px; }
+.soundboard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.soundboard-pad {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 4px; border-radius: 8px; cursor: pointer; overflow: hidden;
+  border: 1px solid var(--panel-2); background: var(--panel); color: inherit;
+  transition: background 120ms, border-color 120ms, transform 60ms;
+}
+.soundboard-pad.empty { border-style: dashed; }
+.soundboard-pad.empty:hover:not(:disabled) { border-color: var(--accent-2); background: var(--panel-2); }
+.soundboard-pad.filled { border-color: var(--accent-2); background: rgba(108, 155, 210, 0.14); }
+.soundboard-pad.filled:hover:not(:disabled) { background: rgba(108, 155, 210, 0.28); }
+.soundboard-pad:active:not(:disabled) { transform: scale(0.96); }
+.soundboard-pad:disabled { opacity: 0.5; cursor: default; }
+.soundboard-pad-icon { font-size: 18px; line-height: 1; }
+.soundboard-pad-label {
+  font-size: 10px; line-height: 1.2; text-align: center; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
 .now-playing { display: flex; flex-direction: column; margin-bottom: 10px; }
 .now-playing strong { font-size: 15px; color: var(--accent-2); }
 .jukebox-master { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }

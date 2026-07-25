@@ -293,6 +293,11 @@ interface DieSim {
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
+/** How long an aced die sits flashing before its bonus die is thrown. */
+export const ACE_FLASH_MS = 750;
+/** Stagger between dice thrown in the same wave. */
+const WAVE_STAGGER_MS = 110;
+
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
 ): DieSim[] {
@@ -301,6 +306,21 @@ export function buildSims(
   const rowCount = Math.ceil(n / cols);
   const spacing = 96;
   const cx = w / 2, cy = h / 2;
+  // Timing: ordinary dice are thrown together in one quick staggered wave.
+  // An exploding die's bonus die instead waits for the die that spawned it
+  // to land and finish flashing, so a chain of aces plays out as
+  // roll → flash → roll → flash → roll with the earlier dice sitting still.
+  // Chains only serialise against themselves, so several dice acing at once
+  // still resolve side by side rather than queueing up behind each other.
+  const settleAt: number[] = [];
+  let waveDelay = 0;
+  const timing = dice.map((_, i) => {
+    const dur = 1450 + Math.random() * 250;
+    const continuesAnAce = i > 0 && dice[i - 1].ace === true;
+    const delay = continuesAnAce ? settleAt[i - 1] + ACE_FLASH_MS : (waveDelay += i === 0 ? 0 : WAVE_STAGGER_MS);
+    settleAt[i] = delay + dur;
+    return { delay, dur };
+  });
   return dice.map((die, i) => {
     const row = Math.floor(i / cols);
     const col = i % cols;
@@ -323,8 +343,8 @@ export function buildSims(
       textColor: customTextColor ?? (luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb'),
       size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
       start, target,
-      delay: i * 110,
-      dur: 1450 + Math.random() * 250,
+      delay: timing[i].delay,
+      dur: timing[i].dur,
       qTarget: targetOrientation(geom, die.value),
       spinAxis: norm(v3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)),
       spinTotal: (Math.PI * 2) * (2.2 + Math.random() * 1.6) * (fromLeft ? 1 : -1),
@@ -335,6 +355,28 @@ export function buildSims(
 
 export function simsSettleTime(sims: DieSim[]): number {
   return Math.max(...sims.map((s) => s.delay + s.dur));
+}
+
+/**
+ * Upper bound on how long a roll's animation will run, using the same
+ * schedule buildSims does but assuming the longest possible throw. Callers
+ * that must not get ahead of the dice (holding the chat entry back until
+ * every die — including a chain of aces — has landed) use this.
+ */
+export function estimateDiceAnimMs(dice: DieRoll[]): number {
+  if (dice.length === 0) return 0;
+  const MAX_DUR = 1700;
+  const settleAt: number[] = [];
+  let waveDelay = 0;
+  let latest = 0;
+  dice.forEach((_, i) => {
+    const continuesAnAce = i > 0 && dice[i - 1].ace === true;
+    const delay = continuesAnAce ? settleAt[i - 1] + ACE_FLASH_MS : (waveDelay += i === 0 ? 0 : WAVE_STAGGER_MS);
+    settleAt[i] = delay + MAX_DUR;
+    latest = Math.max(latest, settleAt[i]);
+  });
+  // However wild the chain, never leave the chat waiting on the dice forever.
+  return Math.min(latest, 15000);
 }
 
 // ---------- rendering ----------
@@ -381,6 +423,40 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
 
   const dropped = !sim.die.kept;
   ctx.globalAlpha = dropped ? 0.45 : 1;
+
+  // An aced die announces itself the moment it lands: a bright halo that
+  // pulses while the bonus die is being readied, so the table can see
+  // exactly which die exploded and why another is about to be thrown.
+  const acePhase = sim.die.ace && sinceSettle > 0 && sinceSettle < ACE_FLASH_MS
+    ? sinceSettle / ACE_FLASH_MS
+    : null;
+  if (acePhase !== null) {
+    const pulse = Math.sin(acePhase * Math.PI * 3) * 0.5 + 0.5;
+    const fade = 1 - acePhase;
+    ctx.save();
+    ctx.globalAlpha = (0.30 + 0.45 * pulse) * fade;
+    const glow = ctx.createRadialGradient(x, y - height * 0.85, size * 0.4, x, y - height * 0.85, size * (1.7 + 0.5 * pulse));
+    glow.addColorStop(0, 'rgba(255, 226, 138, 0.95)');
+    glow.addColorStop(0.55, 'rgba(255, 186, 60, 0.45)');
+    glow.addColorStop(1, 'rgba(255, 170, 40, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y - height * 0.85, size * (1.7 + 0.5 * pulse), 0, Math.PI * 2);
+    ctx.fill();
+    // A few sparks thrown off the die as it aces.
+    ctx.globalAlpha = fade * 0.9;
+    ctx.fillStyle = 'rgba(255, 236, 170, 0.95)';
+    for (let s = 0; s < 6; s++) {
+      const ang = (s / 6) * Math.PI * 2 + acePhase * 2.2;
+      const dist = size * (0.9 + acePhase * 1.5);
+      const sr = 2.6 * (1 - acePhase);
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(ang) * dist, y - height * 0.85 + Math.sin(ang) * dist, Math.max(0.4, sr), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = dropped ? 0.45 : 1;
+  }
 
   // Ground shadow, tied to the table position (not the airborne die).
   const shrink = Math.max(0.35, 1 - height / 320);

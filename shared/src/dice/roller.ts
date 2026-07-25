@@ -42,7 +42,11 @@ function rollDice(
   chains.forEach((chain, i) => {
     const kept = keptIdx.has(i);
     if (kept) total += sums[i];
-    for (const v of chain) allDice.push({ sides, value: v, kept });
+    // Every die in a chain but the last one aced — that's what spawned its
+    // successor. The client animates those in sequence with a flash between.
+    chain.forEach((v, ci) => allDice.push({
+      sides, value: v, kept, ...(ci < chain.length - 1 ? { ace: true } : {}),
+    }));
     const text = chain.length > 1 ? `${chain.join('+')}=${sums[i]}` : String(chain[0]);
     parts.push(kept ? text : `~${text}~`);
   });

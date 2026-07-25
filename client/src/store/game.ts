@@ -14,6 +14,7 @@ import {
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
+import { estimateDiceAnimMs } from '../table/dice3d';
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain';
 export type DockTab = 'chat' | 'initiative' | 'world';
@@ -752,23 +753,33 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.CHAT, ({ msg }: { msg: ChatMessage }) => {
-    const s = useGameStore.getState();
-    useGameStore.setState({ chatLog: [...s.chatLog.slice(-499), msg] });
+    const appendToLog = () => {
+      const cur = useGameStore.getState();
+      useGameStore.setState({ chatLog: [...cur.chatLog.slice(-499), msg] });
+    };
     // Any dice roll triggers the 3D dice animation (capped so a 100d6
     // doesn't fill the screen).
     if (msg.roll && msg.roll.dice.length > 0) {
+      const shown = msg.roll.dice.slice(0, 12);
       const id = ++pingCounter;
       useGameStore.setState({
         diceAnim: {
-          id, dice: msg.roll.dice.slice(0, 12), byName: msg.fromName,
+          id, dice: shown, byName: msg.fromName,
           byUserId: msg.fromUserId, total: msg.roll.total, expression: msg.roll.expression,
         },
       });
-      // Long enough for the roll-in (~2s) plus time to read the result.
+      // The chat entry spoils the total, so it waits for the dice — which
+      // matters most for an exploding (acing) roll, where the bonus dice are
+      // thrown one after another and the result isn't known until the last
+      // one lands. Queued rather than dropped, so ordering still holds.
+      const animMs = estimateDiceAnimMs(shown);
+      setTimeout(appendToLog, animMs);
       setTimeout(() => {
         const cur = useGameStore.getState();
         if (cur.diceAnim?.id === id) useGameStore.setState({ diceAnim: null });
-      }, 5000);
+      }, animMs + 3000);
+    } else {
+      appendToLog();
     }
   });
 

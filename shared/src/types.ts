@@ -243,6 +243,9 @@ export interface DieRoll {
   sides: number;
   value: number;
   kept: boolean;
+  /** This die aced (rolled its max on an exploding die) and spawned the die
+   *  immediately after it. Drives the sequenced roll-flash-roll animation. */
+  ace?: boolean;
 }
 
 export interface RollBreakdown {

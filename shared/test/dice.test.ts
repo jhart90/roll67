@@ -131,6 +131,28 @@ describe('dice roller', () => {
     }
   });
 
+  it('marks every die that aced, so the client can sequence the animation', () => {
+    const rng = seededRng(11);
+    for (let i = 0; i < 300; i++) {
+      const r = roll('1d4!', rng);
+      // In a chain, all but the last die aced — and an aced die always shows
+      // its maximum, while the final die never does.
+      r.dice.forEach((d, idx) => {
+        const isLast = idx === r.dice.length - 1;
+        expect(Boolean(d.ace), `die ${idx} of ${r.dice.length}`).toBe(!isLast);
+        if (d.ace) expect(d.value).toBe(4);
+      });
+      if (r.dice.length <= 20) expect(r.dice[r.dice.length - 1].value).toBeLessThan(4);
+    }
+  });
+
+  it('non-exploding dice never carry the ace flag, even on a max roll', () => {
+    const rng = seededRng(4);
+    for (let i = 0; i < 120; i++) {
+      for (const d of roll('4d6', rng).dice) expect(d.ace).toBeUndefined();
+    }
+  });
+
   it('best() composes with modifiers (SWADE trait roll shape)', () => {
     const r = roll('best(1d8!, 1d6!)-2', seededRng(9));
     const keptSum = r.dice.filter((d) => d.kept).reduce((a, d) => a + d.value, 0);

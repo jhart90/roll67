@@ -18,6 +18,7 @@ import {
   TRAIT_DICE, dieStepIndex, stepDie, swade,
 } from './swade.js';
 import { DAMAGE_TYPES } from './effects.js';
+import { CONTENT_SWADE } from '../data/contentSwade.js';
 
 export type SwadeAttrId = 'agility' | 'smarts' | 'spirit' | 'strength' | 'vigor';
 
@@ -213,6 +214,26 @@ function attrLabelToId(label: string): SwadeAttrId {
   return label.toLowerCase() as SwadeAttrId;
 }
 
+/**
+ * The live modifier columns for an Edge or Hindrance, looked up by name in
+ * the compendium — the single source of truth for what a trait actually
+ * does. Traits with no mechanical hook return all zeroes, which is still
+ * the right shape for the sheet's list columns.
+ */
+function traitModsFor(name: string): SheetData {
+  const entry = CONTENT_SWADE.find(
+    (e) => (e.kind === 'edge' || e.kind === 'hindrance') && e.name.toLowerCase() === name.toLowerCase(),
+  );
+  const t = entry?.trait;
+  return {
+    bonusSkill: t?.bonusSkill ?? '',
+    bonusAmt: t?.bonusAmt ?? 0,
+    parryBonus: t?.parryBonus ?? 0,
+    toughnessBonus: t?.toughnessBonus ?? 0,
+    paceBonus: t?.paceBonus ?? 0,
+  };
+}
+
 /** Point-buy attribute dice before any racial trait adjustments: d4 baseline
  *  plus `steps[attr]` die-steps each (0-4). */
 export function baseAttributeDice(steps: Record<SwadeAttrId, number>): Record<SwadeAttrId, string> {
@@ -332,21 +353,28 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   const chosenHindrances = input.hindranceIds
     .map((id) => CURATED_HINDRANCES_SWADE.find((h) => h.id === id))
     .filter((h): h is HindranceOption => !!h);
-  sheet.hindrances = chosenHindrances.map((h) => ({ name: h.name, severity: h.severity, notes: h.desc }));
+  sheet.hindrances = chosenHindrances.map((h) => ({
+    name: h.name, severity: h.severity, notes: h.desc, ...traitModsFor(h.name),
+  }));
   if (chosenHindrances.some((h) => h.id === 'bad-luck')) sheet.bennies = Math.max(0, num(sheet, 'bennies', 3) - 1);
 
+  // Edges land as real Edge rows carrying their mechanical columns (pulled
+  // from the compendium so there's one source of truth), which is what makes
+  // them live: swadeParry/swadeToughness/swadePace and gearTraitBonus read
+  // those columns directly. Only the effects with no column to live in
+  // (Bennies, starting funds, the running die) are applied to fields here.
   const edges: SheetData[] = [];
-  if (input.ancestryName === 'Human' && !input.ancestryIsCustom) edges.push({ name: HUMAN_FREE_EDGE.name, notes: HUMAN_FREE_EDGE.desc });
+  if (input.ancestryName === 'Human' && !input.ancestryIsCustom) {
+    edges.push({ name: HUMAN_FREE_EDGE.name, notes: HUMAN_FREE_EDGE.desc, ...traitModsFor(HUMAN_FREE_EDGE.name) });
+  }
   let bonusFunds = input.hindranceFundsSpent * 500;
   for (const id of input.edgeIds) {
     const edge = CURATED_EDGES_BY_ID.get(id);
     if (!edge) continue;
-    edges.push({ name: edge.name, notes: edge.desc });
-    if (id === 'brawny') armorRows.push({ name: 'Brawny', armor: 1, parryBonus: 0, rangedArmor: 0, equipped: true, notes: 'Edge' });
-    if (id === 'fleet-footed') { pace += 2; sheet.pace = Math.max(1, num(sheet, 'pace', 6) + 2); sheet.runningDie = 'd10'; }
+    edges.push({ name: edge.name, notes: edge.desc, ...traitModsFor(edge.name) });
+    if (id === 'fleet-footed') sheet.runningDie = 'd10';
     if (id === 'luck') sheet.bennies = num(sheet, 'bennies', 3) + 1;
     if (id === 'rich') bonusFunds += 1000;
-    if (id === 'alertness') inventoryRows.push({ name: 'Alertness (Edge)', qty: 1, weight: 0, equipped: true, bonusSkill: 'Notice', bonusAmt: 2, notes: 'Edge' });
   }
   sheet.edges = edges;
   sheet.dollars = 500 + bonusFunds;

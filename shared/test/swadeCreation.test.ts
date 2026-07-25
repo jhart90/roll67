@@ -4,7 +4,7 @@ import {
   attributePointsSpent, hindrancePoints, CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_TRAITS_BY_ID,
   type SwadeCreationInput,
 } from '../src/systems/swadeCreation.js';
-import { swadeParry, swadeToughness } from '../src/systems/swade.js';
+import { swade, swadePace, swadeParry, swadeToughness } from '../src/systems/swade.js';
 
 function baseInput(overrides: Partial<SwadeCreationInput> = {}): SwadeCreationInput {
   return {
@@ -171,13 +171,20 @@ describe('buildSwadeCharacterSheet — assembly', () => {
   });
 
   it('purchased Edges apply their real mechanical effects: Brawny Toughness, Fleet-Footed pace, Luck bennies, Rich funds', () => {
+    const plain = buildSwadeCharacterSheet(baseInput());
     const sheet = buildSwadeCharacterSheet(baseInput({ edgeIds: ['brawny', 'fleet-footed', 'luck', 'rich'] }));
-    expect(sheet.pace).toBe(8); // 6 + 2
+    // Pace and Toughness now ride the Edge rows' own modifier columns and
+    // surface through derive(), instead of mutating base fields or smuggling
+    // in a phantom "Brawny" armor row.
+    expect(sheet.pace).toBe(6);                       // base field untouched
+    expect(swadePace(sheet)).toBe(8);                 // 6 + Fleet-Footed's +2
+    expect(Number(swade.derive(sheet).pace)).toBe(8);
+    expect(swadeToughness(sheet)).toBe(swadeToughness(plain) + 1); // Brawny
+    expect(sheet.armor).toEqual([]);
+    // Effects with no column to live in still land on their fields.
     expect(sheet.runningDie).toBe('d10');
-    expect(sheet.bennies).toBe(4); // 3 + 1
+    expect(sheet.bennies).toBe(4);                    // 3 + 1
     expect(sheet.dollars).toBe(500 + 1000);
-    const armor = sheet.armor as Array<{ name: string; armor: number }>;
-    expect(armor.some((a) => a.name === 'Brawny' && a.armor === 1)).toBe(true);
   });
 
   it('a fully-built character produces sane derived Parry/Toughness through the normal schema', () => {

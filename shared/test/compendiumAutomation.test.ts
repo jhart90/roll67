@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyEntry, contentForSystem } from '../src/data/compendium.js';
 import { swade, swadeParry, swadeToughness, swadePace, gearTraitBonus } from '../src/systems/swade.js';
+import { buildSwadeCharacterSheet } from '../src/systems/swadeCreation.js';
 import { swn, swnDerivedAc } from '../src/systems/swn.js';
 import { dnd5e } from '../src/systems/dnd5e.js';
 import { combatActions } from '../src/systems/combat.js';
@@ -118,6 +119,47 @@ describe('SWADE Edges and Hindrances are mechanically live', () => {
   it('Edges land in the edges list and Hindrances in the hindrances list', () => {
     expect(sheetAfter('swade', 'Luck').listId).toBe('edges');
     expect(sheetAfter('swade', 'Bad Luck').listId).toBe('hindrances');
+  });
+});
+
+describe('Edges taken at character creation are mechanically live', () => {
+  const build = (edgeIds: string[], hindranceIds: string[] = []) => buildSwadeCharacterSheet({
+    concept: '', ancestryName: 'Human', ancestryIsCustom: false,
+    customTraitIds: [], customTraitChoices: {},
+    attributeSteps: { agility: 0, smarts: 0, spirit: 0, strength: 0, vigor: 0 },
+    skillDice: { Notice: 'd6' }, hindranceIds, hindranceFundsSpent: 0, edgeIds,
+  });
+
+  it('writes Edge rows carrying their modifier columns, not bare name/notes', () => {
+    const sheet = build(['alertness']);
+    const alertness = (sheet.edges as SheetData[]).find((e) => e.name === 'Alertness')!;
+    expect(alertness.bonusSkill).toBe('Notice');
+    expect(alertness.bonusAmt).toBe(2);
+  });
+
+  it('an Edge taken at creation actually moves the roll it boosts', () => {
+    expect(gearTraitBonus(build([]), 'Notice')).toBe(0);
+    expect(gearTraitBonus(build(['alertness']), 'Notice')).toBe(2);
+  });
+
+  it('Brawny and Fleet-Footed move Toughness and Pace through the normal derive path', () => {
+    const plain = build([]);
+    expect(swadeToughness(build(['brawny']))).toBe(swadeToughness(plain) + 1);
+    const fleet = build(['fleet-footed']);
+    expect(swadePace(fleet)).toBe(swadePace(plain) + 2);
+    expect(Number(swade.derive(fleet).pace)).toBe(swadePace(plain) + 2);
+    expect(fleet.runningDie).toBe('d10');
+  });
+
+  it('no longer fakes Edge effects as phantom gear or armor rows', () => {
+    // Alertness used to be smuggled in as an "Alertness (Edge)" inventory
+    // item and Brawny as a fake armor row — both now live on the Edge itself.
+    expect(build(['alertness']).inventory).toEqual([]);
+    expect(build(['brawny']).armor).toEqual([]);
+  });
+
+  it('Hindrances taken at creation carry their penalties too', () => {
+    expect(gearTraitBonus(build([], ['clueless']), 'Common Knowledge')).toBe(-1);
   });
 });
 

@@ -68,8 +68,44 @@ describe('SWADE sheet', () => {
     expect(rolls.find((r) => r.id === 'trait_agility')?.expr).toContain('-3');
   });
 
-  it('unskilled rolls are d4−2', () => {
-    expect(traitExpr(swade.defaultSheet(), 0)).toBe('1d4!-2');
+  it('unskilled rolls are d4−2, and a Wild Card still throws its Wild Die', () => {
+    // The −2 is a penalty on the roll, so it applies to both arms.
+    expect(traitExpr(swade.defaultSheet(), 0)).toBe('best(1d4!-2, 1d6!-2)');
+    const extra = { ...swade.defaultSheet(), wildCard: false };
+    expect(traitExpr(extra, 0)).toBe('1d4!-2');
+    // Wounds stack on top of the unskilled penalty.
+    const hurt = { ...swade.defaultSheet(), wounds: 1 };
+    expect(traitExpr(hurt, 0)).toBe('best(1d4!-2, 1d6!-2)-1');
+  });
+
+  it('an attack whose skill is missing from the sheet keeps the Wild Die', () => {
+    // Regression: the unskilled branch used to drop the Wild Die entirely, so
+    // any action driven by a skill the character had not bought rolled a lone
+    // d4−2 instead of best(d4−2, d6−2).
+    const sheet = {
+      ...swade.defaultSheet(),
+      skills: [{ name: 'Fighting', die: 'd8' }],
+      attacks: [
+        { name: 'Sword', skill: 'Fighting', damage: '1d8!+1d6!', range: 5 },
+        { name: 'Whip', skill: 'Athletics', damage: '1d8!+1d4!', range: 5 },
+      ],
+    };
+    const rolls = swade.rollables(sheet);
+    expect(rolls.find((r) => r.id === 'attack_0')?.expr).toBe('best(1d8!, 1d6!)');
+    expect(rolls.find((r) => r.id === 'attack_1')?.expr).toBe('best(1d4!-2, 1d6!-2)');
+    // ...and the same holds for the action the sheet hands to the combat engine.
+    const character = { id: 'c1', name: 'Test', system: 'swade', sheet } as unknown as Character;
+    const acts = combatActions(character);
+    expect(acts.find((a) => a.label === 'Whip')?.attackExpr).toBe('best(1d4!-2, 1d6!-2)');
+  });
+
+  it('every Wild Card trait rollable carries a Wild Die', () => {
+    const sheet = { ...swade.defaultSheet(), skills: [{ name: 'Fighting', die: 'd8' }] };
+    const traitRolls = swade.rollables(sheet).filter((r) => r.group === 'Attributes' || r.group === 'Skills');
+    expect(traitRolls.length).toBeGreaterThan(0);
+    for (const r of traitRolls) {
+      expect(r.expr, `${r.id} is missing its Wild Die`).toMatch(/^best\(.+, 1d6!(-2)?\)/);
+    }
   });
 
   it('weapon attacks roll the linked skill; damage is the typed expression', () => {

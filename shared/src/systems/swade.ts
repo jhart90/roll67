@@ -94,8 +94,10 @@ export function woundPenalty(sheet: SheetData): number {
 export function traitExpr(sheet: SheetData, sides: number, mod = 0): string {
   const penalty = woundPenalty(sheet) + mod;
   const tail = penalty !== 0 ? fmtMod(penalty) : '';
-  if (sides <= 0) return `1d4!-2${tail}`; // unskilled
   const wild = sheet.wildCard !== false;
+  // Unskilled is d4−2 — but a Wild Card still throws its Wild Die alongside it.
+  // The −2 applies to the roll, so it hits both arms and the better one wins.
+  if (sides <= 0) return wild ? `best(1d4!-2, 1d6!-2)${tail}` : `1d4!-2${tail}`;
   return wild ? `best(1d${sides}!, 1d6!)${tail}` : `1d${sides}!${tail}`;
 }
 

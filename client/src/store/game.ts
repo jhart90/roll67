@@ -790,19 +790,28 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.PROJECTILE, (p: ProjectilePayload) => {
-    const s = useGameStore.getState();
-    // Only show the shot if both ends are actually visible to us -- same
-    // secrecy rule as HP_FLOAT, but checked at both endpoints since this
-    // needs to draw a line between them, not just sit on one token.
-    if (s.map?.id !== p.mapId || !s.tokens[p.fromTokenId] || !s.tokens[p.toTokenId]) return;
-    const id = ++pingCounter;
-    useGameStore.setState({
-      projectiles: [...s.projectiles, { id, fromTokenId: p.fromTokenId, toTokenId: p.toTokenId, damageType: p.damageType, flightMs: p.flightMs }],
+    // Queued rather than fired on arrival, so the shot flies once the damage
+    // dice -- aces and all -- have finished and the queue's gap has elapsed.
+    // Visibility is re-checked at launch, not now: by the time this reaches
+    // the head of the queue the tokens may have moved or gone out of sight.
+    chatQueue.push({
+      append: () => {
+        const s = useGameStore.getState();
+        // Only show the shot if both ends are actually visible to us -- same
+        // secrecy rule as HP_FLOAT, but checked at both endpoints since this
+        // needs to draw a line between them, not just sit on one token.
+        if (s.map?.id !== p.mapId || !s.tokens[p.fromTokenId] || !s.tokens[p.toTokenId]) return;
+        const id = ++pingCounter;
+        useGameStore.setState({
+          projectiles: [...s.projectiles, { id, fromTokenId: p.fromTokenId, toTokenId: p.toTokenId, damageType: p.damageType, flightMs: p.flightMs }],
+        });
+        setTimeout(() => {
+          const cur = useGameStore.getState();
+          useGameStore.setState({ projectiles: cur.projectiles.filter((x) => x.id !== id) });
+        }, p.flightMs);
+      },
     });
-    setTimeout(() => {
-      const cur = useGameStore.getState();
-      useGameStore.setState({ projectiles: cur.projectiles.filter((x) => x.id !== id) });
-    }, p.flightMs);
+    pumpChatQueue();
   });
 
   socket.on(S2C.AOE_BURST, (p: AoeBurstPayload) => {

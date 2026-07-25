@@ -257,3 +257,39 @@ describe('splitRollLabel', () => {
     expect(() => roll(expr)).toThrow();
   });
 });
+
+describe('best() arm tagging', () => {
+  it('labels every die with the arm it came from', () => {
+    for (let s = 0; s < 40; s++) {
+      const r = roll('best(1d12!, 1d6!)', seededRng(s));
+      expect(new Set(r.dice.map((d) => d.arm))).toEqual(new Set([0, 1]));
+      expect(r.dice.filter((d) => d.arm === 0).every((d) => d.sides === 12)).toBe(true);
+      expect(r.dice.filter((d) => d.arm === 1).every((d) => d.sides === 6)).toBe(true);
+    }
+  });
+
+  it('keeps one verdict per arm, so an arm never half-fades', () => {
+    for (let s = 0; s < 40; s++) {
+      const r = roll('best(1d8!, 1d6!)', seededRng(s));
+      for (const a of [0, 1]) {
+        const verdicts = new Set(r.dice.filter((d) => d.arm === a).map((d) => d.kept));
+        expect(verdicts.size).toBe(1);
+      }
+    }
+  });
+
+  it('leaves dice outside a best() untagged, so they never grey out', () => {
+    const r = roll('2d6+1d8', seededRng(3));
+    expect(r.dice.every((d) => d.arm === undefined)).toBe(true);
+  });
+
+  it('tags the arm independently of which one won', () => {
+    const seen = new Set<number>();
+    for (let s = 0; s < 200 && seen.size < 2; s++) {
+      const r = roll('best(1d8!, 1d6!)', seededRng(s));
+      const winner = r.dice.find((d) => d.kept)!.arm!;
+      seen.add(winner);
+    }
+    expect(seen).toEqual(new Set([0, 1])); // both arms win sometimes, both stay tagged
+  });
+});

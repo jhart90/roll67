@@ -258,6 +258,10 @@ export interface DieRoll {
    *  the roller's own colour so the two arms are told apart by hue rather than
    *  by dimming the loser, which would spoil aces that have yet to be thrown. */
   wild?: boolean;
+  /** Which arm of a `best(...)` this die belongs to. Lets the renderer work out
+   *  the moment a losing arm can no longer catch up, and grey it out only then.
+   *  Nested `best()` calls report the outermost arm. */
+  arm?: number;
 }
 
 export interface RollBreakdown {

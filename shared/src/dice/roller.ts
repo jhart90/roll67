@@ -75,7 +75,7 @@ function evalNode(node: DiceNode, rng: RNG, allDice: DieRoll[]): EvalResult {
           // Tagging them lets the renderer tell the arms apart by colour; it
           // must not lean on `kept`, which is only known once every arm has
           // finished acing and would give away rolls still to come.
-          const tagged = armIdx > 0 ? { ...die, wild: true } : die;
+          const tagged = { ...die, arm: armIdx, ...(armIdx > 0 ? { wild: true } : {}) };
           allDice.push(arm === winner ? tagged : { ...tagged, kept: false });
         }
       });

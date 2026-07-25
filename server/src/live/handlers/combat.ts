@@ -661,8 +661,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // (no travel to show) and AoE (its own shockwave, no single target
         // to aim at) skip this.
         if (impactKind === 'ranged') {
-          const launchDelay = Math.max(0, settleMs - PROJECTILE_FLIGHT_MS);
-          setTimeout(() => emitProjectile(io, d.campaignId, src.mapId, src.id, tgt.id, action.damageType), launchDelay);
+          // Emitted immediately, straight after the damage card. The client
+          // holds it behind that roll's animation and fires it a beat after
+          // the last die lands -- only the client knows how long an acing
+          // chain actually took, so timing it from a dice count here was
+          // always a guess that a chain of aces would outrun.
+          emitProjectile(io, d.campaignId, src.mapId, src.id, tgt.id, action.damageType);
         }
         setTimeout(applyToTarget, settleMs);
       }

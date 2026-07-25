@@ -285,6 +285,8 @@ interface DieSim {
   target: { x: number; y: number };
   delay: number;
   dur: number;
+  /** ms at which this die starts greying out; Infinity for one that never does. */
+  fadeAt: number;
   qTarget: Quat;
   spinAxis: Vec3;
   spinTotal: number;
@@ -314,6 +316,59 @@ const WAVE_STAGGER_MS = 110;
 export const DICE_ROLE_DEFAULTS = { trait: '#14171d', wild: '#8b5cf6', raise: '#1f9d55' };
 export type DicePalette = { trait: string; wild: string; raise: string };
 
+/** How long the grey-out takes, and how far down it goes. */
+const FADE_MS = 400;
+const DROPPED_ALPHA = 0.45;
+
+/**
+ * When each die should begin greying out, or Infinity for one that never does.
+ *
+ * A die that loses a `best()` must not fade the moment it lands: `kept` is
+ * decided by dice that may not have been thrown yet, so fading early announces
+ * the result in advance. Nor should it stay bright to the end. The honest
+ * moment is when its own arm has stopped acing *and* another arm has already
+ * passed it — from then on nothing can change the outcome, so saying so gives
+ * nothing away.
+ *
+ * Comparisons use raw dice sums, ignoring any modifier inside an arm. SWADE's
+ * arms carry the same modifier as each other (`best(1d4!-2, 1d6!-2)`), so the
+ * comparison is exact for every expression this actually sees.
+ */
+function fadeTimes(dice: DieRoll[], settleAt: number[]): number[] {
+  const out = dice.map(() => Infinity);
+  const arms = new Map<number, number[]>();
+  dice.forEach((d, i) => {
+    if (d.arm === undefined) return;
+    const list = arms.get(d.arm);
+    if (list) list.push(i); else arms.set(d.arm, [i]);
+  });
+  if (arms.size < 2) return out; // nothing to lose to
+  const latest = Math.max(...settleAt);
+  // Earliest time one arm's running total strictly passes `x`. A still-acing
+  // arm only ever grows, so passing is permanent.
+  const passesAt = (idxs: number[], x: number): number => {
+    let sum = 0;
+    for (const i of [...idxs].sort((a, b) => settleAt[a] - settleAt[b])) {
+      sum += dice[i].value;
+      if (sum > x) return settleAt[i];
+    }
+    return Infinity;
+  };
+  for (const [arm, idxs] of arms) {
+    if (dice[idxs[0]].kept) continue; // this arm won
+    const mine = idxs.reduce((s, i) => s + dice[i].value, 0);
+    const stoppedAt = Math.max(...idxs.map((i) => settleAt[i]));
+    let passed = Infinity;
+    for (const [other, oIdxs] of arms) {
+      if (other !== arm) passed = Math.min(passed, passesAt(oIdxs, mine));
+    }
+    // A tie is never strictly passed, so fall back to the end of the throw.
+    const at = Math.max(stoppedAt, Number.isFinite(passed) ? passed : latest);
+    for (const i of idxs) out[i] = at;
+  }
+  return out;
+}
+
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
   palette: DicePalette | null = null,
@@ -338,6 +393,7 @@ export function buildSims(
     settleAt[i] = delay + dur;
     return { delay, dur };
   });
+  const fade = fadeTimes(dice, settleAt);
   return dice.map((die, i) => {
     const row = Math.floor(i / cols);
     const col = i % cols;
@@ -372,6 +428,7 @@ export function buildSims(
       start, target,
       delay: timing[i].delay,
       dur: timing[i].dur,
+      fadeAt: fade[i],
       qTarget: targetOrientation(geom, die.value),
       spinAxis: norm(v3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)),
       spinTotal: (Math.PI * 2) * (2.2 + Math.random() * 1.6) * (fromLeft ? 1 : -1),
@@ -381,7 +438,11 @@ export function buildSims(
 }
 
 export function simsSettleTime(sims: DieSim[]): number {
-  return Math.max(...sims.map((s) => s.delay + s.dur));
+  const landed = Math.max(...sims.map((s) => s.delay + s.dur));
+  // A losing arm's grey-out can begin as late as the final landing, so the
+  // roll isn't finished until that fade has played out too.
+  const faded = sims.reduce((m, s) => (s.fadeAt === Infinity ? m : Math.max(m, s.fadeAt + FADE_MS)), 0);
+  return Math.max(landed, faded);
 }
 
 /**
@@ -402,6 +463,7 @@ export function estimateDiceAnimMs(dice: DieRoll[]): number {
     settleAt[i] = delay + MAX_DUR;
     latest = Math.max(latest, settleAt[i]);
   });
+  latest += FADE_MS; // a losing arm's grey-out can start at the last landing
   // However wild the chain, never leave the chat waiting on the dice forever.
   // The read pause makes long chains slower, so the ceiling has room to match.
   return Math.min(latest, 20000);
@@ -449,10 +511,12 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
   const pop = sinceSettle > 0 && sinceSettle < 260 ? 1 + 0.14 * Math.sin((sinceSettle / 260) * Math.PI) : 1;
   const size = sim.size * pop;
 
-  // Every die renders at full strength. The losing arm is identified by its
-  // colour, never by fading it out — fading is only knowable after all the
-  // aces have resolved, and would spoil them.
-  ctx.globalAlpha = 1;
+  // A losing arm greys out, but only from the moment it is beyond saving —
+  // see fadeTimes(). Until then it renders at full strength, so nothing about
+  // dice still to be thrown is given away.
+  const fadeT = sim.fadeAt === Infinity ? 0 : Math.max(0, Math.min(1, (tMs - sim.fadeAt) / FADE_MS));
+  const dieAlpha = 1 - (1 - DROPPED_ALPHA) * fadeT;
+  ctx.globalAlpha = dieAlpha;
 
   // An aced die announces itself the moment it lands: a bright halo that
   // pulses while the bonus die is being readied, so the table can see
@@ -485,7 +549,7 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
       ctx.fill();
     }
     ctx.restore();
-    ctx.globalAlpha = 1; // restore after the ace flash's own fades
+    ctx.globalAlpha = dieAlpha; // restore after the ace flash's own fades
   }
 
   // Ground shadow, tied to the table position (not the airborne die).

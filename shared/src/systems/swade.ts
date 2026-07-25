@@ -215,11 +215,16 @@ const combatFields: FieldDef[] = [
   { id: 'fatigue', label: 'Fatigue (0–2)', type: 'number', width: 'sixth', default: 0 },
   { id: 'pace', label: 'Pace', type: 'number', width: 'sixth', default: 6 },
   { id: 'runningDie', label: 'Running die', type: 'select', width: 'sixth', options: TRAIT_DICE, default: 'd6' },
-  { id: 'hp', label: 'HP (pool)', type: 'number', width: 'sixth', default: 15 },
-  { id: 'maxHp', label: 'Max HP', type: 'number', width: 'sixth', default: 15 },
-  { id: 'resist', label: 'Resistances', type: 'text', width: 'third', default: '' },
-  { id: 'vulnerable', label: 'Vulnerabilities', type: 'text', width: 'third', default: '' },
-  { id: 'immune', label: 'Immunities', type: 'text', width: 'third', default: '' },
+  // The five sixths above fill a row exactly, so the HP pair is widened to
+  // thirds: that pushes them past 100% and they wrap together onto their own
+  // line, HP beside Max HP.
+  { id: 'hp', label: 'HP (pool)', type: 'number', width: 'third', default: 15 },
+  { id: 'maxHp', label: 'Max HP', type: 'number', width: 'third', default: 15 },
+  // Damage-type lists hold comma-separated entries and outgrow a third fast,
+  // so each takes the full width of the pane.
+  { id: 'resist', label: 'Resistances', type: 'text', width: 'full', default: '' },
+  { id: 'vulnerable', label: 'Vulnerabilities', type: 'text', width: 'full', default: '' },
+  { id: 'immune', label: 'Immunities', type: 'text', width: 'full', default: '' },
 ];
 
 const sensesFields: FieldDef[] = [

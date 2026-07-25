@@ -170,13 +170,14 @@ export function gearTraitBonus(sheet: SheetData, traitName: string): number {
   const matches = (r: SheetData) => str(r, 'bonusSkill', '').trim().toLowerCase() === want;
   const sum = (list: SheetData[]) => list.reduce((n, r) => (matches(r) ? n + num(r, 'bonusAmt', 0) : n), 0);
   return sum(rows(sheet, 'inventory').filter((i) => i.equipped === true))
+    + sum(rows(sheet, 'racialTraits'))
     + sum(rows(sheet, 'edges'))
     + sum(rows(sheet, 'hindrances'));
 }
 
 /** Flat Parry / Toughness / Pace modifiers granted by Edges and Hindrances. */
 function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number; pace: number } {
-  return [...rows(sheet, 'edges'), ...rows(sheet, 'hindrances')].reduce<{ parry: number; toughness: number; pace: number }>(
+  return [...rows(sheet, 'racialTraits'), ...rows(sheet, 'edges'), ...rows(sheet, 'hindrances')].reduce<{ parry: number; toughness: number; pace: number }>(
     (acc, r) => ({
       parry: acc.parry + num(r, 'parryBonus', 0),
       toughness: acc.toughness + num(r, 'toughnessBonus', 0),
@@ -248,6 +249,21 @@ const coreTab: SheetTab = {
         { id: 'name', label: 'Skill', type: 'text', width: 'third', suggestions: SKILLS_SWADE },
         { id: 'die', label: 'Die', type: 'select', width: 'sixth', options: TRAIT_DICE, default: 'd4' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
+      ],
+    },
+    {
+      // Racial abilities from an ancestry live here as first-class traits
+      // with the same live modifier columns as Edges — never disguised as
+      // gear or armor rows.
+      kind: 'list', id: 'racialTraits', title: 'Ancestry Traits',
+      columns: [
+        { id: 'name', label: 'Trait', type: 'text', width: 'third' },
+        { id: 'bonusSkill', label: 'Boosts trait', type: 'text', width: 'sixth', suggestions: [...SKILLS_SWADE, 'Strength', 'Agility', 'Smarts', 'Spirit', 'Vigor'] },
+        { id: 'bonusAmt', label: '+', type: 'number', width: 'sixth', default: 0 },
+        { id: 'parryBonus', label: 'Parry', type: 'number', width: 'sixth', default: 0 },
+        { id: 'toughnessBonus', label: 'Toughness', type: 'number', width: 'sixth', default: 0 },
+        { id: 'paceBonus', label: 'Pace', type: 'number', width: 'sixth', default: 0 },
+        { id: 'notes', label: 'Effect', type: 'text', width: 'half' },
       ],
     },
     {

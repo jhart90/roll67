@@ -26,9 +26,22 @@ export type SwadeAttrId = 'agility' | 'smarts' | 'spirit' | 'strength' | 'vigor'
 
 export type CustomRaceTraitEffect =
   | { kind: 'attributeStep'; amount: number }
-  | { kind: 'pace'; amount: number; runningDieSteps?: number }
+  | { kind: 'pace'; amount: number; runningDieSteps?: number; skill?: string; skillAmount?: number }
   | { kind: 'armor'; amount: number }
+  | { kind: 'toughness'; amount: number }
+  | { kind: 'parry'; amount: number }
+  | { kind: 'size'; amount: number }
   | { kind: 'vision'; darkvision: number }
+  | { kind: 'flight'; pace: number }
+  | { kind: 'naturalWeapon'; damage: string; ap?: number }
+  | { kind: 'skillStart'; die: string }
+  | { kind: 'coreSkillLost' }
+  | { kind: 'grantEdge' }
+  | { kind: 'grantPower' }
+  | { kind: 'construct' }
+  | { kind: 'immunity' }
+  | { kind: 'envResist' }
+  | { kind: 'envWeak' }
   | { kind: 'resist' }
   | { kind: 'vulnerable' }
   | { kind: 'skillBonus'; skill: string; amount: number }
@@ -37,8 +50,22 @@ export type CustomRaceTraitEffect =
 export interface CustomRaceTrait {
   id: string;
   name: string;
-  /** Build points: positive = costs points, negative = refunds points (a Drawback). */
+  /** Build points for the default (first) tier: positive costs, negative refunds. */
   cost: number;
+  /** Which table this came from, for grouping in the builder. */
+  category?: 'positive' | 'negative';
+  /** How many times it may be taken; omitted means once. */
+  maxTakes?: number | 'unlimited';
+  /** Priced tiers, when the rulebook offers a choice of strength. */
+  tiers?: RaceTraitTier[];
+  /** This trait needs the player to name a skill. */
+  needsSkillChoice?: boolean;
+  /** …an environmental effect (heat, cold, radiation…). */
+  needsEnvironmentChoice?: boolean;
+  /** …an Edge. */
+  needsEdgeChoice?: boolean;
+  /** …a Hindrance. */
+  needsHindranceChoice?: boolean;
   desc: string;
   effect: CustomRaceTraitEffect;
   /** This trait needs the player to pick an attribute (Attribute Increase/Reduced Attribute). */
@@ -47,21 +74,154 @@ export interface CustomRaceTrait {
   needsDamageTypeChoice?: boolean;
 }
 
+/** One purchasable step of a racial ability. Abilities the rulebook prices
+ *  in tiers ("1 or 2 points", "2/3/4") expose one entry per tier. */
+export interface RaceTraitTier {
+  /** Build-point cost: positive for benefits, negative for drawbacks. */
+  cost: number;
+  /** Short label for the tier picker ("Pace 6", "Pace 12", "Pace 24"). */
+  label: string;
+  desc: string;
+  effect: CustomRaceTraitEffect;
+}
+
 export const CUSTOM_RACE_TRAITS: CustomRaceTrait[] = [
-  { id: 'attribute-increase', name: 'Attribute Increase', cost: 2, needsAttrChoice: true, effect: { kind: 'attributeStep', amount: 1 }, desc: 'Raise one attribute one die type.' },
-  { id: 'armor-plus2', name: 'Natural Armor +2', cost: 2, effect: { kind: 'armor', amount: 2 }, desc: 'Tough hide, scales, or plating grant +2 Armor.' },
-  { id: 'low-light-vision', name: 'Low Light Vision', cost: 1, effect: { kind: 'vision', darkvision: 12 }, desc: 'Ignores penalties for Dim and Dark lighting.' },
-  { id: 'infravision', name: 'Infravision', cost: 2, effect: { kind: 'vision', darkvision: 24 }, desc: 'Sees clearly in near-total darkness.' },
-  { id: 'fast', name: 'Fast', cost: 2, effect: { kind: 'pace', amount: 2, runningDieSteps: 1 }, desc: '+2 Pace and a die type to Running.' },
-  { id: 'resistant', name: 'Resistant (choose a damage type)', cost: 1, needsDamageTypeChoice: true, effect: { kind: 'resist' }, desc: 'Takes half damage from a chosen damage type.' },
-  { id: 'rugged', name: 'Rugged Constitution', cost: 1, effect: { kind: 'armor', amount: 1 }, desc: '+1 Toughness from a dense or sturdy build.' },
-  { id: 'keen-senses', name: 'Keen Senses', cost: 1, effect: { kind: 'skillBonus', skill: 'Notice', amount: 2 }, desc: '+2 to Notice rolls.' },
-  { id: 'reduced-attribute', name: 'Reduced Attribute', cost: -2, needsAttrChoice: true, effect: { kind: 'attributeStep', amount: -1 }, desc: 'Lower one attribute one die type.' },
-  { id: 'reduced-pace', name: 'Reduced Pace', cost: -1, effect: { kind: 'pace', amount: -1, runningDieSteps: -1 }, desc: '−1 Pace and a die type to Running.' },
-  { id: 'frail', name: 'Frail', cost: -1, effect: { kind: 'armor', amount: -1 }, desc: '−1 Toughness.' },
-  { id: 'vulnerable-damage', name: 'Vulnerable (choose a damage type)', cost: -1, needsDamageTypeChoice: true, effect: { kind: 'vulnerable' }, desc: 'Takes double damage from a chosen damage type.' },
-  { id: 'outsider', name: 'Outsider', cost: -1, effect: { kind: 'none' }, desc: 'Suffers social penalties among those unfamiliar with your kind.' },
-  { id: 'clumsy', name: 'Clumsy', cost: -1, effect: { kind: 'skillBonus', skill: 'Athletics', amount: -1 }, desc: '−1 to Athletics rolls needing fine coordination.' },
+  // ---------- positive ----------
+  { id: 'adaptable', name: 'Adaptable', cost: 2, category: 'positive', effect: { kind: 'none' }, desc: 'Start with a free Novice Edge of your choice (you must still meet its Requirements).' },
+  { id: 'additional-action', name: 'Additional Action', cost: 3, category: 'positive', effect: { kind: 'none' }, desc: 'Extra limbs or reflexes: ignore 2 points of Multi-Action penalties each turn.' },
+  {
+    id: 'aquatic', name: 'Aquatic / Semi-Aquatic', category: 'positive', cost: 1, effect: { kind: 'none' },
+    desc: 'At home in the water.',
+    tiers: [
+      { cost: 1, label: 'Semi-Aquatic', desc: 'Holds its breath 15 minutes before checking for drowning.', effect: { kind: 'none' } },
+      { cost: 2, label: 'Aquatic', desc: 'Native to water: cannot drown in oxygenated liquid and swims at full Pace.', effect: { kind: 'none' } },
+    ],
+  },
+  { id: 'armor', name: 'Armor', cost: 1, category: 'positive', maxTakes: 3, effect: { kind: 'armor', amount: 2 }, desc: 'Thick hide, scales, or plating grant +2 Armor each time taken.' },
+  { id: 'attribute-increase', name: 'Attribute Increase', cost: 2, category: 'positive', maxTakes: 'unlimited', needsAttrChoice: true, effect: { kind: 'attributeStep', amount: 1 }, desc: 'Raise one attribute a die type, raising its maximum too.' },
+  { id: 'bite', name: 'Bite', cost: 1, category: 'positive', effect: { kind: 'naturalWeapon', damage: 'Str+d4' }, desc: 'Fangs that cause Strength+d4 damage.' },
+  { id: 'burrowing', name: 'Burrowing', cost: 1, category: 'positive', effect: { kind: 'none' }, desc: 'Burrow through loose earth at half Pace; may surprise foes by surfacing beneath them.' },
+  {
+    id: 'claws', name: 'Claws', category: 'positive', cost: 2, effect: { kind: 'naturalWeapon', damage: 'Str+d4' },
+    desc: 'Natural claws.',
+    tiers: [
+      { cost: 2, label: 'Claws', desc: 'Claws that cause Strength+d4 damage.', effect: { kind: 'naturalWeapon', damage: 'Str+d4' } },
+      { cost: 3, label: 'Claws (d6)', desc: 'Claws that cause Strength+d6 damage.', effect: { kind: 'naturalWeapon', damage: 'Str+d6' } },
+      { cost: 4, label: 'Claws (d6, AP 2)', desc: 'Strength+d6 damage with AP 2.', effect: { kind: 'naturalWeapon', damage: 'Str+d6', ap: 2 } },
+    ],
+  },
+  { id: 'construct', name: 'Construct', cost: 8, category: 'positive', effect: { kind: 'construct' }, desc: '+2 to recover from Shaken, ignores one level of Wound modifiers, does not breathe, immune to disease and poison. Must be repaired rather than healed.' },
+  { id: 'doesnt-breathe', name: 'Doesn’t Breathe', cost: 2, category: 'positive', effect: { kind: 'none' }, desc: 'Unaffected by inhaled toxins, cannot drown, and can survive vacuum.' },
+  { id: 'edge', name: 'Edge', cost: 2, category: 'positive', maxTakes: 'unlimited', needsEdgeChoice: true, effect: { kind: 'grantEdge' }, desc: 'An innate Edge, ignoring its Requirements except other Edges. Higher-Rank Edges cost more.' },
+  { id: 'environmental-resistance', name: 'Environmental Resistance', cost: 1, category: 'positive', maxTakes: 'unlimited', needsEnvironmentChoice: true, effect: { kind: 'envResist' }, desc: '+4 to resist one environmental effect, and 4 less damage from it.' },
+  {
+    id: 'flight', name: 'Flight', category: 'positive', cost: 2, effect: { kind: 'flight', pace: 6 },
+    desc: 'The species can fly.',
+    tiers: [
+      { cost: 2, label: 'Fly Pace 6', desc: 'Flies at Pace 6 and may “run” for extra movement.', effect: { kind: 'flight', pace: 6 } },
+      { cost: 4, label: 'Fly Pace 12', desc: 'Flies at Pace 12 and may “run” for extra movement.', effect: { kind: 'flight', pace: 12 } },
+      { cost: 6, label: 'Fly Pace 24', desc: 'Flies at Pace 24 and may “run” for 2d6 additional movement.', effect: { kind: 'flight', pace: 24 } },
+    ],
+  },
+  { id: 'hardy', name: 'Hardy', cost: 2, category: 'positive', effect: { kind: 'none' }, desc: 'A second Shaken result in combat does not cause a Wound.' },
+  {
+    id: 'horns', name: 'Horns', category: 'positive', cost: 1, effect: { kind: 'naturalWeapon', damage: 'Str+d4' },
+    desc: 'A horn or horns.',
+    tiers: [
+      { cost: 1, label: 'Horns (d4)', desc: 'Horns that cause Strength+d4 damage.', effect: { kind: 'naturalWeapon', damage: 'Str+d4' } },
+      { cost: 2, label: 'Horns (d6)', desc: 'Horns that cause Strength+d6 damage.', effect: { kind: 'naturalWeapon', damage: 'Str+d6' } },
+    ],
+  },
+  { id: 'immune-poison-disease', name: 'Immune to Poison or Disease', cost: 1, category: 'positive', maxTakes: 2, effect: { kind: 'immunity' }, desc: 'Immune to poison or to disease (your choice). Take it twice for both.' },
+  { id: 'infravision', name: 'Infravision', cost: 1, category: 'positive', effect: { kind: 'vision', darkvision: 24 }, desc: 'Sees heat, halving Illumination penalties against warm targets (even invisible ones).' },
+  { id: 'leaper', name: 'Leaper', cost: 2, category: 'positive', effect: { kind: 'none' }, desc: 'Jumps twice as far, and adds +4 damage when leaping as part of a Wild Attack instead of +2.' },
+  { id: 'low-light-vision', name: 'Low Light Vision', cost: 1, category: 'positive', effect: { kind: 'vision', darkvision: 12 }, desc: 'Ignores penalties for Dim and Dark illumination (but not Pitch Darkness).' },
+  { id: 'no-vital-organs', name: 'No Vital Organs', cost: 1, category: 'positive', effect: { kind: 'none' }, desc: 'Hidden or redundant vital organs: Called Shots do no extra damage.' },
+  { id: 'pace', name: 'Pace', cost: 2, category: 'positive', effect: { kind: 'pace', amount: 2, runningDieSteps: 1 }, desc: '+2 Pace and a die type to the running die.' },
+  { id: 'parry', name: 'Parry', cost: 1, category: 'positive', maxTakes: 3, effect: { kind: 'parry', amount: 1 }, desc: '+1 natural Parry each time taken — a prehensile tail, extra limbs, or latent psi-sense.' },
+  {
+    id: 'poisonous-touch', name: 'Poisonous Touch', category: 'positive', cost: 1, effect: { kind: 'none' },
+    desc: 'A venomous touch, bite, or claw.',
+    tiers: [
+      { cost: 1, label: 'Mild Poison', desc: 'On a successful Touch Attack the victim rolls Vigor or suffers Mild Poison.', effect: { kind: 'none' } },
+      { cost: 3, label: 'Lethal Poison', desc: 'As above, but the poison may Knockout, Paralyze, or kill. Costs the user Fatigue.', effect: { kind: 'none' } },
+    ],
+  },
+  {
+    id: 'power', name: 'Power', category: 'positive', cost: 2, maxTakes: 'unlimited', effect: { kind: 'grantPower' },
+    desc: 'An innate ability that works like a power.',
+    tiers: [
+      { cost: 2, label: 'First power', desc: 'Grants Arcane Background (Gifted) and one power. Does not add Power Points.', effect: { kind: 'grantPower' } },
+      { cost: 1, label: 'Additional power', desc: 'Each power after the first costs 1 point.', effect: { kind: 'grantPower' } },
+    ],
+  },
+  { id: 'reach', name: 'Reach', cost: 1, category: 'positive', maxTakes: 3, effect: { kind: 'none' }, desc: 'Long limbs or tentacles grant Reach +1 (and +1 more each further time).' },
+  {
+    id: 'regeneration', name: 'Regeneration', category: 'positive', cost: 2, effect: { kind: 'none' },
+    desc: 'The being heals unnaturally fast.',
+    tiers: [
+      { cost: 2, label: 'Fast healing', desc: 'Makes a natural healing roll once per day rather than every five.', effect: { kind: 'none' } },
+      { cost: 3, label: 'Regrows injuries', desc: 'As above, and permanent injuries can be recovered once all other Wounds are healed.', effect: { kind: 'none' } },
+    ],
+  },
+  { id: 'size-plus', name: 'Size +1', cost: 1, category: 'positive', maxTakes: 3, effect: { kind: 'size', amount: 1 }, desc: 'Larger than normal: each point adds +1 Toughness and raises maximum Strength a step.' },
+  {
+    id: 'skill', name: 'Skill', category: 'positive', cost: 1, maxTakes: 'unlimited', needsSkillChoice: true, effect: { kind: 'skillStart', die: 'd4' },
+    desc: 'A skill inherent to the race.',
+    tiers: [
+      { cost: 1, label: 'Starts at d4', desc: 'The character begins with a d4 in a skill inherent to her race.', effect: { kind: 'skillStart', die: 'd4' } },
+      { cost: 2, label: 'Starts at d6, max d12+1', desc: 'The skill starts at d6 and its maximum increases to d12+1.', effect: { kind: 'skillStart', die: 'd6' } },
+    ],
+  },
+  { id: 'skill-bonus', name: 'Skill Bonus', cost: 2, category: 'positive', maxTakes: 'unlimited', needsSkillChoice: true, effect: { kind: 'skillBonus', skill: '', amount: 2 }, desc: '+2 when using a particular skill (once per skill).' },
+  { id: 'sleep-reduction', name: 'Sleep Reduction', cost: 1, category: 'positive', maxTakes: 2, effect: { kind: 'none' }, desc: 'Needs half the sleep a human does. Taken twice, the being never sleeps.' },
+  { id: 'toughness', name: 'Toughness', cost: 1, category: 'positive', maxTakes: 3, effect: { kind: 'toughness', amount: 1 }, desc: 'Hardened skin or dense tissue: +1 Toughness each time taken.' },
+  { id: 'wall-walker', name: 'Wall Walker', cost: 1, category: 'positive', effect: { kind: 'none' }, desc: 'Walks vertical surfaces normally, and inverted surfaces at half Pace.' },
+
+  // ---------- negative ----------
+  {
+    id: 'attribute-penalty', name: 'Attribute Penalty', category: 'negative', cost: -2, maxTakes: 'unlimited', needsAttrChoice: true,
+    effect: { kind: 'attributeStep', amount: -1 },
+    desc: 'One attribute (but not its linked skills) is reduced.',
+    tiers: [
+      { cost: -2, label: '−1 die type', desc: 'One attribute drops a die type.', effect: { kind: 'attributeStep', amount: -1 } },
+      { cost: -3, label: '−2 die types', desc: 'One attribute drops two die types.', effect: { kind: 'attributeStep', amount: -2 } },
+    ],
+  },
+  { id: 'big', name: 'Big', cost: -2, category: 'negative', effect: { kind: 'none' }, desc: 'Too large for common equipment: −2 with gear not made for the race, and clothing, food, and armor cost double.' },
+  { id: 'cannot-speak', name: 'Cannot Speak', cost: -1, category: 'negative', effect: { kind: 'none' }, desc: 'No vocal cords: communicates naturally only with its own kind.' },
+  { id: 'dependency', name: 'Dependency', cost: -2, category: 'negative', needsEnvironmentChoice: true, effect: { kind: 'none' }, desc: 'Must spend an hour a day in contact with a substance or grow Fatigued daily until Incapacitated.' },
+  { id: 'environmental-weakness', name: 'Environmental Weakness', cost: -1, category: 'negative', maxTakes: 'unlimited', needsEnvironmentChoice: true, effect: { kind: 'envWeak' }, desc: '−4 to resist one environmental effect, and +4 damage from it.' },
+  { id: 'frail', name: 'Frail', cost: -1, category: 'negative', maxTakes: 2, effect: { kind: 'toughness', amount: -1 }, desc: '−1 Toughness.' },
+  {
+    id: 'hindrance', name: 'Hindrance', category: 'negative', cost: -1, maxTakes: 'unlimited', needsHindranceChoice: true, effect: { kind: 'none' },
+    desc: 'The race carries an inherent Hindrance.',
+    tiers: [
+      { cost: -1, label: 'Minor', desc: 'An inherent Minor Hindrance.', effect: { kind: 'none' } },
+      { cost: -2, label: 'Major', desc: 'An inherent Major Hindrance.', effect: { kind: 'none' } },
+    ],
+  },
+  { id: 'poor-parry', name: 'Poor Parry', cost: -1, category: 'negative', maxTakes: 3, effect: { kind: 'parry', amount: -1 }, desc: 'A poor melee defender: −1 Parry each time taken.' },
+  { id: 'racial-enemy', name: 'Racial Enemy', cost: -1, category: 'negative', maxTakes: 'unlimited', effect: { kind: 'none' }, desc: '−2 Persuasion when dealing with a rival species, who may turn hostile easily.' },
+  { id: 'reduced-core-skills', name: 'Reduced Core Skills', cost: -1, category: 'negative', maxTakes: 5, needsSkillChoice: true, effect: { kind: 'coreSkillLost' }, desc: 'One core skill does not start at d4 (it can still be bought normally).' },
+  {
+    id: 'reduced-pace', name: 'Reduced Pace', category: 'negative', cost: -1, effect: { kind: 'pace', amount: -1, runningDieSteps: -1 },
+    desc: 'Slower than most.',
+    tiers: [
+      { cost: -1, label: '−1 Pace', desc: '−1 Pace and the running die drops a type.', effect: { kind: 'pace', amount: -1, runningDieSteps: -1 } },
+      { cost: -2, label: '−3 Pace, −2 Athletics', desc: 'Pace drops another 2 points, and −2 to Athletics where mobility matters.', effect: { kind: 'pace', amount: -3, runningDieSteps: -1, skill: 'Athletics', skillAmount: -2 } },
+    ],
+  },
+  { id: 'size-minus', name: 'Size −1', cost: -1, category: 'negative', effect: { kind: 'size', amount: -1 }, desc: 'Smaller than average: Size and Toughness drop by 1.' },
+  {
+    id: 'skill-penalty', name: 'Skill Penalty', category: 'negative', cost: -1, maxTakes: 'unlimited', needsSkillChoice: true,
+    effect: { kind: 'skillBonus', skill: '', amount: -1 },
+    desc: 'The race is poor at a particular skill.',
+    tiers: [
+      { cost: -1, label: '−1 (common skill)', desc: '−1 to a commonly used skill.', effect: { kind: 'skillBonus', skill: '', amount: -1 } },
+      { cost: -2, label: '−2 (common skill)', desc: '−2 to a commonly used skill.', effect: { kind: 'skillBonus', skill: '', amount: -2 } },
+    ],
+  },
 ];
 
 export const CUSTOM_RACE_TRAITS_BY_ID = new Map(CUSTOM_RACE_TRAITS.map((t) => [t.id, t]));
@@ -74,9 +234,41 @@ export const CUSTOM_RACE_POINT_CAP = 2;
  *  flawed race and probably wants a GM's sign-off. */
 export const CUSTOM_RACE_POINT_FLOOR = -4;
 
-export function raceTraitPointTotal(traitIds: string[]): number {
-  return traitIds.reduce((sum, id) => sum + (CUSTOM_RACE_TRAITS_BY_ID.get(id)?.cost ?? 0), 0);
+/** One racial ability the player has actually taken, at a chosen tier and
+ *  with whatever the ability asks them to name. */
+export interface RaceTraitPick {
+  traitId: string;
+  /** Index into the trait's `tiers`, or 0 when it has none. */
+  tier?: number;
+  /** Attribute id / skill name / damage type / environment / Edge / Hindrance. */
+  choice?: string;
 }
+
+/** The tier a pick resolves to (falls back to the trait's own cost/effect). */
+export function pickTier(trait: CustomRaceTrait, tier = 0): RaceTraitTier {
+  if (trait.tiers && trait.tiers[tier]) return trait.tiers[tier];
+  return { cost: trait.cost, label: trait.name, desc: trait.desc, effect: trait.effect };
+}
+
+export function raceTraitPickCost(pick: RaceTraitPick): number {
+  const trait = CUSTOM_RACE_TRAITS_BY_ID.get(pick.traitId);
+  return trait ? pickTier(trait, pick.tier ?? 0).cost : 0;
+}
+
+/** How many times a trait may be taken (1 unless stated otherwise). */
+export function maxTakesOf(trait: CustomRaceTrait): number {
+  if (trait.maxTakes === 'unlimited') return Number.POSITIVE_INFINITY;
+  return trait.maxTakes ?? 1;
+}
+
+export function raceTraitPointTotal(picks: RaceTraitPick[]): number {
+  return picks.reduce((sum, p) => sum + raceTraitPickCost(p), 0);
+}
+
+/** Environmental effects the Resistance/Weakness/Dependency abilities name. */
+export const RACE_ENVIRONMENTS = [
+  'Heat', 'Cold', 'Lack of air', 'Radiation', 'Pressure', 'Sunlight', 'Water', 'Toxins', 'Disease', 'Magic',
+];
 
 export const RESISTIBLE_DAMAGE_TYPES = DAMAGE_TYPES;
 
@@ -186,8 +378,7 @@ export interface SwadeCreationInput {
   ancestryIsCustom: boolean;
   /** Only when ancestryIsCustom — the chosen trait ids and, for traits that
    *  need one, the picked attribute id or damage type. */
-  customTraitIds: string[];
-  customTraitChoices: Record<string, string>;
+  customTraitPicks: RaceTraitPick[];
   /**
    * FINAL point-buy steps (0-4) for each attribute, before any racial
    * attribute-step traits — this already includes any extra steps bought
@@ -245,17 +436,26 @@ export function baseAttributeDice(steps: Record<SwadeAttrId, number>): Record<Sw
   return attrs;
 }
 
+/** "Str+d4" with the character's real Strength die folded in, so a natural
+ *  weapon arrives as a rollable attack rather than a formula to interpret. */
+function naturalWeaponDamage(formula: string, strengthDie: string): string {
+  const bonus = /d(\d+)/.exec(formula)?.[0] ?? 'd4';
+  return `1${strengthDie}!+1${bonus}!`;
+}
+
 /** Apply every selected custom-race trait's attributeStep effect (Attribute
  *  Increase / Reduced Attribute) on top of a base attribute set. */
 export function applyCustomRaceAttributeSteps(
-  attrs: Record<SwadeAttrId, string>, traitIds: string[], choices: Record<string, string>,
+  attrs: Record<SwadeAttrId, string>, picks: RaceTraitPick[],
 ): Record<SwadeAttrId, string> {
   const out = { ...attrs };
-  for (const id of traitIds) {
-    const trait = CUSTOM_RACE_TRAITS_BY_ID.get(id);
-    if (trait?.effect.kind === 'attributeStep') {
-      const attrId = (choices[id] as SwadeAttrId) ?? 'agility';
-      out[attrId] = stepDie(out[attrId], trait.effect.amount);
+  for (const pick of picks) {
+    const trait = CUSTOM_RACE_TRAITS_BY_ID.get(pick.traitId);
+    if (!trait) continue;
+    const effect = pickTier(trait, pick.tier ?? 0).effect;
+    if (effect.kind === 'attributeStep') {
+      const attrId = (pick.choice as SwadeAttrId) ?? 'agility';
+      out[attrId] = stepDie(out[attrId], effect.amount);
     }
   }
   return out;
@@ -268,10 +468,10 @@ export function applyCustomRaceAttributeSteps(
  * uses to assemble the real sheet, so the two can never disagree.
  */
 export function finalAttributeDice(
-  steps: Record<SwadeAttrId, number>, ancestryIsCustom: boolean, customTraitIds: string[], customTraitChoices: Record<string, string>,
+  steps: Record<SwadeAttrId, number>, ancestryIsCustom: boolean, picks: RaceTraitPick[],
 ): Record<SwadeAttrId, string> {
   const base = baseAttributeDice(steps);
-  return ancestryIsCustom ? applyCustomRaceAttributeSteps(base, customTraitIds, customTraitChoices) : base;
+  return ancestryIsCustom ? applyCustomRaceAttributeSteps(base, picks) : base;
 }
 
 /** Build a complete SWADE sheet patch from a finished wizard run. Pure and
@@ -283,7 +483,7 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   sheet.wildCard = true;
   sheet.rank = 'Novice';
 
-  const attrs = finalAttributeDice(input.attributeSteps, input.ancestryIsCustom, input.customTraitIds, input.customTraitChoices);
+  const attrs = finalAttributeDice(input.attributeSteps, input.ancestryIsCustom, input.customTraitPicks);
 
   let pace = 6;
   let runningDieSteps = 0;
@@ -293,25 +493,75 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   const resistTypes: string[] = [];
   const vulnerableTypes: string[] = [];
   const ancestryTraitNotes: string[] = [];
+  // Racial abilities are first-class traits on the sheet, carrying the same
+  // live modifier columns as Edges — never disguised as gear or armor rows.
+  const racialTraitRows: SheetData[] = [];
+  const extraAttackRows: SheetData[] = [];
+  const extraSkillRows: SheetData[] = [];
+  const lostCoreSkills = new Set<string>();
 
   if (input.ancestryIsCustom) {
-    for (const id of input.customTraitIds) {
-      const trait = CUSTOM_RACE_TRAITS_BY_ID.get(id);
+    for (const pick of input.customTraitPicks) {
+      const trait = CUSTOM_RACE_TRAITS_BY_ID.get(pick.traitId);
       if (!trait) continue;
-      const choice = input.customTraitChoices[id];
-      ancestryTraitNotes.push(`${trait.name}${choice ? ` (${choice})` : ''}`);
-      switch (trait.effect.kind) {
+      const tier = pickTier(trait, pick.tier ?? 0);
+      const effect = tier.effect;
+      const choice = pick.choice;
+      const label = `${trait.name}${trait.tiers ? ` — ${tier.label}` : ''}${choice ? ` (${choice})` : ''}`;
+      ancestryTraitNotes.push(label);
+
+      const row: SheetData = {
+        name: label, bonusSkill: '', bonusAmt: 0,
+        parryBonus: 0, toughnessBonus: 0, paceBonus: 0, notes: tier.desc,
+      };
+
+      switch (effect.kind) {
         case 'attributeStep':
           break; // already folded into `attrs` via finalAttributeDice above
         case 'pace':
-          pace += trait.effect.amount;
-          runningDieSteps += trait.effect.runningDieSteps ?? 0;
+          pace += effect.amount;
+          runningDieSteps += effect.runningDieSteps ?? 0;
+          if (effect.skill) { row.bonusSkill = effect.skill; row.bonusAmt = effect.skillAmount ?? 0; }
           break;
         case 'armor':
-          armorRows.push({ name: trait.name, armor: trait.effect.amount, parryBonus: 0, rangedArmor: 0, equipped: true, notes: 'Racial trait' });
+        case 'toughness':
+        case 'size':
+          // Natural armor, hardened tissue, and Size all land on Toughness.
+          row.toughnessBonus = effect.amount;
+          break;
+        case 'parry':
+          row.parryBonus = effect.amount;
           break;
         case 'vision':
-          darkvisionBonus = Math.max(darkvisionBonus, trait.effect.darkvision);
+          darkvisionBonus = Math.max(darkvisionBonus, effect.darkvision);
+          break;
+        case 'flight':
+          row.notes = `${tier.desc} Flying Pace ${effect.pace}.`;
+          break;
+        case 'naturalWeapon':
+          extraAttackRows.push({
+            name: trait.name, skill: 'Fighting', damage: naturalWeaponDamage(effect.damage, attrs.strength),
+            dtype: '', range: 5, ap: effect.ap ?? 0, parryBonus: 0, wielded: false, notes: 'Natural weapon',
+          });
+          break;
+        case 'skillStart':
+          if (choice) extraSkillRows.push({ name: choice, die: effect.die, notes: 'Racial' });
+          break;
+        case 'coreSkillLost':
+          if (choice) lostCoreSkills.add(choice);
+          break;
+        case 'skillBonus':
+          if (choice) { row.bonusSkill = choice; row.bonusAmt = effect.amount; }
+          break;
+        case 'envResist':
+          if (choice) row.notes = `+4 to resist ${choice}, and 4 less damage from it.`;
+          break;
+        case 'envWeak':
+          if (choice) row.notes = `−4 to resist ${choice}, and +4 damage from it.`;
+          break;
+        case 'immunity':
+        case 'construct':
+          if (choice) resistTypes.push(choice);
           break;
         case 'resist':
           if (choice) resistTypes.push(choice);
@@ -319,16 +569,13 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
         case 'vulnerable':
           if (choice) vulnerableTypes.push(choice);
           break;
-        case 'skillBonus':
-          inventoryRows.push({
-            name: `${trait.name} (racial)`, qty: 1, weight: 0, equipped: true,
-            bonusSkill: trait.effect.skill, bonusAmt: trait.effect.amount, notes: 'Racial trait',
-          });
-          break;
+        case 'grantEdge':
+        case 'grantPower':
         case 'none':
         default:
           break;
       }
+      racialTraitRows.push(row);
     }
   }
 
@@ -341,12 +588,23 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   if (resistTypes.length) sheet.resist = resistTypes.join(', ');
   if (vulnerableTypes.length) sheet.vulnerable = vulnerableTypes.join(', ');
 
-  // Skills: free baseline first, then every skill the player actually bought.
-  const skillRows: SheetData[] = FREE_SKILLS_SWADE.map((name) => ({ name, die: input.skillDice[name] ?? 'd4', notes: '' }));
+  sheet.racialTraits = racialTraitRows;
+
+  // Skills: free baseline first (minus any core skill the race gave up),
+  // then every skill the player bought, then racial starting skills.
+  const skillRows: SheetData[] = FREE_SKILLS_SWADE
+    .filter((name) => !lostCoreSkills.has(name))
+    .map((name) => ({ name, die: input.skillDice[name] ?? 'd4', notes: '' }));
   for (const [name, die] of Object.entries(input.skillDice)) {
-    if (FREE_SKILLS_SWADE.includes(name)) continue;
+    if (FREE_SKILLS_SWADE.includes(name) && !lostCoreSkills.has(name)) continue;
     if (!SKILLS_SWADE.includes(name)) continue;
     skillRows.push({ name, die, notes: '' });
+  }
+  for (const racial of extraSkillRows) {
+    const existing = skillRows.find((s) => String(s.name).toLowerCase() === String(racial.name).toLowerCase());
+    // A racial skill only helps if it beats what the character already has.
+    if (!existing) skillRows.push(racial);
+    else if (dieStepIndex(String(racial.die)) > dieStepIndex(String(existing.die))) existing.die = racial.die;
   }
   sheet.skills = skillRows;
 
@@ -380,6 +638,8 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   sheet.dollars = 500 + bonusFunds;
   sheet.armor = armorRows;
   sheet.inventory = inventoryRows;
+  // Bites, claws, and horns arrive as real attacks you can click.
+  if (extraAttackRows.length) sheet.attacks = extraAttackRows;
 
   const bioParts = [
     input.concept.trim() ? `Concept: ${input.concept.trim()}.` : '',

@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   ANCESTRIES_SWADE, ATTRIBUTES_SWADE, ATTRIBUTE_POINTS, CURATED_EDGES_SWADE, CURATED_HINDRANCES_SWADE,
-  CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_POINT_FLOOR, CUSTOM_RACE_TRAITS, FREE_SKILLS_SWADE,
-  MAX_MAJOR_HINDRANCES, MAX_MINOR_HINDRANCES, RESISTIBLE_DAMAGE_TYPES, SKILL_ATTR_SWADE, SKILLS_SWADE,
-  SKILL_POINTS, TRAIT_DICE,
+  CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_POINT_FLOOR, CUSTOM_RACE_TRAITS, CUSTOM_RACE_TRAITS_BY_ID,
+  FREE_SKILLS_SWADE, MAX_MAJOR_HINDRANCES, MAX_MINOR_HINDRANCES, RACE_ENVIRONMENTS,
+  RESISTIBLE_DAMAGE_TYPES, SKILL_ATTR_SWADE, SKILLS_SWADE, SKILL_POINTS, TRAIT_DICE,
   attributePointsSpent, buildSwadeCharacterSheet, dieStepIndex, finalAttributeDice, hindrancePoints,
-  raceTraitPointTotal, skillPointCost, stepDie, swadeParry, swadeToughness, termDesc, totalSkillPointsSpent,
-  type SwadeAttrId, type SwadeCreationInput,
+  maxTakesOf, pickTier, raceTraitPointTotal, skillPointCost, stepDie, swadeParry, swadeToughness,
+  termDesc, totalSkillPointsSpent,
+  type CustomRaceTrait, type RaceTraitPick, type SwadeAttrId, type SwadeCreationInput,
 } from 'shared';
 import { intents } from '../store/game';
 import { Term } from '../util/Term';
@@ -49,9 +50,9 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   const [ancestryName, setAncestryName] = useState('Human');
   const [isCustom, setIsCustom] = useState(false);
   const [customAncestryName, setCustomAncestryName] = useState('');
-  const [customTraitIds, setCustomTraitIds] = useState<string[]>([]);
-  const [customChoices, setCustomChoices] = useState<Record<string, string>>({});
-  const raceTotal = useMemo(() => raceTraitPointTotal(customTraitIds), [customTraitIds]);
+  const [customPicks, setCustomPicks] = useState<RaceTraitPick[]>([]);
+  const [traitFilter, setTraitFilter] = useState('');
+  const raceTotal = useMemo(() => raceTraitPointTotal(customPicks), [customPicks]);
 
   const [hindranceIds, setHindranceIds] = useState<string[]>([]);
   const minorCount = hindranceIds.filter((id) => CURATED_HINDRANCES_SWADE.find((h) => h.id === id)?.severity === 'Minor').length;
@@ -72,8 +73,8 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   const attrSpent = attributePointsSpent(attributeSteps);
 
   const finalAttrs = useMemo(
-    () => finalAttributeDice(attributeSteps, isCustom, customTraitIds, customChoices),
-    [attributeSteps, isCustom, customTraitIds, customChoices],
+    () => finalAttributeDice(attributeSteps, isCustom, customPicks),
+    [attributeSteps, isCustom, customPicks],
   );
 
   const [skillDice, setSkillDice] = useState<Record<string, string>>({});
@@ -83,11 +84,33 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
 
   const [edgeIds, setEdgeIds] = useState<string[]>([]);
 
-  function toggleCustomTrait(id: string) {
-    setCustomTraitIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  /** How many times a trait is currently taken. */
+  function takesOf(traitId: string): number {
+    return customPicks.filter((p) => p.traitId === traitId).length;
   }
-  function setTraitChoice(id: string, value: string) {
-    setCustomChoices((c) => ({ ...c, [id]: value }));
+  function addTrait(trait: CustomRaceTrait, tier = 0) {
+    if (takesOf(trait.id) >= maxTakesOf(trait)) return;
+    setCustomPicks((picks) => [...picks, { traitId: trait.id, tier, choice: '' }]);
+  }
+  function removeTrait(traitId: string) {
+    const idx = customPicks.map((p) => p.traitId).lastIndexOf(traitId);
+    if (idx < 0) return;
+    setCustomPicks((picks) => picks.filter((_, i) => i !== idx));
+  }
+  function updatePick(index: number, patch: Partial<RaceTraitPick>) {
+    setCustomPicks((picks) => picks.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+  }
+
+  /** Options a pick still needs the player to name, if any. */
+  function choicesFor(trait: CustomRaceTrait): { label: string; options: readonly string[] } | null {
+    if (trait.needsAttrChoice) return { label: 'Choose attribute…', options: ATTRIBUTES_SWADE.map((a) => a.id) };
+    if (trait.needsSkillChoice) return { label: 'Choose skill…', options: SKILLS_SWADE };
+    if (trait.needsDamageTypeChoice) return { label: 'Choose damage type…', options: RESISTIBLE_DAMAGE_TYPES };
+    if (trait.needsEnvironmentChoice) return { label: 'Choose effect…', options: RACE_ENVIRONMENTS };
+    if (trait.needsEdgeChoice) return { label: 'Choose Edge…', options: CURATED_EDGES_SWADE.map((e) => e.name) };
+    if (trait.needsHindranceChoice) return { label: 'Choose Hindrance…', options: CURATED_HINDRANCES_SWADE.map((h) => h.name) };
+    if (trait.id === 'immune-poison-disease') return { label: 'Immune to…', options: ['poison', 'disease'] };
+    return null;
   }
 
   function toggleHindrance(id: string) {
@@ -165,7 +188,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
       concept,
       ancestryName: isCustom ? (customAncestryName.trim() || 'Custom Ancestry') : ancestryName,
       ancestryIsCustom: isCustom,
-      customTraitIds, customTraitChoices: customChoices,
+      customTraitPicks: customPicks,
       attributeSteps, skillDice,
       hindranceIds, hindranceFundsSpent: hindFundsUnits,
       edgeIds,
@@ -243,33 +266,98 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
                 <p className="dim" style={{ fontSize: 11 }}>
                   An approximate, GM-adjustable model of the core rules' race-building point-buy — everything below lands on real, editable sheet fields.
                 </p>
-                <div className="swc-trait-grid">
-                  {CUSTOM_RACE_TRAITS.map((t) => {
-                    const checked = customTraitIds.includes(t.id);
-                    return (
-                      <label key={t.id} className={`swc-trait ${checked ? 'on' : ''} ${t.cost < 0 ? 'drawback' : ''}`}>
-                        <div className="swc-trait-head">
-                          <input type="checkbox" checked={checked} onChange={() => toggleCustomTrait(t.id)} />
-                          <span className="swc-trait-name"><T desc={t.desc}>{t.name}</T></span>
-                          <span className="swc-trait-cost">{t.cost >= 0 ? `+${t.cost}` : t.cost}</span>
+                {customPicks.length > 0 && (
+                  <div className="swc-picked-traits">
+                    {customPicks.map((pick, i) => {
+                      const trait = CUSTOM_RACE_TRAITS_BY_ID.get(pick.traitId);
+                      if (!trait) return null;
+                      const tier = pickTier(trait, pick.tier ?? 0);
+                      const choice = choicesFor(trait);
+                      return (
+                        <div key={`${pick.traitId}-${i}`} className="swc-picked-trait">
+                          <span className="swc-trait-name"><T desc={tier.desc}>{trait.name}</T></span>
+                          {trait.tiers && (
+                            <select
+                              value={pick.tier ?? 0}
+                              onChange={(e) => updatePick(i, { tier: Number(e.target.value) })}
+                            >
+                              {trait.tiers.map((tr, ti) => (
+                                <option key={ti} value={ti}>{tr.label} ({tr.cost >= 0 ? `+${tr.cost}` : tr.cost})</option>
+                              ))}
+                            </select>
+                          )}
+                          {choice && (
+                            <select value={pick.choice ?? ''} onChange={(e) => updatePick(i, { choice: e.target.value })}>
+                              <option value="">{choice.label}</option>
+                              {choice.options.map((o) => (
+                                <option key={o} value={o}>
+                                  {ATTRIBUTES_SWADE.find((a) => a.id === o)?.label ?? o}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <span className="swc-trait-cost">{tier.cost >= 0 ? `+${tier.cost}` : tier.cost}</span>
+                          <button className="link danger" title="Remove" onClick={() => removeTrait(pick.traitId)}>×</button>
                         </div>
-                        <span className="dim swc-trait-desc">{t.desc}</span>
-                        {checked && t.needsAttrChoice && (
-                          <select value={customChoices[t.id] ?? ''} onChange={(e) => setTraitChoice(t.id, e.target.value)}>
-                            <option value="">Choose attribute…</option>
-                            {ATTRIBUTES_SWADE.map((a) => <option key={a.id} value={attrIdOf(a.id)}>{a.label}</option>)}
-                          </select>
-                        )}
-                        {checked && t.needsDamageTypeChoice && (
-                          <select value={customChoices[t.id] ?? ''} onChange={(e) => setTraitChoice(t.id, e.target.value)}>
-                            <option value="">Choose damage type…</option>
-                            {RESISTIBLE_DAMAGE_TYPES.map((d) => <option key={d} value={d}>{d}</option>)}
-                          </select>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <input
+                  placeholder="Filter racial abilities…" value={traitFilter}
+                  onChange={(e) => setTraitFilter(e.target.value)} style={{ margin: '8px 0' }}
+                />
+                {(['positive', 'negative'] as const).map((cat) => {
+                  const list = CUSTOM_RACE_TRAITS
+                    .filter((t) => (t.category ?? 'positive') === cat)
+                    .filter((t) => !traitFilter.trim()
+                      || t.name.toLowerCase().includes(traitFilter.trim().toLowerCase())
+                      || t.desc.toLowerCase().includes(traitFilter.trim().toLowerCase()));
+                  if (list.length === 0) return null;
+                  return (
+                    <div key={cat}>
+                      <h5>{cat === 'positive' ? 'Positive Racial Abilities' : 'Negative Racial Abilities'}</h5>
+                      <div className="swc-trait-grid">
+                        {list.map((t) => {
+                          const takes = takesOf(t.id);
+                          const max = maxTakesOf(t);
+                          const atMax = takes >= max;
+                          const repeatable = max > 1;
+                          return (
+                            <div key={t.id} className={`swc-trait ${takes > 0 ? 'on' : ''} ${(t.cost < 0) ? 'drawback' : ''}`}>
+                              <div className="swc-trait-head">
+                                <span className="swc-trait-name"><T desc={t.desc}>{t.name}</T></span>
+                                <span className="swc-trait-cost">
+                                  {t.tiers
+                                    ? t.tiers.map((tr) => (tr.cost >= 0 ? `+${tr.cost}` : tr.cost)).join('/')
+                                    : t.cost >= 0 ? `+${t.cost}` : t.cost}
+                                </span>
+                              </div>
+                              <span className="dim swc-trait-desc">{t.desc}</span>
+                              <div className="swc-trait-actions">
+                                {repeatable && takes > 0 && (
+                                  <button className="icon-btn" onClick={() => removeTrait(t.id)}>−</button>
+                                )}
+                                {repeatable && takes > 0 && <span className="swc-trait-takes">×{takes}</span>}
+                                <button
+                                  className="btn btn-sm" disabled={atMax}
+                                  title={atMax ? `Already taken the maximum (${max})` : 'Add this ability'}
+                                  onClick={() => addTrait(t)}
+                                >
+                                  {takes > 0 && !repeatable ? 'taken' : '+ add'}
+                                </button>
+                                {!repeatable && takes > 0 && (
+                                  <button className="link danger" onClick={() => removeTrait(t.id)}>remove</button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </>
             )}
             {!isCustom && ancestryName === 'Human' && (

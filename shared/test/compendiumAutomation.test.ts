@@ -125,7 +125,7 @@ describe('SWADE Edges and Hindrances are mechanically live', () => {
 describe('Edges taken at character creation are mechanically live', () => {
   const build = (edgeIds: string[], hindranceIds: string[] = []) => buildSwadeCharacterSheet({
     concept: '', ancestryName: 'Human', ancestryIsCustom: false,
-    customTraitIds: [], customTraitChoices: {},
+    customTraitPicks: [],
     attributeSteps: { agility: 0, smarts: 0, spirit: 0, strength: 0, vigor: 0 },
     skillDice: { Notice: 'd6' }, hindranceIds, hindranceFundsSpent: 0, edgeIds,
   });

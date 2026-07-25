@@ -16,6 +16,25 @@ import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
 import { estimateDiceAnimMs } from '../table/dice3d';
 
+/**
+ * Roll chat entries waiting on their dice to finish. Keyed by the dice-anim
+ * id so the overlay can flush exactly its own roll the moment the last die
+ * lands, rather than everyone guessing from a timer.
+ */
+const pendingRollChat = new Map<number, () => void>();
+
+function flushRollChat(id: number): void {
+  const append = pendingRollChat.get(id);
+  if (!append) return;
+  pendingRollChat.delete(id);
+  append();
+}
+
+/** Called by the dice overlay once a roll's animation has fully played. */
+export function diceAnimationFinished(id: number): void {
+  flushRollChat(id);
+}
+
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain';
 export type DockTab = 'chat' | 'initiative' | 'world';
 
@@ -771,13 +790,17 @@ export function wireSocket(): void {
       // The chat entry spoils the total, so it waits for the dice — which
       // matters most for an exploding (acing) roll, where the bonus dice are
       // thrown one after another and the result isn't known until the last
-      // one lands. Queued rather than dropped, so ordering still holds.
+      // one lands. The overlay reports when it has actually finished
+      // (diceSettled); the estimate is only a fallback for when no overlay
+      // is on screen to report back. Either way the entry is queued, never
+      // dropped, so ordering holds.
+      pendingRollChat.set(id, appendToLog);
       const animMs = estimateDiceAnimMs(shown);
-      setTimeout(appendToLog, animMs);
+      setTimeout(() => flushRollChat(id), animMs + 500);
       setTimeout(() => {
         const cur = useGameStore.getState();
         if (cur.diceAnim?.id === id) useGameStore.setState({ diceAnim: null });
-      }, animMs + 3000);
+      }, animMs + 3500);
     } else {
       appendToLog();
     }

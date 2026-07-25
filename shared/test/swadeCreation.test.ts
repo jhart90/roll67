@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSwadeCharacterSheet, raceTraitPointTotal, skillPointCost, totalSkillPointsSpent,
-  attributePointsSpent, hindrancePoints, CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_TRAITS_BY_ID,
+  attributePointsSpent, hindrancePoints, maxTakesOf, CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_TRAITS_BY_ID,
   type SwadeCreationInput,
 } from '../src/systems/swadeCreation.js';
-import { swade, swadePace, swadeParry, swadeToughness } from '../src/systems/swade.js';
+import { gearTraitBonus, swade, swadePace, swadeParry, swadeToughness } from '../src/systems/swade.js';
 
 function baseInput(overrides: Partial<SwadeCreationInput> = {}): SwadeCreationInput {
   return {
     concept: 'Drifting gunslinger',
     ancestryName: 'Human',
     ancestryIsCustom: false,
-    customTraitIds: [],
-    customTraitChoices: {},
+    customTraitPicks: [],
     attributeSteps: { agility: 0, smarts: 0, spirit: 0, strength: 0, vigor: 0 },
     skillDice: {},
     hindranceIds: [],
@@ -28,9 +27,45 @@ describe('SWADE custom race point-buy', () => {
   });
 
   it('drawbacks (negative-cost traits) refund points for extra benefits', () => {
-    const total = raceTraitPointTotal(['attribute-increase', 'armor-plus2', 'reduced-pace', 'frail']);
-    expect(total).toBe(2 + 2 - 1 - 1); // 2 net — right at the cap
+    // Attribute Increase (2) + Armor (1) + Toughness (1) − Reduced Pace (1)
+    // − Frail (1) = 2 net, right at the cap.
+    const total = raceTraitPointTotal([
+      { traitId: 'attribute-increase', choice: 'agility' },
+      { traitId: 'armor' },
+      { traitId: 'toughness' },
+      { traitId: 'reduced-pace' },
+      { traitId: 'frail' },
+    ]);
+    expect(total).toBe(2 + 1 + 1 - 1 - 1);
     expect(total).toBeLessThanOrEqual(CUSTOM_RACE_POINT_CAP);
+  });
+
+  it('tiered abilities price by the tier chosen', () => {
+    expect(raceTraitPointTotal([{ traitId: 'flight', tier: 0 }])).toBe(2);
+    expect(raceTraitPointTotal([{ traitId: 'flight', tier: 1 }])).toBe(4);
+    expect(raceTraitPointTotal([{ traitId: 'flight', tier: 2 }])).toBe(6);
+    expect(raceTraitPointTotal([{ traitId: 'claws', tier: 2 }])).toBe(4);
+    expect(raceTraitPointTotal([{ traitId: 'hindrance', tier: 1 }])).toBe(-2);
+  });
+
+  it('covers the whole Making Races table, both halves', () => {
+    const all = [...CUSTOM_RACE_TRAITS_BY_ID.values()];
+    const positive = all.filter((t) => t.category === 'positive');
+    const negative = all.filter((t) => t.category === 'negative');
+    expect(positive.length).toBeGreaterThanOrEqual(28);
+    expect(negative.length).toBeGreaterThanOrEqual(13);
+    for (const name of ['Adaptable', 'Additional Action', 'Construct', 'Flight', 'Regeneration', 'Wall Walker', 'Super Powers'.replace('Super Powers', 'Power')]) {
+      expect(all.some((t) => t.name === name), name).toBe(true);
+    }
+    for (const name of ['Big', 'Cannot Speak', 'Dependency', 'Racial Enemy', 'Reduced Core Skills', 'Poor Parry']) {
+      expect(all.some((t) => t.name === name), name).toBe(true);
+    }
+  });
+
+  it('repeatable abilities declare their cap; one-shot ones default to a single take', () => {
+    expect(maxTakesOf(CUSTOM_RACE_TRAITS_BY_ID.get('armor')!)).toBe(3);
+    expect(maxTakesOf(CUSTOM_RACE_TRAITS_BY_ID.get('attribute-increase')!)).toBe(Number.POSITIVE_INFINITY);
+    expect(maxTakesOf(CUSTOM_RACE_TRAITS_BY_ID.get('hardy')!)).toBe(1);
   });
 
   it('every curated trait carries a real, non-empty description', () => {
@@ -107,43 +142,101 @@ describe('buildSwadeCharacterSheet — assembly', () => {
   it('a custom ancestry with Attribute Increase actually raises the chosen attribute', () => {
     const sheet = buildSwadeCharacterSheet(baseInput({
       ancestryName: 'Skyfolk', ancestryIsCustom: true,
-      customTraitIds: ['attribute-increase', 'reduced-pace'],
-      customTraitChoices: { 'attribute-increase': 'agility' },
+      customTraitPicks: [
+        { traitId: 'attribute-increase', choice: 'agility' },
+        { traitId: 'reduced-pace' },
+      ],
     }));
     expect(sheet.ancestry).toBe('Skyfolk');
     expect(sheet.agility).toBe('d6'); // d4 + 1 step
-    expect(sheet.pace).toBe(5); // 6 - 1 from Reduced Pace
+    expect(swadePace(sheet)).toBe(5); // 6 - 1 from Reduced Pace
     expect(sheet.runningDie).toBe('d4'); // d6 - 1 step
-    expect(String(sheet.notes)).toContain('Attribute Increase');
   });
 
-  it('Natural Armor and Rugged Constitution actually raise derived Toughness', () => {
-    const withoutTraits = buildSwadeCharacterSheet(baseInput());
-    const withTraits = buildSwadeCharacterSheet(baseInput({
+  it('racial abilities land in their own Ancestry Traits list, never as gear or armor', () => {
+    const sheet = buildSwadeCharacterSheet(baseInput({
       ancestryName: 'Ironhide', ancestryIsCustom: true,
-      customTraitIds: ['armor-plus2', 'rugged'],
+      customTraitPicks: [{ traitId: 'armor' }, { traitId: 'skill-bonus', choice: 'Notice' }],
     }));
-    expect(swadeToughness(withTraits)).toBe(swadeToughness(withoutTraits) + 3);
+    const traits = sheet.racialTraits as Array<{ name: string; toughnessBonus: number; bonusSkill: string }>;
+    expect(traits).toHaveLength(2);
+    expect(traits.some((t) => t.name.startsWith('Armor') && t.toughnessBonus === 2)).toBe(true);
+    expect(traits.some((t) => t.bonusSkill === 'Notice')).toBe(true);
+    // Nothing smuggled into the gear or armor lists.
+    expect(sheet.inventory).toEqual([]);
+    expect(sheet.armor).toEqual([]);
   });
 
-  it('Low Light Vision / Infravision set darkvision; Resistant/Vulnerable set damage-type lists', () => {
+  it('Armor and Toughness abilities raise derived Toughness through the trait rows', () => {
+    const plain = buildSwadeCharacterSheet(baseInput());
+    const tough = buildSwadeCharacterSheet(baseInput({
+      ancestryName: 'Ironhide', ancestryIsCustom: true,
+      customTraitPicks: [{ traitId: 'armor' }, { traitId: 'toughness' }],
+    }));
+    expect(swadeToughness(tough)).toBe(swadeToughness(plain) + 3); // +2 armor, +1 toughness
+  });
+
+  it('Parry and Poor Parry move derived Parry; Size shifts Toughness both ways', () => {
+    const plain = buildSwadeCharacterSheet(baseInput());
+    const nimble = buildSwadeCharacterSheet(baseInput({
+      ancestryIsCustom: true, ancestryName: 'Tailed', customTraitPicks: [{ traitId: 'parry' }],
+    }));
+    expect(swadeParry(nimble)).toBe(swadeParry(plain) + 1);
+    const clumsy = buildSwadeCharacterSheet(baseInput({
+      ancestryIsCustom: true, ancestryName: 'Lumbering', customTraitPicks: [{ traitId: 'poor-parry' }],
+    }));
+    expect(swadeParry(clumsy)).toBe(swadeParry(plain) - 1);
+    const small = buildSwadeCharacterSheet(baseInput({
+      ancestryIsCustom: true, ancestryName: 'Wee', customTraitPicks: [{ traitId: 'size-minus' }],
+    }));
+    expect(swadeToughness(small)).toBe(swadeToughness(plain) - 1);
+  });
+
+  it('Infravision sets darkvision, and immunities/resistances land on the damage lists', () => {
     const sheet = buildSwadeCharacterSheet(baseInput({
       ancestryName: 'Deepwalker', ancestryIsCustom: true,
-      customTraitIds: ['infravision', 'resistant', 'vulnerable-damage'],
-      customTraitChoices: { resistant: 'cold', 'vulnerable-damage': 'fire' },
+      customTraitPicks: [
+        { traitId: 'infravision' },
+        { traitId: 'immune-poison-disease', choice: 'poison' },
+      ],
     }));
     expect(sheet.darkvision).toBe(24);
-    expect(sheet.resist).toBe('cold');
-    expect(sheet.vulnerable).toBe('fire');
+    expect(String(sheet.resist)).toContain('poison');
   });
 
-  it('Keen Senses grants a real +2 Notice via the equipped-gear bonus channel', () => {
+  it('Skill Bonus grants its +2 through the trait row, and Skill grants a starting die', () => {
     const sheet = buildSwadeCharacterSheet(baseInput({
       ancestryName: 'Farsight', ancestryIsCustom: true,
-      customTraitIds: ['keen-senses'],
+      customTraitPicks: [
+        { traitId: 'skill-bonus', choice: 'Notice' },
+        { traitId: 'skill', tier: 1, choice: 'Survival' },
+      ],
     }));
-    const inv = sheet.inventory as Array<{ bonusSkill: string; bonusAmt: number; equipped: boolean }>;
-    expect(inv.some((i) => i.bonusSkill === 'Notice' && i.bonusAmt === 2 && i.equipped)).toBe(true);
+    expect(gearTraitBonus(sheet, 'Notice')).toBe(2);
+    const skills = sheet.skills as Array<{ name: string; die: string }>;
+    expect(skills.find((s) => s.name === 'Survival')?.die).toBe('d6');
+  });
+
+  it('Bite and Claws arrive as real, rollable attacks', () => {
+    const sheet = buildSwadeCharacterSheet(baseInput({
+      ancestryName: 'Saurian', ancestryIsCustom: true,
+      attributeSteps: { agility: 0, smarts: 0, spirit: 0, strength: 2, vigor: 0 },
+      customTraitPicks: [{ traitId: 'claws', tier: 2 }],
+    }));
+    const attacks = sheet.attacks as Array<{ name: string; damage: string; ap: number }>;
+    const claws = attacks.find((a) => a.name === 'Claws')!;
+    expect(claws.damage).toBe('1d8!+1d6!'); // Strength d8 + claw d6, both acing
+    expect(claws.ap).toBe(2);
+  });
+
+  it('Reduced Core Skills drops a free skill from the starting five', () => {
+    const sheet = buildSwadeCharacterSheet(baseInput({
+      ancestryIsCustom: true, ancestryName: 'Feral',
+      customTraitPicks: [{ traitId: 'reduced-core-skills', choice: 'Persuasion' }],
+    }));
+    const skills = sheet.skills as Array<{ name: string }>;
+    expect(skills.some((s) => s.name === 'Persuasion')).toBe(false);
+    expect(skills.some((s) => s.name === 'Notice')).toBe(true);
   });
 
   it('Bad Luck hindrance actually removes a starting Benny', () => {

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DieRoll } from 'shared';
-import { useGameStore } from '../store/game';
+import { diceAnimationFinished, useGameStore } from '../store/game';
 import { buildSims, drawFrame, simsSettleTime } from './dice3d';
 
-function DiceCanvas({ dice, byName, total, expression, color, textColor }: {
-  dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null;
+function DiceCanvas({ animId, dice, byName, total, expression, color, textColor }: {
+  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [settled, setSettled] = useState(false);
@@ -31,8 +31,17 @@ function DiceCanvas({ dice, byName, total, expression, color, textColor }: {
     const tick = (now: number) => {
       const t = now - t0;
       const moving = drawFrame(ctx, sims, t, w, h);
-      if (t >= settleAt && !done) { done = true; setSettled(true); }
-      if (moving) raf = requestAnimationFrame(tick);
+      // `settleAt` is the LAST die's landing time, which for an exploding
+      // chain is well after the earlier dice have stopped — so the loop is
+      // driven purely by the clock and never bails out during the pause
+      // between an ace flashing and its bonus die being thrown.
+      if (t >= settleAt && !done) {
+        done = true;
+        setSettled(true);
+        // The result is only safe to print now that every die has landed.
+        diceAnimationFinished(animId);
+      }
+      if (moving || t < settleAt) raf = requestAnimationFrame(tick);
       else drawFrame(ctx, sims, settleAt + 401, w, h); // final resting frame
     };
     raf = requestAnimationFrame(tick);
@@ -62,6 +71,7 @@ export function DiceOverlay() {
   return (
     <DiceCanvas
       key={anim.id}
+      animId={anim.id}
       dice={anim.dice}
       byName={anim.byName}
       total={anim.total}

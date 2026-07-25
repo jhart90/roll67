@@ -1570,6 +1570,16 @@ button.link:hover { text-decoration: underline; }
 .swc-trait-name { flex: 1; font-weight: 600; }
 .swc-trait-cost { font-weight: 700; }
 .swc-trait-desc { font-size: 11px; }
+.swc-trait-actions { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.swc-trait-takes { font-weight: 700; color: var(--accent-2); font-size: 12px; }
+.swc-picked-traits { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.swc-picked-trait {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 5px 8px; border-radius: 6px; font-size: 12px;
+  background: var(--panel-2); border: 1px solid var(--accent);
+}
+.swc-picked-trait select { width: auto; margin: 0; font-size: 11px; padding: 2px 4px; }
+.swc-picked-trait .swc-trait-name { flex: 1; min-width: 110px; }
 .swc-hindrance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 8px 0; }
 .swc-hindrance-cols h5 { margin: 4px 0; font-size: 12px; }
 .swc-spend-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 0; }

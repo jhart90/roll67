@@ -222,7 +222,17 @@ export interface Token {
 }
 
 /** Token as seen by a player (same shape; gm-layer tokens never sent). */
-export type TokenView = Token;
+/** The public face of a character, shown when someone selects a token they
+ *  do not control. Computed server-side: players never receive other
+ *  players' sheets, so it cannot be derived on the client. */
+export interface TokenNameplate {
+  name: string;
+  portraitUrl: string | null;
+  color: string;
+  lines: string[];
+}
+
+export type TokenView = Token & { nameplate?: TokenNameplate | null };
 
 // ---------- Characters & sheets ----------
 

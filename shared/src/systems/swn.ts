@@ -398,6 +398,8 @@ const psionicsTab: SheetTab = {
       fields: [
         { id: 'tokenImage', label: 'Token image', type: 'image', width: 'half' },
         { id: 'detailImage', label: 'Detail / portrait', type: 'image', width: 'half' },
+        { id: 'quip', label: 'Nameplate quip', type: 'text', width: 'half' },
+        { id: 'nameplateColor', label: 'Nameplate colour', type: 'text', width: 'half' },
       ],
     },
     {

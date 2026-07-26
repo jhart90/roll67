@@ -8,7 +8,7 @@ import {
   type LightPolygonResult,
   packHex, pixelToHex, sightSegments, systemFor,
   S2C, type Door, type FovInput, type Hex, type Light, type MapObject, type MapStatePayload, type Point, type Segment, type Token,
-  type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
+  nameplateFor, type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
 import { campaigns, characters, doorMemory, fog, maps, tokens } from '../db/repos.js';
 import { campaignSockets, sdata, userRoom } from './hub.js';
@@ -173,11 +173,18 @@ export function flushAllVisionMemory(): void {
 
 /** Tokens a player may see: token-layer tokens on visible hexes, plus their own. */
 function visibleTokens(userId: string, mapTokens: Token[], visible: Set<number>): TokenView[] {
-  return mapTokens.filter((t) => {
-    if (t.layer === 'gm') return false;
-    if (t.characterId && charById(t.characterId)?.ownerUserId === userId) return true;
-    return visible.has(packHex({ q: t.q, r: t.r }));
-  });
+  return mapTokens
+    .filter((t) => {
+      if (t.layer === 'gm') return false;
+      if (t.characterId && charById(t.characterId)?.ownerUserId === userId) return true;
+      return visible.has(packHex({ q: t.q, r: t.r }));
+    })
+    // The nameplate rides along because a player receives only their OWN
+    // sheets — they could never build one for someone else's token.
+    .map((t) => {
+      const ch = t.characterId ? charById(t.characterId) : undefined;
+      return ch ? { ...t, nameplate: nameplateFor(ch, t.color, t.artUrl) } : t;
+    });
 }
 
 /**

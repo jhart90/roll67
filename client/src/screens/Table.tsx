@@ -18,6 +18,7 @@ import { MapObjectInspector } from '../table/MapObjectInspector';
 import { DRAW_COLORS } from '../table/DrawingLayer';
 import { DiceOverlay } from '../table/DiceOverlay';
 import { InitiativeFloat } from '../table/InitiativeFloat';
+import { TokenNameplateCard } from '../table/TokenNameplateCard';
 import { CardDrawOverlay } from '../table/CardDrawOverlay';
 import { InitiativeRollPrompt } from '../table/InitiativeRollPrompt';
 import { PresenceBar } from '../table/PresenceBar';
@@ -162,6 +163,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         </nav>
 
         <MapStage />
+        <TokenNameplateCard />
 
         <aside className="dock">
           <div className="dock-tabs">

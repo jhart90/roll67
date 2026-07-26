@@ -1983,3 +1983,17 @@ th > .term { border-bottom-style: dotted; }
 
 /* The account name trails the character it acted as, so the character reads first. */
 .chat-from-player { font-weight: 400; opacity: 0.75; font-size: 0.9em; }
+
+/* ---- Token nameplate: the public face of someone else's token ---- */
+.nameplate-card {
+  position: fixed; z-index: 60; display: flex; align-items: stretch;
+  width: 300px; border-radius: 10px; overflow: hidden; cursor: grab;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(0, 0, 0, 0.35); user-select: none;
+}
+.nameplate-card:active { cursor: grabbing; }
+/* Portrait is full-bleed down the left edge. */
+.nameplate-portrait { width: 34%; object-fit: cover; display: block; align-self: stretch; }
+.nameplate-body { flex: 1; display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; min-width: 0; }
+.nameplate-name { font-size: 15px; line-height: 1.2; }
+.nameplate-line { font-size: 11px; opacity: 0.85; line-height: 1.3; }

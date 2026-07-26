@@ -13,7 +13,7 @@ const SLOT_COUNT = 16; // 4x4
  * rather than the jukebox's playback state, so firing one never interrupts the
  * music that is already playing.
  */
-export function Soundboard({ onClose }: { onClose: () => void }) {
+export function Soundboard() {
   const you = useGameStore((s) => s.you);
   const campaign = useGameStore((s) => s.campaign);
   const slots = useGameStore((s) => s.soundboardSlots);
@@ -28,10 +28,6 @@ export function Soundboard({ onClose }: { onClose: () => void }) {
   if (!isDm) {
     return (
       <div className="dock-panel">
-        <div className="dock-header">
-          <h3>Soundboard</h3>
-          <button className="link" onClick={onClose}>close</button>
-        </div>
         <p className="dim" style={{ fontSize: 12 }}>The soundboard is a DM tool.</p>
       </div>
     );
@@ -65,10 +61,6 @@ export function Soundboard({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="dock-panel soundboard">
-      <div className="dock-header">
-        <h3>Soundboard</h3>
-        <button className="link" onClick={onClose}>close</button>
-      </div>
 
       <div className="soundboard-grid">
         {Array.from({ length: SLOT_COUNT }, (_, i) => {

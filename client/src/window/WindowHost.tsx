@@ -31,7 +31,7 @@ export function WindowHost() {
         let content: ReactNode = null;
         switch (w.kind) {
           case 'soundboard':
-            content = <Soundboard onClose={onClose} />;
+            content = <Soundboard />;
             break;
           case 'characterSheet':
             content = <CharacterSheetWindow characterId={w.key} onClose={onClose} />;

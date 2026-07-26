@@ -1806,7 +1806,7 @@ th > .term { border-bottom-style: dotted; }
 
 /* DM soundboard: a fixed 4x4 pad grid. Pads stay square via aspect-ratio so
    the grid keeps its shape as the window is resized. */
-.soundboard { padding: 12px; min-width: 300px; }
+.soundboard { padding: 12px; min-width: 300px; background: var(--panel); }
 .soundboard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .soundboard-pad {
   aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;

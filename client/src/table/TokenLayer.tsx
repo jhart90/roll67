@@ -5,6 +5,10 @@ import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixe
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 import { worldDrag } from '../store/worldDrag';
+import { playerColorFor } from '../util/playerColor';
+
+/** How much larger a token with custom art renders than a plain colour disc. */
+const ART_SCALE = 1.2;
 
 const DRAG_THROTTLE_MS = 100;
 
@@ -43,6 +47,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const map = useGameStore((s) => s.map)!;
   const you = useGameStore((s) => s.you);
   const character = useGameStore((s) => s.characters.find((c) => c.id === token.characterId));
+  const members = useGameStore((s) => s.members);
   const selected = useGameStore((s) => s.selectedTokenIds.includes(token.id));
   const tool = useGameStore((s) => s.tool);
   const targetEffect = useGameStore((s) => s.targeting?.action.effect ?? null);
@@ -56,8 +61,20 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const home = hexToPixel({ q: token.q, r: token.r }, map.grid);
   const pos = dragPos ?? home;
   const radius = map.grid.hexSize * 0.72 * token.size;
+  // Token art reads better with a little more presence than the flat colour
+  // discs, so it renders 20% larger than the hex-derived radius. Everything
+  // that isn't art keeps the original size.
+  const drawR = token.artUrl ? radius * ART_SCALE : radius;
   const shape = token.shape ?? 'circle';
   const ringColor = targetEffect === 'heal' ? '#7ed28a' : '#d26c6c';
+  // Art tokens are ringed in their controller's colour instead of the black
+  // outline the colour discs use — the disc's own fill already says whose it
+  // is, but art covers that fill completely. A token nobody controls (a DM's
+  // NPC) falls back to its own colour rather than going back to black.
+  const owner = character?.ownerUserId
+    ? members.find((m) => m.userId === character.ownerUserId)
+    : undefined;
+  const outlineColor = owner ? playerColorFor(owner) : token.color;
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
     if (targetState !== 'off') {
@@ -207,23 +224,27 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </>
       )}
       {targetState === 'valid' && (
-        <circle className="target-ring" r={radius + 6} fill="none" stroke={ringColor} strokeWidth={3} />
+        <circle className="target-ring" r={drawR + 6} fill="none" stroke={ringColor} strokeWidth={3} />
       )}
       {selected && (
-        <circle r={radius + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" />
+        <circle r={drawR + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" />
       )}
-      {shapeNode(shape, radius, { fill: token.color, stroke: '#10131a', strokeWidth: 2 })}
+      {shapeNode(shape, drawR, {
+        fill: token.color,
+        stroke: token.artUrl ? outlineColor : '#10131a',
+        strokeWidth: token.artUrl ? 3 : 2,
+      })}
       {token.artUrl ? (
         <>
           <clipPath id={`clip-${token.id}`}>
-            {shapeNode(shape, radius - 2, {})}
+            {shapeNode(shape, drawR - 2, {})}
           </clipPath>
           <image
             href={token.artUrl}
-            x={-radius + 2}
-            y={-radius + 2}
-            width={(radius - 2) * 2}
-            height={(radius - 2) * 2}
+            x={-drawR + 2}
+            y={-drawR + 2}
+            width={(drawR - 2) * 2}
+            height={(drawR - 2) * 2}
             clipPath={`url(#clip-${token.id})`}
             preserveAspectRatio="xMidYMid slice"
           />
@@ -241,7 +262,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </text>
       )}
       {hpFrac !== null && (
-        <g transform={`translate(${-barW / 2}, ${radius + 4})`}>
+        <g transform={`translate(${-barW / 2}, ${drawR + 4})`}>
           <rect width={barW} height={5} rx={2} fill="#10131a" />
           <rect
             width={barW * hpFrac}
@@ -253,7 +274,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       )}
       {conditionIcons.length > 0 && (
         <text
-          y={-radius - 5}
+          y={-drawR - 5}
           textAnchor="middle"
           fontSize={13}
           style={{ userSelect: 'none', pointerEvents: 'none' }}
@@ -262,7 +283,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </text>
       )}
       <text
-        y={radius + (hpFrac !== null ? 20 : 14)}
+        y={drawR + (hpFrac !== null ? 20 : 14)}
         textAnchor="middle"
         fontSize={12}
         fill="#e6e8ee"
@@ -281,7 +302,8 @@ const DragGhost = memo(function DragGhost({ tokenId, x, y }: { tokenId: string; 
   const map = useGameStore((s) => s.map)!;
   const token = useGameStore((s) => s.tokens[tokenId]);
   if (!token) return null;
-  const radius = map.grid.hexSize * 0.72 * token.size;
+  // Matches the piece it stands in for, art scaling included.
+  const radius = map.grid.hexSize * 0.72 * token.size * (token.artUrl ? ART_SCALE : 1);
   return (
     <circle cx={x} cy={y} r={radius} fill={token.color} opacity={0.45} pointerEvents="none" />
   );

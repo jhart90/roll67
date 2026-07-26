@@ -29,7 +29,7 @@ import { WindowHost } from '../window/WindowHost';
 import { SwadeCharacterCreator } from '../panels/SwadeCharacterCreator';
 import { SwnCharacterCreator } from '../panels/SwnCharacterCreator';
 import { Dnd5eCharacterCreator } from '../panels/Dnd5eCharacterCreator';
-import { TurnBanner } from '../panels/TurnBanner';
+import { TurnBanner, useTurnTint } from '../panels/TurnBanner';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -73,6 +73,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const [showAudio, setShowAudio] = useState(false);
   const dockTab = useGameStore((s) => s.dockTab);
   const setDockTab = useGameStore((s) => s.setDockTab);
+  const turnTint = useTurnTint();
   const showCharacterCreator = useGameStore((s) => s.showCharacterCreator);
   const characterCreatorPrompted = useGameStore((s) => s.characterCreatorPrompted);
 
@@ -110,7 +111,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
   return (
     <div className="table-shell">
-      <header className="topbar">
+      <header className={`topbar ${turnTint ? 'in-combat' : ''}`} style={turnTint ? { background: turnTint.bg, color: turnTint.fg } : undefined}>
         <button className="link" onClick={onExit}>← campaigns</button>
         <span className="topbar-title">{campaign.name}</span>
         {map && <span className="dim">· {map.name}</span>}

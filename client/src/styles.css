@@ -1965,13 +1965,21 @@ th > .term { border-bottom-style: dotted; }
 }
 .init-list li { flex-wrap: wrap; }
 
-/* Whose turn it is, in the top bar over the map. */
+/* Whose turn it is, centred in the top bar. Absolutely positioned so it sits
+   dead centre of the bar regardless of how many controls flank it. */
+.topbar { position: relative; }
 .turn-banner {
-  display: flex; flex-direction: column; align-items: center; line-height: 1.15;
-  margin: 0 auto; padding: 2px 12px; text-align: center;
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  line-height: 1.15; text-align: center; pointer-events: none;
 }
 .turn-banner strong { font-size: 14px; }
-.turn-banner .dim { font-size: 10px; }
+.turn-banner-sub { font-size: 10px; opacity: 0.8; }
+/* While someone is up the whole bar wears their colour, so the flanking
+   controls have to inherit the readable text colour rather than keep theirs. */
+.topbar.in-combat button, .topbar.in-combat .link,
+.topbar.in-combat select, .topbar.in-combat .dim { color: inherit; }
+.topbar.in-combat .link { text-decoration: underline; }
 
 /* The account name trails the character it acted as, so the character reads first. */
 .chat-from-player { font-weight: 400; opacity: 0.75; font-size: 0.9em; }

@@ -115,6 +115,26 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
   );
 }
 
+/**
+ * Who a message came from. Anything a character did is attributed to the
+ * character first — "Kira (jackh)" — because at the table people track the
+ * character, not the account. Tinted with that player's colour, the same one
+ * used for their presence dot and their tokens' rings.
+ */
+function ChatFrom({ msg, playerHidden }: { msg: ChatMessage; playerHidden: boolean }) {
+  const members = useGameStore((s) => s.members);
+  if (playerHidden) return <span className="chat-from">DM</span>;
+  const member = msg.fromUserId ? members.find((m) => m.userId === msg.fromUserId) : undefined;
+  const color = member ? playerColorFor(member) : null;
+  return (
+    <span className="chat-from" style={color ? { color } : undefined}>
+      {msg.fromCharacter
+        ? <>{msg.fromCharacter} <span className="chat-from-player">({msg.fromName})</span></>
+        : msg.fromName}
+    </span>
+  );
+}
+
 function Message({ msg, isDm, hl, onMenu }: {
   msg: ChatMessage; isDm: boolean; hl: NameHighlights; onMenu: (id: number, x: number, y: number) => void;
 }) {
@@ -128,7 +148,7 @@ function Message({ msg, isDm, hl, onMenu }: {
       onContextMenu={isDm ? (e) => { e.preventDefault(); onMenu(msg.id, e.clientX, e.clientY); } : undefined}
     >
       <div className="chat-meta">
-        <span className="chat-from">{playerHidden ? 'DM' : msg.fromName}</span>
+        <ChatFrom msg={msg} playerHidden={!!playerHidden} />
         {msg.hidden && isDm && <span className="chat-whisper-tag">hidden</span>}
         {msg.kind === 'whisper' && !playerHidden && (
           <span className="chat-whisper-tag">

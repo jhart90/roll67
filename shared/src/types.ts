@@ -279,6 +279,9 @@ export interface ChatMessage {
   kind: ChatKind;
   fromUserId: string | null; // null = system
   fromName: string;
+  /** Set when the message came from a character rather than the account:
+   *  chat shows "Character (Player)". Null for plain talk and system lines. */
+  fromCharacter?: string | null;
   text: string;
   roll: RollBreakdown | null;
   /** For whispers: usernames included. */

@@ -69,6 +69,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const msg = chat.add(d.campaignId, {
       userId: d.userId,
       fromName: d.username,
+      fromCharacter: character.name,
       kind: 'roll',
       text: label,
       roll: breakdown,
@@ -136,7 +137,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const breakdown = roll(rollable.expr);
     const atLabel = level > minLevel ? ` (cast at level ${level})` : '';
     const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, kind: 'roll',
+      userId: d.userId, fromName: d.username, fromCharacter: character.name, kind: 'roll',
       text: `${character.name}: ${rollable.label}${atLabel}${concNote}`, roll: breakdown, recipients: null,
     }, undo);
     deliver(io, d.campaignId, msg);
@@ -190,7 +191,7 @@ function runSheetRoll(
   if (!rollable) throw new Error('That roll is no longer on the sheet.');
   const breakdown = roll(rollable.expr);
   const msg = chat.add(campaignId, {
-    userId, fromName: username, kind: 'roll',
+    userId, fromName: username, fromCharacter: character.name, kind: 'roll',
     text: `${character.name}: ${rollable.label}`, roll: breakdown, recipients: null,
   });
   deliver(io, campaignId, msg);

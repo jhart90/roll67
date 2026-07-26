@@ -303,7 +303,7 @@ function activatePsychicPower(
         const { character: afterChar, note } = applyHpDelta(io, campaignId, fresh, -dmg, `${label} mishap`);
         const { hp, maxHp } = systemFor(afterChar.system).hp(afterChar.sheet);
         const dmgMsg = chat.add(campaignId, {
-          userId: d.userId, fromName: d.username, kind: 'roll',
+          userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll',
           text: `${afterChar.name} takes ${dmg} backlash damage (${afterChar.name} ${hp}/${maxHp})${note}`.replace(/\s+/g, ' ').trim(),
           roll: dmgRoll, recipients: null,
         });
@@ -546,7 +546,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         const br = roll(sc.expr);
         const passed = br.total >= sc.threshold;
         const msg = chat.add(d.campaignId, {
-          userId: d.userId, fromName: d.username, kind: 'roll',
+          userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll',
           text: `${tgt.name} — ${sc.label} vs ${action.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
           roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
         });
@@ -670,7 +670,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         : `${actor.name} ${verb} ${action.effect === 'heal' ? action.label + ' on' : ''} ${tgt.name}${action.effect === 'heal' ? '' : ': ' + action.label}${hitLabel} · ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim();
       const cardRoll = amountRoll;
       const msg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, kind: 'roll', text, roll: cardRoll, recipients: null,
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text, roll: cardRoll, recipients: null,
       }, undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
 
@@ -713,7 +713,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (noDamage) consumeAmmoAndItem();
       const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${threshold} · ${passed ? 'SAVE' : 'FAIL'}${noDamage ? ' · no damage' : ''}`;
       const saveMsg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, kind: 'roll', text: saveText,
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: saveText,
         roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       }, noDamage && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: saveMsg });
@@ -739,7 +739,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (!hit) consumeAmmoAndItem();
       const attackText = `${actor.name} attacks ${tgt.name}: ${action.label}${hitLabel}`.replace(/\s+/g, ' ').trim();
       const attackMsg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, kind: 'roll', text: attackText,
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: attackText,
         roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
       }, !hit && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });
@@ -942,7 +942,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       });
     }
     const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
+      userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     const noSaveSettleMs = diceSettleDelayMs(dmg.dice.length);

@@ -80,6 +80,8 @@ ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
 ensureColumn('maps', 'terrain_json', "terrain_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
+// Chat shows "Character (Player)" for anything a character did.
+ensureColumn('chat_messages', 'from_character', 'from_character TEXT');
 // SWADE colours dice by their role in the roll rather than by die size, so it
 // gets its own three-slot palette. Null in any slot falls back to the default.
 ensureColumn('users', 'dice_trait_color', 'dice_trait_color TEXT');

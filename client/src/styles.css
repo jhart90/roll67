@@ -1980,3 +1980,6 @@ th > .term { border-bottom-style: dotted; }
 }
 .turn-banner strong { font-size: 14px; }
 .turn-banner .dim { font-size: 10px; }
+
+/* The account name trails the character it acted as, so the character reads first. */
+.chat-from-player { font-weight: 400; opacity: 0.75; font-size: 0.9em; }

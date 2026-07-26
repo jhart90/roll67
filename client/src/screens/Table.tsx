@@ -29,7 +29,7 @@ import { WindowHost } from '../window/WindowHost';
 import { SwadeCharacterCreator } from '../panels/SwadeCharacterCreator';
 import { SwnCharacterCreator } from '../panels/SwnCharacterCreator';
 import { Dnd5eCharacterCreator } from '../panels/Dnd5eCharacterCreator';
-import { TurnBanner } from '../panels/InitiativeOrder';
+import { TurnBanner } from '../panels/TurnBanner';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -134,7 +134,6 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           </>
         )}
         <TurnBanner />
-        <button onClick={() => openWindow('initiativeOrder', 'main', {}, 'Initiative Order')} title="Initiative order">⚔</button>
         <button onClick={() => setShowAudio((v) => !v)} title="Jukebox">🎵</button>
         <button className="user-chip" onClick={() => openWindow('accountDetails', 'me', {}, 'Account Details')} title="Account settings">{you.username} ({you.role})</button>
       </header>

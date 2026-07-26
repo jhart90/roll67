@@ -1955,23 +1955,15 @@ th > .term { border-bottom-style: dotted; }
 .account-success { color: #5cb85c; font-size: 13px; margin-top: 4px; }
 .account-error { color: #e85050; font-size: 13px; margin-top: 4px; }
 
-/* ---- Initiative order window + turn banner ---- */
-.initiative-order { padding: 12px; min-width: 240px; }
-.init-order-list { list-style: none; padding: 0; margin: 6px 0 10px; }
-.init-order-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 6px; border-bottom: 1px solid var(--panel-2); font-size: 12px;
+/* ---- Turn banner + initiative float extras ---- */
+.init-end-turn { width: calc(100% - 16px); margin: 4px 8px 8px; padding: 7px; font-weight: 700; }
+/* Where the order wraps into the next round. */
+.init-round-break {
+  flex-basis: 100%; margin: 2px 0 4px; padding-top: 4px;
+  border-top: 1px solid var(--border); font-size: 10px; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.06em;
 }
-/* The combatant who is up sits at the top and is hard to miss. */
-.init-order-row.current {
-  background: rgba(232, 210, 123, 0.16);
-  border: 1px solid #e8d27b; border-radius: 6px; font-weight: 700;
-}
-.init-order-pos { width: 16px; text-align: center; color: var(--text-dim); }
-.init-order-name { flex: 1; }
-.init-order-owner { font-size: 10px; }
-.init-order-value { font-variant-numeric: tabular-nums; }
-.init-end-turn { width: 100%; padding: 8px; font-weight: 700; }
+.init-list li { flex-wrap: wrap; }
 
 /* Whose turn it is, in the top bar over the map. */
 .turn-banner {

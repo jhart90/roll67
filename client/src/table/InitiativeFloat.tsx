@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useGameStore } from '../store/game';
+import { intents, useGameStore } from '../store/game';
 import { CardChip } from '../util/PlayingCardView';
 
 const DEFAULT_POS = { x: 16, y: 140 }; // from the bottom-left corner
@@ -25,6 +25,18 @@ export function InitiativeFloat() {
   }, [state.active]);
 
   if (!you || !state.active || dismissed) return null;
+
+  const current = state.entries[state.turnIdx];
+  const isMine = !!current && current.ownerUserId === you.userId;
+  const myTurn = isMine || you.role === 'dm';
+  // Rotate so whoever is up leads the list. Only the DISPLAY rotates — the
+  // stored order and turnIdx stay put, which keeps round counting and the DM's
+  // back/forward controls working off a stable index. roundOffset marks where
+  // the wrap happens so the next round can be labelled.
+  const rotated = state.entries.map((_, i) => {
+    const idx = (state.turnIdx + i) % state.entries.length;
+    return { entry: state.entries[idx], roundOffset: idx < state.turnIdx ? 1 : 0 };
+  });
 
   function startDrag(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('button')) return;
@@ -57,14 +69,24 @@ export function InitiativeFloat() {
         <button className="link" onClick={() => setDismissed(true)}>✕</button>
       </div>
       <ol className="init-list">
-        {state.entries.map((e, i) => (
-          <li key={e.id} className={`${i === state.turnIdx ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''}`}>
-            {e.card ? <CardChip card={e.card} /> : <span className="init-value">{e.value}</span>}
-            <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}</span>
+        {rotated.map(({ entry, roundOffset }, i) => (
+          <li key={entry.id} className={`${i === 0 ? 'current' : ''} ${entry.hidden ? 'hidden-entry' : ''}`}>
+            {/* Everything from here on happens next round, so say where the
+                round breaks rather than letting the wrap pass unremarked. */}
+            {roundOffset > 0 && i > 0 && rotated[i - 1].roundOffset !== roundOffset && (
+              <span className="init-round-break">round {state.round + roundOffset}</span>
+            )}
+            {entry.card ? <CardChip card={entry.card} /> : <span className="init-value">{entry.value}</span>}
+            <span className="init-name">{entry.name}{entry.hidden ? ' 🕶' : ''}</span>
           </li>
         ))}
         {state.entries.length === 0 && <p className="dim" style={{ margin: '4px 8px', fontSize: 12 }}>Nobody in initiative yet.</p>}
       </ol>
+      {myTurn && (
+        <button className="init-end-turn" onClick={() => intents.endTurn()}>
+          End {isMine ? 'my' : `${current?.name}’s`} turn
+        </button>
+      )}
     </div>
   );
 }

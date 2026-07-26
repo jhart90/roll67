@@ -987,11 +987,7 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
-    const was = useGameStore.getState().initiativeState.active;
     useGameStore.setState({ initiativeState: state });
-    // Combat starting pops the order up for everyone; closing it again is the
-    // player's call, so this only fires on the transition into combat.
-    if (state.active && !was) openWindow('initiativeOrder', 'main', {}, 'Initiative Order');
   });
 
   // SWADE action-deck draw: drives the card-flip animation overlay (seq keeps

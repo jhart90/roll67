@@ -11,7 +11,6 @@ export type WindowKind =
   | 'randomizeNpc'
   | 'assetLibrary'
   | 'soundboard'
-  | 'initiativeOrder'
   | 'accountDetails';
 
 export interface WindowInstance {

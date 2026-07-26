@@ -720,7 +720,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // serializes the undo entries right then (a late consume's refund
       // entry would silently miss the stored undo).
       if (noDamage) consumeAmmoAndItem();
-      const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${threshold} · ${passed ? 'SAVE' : 'FAIL'}${noDamage ? ' · no damage' : ''}`;
+      // Name the number and say what the result costs. "14 vs 15 · FAIL" left
+      // two questions open: 15 of what, and what does failing actually do?
+      // 5e measures against the caster's DC; SWN and SWADE against a target
+      // number of the defender's own, so the label has to follow the system.
+      const thName = (targetChar?.system ?? actor.system) === 'dnd5e' ? 'DC' : 'TN';
+      const dealsDamage = action.effect === 'damage' && usableAmount(action.amountExpr);
+      const consequence = noDamage ? 'negated entirely'
+        : passed ? (dealsDamage ? 'half damage' : 'effect avoided')
+          : (dealsDamage ? 'full damage' : 'effect applies');
+      const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${thName} ${threshold} · ${passed ? 'SAVE' : 'FAIL'} (${consequence})`;
       const saveMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: saveText,
         roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,

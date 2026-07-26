@@ -1,8 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useGameStore } from '../store/game';
 import { readableOn } from '../util/playerColor';
 
-const DEFAULT_POS = { x: 16, y: 16 }; // from the bottom-RIGHT corner
+/** The chat dock owns the right edge of the screen, so 'lower right' means
+ *  the lower right of the MAP, not of the window. */
+const DOCK_W = 300;
+const DEFAULT_POS = { x: DOCK_W + 16, y: 16 }; // insets from the bottom-RIGHT
+const STORAGE_KEY = 'roll67.nameplatePos';
+
+/** Where this player last dragged the card, so every later one opens there. */
+function loadPos(): { x: number; y: number } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const p = raw ? JSON.parse(raw) : null;
+    if (typeof p?.x === 'number' && typeof p?.y === 'number') return p;
+  } catch { /* unreadable or disabled storage: fall back to the default */ }
+  return { ...DEFAULT_POS };
+}
 
 /**
  * The public face of someone else's token.
@@ -17,12 +31,8 @@ export function TokenNameplateCard() {
   const selectedId = useGameStore((s) => s.selectedTokenId);
   const tokens = useGameStore((s) => s.tokens);
   const characters = useGameStore((s) => s.characters);
-  const [pos, setPos] = useState(DEFAULT_POS);
+  const [pos, setPos] = useState(loadPos);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
-
-  // A fresh selection re-homes the card, so it can't be lost off-screen after
-  // being dragged somewhere awkward.
-  useEffect(() => { setPos(DEFAULT_POS); }, [selectedId]);
 
   const token = selectedId ? tokens[selectedId] : undefined;
   const plate = token?.nameplate;
@@ -51,6 +61,11 @@ export function TokenNameplateCard() {
     };
     const onUp = () => {
       dragRef.current = null;
+      // Remember where they dropped it, so every later nameplate opens there.
+      setPos((cur) => {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cur)); } catch { /* storage disabled */ }
+        return cur;
+      });
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };

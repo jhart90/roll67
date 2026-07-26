@@ -43,13 +43,24 @@ function facets(sides: number) {
           <line x1={50} y1={3} x2={50} y2={52} {...f} opacity={0.35} />
         </>
       );
-    case 10:
-    case 100: // pentagonal trapezohedron (kite)
+    case 10: // pentagonal trapezohedron (kite)
       return (
         <>
           <polygon points="50,2 92,44 50,100 8,44" {...f} />
           <polyline points="8,44 50,62 92,44" {...f} opacity={0.5} />
           <line x1={50} y1={62} x2={50} y2={100} {...f} opacity={0.5} />
+        </>
+      );
+    case 100: // Zocchihedron: a ball of small facets, banded like a globe
+      return (
+        <>
+          <circle cx={50} cy={52} r={47} {...f} />
+          {/* Latitude bands, flattened by perspective toward the equator. */}
+          <ellipse cx={50} cy={52} rx={47} ry={15} {...f} opacity={0.45} />
+          <ellipse cx={50} cy={52} rx={40} ry={40} {...f} opacity={0.3} />
+          {/* Longitude seams, so it reads as faceted rather than a plain disc. */}
+          <ellipse cx={50} cy={52} rx={17} ry={47} {...f} opacity={0.45} />
+          <ellipse cx={50} cy={52} rx={38} ry={47} {...f} opacity={0.3} />
         </>
       );
     case 12: // dodecahedron (pentagon + inner pentagon)
@@ -89,8 +100,9 @@ function outline(sides: number): React.ReactNode {
     case 4: return <polygon points="50,4 96,90 4,90" fill={fill} />;
     case 6: return <path d="M10,24 Q10,18 16,18 L26,6 Q28,4 32,4 L86,4 Q90,4 90,8 L90,70 Q90,74 86,78 L82,86 Q78,88 72,88 L16,88 Q10,88 10,82 Z" fill={fill} />;
     case 8: return <polygon points="50,3 95,52 50,99 5,52" fill={fill} />;
-    case 10:
-    case 100: return <polygon points="50,2 92,44 50,100 8,44" fill={fill} />;
+    case 10: return <polygon points="50,2 92,44 50,100 8,44" fill={fill} />;
+    // A d100 is a Zocchihedron — effectively a faceted ball, not a big d10.
+    case 100: return <circle cx={50} cy={52} r={47} fill={fill} />;
     case 12: return <polygon points="50,3 96,37 78,92 22,92 4,37" fill={fill} />;
     case 20:
     default: return <polygon points="50,2 92,27 92,77 50,102 8,77 8,27" fill={fill} />;

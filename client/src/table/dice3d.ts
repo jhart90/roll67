@@ -171,6 +171,38 @@ function trapezohedron(): DieGeometry {
   return buildDie(rawFaces, 10, 0.34);
 }
 
+function zocchihedron(): DieGeometry {
+  // A real d100 is a Zocchihedron — a near-sphere of 100 small faces, not the
+  // d10 kite this used to borrow. Approximated as a 10x10 UV sphere: eight
+  // bands of quads with a ring of triangles at each pole, which comes to
+  // exactly 100 faces and reads as the golf ball people recognise.
+  const LON = 10, LAT = 10, R = 1.02;
+  const ringAt = (lat: number): Vec3[] => {
+    const phi = (lat / LAT) * Math.PI;
+    const z = Math.cos(phi) * R, rad = Math.sin(phi) * R;
+    return Array.from({ length: LON }, (_, i) => {
+      const a = (i / LON) * Math.PI * 2;
+      return v3(Math.cos(a) * rad, Math.sin(a) * rad, z);
+    });
+  };
+  const rings = Array.from({ length: LAT + 1 }, (_, lat) => ringAt(lat));
+  const north = v3(0, 0, R), south = v3(0, 0, -R);
+  const rawFaces: Vec3[][] = [];
+  for (let lat = 0; lat < LAT; lat++) {
+    const a = rings[lat], b = rings[lat + 1];
+    for (let i = 0; i < LON; i++) {
+      const j = (i + 1) % LON;
+      // The polar rings collapse to a point, so those bands are triangles.
+      if (lat === 0) rawFaces.push([north, b[i], b[j]]);
+      else if (lat === LAT - 1) rawFaces.push([south, a[j], a[i]]);
+      else rawFaces.push([a[i], a[j], b[j], b[i]]);
+    }
+  }
+  // 100 faces on a unit sphere leaves each about a third of a radius across,
+  // so the label has to be small — a real d100's numbers are tiny too.
+  return buildDie(rawFaces, 100, 0.17);
+}
+
 function icosahedronFaces(): Vec3[][] {
   const t = (1 + Math.sqrt(5)) / 2;
   const raw = [
@@ -228,7 +260,7 @@ function dodecahedron(): DieGeometry {
 
 const GEOMS: Record<number, DieGeometry> = {
   2: coin(), 4: tetrahedron(), 6: cube(), 8: octahedron(),
-  10: trapezohedron(), 12: dodecahedron(), 20: icosahedron(), 100: trapezohedron(),
+  10: trapezohedron(), 12: dodecahedron(), 20: icosahedron(), 100: zocchihedron(),
 };
 
 export function geometryFor(sides: number): DieGeometry {

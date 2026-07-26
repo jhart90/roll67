@@ -652,6 +652,14 @@ button.link:hover { text-decoration: underline; }
 .roll-card.crit .roll-total { color: var(--ok); }
 .roll-card.fumble .roll-total { color: var(--danger); }
 .roll-detail { font-size: 11px; color: var(--text-dim); font-family: monospace; }
+/* The rolled faces as an equation: [19] + [13] = 32. Wraps on a narrow dock
+   rather than pushing the card wider. */
+.roll-dice { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin: 4px 0 2px; }
+.roll-die { display: flex; align-items: center; gap: 3px; }
+.roll-op { font-size: 12px; color: var(--text-dim); padding: 0 1px; }
+.roll-eq-total { font-size: 14px; font-weight: 700; }
+.roll-card.crit .roll-eq-total { color: var(--ok); }
+.roll-card.fumble .roll-eq-total { color: var(--danger); }
 
 .macro-bar {
   display: flex;

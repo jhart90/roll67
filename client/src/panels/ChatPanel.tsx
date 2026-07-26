@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, ChatMessage, MemberInfo, TokenView } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
+import { DieShape } from '../table/DiceShapes';
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -58,6 +59,43 @@ function Highlighted({ text, hl }: { text: string; hl: NameHighlights }) {
   );
 }
 
+/** Beyond this the equation is more clutter than information. */
+const MAX_SHOWN_DICE = 20;
+
+/**
+ * The roll as its actual faces: a die glyph per rolled value, joined into the
+ * sum that produced the total — `[19] + [13] = 32`.
+ *
+ * Only dice that counted are drawn. Dropped ones (a losing best() arm, the low
+ * die of an advantage roll) would break the running sum, and the detail line
+ * underneath already spells them out with ~strikethrough~.
+ *
+ * The trailing modifier is derived as `total - sum(faces)` rather than parsed
+ * back out of the expression, so the equation always balances against the
+ * total the server actually sent, whatever the expression did to get there.
+ */
+function DiceEquation({ r }: { r: NonNullable<ChatMessage['roll']> }) {
+  const counted = r.dice.filter((d) => d.kept);
+  if (counted.length === 0) return null;
+  const shown = counted.slice(0, MAX_SHOWN_DICE);
+  const hidden = counted.length - shown.length;
+  const mod = r.total - counted.reduce((s, d) => s + d.value, 0);
+  return (
+    <div className="roll-dice">
+      {shown.map((d, i) => (
+        <span className="roll-die" key={i}>
+          {i > 0 && <span className="roll-op">+</span>}
+          <DieShape sides={d.sides} size={30} value={d.value} />
+        </span>
+      ))}
+      {hidden > 0 && <span className="roll-op">+ {hidden} more</span>}
+      {mod !== 0 && <span className="roll-op">{mod > 0 ? '+' : '−'} {Math.abs(mod)}</span>}
+      <span className="roll-op">=</span>
+      <span className="roll-eq-total">{r.total}</span>
+    </div>
+  );
+}
+
 function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
   const r = msg.roll!;
   // A pass/fail roll (e.g. a saving throw) reuses the crit/fumble green/red
@@ -71,6 +109,7 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
         <span className="roll-expr">{r.expression}</span>
         <span className="roll-total">{r.total}</span>
       </div>
+      <DiceEquation r={r} />
       <div className="roll-detail">{r.detail}</div>
     </div>
   );

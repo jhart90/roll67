@@ -1121,6 +1121,10 @@ export const chat = {
       kind: msg.kind,
       fromUserId: msg.userId,
       fromName: msg.fromName,
+      // Must mirror every column written above: this object is what gets
+      // broadcast live, while a reload re-reads the row through toChatMsg.
+      // Anything missing here shows up only after a refresh.
+      fromCharacter: msg.fromCharacter ?? null,
       text: msg.text,
       roll: msg.roll,
       recipients: msg.recipients,

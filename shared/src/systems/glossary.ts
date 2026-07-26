@@ -393,7 +393,7 @@ export function termDesc(system: GlossarySystem, term: string): string | undefin
 
 /**
  * Glossary lookup for a *sheet label*, which often decorates the bare term
- * with units or a reminder — "Toughness (incl. armor)", "HP (pool)",
+ * with units or a reminder — "Toughness (incl. armor)", "HP (current)",
  * "Wounds (0–3)", "Notes (RoF…)", "Max PP". Tries the label as written,
  * then progressively simpler forms, so schemas don't have to be rewritten
  * to match glossary keys.
@@ -413,7 +413,7 @@ function labelCandidates(label: string): string[] {
     if (t && !out.includes(t)) out.push(t);
   };
   push(label);
-  // "Toughness (incl. armor)" -> "Toughness"; "HP (pool)" -> "HP"
+  // "Toughness (incl. armor)" -> "Toughness"; "HP (current)" -> "HP"
   push(label.replace(/\s*\([^)]*\)\s*/g, ' '));
   for (const base of [...out]) {
     push(base.replace(/[…:.]+$/, ''));           // "Notes…" -> "Notes"

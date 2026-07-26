@@ -218,7 +218,7 @@ const combatFields: FieldDef[] = [
   // The five sixths above fill a row exactly, so the HP pair is widened to
   // thirds: that pushes them past 100% and they wrap together onto their own
   // line, HP beside Max HP.
-  { id: 'hp', label: 'HP (pool)', type: 'number', width: 'third', default: 15 },
+  { id: 'hp', label: 'HP (current)', type: 'number', width: 'third', default: 15 },
   { id: 'maxHp', label: 'Max HP', type: 'number', width: 'third', default: 15 },
   // Damage-type lists hold comma-separated entries and outgrow a third fast,
   // so each takes the full width of the pane.

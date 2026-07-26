@@ -18,7 +18,7 @@ export function makeTerm(system: GlossarySystem) {
   };
 }
 
-/** A sheet label ("HP (pool)", "Toughness (incl. armor)") with the tooltip
+/** A sheet label ("HP (current)", "Toughness (incl. armor)") with the tooltip
  *  for whatever rules term it decorates. Renders plain text when the label
  *  is pure UI plumbing (Name, Qty, Notes…). */
 export function SheetTerm({ system, label }: { system: GlossarySystem; label: string }) {

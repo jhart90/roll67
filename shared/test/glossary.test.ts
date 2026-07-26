@@ -49,9 +49,9 @@ describe('rules-term glossary', () => {
   });
 
   it('sheet labels resolve through their decorated forms', () => {
-    // "Toughness (incl. armor)" -> Toughness, "HP (pool)" -> HP, "Max PP" -> PP
+    // "Toughness (incl. armor)" -> Toughness, "HP (current)" -> HP, "Max PP" -> PP
     expect(sheetTermDesc('swade', 'Toughness (incl. armor)')).toBe(termDesc('swade', 'Toughness'));
-    expect(sheetTermDesc('swade', 'HP (pool)')).toBe(termDesc('swade', 'HP'));
+    expect(sheetTermDesc('swade', 'HP (current)')).toBe(termDesc('swade', 'HP'));
     expect(sheetTermDesc('swade', 'Max PP')).toBe(termDesc('swade', 'PP'));
     expect(sheetTermDesc('swn', 'Max Effort (1 + best of discipline skill / WIS / CON)')).toBe(termDesc('swn', 'Max Effort'));
     // An exact match always wins over the stripped form.

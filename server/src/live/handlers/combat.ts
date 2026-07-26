@@ -480,7 +480,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         ?? (targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0);
       hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
       raise = hit && actor.system === 'swade' && ac > 0 && attackBreakdown.total >= ac + 4;
-      hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''} · ${hit ? 'HIT' : 'MISS'}`;
+      // Say WHY it landed or didn't. A bare HIT/MISS makes the engine look
+      // arbitrary — especially in SWADE, where a weapon beats Parry but a
+      // power beats a flat TN, and the two numbers look nothing alike.
+      const targetSystem = targetChar?.system ?? actor.system;
+      const acName = action.fixedTn ? 'TN' : targetSystem === 'swade' ? 'Parry' : 'AC';
+      const why = nat1 ? 'natural 1 always misses'
+        : crit ? `natural ${critAt}+ always hits`
+          : ac > 0 ? `vs ${acName} ${ac}`
+            : 'no target number to beat';
+      hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''} · ${hit ? 'HIT' : 'MISS'} (${why}${raise ? `, beat it by ${attackBreakdown.total - ac}` : ''})`;
     }
 
     // Consume a used item (decrement the actor's inventory row) and/or ammo

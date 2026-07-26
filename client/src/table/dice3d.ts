@@ -369,15 +369,52 @@ function fadeTimes(dice: DieRoll[], settleAt: number[]): number[] {
   return out;
 }
 
+/**
+ * Scatter landing spots around the middle of the screen, no two dice touching.
+ *
+ * Dart-throwing: try random points, keep the first that clears every spot
+ * already taken. A crowded board can run out of room, so each die gets a
+ * budget of attempts and then settles for the roomiest of its candidates —
+ * a slightly tight pair beats hanging the animation looking for perfection.
+ * The scatter area grows with the number of dice so a big handful spreads out
+ * instead of jamming into the same small patch.
+ */
+function scatterTargets(n: number, w: number, h: number): Array<{ x: number; y: number }> {
+  const cx = w / 2, cy = h / 2;
+  const minGap = 92; // a touch over the widest die, so nothing overlaps
+  // Random packing wastes a lot of space, so the box is ~1.6x the naive
+  // sqrt(n) side. Simulated over every die count up to the 12 the overlay
+  // shows: below about 1.5 a full handful overlaps almost every time.
+  const needed = Math.sqrt(n) * minGap * 1.6;
+  const spreadX = Math.min(Math.max(needed, minGap), w * 0.8) / 2;
+  const spreadY = Math.min(Math.max(needed, minGap), h * 0.62) / 2;
+  const placed: Array<{ x: number; y: number }> = [];
+  const nearest = (p: { x: number; y: number }) =>
+    placed.reduce((m, q) => Math.min(m, Math.hypot(p.x - q.x, p.y - q.y)), Infinity);
+  for (let i = 0; i < n; i++) {
+    let best = { x: cx, y: cy };
+    let bestGap = -1;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const p = {
+        x: cx + (Math.random() * 2 - 1) * spreadX,
+        y: cy + (Math.random() * 2 - 1) * spreadY,
+      };
+      const gap = nearest(p);
+      if (gap >= minGap) { best = p; bestGap = gap; break; }
+      if (gap > bestGap) { best = p; bestGap = gap; }
+    }
+    placed.push(best);
+  }
+  return placed;
+}
+
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
   palette: DicePalette | null = null,
 ): DieSim[] {
   const n = dice.length;
-  const cols = Math.min(n, 6);
-  const rowCount = Math.ceil(n / cols);
-  const spacing = 96;
   const cx = w / 2, cy = h / 2;
+  const targets = scatterTargets(n, w, h);
   // Timing: ordinary dice are thrown together in one quick staggered wave.
   // An exploding die's bonus die instead waits for the die that spawned it to
   // land, finish flashing, and then sit readable for a beat, so a chain of aces
@@ -395,13 +432,7 @@ export function buildSims(
   });
   const fade = fadeTimes(dice, settleAt);
   return dice.map((die, i) => {
-    const row = Math.floor(i / cols);
-    const col = i % cols;
-    const inRow = Math.min(cols, n - row * cols);
-    const target = {
-      x: cx + (col - (inRow - 1) / 2) * spacing + (Math.random() - 0.5) * 16,
-      y: cy + (row - (rowCount - 1) / 2) * spacing + (Math.random() - 0.5) * 16,
-    };
+    const target = targets[i];
     // Enter from the left or right edge, biased low, like a real throw.
     const fromLeft = target.x < cx ? Math.random() < 0.8 : Math.random() < 0.2;
     const start = {

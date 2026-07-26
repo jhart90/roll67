@@ -1116,21 +1116,14 @@ export const chat = {
       undo ? JSON.stringify(undo) : null,
       at,
     );
-    return {
-      id: Number(info.lastInsertRowid),
-      kind: msg.kind,
-      fromUserId: msg.userId,
-      fromName: msg.fromName,
-      // Must mirror every column written above: this object is what gets
-      // broadcast live, while a reload re-reads the row through toChatMsg.
-      // Anything missing here shows up only after a refresh.
-      fromCharacter: msg.fromCharacter ?? null,
-      text: msg.text,
-      roll: msg.roll,
-      recipients: msg.recipients,
-      at,
-      hidden: false,
-    };
+    // Read the row back rather than hand-building the return value. The
+    // object returned here is what gets broadcast live, while a reload goes
+    // through toChatMsg — two representations that silently drift the moment
+    // a column is added to one and not the other (fromCharacter did exactly
+    // that: right after a refresh, wrong before one). One extra indexed read
+    // by primary key buys a single source of truth.
+    const row = stmt('SELECT * FROM chat_messages WHERE id = ?').get(info.lastInsertRowid) as ChatRow;
+    return toChatMsg(row);
   },
   byId(id: number): ChatMessage | undefined {
     const r = stmt('SELECT * FROM chat_messages WHERE id = ?').get(id) as ChatRow | undefined;

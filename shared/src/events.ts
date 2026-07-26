@@ -109,6 +109,8 @@ export const C2S = {
   INIT_ROLL_CALL: 'initRollCall',
   /** 5e/SWN: roll initiative for one pending combatant. */
   INIT_ROLL_MINE: 'initRollMine',
+  /** A player ends their own character's turn. */
+  INIT_END_TURN: 'initEndTurn',
   // table
   DRAW: 'draw',
   ERASE_DRAWING: 'eraseDrawing',

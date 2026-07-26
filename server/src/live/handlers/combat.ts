@@ -4,7 +4,7 @@ import {
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
-  type InitAddPayload, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
+  type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
@@ -69,9 +69,29 @@ function emitAoeBurst(
 /** Players never receive hidden entries; the DM sees everything. The card
  *  deck's remaining contents never leave the server for ANYONE — clients get
  *  only the count (knowing the next card up would spoil the draw). */
-export function initiativeViewFor(state: InitiativeState, isDm: boolean): InitiativeState {
+/**
+ * Stamp each entry with who controls it. Players only ever receive their own
+ * character sheets, so they cannot resolve token → character → owner
+ * themselves; the initiative window needs it for every combatant to show
+ * "controlled by" and to decide who may end the current turn.
+ */
+function withOwners(campaignId: string, entries: InitiativeEntry[]): InitiativeEntry[] {
+  const names = new Map(campaigns.members(campaignId).map((m) => [m.userId, m.username]));
+  return entries.map((e) => {
+    const tok = e.tokenId ? tokens.byId(e.tokenId) : undefined;
+    const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+    const ownerUserId = ch?.ownerUserId ?? null;
+    return { ...e, ownerUserId, ownerName: ownerUserId ? names.get(ownerUserId) ?? null : null };
+  });
+}
+
+export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaignId: string): InitiativeState {
   const { deck, drawCounter, ...rest } = state;
-  const view: InitiativeState = { ...rest, ...(state.cardMode ? { deckRemaining: deck?.length ?? 0 } : {}) };
+  const view: InitiativeState = {
+    ...rest,
+    entries: withOwners(campaignId, rest.entries),
+    ...(state.cardMode ? { deckRemaining: deck?.length ?? 0 } : {}),
+  };
   if (isDm) return view;
   return {
     ...view,
@@ -85,7 +105,7 @@ export function broadcastInitiative(io: Server, campaignId: string): void {
   const state = initiative.get(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
     const d = sdata(socket);
-    socket.emit(S2C.INITIATIVE, { state: initiativeViewFor(state, d.role === 'dm') });
+    socket.emit(S2C.INITIATIVE, { state: initiativeViewFor(state, d.role === 'dm', campaignId) });
   }
 }
 
@@ -1185,6 +1205,41 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_NEXT'));
 
+  /**
+   * A player ends their OWN character's turn. Same advance as INIT_NEXT, but
+   * authorised against the combatant currently up rather than the DM role —
+   * and only for whoever controls them, so nobody can skip someone else's turn.
+   */
+  socket.on(C2S.INIT_END_TURN, safe(socket, () => {
+    const d = requireCampaign(socket);
+    const state = initiative.get(d.campaignId);
+    if (!state.active || state.entries.length === 0) return;
+    const current = state.entries[state.turnIdx];
+    if (!current) return;
+    if (d.role !== 'dm') {
+      const tok = current.tokenId ? tokens.byId(current.tokenId) : undefined;
+      const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+      if (!ch || ch.ownerUserId !== d.userId) {
+        emitError(socket, "It isn't your turn.");
+        return;
+      }
+    }
+    state.turnIdx++;
+    if (state.turnIdx >= state.entries.length) {
+      state.turnIdx = 0;
+      state.round++;
+    }
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    const next = state.entries[state.turnIdx];
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `⏭ ${current.name} ends their turn — ${next?.name ?? '—'} is up (Round ${state.round}).`,
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'INIT_END_TURN'));
+
   socket.on(C2S.INIT_PREV, safe(socket, () => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
@@ -1288,8 +1343,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (pendingRolls.length === 0) { emitError(socket, 'No tokens on this map to roll for.'); return; }
 
     // A fresh call clears the previous order — same as dealing a new deck.
+    // Calling for initiative IS starting combat — the DM should not have to
+    // flip a separate switch once everyone has rolled.
     const state: InitiativeState = {
-      entries: [], turnIdx: 0, round: 1, active: false, pendingRolls,
+      entries: [], turnIdx: 0, round: 1, active: true, pendingRolls,
     };
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
@@ -1364,8 +1421,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     if (pendingDraws.length === 0) { emitError(socket, 'No tokens on this map to deal to.'); return; }
 
+    // Dealing the deck IS starting combat; see INIT_ROLL_CALL.
     const state: InitiativeState = {
-      entries: [], turnIdx: 0, round: 1, active: false,
+      entries: [], turnIdx: 0, round: 1, active: true,
       cardMode: true, deck: shuffleDeck(buildDeck()), pendingDraws, drawCounter: 0,
     };
     initiative.set(d.campaignId, state);

@@ -987,7 +987,11 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
+    const was = useGameStore.getState().initiativeState.active;
     useGameStore.setState({ initiativeState: state });
+    // Combat starting pops the order up for everyone; closing it again is the
+    // player's call, so this only fires on the transition into combat.
+    if (state.active && !was) openWindow('initiativeOrder', 'main', {}, 'Initiative Order');
   });
 
   // SWADE action-deck draw: drives the card-flip animation overlay (seq keeps
@@ -1281,6 +1285,8 @@ export const intents = {
   deleteAsset: (assetId: string) => socket.emit(C2S.DELETE_ASSET, { assetId }),
   moveHandout: (handoutId: string, folderId: string | null) => socket.emit(C2S.MOVE_HANDOUT, { handoutId, folderId }),
 
+  /** End the current combatant's turn (your own character, or any if DM). */
+  endTurn: () => socket.emit(C2S.INIT_END_TURN, {}),
   setSoundboardSlot: (slotIndex: number, assetId: string, label: string) =>
     socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),
   clearSoundboardSlot: (slotIndex: number) => socket.emit(C2S.CLEAR_SOUNDBOARD_SLOT, { slotIndex }),

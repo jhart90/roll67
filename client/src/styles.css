@@ -1954,3 +1954,29 @@ th > .term { border-bottom-style: dotted; }
 .account-form button:disabled { opacity: 0.5; cursor: default; }
 .account-success { color: #5cb85c; font-size: 13px; margin-top: 4px; }
 .account-error { color: #e85050; font-size: 13px; margin-top: 4px; }
+
+/* ---- Initiative order window + turn banner ---- */
+.initiative-order { padding: 12px; min-width: 240px; }
+.init-order-list { list-style: none; padding: 0; margin: 6px 0 10px; }
+.init-order-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 6px; border-bottom: 1px solid var(--panel-2); font-size: 12px;
+}
+/* The combatant who is up sits at the top and is hard to miss. */
+.init-order-row.current {
+  background: rgba(232, 210, 123, 0.16);
+  border: 1px solid #e8d27b; border-radius: 6px; font-weight: 700;
+}
+.init-order-pos { width: 16px; text-align: center; color: var(--text-dim); }
+.init-order-name { flex: 1; }
+.init-order-owner { font-size: 10px; }
+.init-order-value { font-variant-numeric: tabular-nums; }
+.init-end-turn { width: 100%; padding: 8px; font-weight: 700; }
+
+/* Whose turn it is, in the top bar over the map. */
+.turn-banner {
+  display: flex; flex-direction: column; align-items: center; line-height: 1.15;
+  margin: 0 auto; padding: 2px 12px; text-align: center;
+}
+.turn-banner strong { font-size: 14px; }
+.turn-banner .dim { font-size: 10px; }

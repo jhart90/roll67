@@ -13,6 +13,7 @@ import { RandomizeNpcModal } from '../panels/RandomizeNpcModal';
 import { AssetLibrary } from '../panels/AssetLibrary';
 import { AccountDetails } from '../panels/AccountDetails';
 import { Soundboard } from '../panels/Soundboard';
+import { InitiativeOrder } from '../panels/InitiativeOrder';
 
 /** Mounted once at the top level: renders every open window instance,
  *  each in its own draggable/poppable WindowFrame, so multiple windows
@@ -30,6 +31,9 @@ export function WindowHost() {
         const onClose = () => closeWindow(w.id);
         let content: ReactNode = null;
         switch (w.kind) {
+          case 'initiativeOrder':
+            content = <InitiativeOrder onClose={onClose} />;
+            break;
           case 'soundboard':
             content = <Soundboard onClose={onClose} />;
             break;

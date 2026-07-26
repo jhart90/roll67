@@ -1234,7 +1234,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const next = state.entries[state.turnIdx];
     const msg = chat.add(d.campaignId, {
       userId: null, fromName: 'System', kind: 'system',
-      text: `⏭ ${current.name} ends their turn — ${next?.name ?? '—'} is up (Round ${state.round}).`,
+      // Two lines: who finished, then who is up. One run-on sentence buried
+      // the handover, which is the half people actually need to read.
+      // .chat-text is pre-wrap, so the newline survives to the log.
+      text: `⏭ ${current.name} ends their turn\n⏭ ${next?.name ?? '—'} is up (Round ${state.round}).`,
       roll: null, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });

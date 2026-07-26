@@ -65,7 +65,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     if (!rollable) throw new Error('Unknown roll.');
     const expr = applyAdv(rollable.expr, rollable.d20 ? adv : null);
     const breakdown = roll(expr);
-    const label = `${character.name}: ${rollable.label}${adv === 'adv' ? ' (advantage)' : adv === 'dis' ? ' (disadvantage)' : ''}`;
+    const label = `${rollable.label}${adv === 'adv' ? ' (advantage)' : adv === 'dis' ? ' (disadvantage)' : ''}`;
     const msg = chat.add(d.campaignId, {
       userId: d.userId,
       fromName: d.username,
@@ -138,7 +138,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const atLabel = level > minLevel ? ` (cast at level ${level})` : '';
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, fromCharacter: character.name, kind: 'roll',
-      text: `${character.name}: ${rollable.label}${atLabel}${concNote}`, roll: breakdown, recipients: null,
+      text: `${rollable.label}${atLabel}${concNote}`, roll: breakdown, recipients: null,
     }, undo);
     deliver(io, d.campaignId, msg);
   }, 'CAST_SPELL'));
@@ -192,7 +192,7 @@ function runSheetRoll(
   const breakdown = roll(rollable.expr);
   const msg = chat.add(campaignId, {
     userId, fromName: username, fromCharacter: character.name, kind: 'roll',
-    text: `${character.name}: ${rollable.label}`, roll: breakdown, recipients: null,
+    text: rollable.label, roll: breakdown, recipients: null,
   });
   deliver(io, campaignId, msg);
 }

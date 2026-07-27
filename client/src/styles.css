@@ -1010,8 +1010,11 @@ button.link:hover { text-decoration: underline; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 34px;
-  padding: 2px 5px;
+  /* Fixed, not min-width: a "10♦" is wider than an "A♠", and a chip that
+     grows to fit pushes every name in the list to a different indent. */
+  flex: 0 0 40px;
+  width: 40px;
+  padding: 2px 0;
   border-radius: 4px;
   background: #f7f4ec;
   border: 1px solid #b9b2a2;

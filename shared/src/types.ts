@@ -292,6 +292,11 @@ export interface ChatMessage {
   /** Set when the message came from a character rather than the account:
    *  chat shows "Character (Player)". Null for plain talk and system lines. */
   fromCharacter?: string | null;
+  /** The action this message is about (a weapon, spell or power). Rendered as
+   *  a hoverable term, so it stays out of . */
+  actionName?: string | null;
+  /** Why it landed or not — drawn under the dice, not in the headline. */
+  outcomeNote?: string | null;
   text: string;
   roll: RollBreakdown | null;
   /** For whispers: usernames included. */

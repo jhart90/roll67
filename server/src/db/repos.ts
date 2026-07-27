@@ -1075,7 +1075,7 @@ export const rollableTables = {
 // ---------- chat ----------
 
 interface ChatRow {
-  id: number; user_id: string | null; from_name: string; from_character: string | null; kind: ChatKind; text: string;
+  id: number; user_id: string | null; from_name: string; from_character: string | null; action_name: string | null; outcome_note: string | null; kind: ChatKind; text: string;
   roll_json: string | null; recipients_json: string | null; hidden: number; created_at: number;
 }
 
@@ -1092,6 +1092,8 @@ function toChatMsg(r: ChatRow): ChatMessage {
     fromUserId: r.user_id,
     fromName: r.from_name,
     fromCharacter: r.from_character,
+    actionName: r.action_name,
+    outcomeNote: r.outcome_note,
     text: r.text,
     roll: r.roll_json ? safeParse(r.roll_json, null) : null,
     recipients: r.recipients_json ? safeParse<string[] | null>(r.recipients_json, null) : null,
@@ -1102,15 +1104,16 @@ function toChatMsg(r: ChatRow): ChatMessage {
 
 export const chat = {
   add(campaignId: string, msg: {
-    userId: string | null; fromName: string; fromCharacter?: string | null; kind: ChatKind; text: string;
+    userId: string | null; fromName: string; fromCharacter?: string | null; actionName?: string | null; outcomeNote?: string | null; kind: ChatKind; text: string;
     roll: RollBreakdown | null; recipients: string[] | null;
   }, undo?: unknown): ChatMessage {
     const at = now();
     const info = stmt(
-      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, kind, text, roll_json, recipients_json, hidden, undo_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     ).run(
-      campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null, msg.kind, msg.text,
+      campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null,
+      msg.actionName ?? null, msg.outcomeNote ?? null, msg.kind, msg.text,
       msg.roll ? JSON.stringify(msg.roll) : null,
       msg.recipients ? JSON.stringify(msg.recipients) : null,
       undo ? JSON.stringify(undo) : null,

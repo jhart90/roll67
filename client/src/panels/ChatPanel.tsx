@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, ChatMessage, MemberInfo, TokenView } from 'shared';
+import { contentForSystem } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
 import { DieShape } from '../table/DiceShapes';
@@ -104,14 +105,40 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
   const isFumble = r.outcome === 'failure' || r.dice.some((d) => d.sides === 20 && d.kept && d.value === 1);
   return (
     <div className={`roll-card ${isCrit ? 'crit' : ''} ${isFumble ? 'fumble' : ''}`}>
-      {msg.text && <div className="roll-label"><Highlighted text={msg.text} hl={hl} /></div>}
+      {msg.text && (
+        <div className="roll-label">
+          <Highlighted text={msg.text} hl={hl} />
+          {msg.actionName && <> <ActionTerm name={msg.actionName} /></>}
+        </div>
+      )}
       <div className="roll-main">
         <span className="roll-expr">{r.expression}</span>
         <span className="roll-total">{r.total}</span>
       </div>
       <DiceEquation r={r} />
       <div className="roll-detail">{r.detail}</div>
+      {/* Why it landed, last — the dice come first, the verdict reads as their
+          conclusion rather than a spoiler above them. */}
+      {msg.outcomeNote && <div className="roll-outcome">{msg.outcomeNote}</div>}
     </div>
+  );
+}
+
+/**
+ * An action's name, underlined and explained on hover. The blurb comes from
+ * the compendium entry of the same name — actions are content, not rules
+ * vocabulary, so the glossary has nothing to say about them.
+ */
+function ActionTerm({ name }: { name: string }) {
+  const system = useGameStore((s) => s.campaign?.system);
+  const entry = system
+    ? contentForSystem(system).find((e) => e.name.toLowerCase() === name.toLowerCase())
+    : undefined;
+  const blurb = entry?.detail?.trim();
+  return (
+    <span className="action-term" title={blurb || `${name} — no compendium entry`}>
+      {name}
+    </span>
   );
 }
 

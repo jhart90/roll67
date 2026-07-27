@@ -434,6 +434,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let saveScale = 1;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
     let hitLabel = '';
+    // The attack card shows this under the dice instead of in its headline.
+    let attackOutcome = '';
     let deferredSave: { total: number; threshold: number; label: string; passed: boolean } | null = null;
     if (action.saveId && action.effect === 'damage') {
       // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
@@ -489,7 +491,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         : crit ? `natural ${critAt}+ always hits`
           : ac > 0 ? `vs ${acName} ${ac}`
             : 'no target number to beat';
-      hitLabel = ` — attack ${attackBreakdown.total}${advTag}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''} · ${hit ? 'HIT' : 'MISS'} (${why}${raise ? `, beat it by ${attackBreakdown.total - ac}` : ''})`;
+      attackOutcome = `${hit ? 'HIT' : 'MISS'}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''} — ${why}${raise ? `, beat it by ${attackBreakdown.total - ac}` : ''}`;
+      hitLabel = ` — attack ${attackBreakdown.total}${advTag} · ${attackOutcome}`;
     }
 
     // Consume a used item (decrement the actor's inventory row) and/or ammo
@@ -755,9 +758,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // hit consumes inside resolveDamage's own flow instead, before its
       // damage card.
       if (!hit) consumeAmmoAndItem();
-      const attackText = `${actor.name} attacks ${tgt.name}: ${action.label}${hitLabel}`.replace(/\s+/g, ' ').trim();
+      // Headline states who did what to whom; the action rides in its own
+      // field so chat can underline it and hang a tooltip off it, and the
+      // outcome in another so it can sit under the dice rather than above.
+      const attackText = `${actor.name} attacks ${tgt.name} with`;
       const attackMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: attackText,
+        actionName: action.label, outcomeNote: attackOutcome,
         roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
       }, !hit && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });

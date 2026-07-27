@@ -81,7 +81,12 @@ function withOwners(campaignId: string, entries: InitiativeEntry[]): InitiativeE
     const tok = e.tokenId ? tokens.byId(e.tokenId) : undefined;
     const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
     const ownerUserId = ch?.ownerUserId ?? null;
-    return { ...e, ownerUserId, ownerName: ownerUserId ? names.get(ownerUserId) ?? null : null };
+    return {
+      ...e,
+      ownerUserId,
+      ownerName: ownerUserId ? names.get(ownerUserId) ?? null : null,
+      color: tok?.color ?? null,
+    };
   });
 }
 

@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canMoveToken, firstFreeHex, inBounds, packHex, reachableAlong, systemFor,
+  C2S, S2C, canMoveToken, firstFreeHex, inBounds, packHex, playerColorFor, reachableAlong, systemFor,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type MoveTokenPayload, type UpdateTokenPayload,
 } from 'shared';
@@ -11,6 +11,12 @@ import { persistSheet } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
+
+/** The colour a member is shown in everywhere else, so a new token matches. */
+function colorForOwner(campaignId: string, userId: string): string {
+  const m = campaigns.members(campaignId).find((x) => x.userId === userId);
+  return m ? playerColorFor(m) : '#6c9bd2';
+}
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -39,7 +45,10 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       layer: payload.layer ?? 'token',
       size: payload.size ?? 1,
       shape: payload.shape ?? 'circle',
-      color: payload.color ?? '#6c9bd2',
+      // A token starts in the colour of whoever will control it — the linked
+      // character's owner, or the DM placing it. One less thing to set by hand,
+      // and the map reads as "whose is whose" straight away.
+      color: payload.color ?? colorForOwner(d.campaignId, character?.ownerUserId ?? d.userId),
       vision: payload.vision ?? null,
       bar: payload.bar ?? null,
     });
@@ -68,15 +77,22 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
 
   socket.on(C2S.UPDATE_TOKEN, safe(socket, ({ tokenId, patch: rawPatch }: UpdateTokenPayload) => {
     const d = requireCampaign(socket);
-    if (d.role !== 'dm') {
-      emitError(socket, 'Only the DM can edit tokens.');
-      return;
-    }
     const patch = scrubNonFinite(rawPatch);
     const token = tokens.byId(tokenId);
     if (!token) return;
     const map = maps.byId(token.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown token.');
+    if (d.role !== 'dm') {
+      // A player may recolour a token they control, and nothing else — colour
+      // is theirs to pick, but size, vision and HP stay the DM's.
+      const ch = token.characterId ? characters.byId(token.characterId) : undefined;
+      const mine = !!ch && ch.ownerUserId === d.userId;
+      const onlyColor = Object.keys(patch).length === 1 && typeof patch.color === 'string';
+      if (!mine || !onlyColor) {
+        emitError(socket, mine ? 'You can only change that token’s colour.' : 'Only the DM can edit tokens.');
+        return;
+      }
+    }
     // For a character-linked token the SHEET is authoritative for HP: a bar
     // edit writes through to the sheet (persistSheet then mirrors the new HP
     // back onto every one of that character's token bars), so the sheet and

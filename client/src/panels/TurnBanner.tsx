@@ -18,8 +18,10 @@ export function useTurnTint(): { bg: string; fg: string } | null {
   const current = state.entries[state.turnIdx];
   if (!current) return null;
   const member = current.ownerUserId ? members.find((m) => m.userId === current.ownerUserId) : undefined;
-  // A DM-run NPC has no player colour, so the bar stays its usual slate.
-  const bg = member ? playerColorFor(member) : '#3a3f4d';
+  // A player's combatant wears their colour; a DM-run one wears its own token
+  // colour, so a fight full of NPCs still changes hue turn to turn instead of
+  // sitting on one anonymous grey. Grey only survives as a last resort.
+  const bg = member ? playerColorFor(member) : (current.color || '#3a3f4d');
   return { bg, fg: readableOn(bg) };
 }
 

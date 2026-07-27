@@ -25,7 +25,32 @@ export function TokenInspector() {
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
 
-  if (!token || you?.role !== 'dm' || !campaign) return null;
+  if (!token || !you || !campaign) return null;
+  const isDm = you.role === 'dm';
+  // A player gets this panel only for a token they control, and only to
+  // recolour it — the server enforces the same limit, this just avoids
+  // showing controls that would be rejected.
+  const mine = !!character && character.ownerUserId === you.userId;
+  if (!isDm && !mine) return null;
+
+  if (!isDm) {
+    return (
+      <div className="token-inspector">
+        <div className="dock-header">
+          <h3>{token.name}</h3>
+          <button className="link" onClick={() => useGameStore.getState().openInspector(null)}>close</button>
+        </div>
+        <label>
+          Color
+          <input
+            type="color"
+            value={token.color}
+            onChange={(e) => intents.updateToken(token.id, { color: e.target.value })}
+          />
+        </label>
+      </div>
+    );
+  }
 
   const vision = token.vision;
   // A token linked to a character reads/writes its vision straight from the

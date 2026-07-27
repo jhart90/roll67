@@ -5,7 +5,6 @@ import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixe
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 import { worldDrag } from '../store/worldDrag';
-import { playerColorFor } from '../util/playerColor';
 
 /** How much larger a token with custom art renders than a plain colour disc. */
 const ART_SCALE = 1.2;
@@ -90,14 +89,6 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const drawR = token.artUrl ? radius * ART_SCALE : radius;
   const shape = token.shape ?? 'circle';
   const ringColor = targetEffect === 'heal' ? '#7ed28a' : '#d26c6c';
-  // Art tokens are ringed in their controller's colour instead of the black
-  // outline the colour discs use — the disc's own fill already says whose it
-  // is, but art covers that fill completely. A token nobody controls (a DM's
-  // NPC) falls back to its own colour rather than going back to black.
-  const owner = character?.ownerUserId
-    ? members.find((m) => m.userId === character.ownerUserId)
-    : undefined;
-  const outlineColor = owner ? playerColorFor(owner) : token.color;
   // The DM stages a scene by moving pieces onto the visible layer; players see
   // them arrive gradually rather than pop in.
   const revealOpacity = useRevealFade(isDm ? undefined : token.revealedAt);
@@ -202,6 +193,11 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     if (isDm) {
       useGameStore.getState().selectToken(token.id, e.shiftKey);
       useGameStore.getState().openInspector(token.id);
+    } else if (character && you && character.ownerUserId === you.userId) {
+      // Your own token: the inspector opens in its colour-only form, so
+      // recolouring your piece is the same right-click the DM uses.
+      useGameStore.getState().selectToken(token.id, e.shiftKey);
+      useGameStore.getState().openInspector(token.id);
     } else if (token.characterId) {
       const shops = useGameStore.getState().shopList;
       const linkedShop = shops.find((s) => s.linkedCharacterId === token.characterId);
@@ -257,7 +253,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       )}
       {shapeNode(shape, drawR, {
         fill: token.color,
-        stroke: token.artUrl ? outlineColor : '#10131a',
+        stroke: token.color,
         strokeWidth: token.artUrl ? 3 : 2,
       })}
       {token.artUrl ? (

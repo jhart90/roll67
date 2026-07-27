@@ -377,6 +377,9 @@ export interface InitiativeEntry {
    *  their own sheets - so it rides along on the entry. Null for NPCs. */
   ownerUserId?: string | null;
   ownerName?: string | null;
+  /** The token's colour — what the turn banner wears, so a DM-run combatant
+   *  gets its own identity rather than a default grey. */
+  color?: string | null;
   /** SWADE card mode: draw order (earlier draw wins rank ties). */
   drawSeq?: number;
 }

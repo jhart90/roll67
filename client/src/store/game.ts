@@ -1112,7 +1112,7 @@ export const intents = {
     socket.emit(C2S.ASSIGN_PLAYER_MAP, { userId, mapId }),
   dmViewAs: (userId: string | null) => socket.emit(C2S.DM_VIEW_AS, { userId }),
 
-  createMap: (name: string) => socket.emit(C2S.CREATE_MAP, { name }),
+  createMap: (name: string, isScene = false) => socket.emit(C2S.CREATE_MAP, { name, isScene }),
   deleteMap: (mapId: string) => socket.emit(C2S.DELETE_MAP, { mapId }),
   updateMap: (mapId: string, fields: { name?: string; bgAssetId?: string | null }) =>
     socket.emit(C2S.UPDATE_MAP, { mapId, ...fields }),

@@ -621,6 +621,7 @@ interface MapRow {
   walls_json: string;
   doors_json: string;
   lights_json: string;
+  is_scene?: number;
   texts_json: string;
   spawn_json: string | null;
   terrain_json: string;
@@ -666,18 +667,19 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     doors: safeParse(row.doors_json, []),
     lights: safeParse(row.lights_json, []),
     texts: safeParse(row.texts_json, []),
+    isScene: row.is_scene === 1,
     spawn: row.spawn_json ? safeParse(row.spawn_json, null) : null,
     terrain: safeParse(row.terrain_json, []),
   };
 }
 
 export const maps = {
-  create(campaignId: string, name: string): MapDef & { campaignId: string; bgAssetId: string | null } {
+  create(campaignId: string, name: string, isScene = false): MapDef & { campaignId: string; bgAssetId: string | null } {
     const id = newId();
     const maxOrder = (stmt('SELECT MAX(sort_order) as m FROM maps WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
     stmt(
-      'INSERT INTO maps (id, campaign_id, name, bg_asset_id, grid_json, sort_order) VALUES (?, ?, ?, NULL, ?, ?)',
-    ).run(id, campaignId, name, JSON.stringify(DEFAULT_GRID), maxOrder + 1);
+      'INSERT INTO maps (id, campaign_id, name, bg_asset_id, grid_json, sort_order, is_scene) VALUES (?, ?, ?, NULL, ?, ?, ?)',
+    ).run(id, campaignId, name, JSON.stringify(DEFAULT_GRID), maxOrder + 1, isScene ? 1 : 0);
     return maps.byId(id)!;
   },
   byId(id: string): (MapDef & { campaignId: string; bgAssetId: string | null }) | undefined {
@@ -685,8 +687,8 @@ export const maps = {
     return row ? toMapDef(row) : undefined;
   },
   forCampaign(campaignId: string): MapMeta[] {
-    const rows = stmt('SELECT id, name, sort_order, parent_id FROM maps WHERE campaign_id = ? ORDER BY sort_order').all(campaignId) as Array<{ id: string; name: string; sort_order: number; parent_id: string | null }>;
-    return rows.map((r) => ({ id: r.id, name: r.name, sortOrder: r.sort_order, parentId: r.parent_id ?? null }));
+    const rows = stmt('SELECT id, name, sort_order, parent_id, is_scene FROM maps WHERE campaign_id = ? ORDER BY sort_order').all(campaignId) as Array<{ id: string; name: string; sort_order: number; parent_id: string | null; is_scene: number }>;
+    return rows.map((r) => ({ id: r.id, name: r.name, sortOrder: r.sort_order, parentId: r.parent_id ?? null, isScene: r.is_scene === 1 }));
   },
   update(id: string, fields: { name?: string; bgAssetId?: string | null; parentId?: string | null }): void {
     if (fields.name !== undefined) stmt('UPDATE maps SET name = ? WHERE id = ?').run(fields.name, id);
@@ -734,6 +736,7 @@ export const maps = {
 
 interface TokenRow {
   id: string;
+  revealed_at?: number | null;
   map_id: string;
   character_id: string | null;
   name: string;
@@ -768,6 +771,7 @@ function toToken(row: TokenRow): Token {
     q: row.q,
     r: row.r,
     layer: row.layer,
+    revealedAt: row.revealed_at ?? null,
     size: row.size,
     shape: (row.shape as Token['shape']) ?? 'circle',
     color: row.color,
@@ -820,7 +824,7 @@ export const tokens = {
     const cur = stmt('SELECT * FROM tokens WHERE id = ?').get(id) as TokenRow | undefined;
     if (!cur) return;
     stmt(
-      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?, light_json = ?
+      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?, light_json = ?, revealed_at = ?
        WHERE id = ?`,
     ).run(
       patch.name ?? cur.name,
@@ -833,6 +837,9 @@ export const tokens = {
       patch.vision !== undefined ? (patch.vision ? JSON.stringify(patch.vision) : null) : cur.vision_json,
       patch.bar !== undefined ? (patch.bar ? JSON.stringify(patch.bar) : null) : cur.bar_json,
       patch.light !== undefined ? (patch.light ? JSON.stringify(patch.light) : null) : cur.light_json,
+      // Crossing from the GM layer onto the visible one is a reveal: stamp it
+      // so players fade the piece in rather than have it blink into being.
+      patch.layer === 'token' && cur.layer === 'gm' ? now() : cur.revealed_at ?? null,
       id,
     );
   },

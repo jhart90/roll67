@@ -99,13 +99,13 @@ function requireDmMap(socket: Socket, mapId: string) {
 }
 
 export function registerMapEditHandlers(io: Server, socket: Socket): void {
-  socket.on(C2S.CREATE_MAP, safe(socket, ({ name }: CreateMapPayload) => {
+  socket.on(C2S.CREATE_MAP, safe(socket, ({ name, isScene }: CreateMapPayload) => {
     const d = sdata(socket);
     if (!d.campaignId || d.role !== 'dm') {
       emitError(socket, 'Only the DM can create maps.');
       return;
     }
-    const map = maps.create(d.campaignId, name?.trim() || 'New map');
+    const map = maps.create(d.campaignId, name?.trim() || (isScene ? 'New scene' : 'New map'), !!isScene);
     const campaign = campaigns.byId(d.campaignId)!;
     if (!campaign.activeMapId) campaigns.setActiveMap(d.campaignId, map.id);
     io.to(dmRoom(d.campaignId)).emit(S2C.MAP_LIST, { maps: maps.forCampaign(d.campaignId) });

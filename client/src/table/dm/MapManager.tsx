@@ -235,6 +235,7 @@ export function MapManager({ onClose }: { onClose: () => void }) {
               onClick={() => intents.viewMap(m.id)}
             >
               {m.name}
+              {m.isScene && <span className="dim" style={{ fontSize: 10, marginLeft: 6 }} title="Scene — fully visible to all players">🎬</span>}
               <span className="map-badges">
                 {m.id === activeMapId && <span className="tag party-tag">party</span>}
                 {m.id === map?.id && <span className="tag">viewing</span>}
@@ -281,6 +282,16 @@ export function MapManager({ onClose }: { onClose: () => void }) {
 
       <div className="map-actions">
         <button className="btn" onClick={() => openWindow('mapEditor', 'new', {}, 'New map')}>+ New map</button>
+        <button
+          className="btn"
+          title="A scene is fully visible to every player — no fog. Stage it by moving pieces off the GM layer."
+          onClick={() => {
+            const name = window.prompt('Scene name', 'New scene');
+            if (name?.trim()) intents.createMap(name.trim(), true);
+          }}
+        >
+          + New scene
+        </button>
         <label className="btn" title="Import a .r67 map pack from another campaign">
           {importing ? 'importing…' : '⭱ Import .r67'}
           <input type="file" accept=".r67,application/json" style={{ display: 'none' }} disabled={importing} onChange={onImport} />

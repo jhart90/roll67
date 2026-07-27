@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
 import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, pointInAoe, pxPerFoot } from 'shared';
@@ -9,6 +9,29 @@ import { playerColorFor } from '../util/playerColor';
 
 /** How much larger a token with custom art renders than a plain colour disc. */
 const ART_SCALE = 1.2;
+
+/** How long a piece takes to fade in after the DM reveals it on a scene. */
+export const REVEAL_FADE_MS = 5000;
+
+/**
+ * 0..1 opacity for a token the DM has just moved onto the visible layer.
+ * Re-renders itself each frame for the length of the fade, then stops — a
+ * token revealed long ago costs nothing.
+ */
+function useRevealFade(revealedAt: number | null | undefined): number {
+  const [, tick] = useState(0);
+  const elapsed = revealedAt ? Date.now() - revealedAt : Infinity;
+  const fading = elapsed >= 0 && elapsed < REVEAL_FADE_MS;
+  useEffect(() => {
+    if (!fading) return;
+    let raf = 0;
+    const step = () => { tick((n) => n + 1); raf = requestAnimationFrame(step); };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [fading]);
+  if (!revealedAt || elapsed >= REVEAL_FADE_MS) return 1;
+  return Math.max(0, Math.min(1, elapsed / REVEAL_FADE_MS));
+}
 
 const DRAG_THROTTLE_MS = 100;
 
@@ -75,6 +98,9 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     ? members.find((m) => m.userId === character.ownerUserId)
     : undefined;
   const outlineColor = owner ? playerColorFor(owner) : token.color;
+  // The DM stages a scene by moving pieces onto the visible layer; players see
+  // them arrive gradually rather than pop in.
+  const revealOpacity = useRevealFade(isDm ? undefined : token.revealedAt);
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
     if (targetState !== 'off') {
@@ -211,7 +237,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       onContextMenu={onContextMenu}
       style={{
         cursor: targetState === 'valid' ? 'crosshair' : movable ? 'grab' : 'default',
-        opacity: (token.layer === 'gm' ? 0.55 : 1) * (targetState === 'invalid' ? 0.4 : 1),
+        opacity: (token.layer === 'gm' ? 0.55 : 1) * (targetState === 'invalid' ? 0.4 : 1) * revealOpacity,
         // The layer's svg root is pointer-events:none so draw/measure tools
         // beneath still work; tokens themselves stay interactive.
         pointerEvents: 'auto',

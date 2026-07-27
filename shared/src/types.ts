@@ -174,6 +174,9 @@ export interface MapText {
 }
 
 export interface MapMeta {
+  /** A scene is a map every player sees in full — no fog, no vision checks.
+   *  The DM stages it by moving pieces from the GM layer, which fades them in. */
+  isScene?: boolean;
   id: string;
   name: string;
   sortOrder: number;
@@ -239,6 +242,9 @@ export interface Token {
   /** Explicit stats for NPC tokens; PC tokens derive from their character sheet. */
   vision: VisionStats | null;
   bar: { hp: number; maxHp: number } | null;
+  /** When this token was moved onto the visible layer. Players fade it in over
+   *  REVEAL_FADE_MS from this moment; null once the fade is ancient history. */
+  revealedAt?: number | null;
   /** Emits light from the token's position (radii in hexes); null = no light. */
   light: { bright: number; dim: number; color?: string } | null;
 }

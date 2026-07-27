@@ -79,6 +79,8 @@ ensureColumn('maps', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
 ensureColumn('maps', 'terrain_json', "terrain_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('maps', 'texts_json', "texts_json TEXT NOT NULL DEFAULT '[]'");
+ensureColumn('maps', 'is_scene', 'is_scene INTEGER NOT NULL DEFAULT 0');
+ensureColumn('tokens', 'revealed_at', 'revealed_at INTEGER');
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 // Chat shows "Character (Player)" for anything a character did.

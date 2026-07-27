@@ -383,6 +383,28 @@ export function buildMapState(
     };
   }
 
+  // A scene is staged, not explored: everyone sees the whole thing, whether or
+  // not they have a token on it. The DM controls what is visible by which
+  // layer a piece sits on, so the GM layer is still withheld.
+  if (map.isScene) {
+    return {
+      map: mapView,
+      dmGeometry: viewer.isDm ? { walls: map.walls, doors: map.doors, lights: map.lights } : null,
+      tokens: allTokens.filter((t) => t.layer !== 'gm'),
+      drawings,
+      visible: null,
+      fade: null,
+      visiblePolygons: null,
+      fadePolygons: null,
+      visibleLitMask: null,
+      fadeLitMask: null,
+      explored: null,
+      knownDoors: [],
+      mapObjects: objs,
+      viewingAs: viewer.viewingAs ?? null,
+    };
+  }
+
   const targetUser = viewer.viewingAs ?? viewer.userId;
   const view = computeUserMapView(targetUser, map, allTokens);
   return {

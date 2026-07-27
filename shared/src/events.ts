@@ -178,7 +178,7 @@ export interface ViewMapPayload { mapId: string | null }
 export interface AssignPlayerMapPayload { userId: string; mapId: string | null }
 export interface DmViewAsPayload { userId: string | null }
 
-export interface CreateMapPayload { name: string }
+export interface CreateMapPayload { name: string; isScene?: boolean }
 export interface DeleteMapPayload { mapId: string }
 export interface UpdateMapPayload {
   mapId: string;

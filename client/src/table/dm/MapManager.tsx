@@ -44,7 +44,10 @@ function GridField({
  * background, and hex grid. Editing operates on the currently-viewed map, so
  * the window views the target map first and waits for it to load.
  */
-export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onClose: () => void }) {
+export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new' | 'new-scene'; onClose: () => void }) {
+  // 'new-scene' is the same form, creating a fully-visible map instead.
+  const creatingScene = mapId === 'new-scene';
+  const creating = mapId === 'new' || creatingScene;
   const campaign = useGameStore((s) => s.campaign);
   const map = useGameStore((s) => s.map);
   const [newName, setNewName] = useState('');
@@ -55,11 +58,11 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
 
   // Load the target map so its grid/details are available to edit.
   useEffect(() => {
-    if (mapId !== 'new' && map?.id !== mapId) intents.viewMap(mapId);
+    if (!creating && map?.id !== mapId) intents.viewMap(mapId);
   }, [mapId]);
 
   if (!campaign) return null;
-  const loaded = mapId !== 'new' && map && map.id === mapId ? map : null;
+  const loaded = !creating && map && map.id === mapId ? map : null;
   const grid = loaded?.grid;
 
   function setGrid(patch: Partial<GridConfig>) {
@@ -84,21 +87,25 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
   return (
       <div className="panel levelup map-window">
         <div className="dock-header">
-          <h3>{mapId === 'new' ? 'New map' : 'Edit map'}</h3>
+          <h3>{creatingScene ? 'New scene' : creating ? 'New map' : 'Edit map'}</h3>
         </div>
 
-        {mapId === 'new' ? (
+        {creating ? (
           <form
             className="stack"
-            onSubmit={(e) => { e.preventDefault(); if (newName.trim()) { intents.createMap(newName.trim()); onClose(); } }}
+            onSubmit={(e) => { e.preventDefault(); if (newName.trim()) { intents.createMap(newName.trim(), creatingScene); onClose(); } }}
           >
             <label>
               Name
-              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Tavern interior" autoFocus />
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={creatingScene ? 'e.g. The throne room' : 'e.g. Tavern interior'} autoFocus />
             </label>
-            <p className="dim" style={{ fontSize: 12 }}>Create the map, then click its ✏️ to set a background and align the hex grid.</p>
+            <p className="dim" style={{ fontSize: 12 }}>
+              {creatingScene
+                ? 'A scene is fully visible to every player — no fog. Stage it by keeping pieces on the GM layer and moving them across to fade them in.'
+                : 'Create the map, then click its ✏️ to set a background and align the hex grid.'}
+            </p>
             <div className="row">
-              <button type="submit" className="primary" style={{ width: 'auto' }} disabled={!newName.trim()}>Create map</button>
+              <button type="submit" className="primary" style={{ width: 'auto' }} disabled={!newName.trim()}>{creatingScene ? 'Create scene' : 'Create map'}</button>
               <button type="button" onClick={onClose}>Cancel</button>
             </div>
           </form>
@@ -285,10 +292,7 @@ export function MapManager({ onClose }: { onClose: () => void }) {
         <button
           className="btn"
           title="A scene is fully visible to every player — no fog. Stage it by moving pieces off the GM layer."
-          onClick={() => {
-            const name = window.prompt('Scene name', 'New scene');
-            if (name?.trim()) intents.createMap(name.trim(), true);
-          }}
+          onClick={() => openWindow('mapEditor', 'new-scene', {}, 'New scene')}
         >
           + New scene
         </button>

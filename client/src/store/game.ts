@@ -263,6 +263,9 @@ interface GameState {
   setClientMuted(m: boolean): void;
   drawColor: string;
   drawLayer: DrawingLayerName;
+  /** The label currently being edited/resized, if any. */
+  selectedTextId: string | null;
+  setSelectedTextId(id: string | null): void;
   /** Style the next map label is placed with. */
   textStyle: { size: number; color: string; font: string; bold: boolean; italic: boolean };
   setDrawColor(c: string): void;
@@ -479,9 +482,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   clientMuted: false,
   setClientMuted(clientMuted) { set({ clientMuted }); },
   drawColor: '#e8d27b',
+  selectedTextId: null,
   textStyle: { size: 28, color: '#f4f6fb', font: 'sans-serif', bold: true, italic: false },
   drawLayer: 'map',
   setDrawColor(drawColor) { set({ drawColor }); },
+  setSelectedTextId(selectedTextId) { set({ selectedTextId }); },
   setTextStyle(patch) { set((st) => ({ textStyle: { ...st.textStyle, ...patch } })); },
   setDrawLayer(drawLayer) { set({ drawLayer }); },
   lootKind: 'item',

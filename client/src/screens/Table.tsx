@@ -80,6 +80,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const doorType = useGameStore((s) => s.doorType);
   const lootKind = useGameStore((s) => s.lootKind);
   const textStyle = useGameStore((s) => s.textStyle);
+  const selectedTextId = useGameStore((s) => s.selectedTextId);
   const terrainBrush = useGameStore((s) => s.terrainBrush);
   const terrainErase = useGameStore((s) => s.terrainErase);
   const [showMaps, setShowMaps] = useState(false);
@@ -110,6 +111,14 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
       useGameStore.getState().setShowCharacterCreator(true);
     }
   }, [characterCreatorPrompted, you, campaign, characters]);
+
+  // Changing a style control restyles the selected label as you go; with
+  // nothing selected it just arms the next label you place.
+  function applyTextStyle(patch: Partial<typeof textStyle>) {
+    useGameStore.getState().setTextStyle(patch);
+    const sel = map?.texts?.find((t) => t.id === selectedTextId);
+    if (map && sel) intents.upsertMapText(map.id, { ...sel, ...textStyle, ...patch });
+  }
 
   const isDm = you?.role === 'dm';
   const players = members.filter((m) => m.role === 'player');
@@ -284,7 +293,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
             <select
               style={{ fontSize: 12, width: 'auto' }}
               value={textStyle.font}
-              onChange={(e) => useGameStore.getState().setTextStyle({ font: e.target.value })}
+              onChange={(e) => applyTextStyle({ font: e.target.value })}
             >
               {LABEL_FONTS.map((f) => (
                 <option key={f.css} value={f.css} style={{ fontFamily: f.css }}>{f.name}</option>
@@ -295,13 +304,13 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               type="number" min={6} max={400} step={2}
               style={{ fontSize: 12, width: 64, margin: 0 }}
               value={textStyle.size}
-              onChange={(e) => useGameStore.getState().setTextStyle({ size: Number(e.target.value) || 28 })}
+              onChange={(e) => applyTextStyle({ size: Number(e.target.value) || 28 })}
             />
             <button
               className={textStyle.bold ? 'active' : ''}
               style={{ fontSize: 12, fontWeight: 700 }}
               title="Bold"
-              onClick={() => useGameStore.getState().setTextStyle({ bold: !textStyle.bold })}
+              onClick={() => applyTextStyle({ bold: !textStyle.bold })}
             >
               B
             </button>
@@ -309,7 +318,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               className={textStyle.italic ? 'active' : ''}
               style={{ fontSize: 12, fontStyle: 'italic' }}
               title="Italic"
-              onClick={() => useGameStore.getState().setTextStyle({ italic: !textStyle.italic })}
+              onClick={() => applyTextStyle({ italic: !textStyle.italic })}
             >
               I
             </button>
@@ -318,7 +327,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
                 key={c}
                 className={`swatch ${textStyle.color === c ? 'active' : ''}`}
                 style={{ background: c }}
-                onClick={() => useGameStore.getState().setTextStyle({ color: c })}
+                onClick={() => applyTextStyle({ color: c })}
               />
             ))}
             <input
@@ -326,7 +335,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               className="dice-color-custom"
               value={textStyle.color}
               title="Custom colour"
-              onChange={(e) => useGameStore.getState().setTextStyle({ color: e.target.value })}
+              onChange={(e) => applyTextStyle({ color: e.target.value })}
             />
             <span className="dim" style={{ fontSize: 11 }}>click map to place · right-click a label to remove</span>
           </div>

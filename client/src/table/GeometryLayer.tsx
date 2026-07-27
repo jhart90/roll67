@@ -223,6 +223,11 @@ export function GeometryLayer() {
   const knownDoors = useGameStore((s) => s.knownDoors);
   const tool = useGameStore((s) => s.tool);
   const textStyle = useGameStore((s) => s.textStyle);
+  const selectedTextId = useGameStore((s) => s.selectedTextId);
+  /** Where the DM is typing a brand-new label, before it is committed. */
+  const [textDraft, setTextDraft] = useState<{ x: number; y: number; value: string } | null>(null);
+  /** A label being dragged: its id and the live position under the cursor. */
+  const [textDrag, setTextDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const selectedLightId = useGameStore((s) => s.selectedLightId);
   const selectedWallId = useGameStore((s) => s.selectedWallId);
   const selectedDoorId = useGameStore((s) => s.selectedDoorId);
@@ -400,16 +405,10 @@ export function GeometryLayer() {
         setDraft([]);
       }
     } else if (tool === 'text') {
-      // A label needs words, so it asks for them rather than dropping an
-      // empty box the DM then has to find and fill in.
-      const body = window.prompt('Label text');
-      if (body?.trim()) {
-        intents.upsertMapText(map.id, {
-          x: raw.x, y: raw.y, text: body.trim(),
-          size: textStyle.size, color: textStyle.color, font: textStyle.font,
-          bold: textStyle.bold, italic: textStyle.italic,
-        });
-      }
+      // Type where you clicked. A browser prompt would take the DM's eyes off
+      // the map at exactly the moment they are choosing where the words go.
+      setTextDraft({ x: raw.x, y: raw.y, value: '' });
+      useGameStore.getState().setSelectedTextId(null);
     } else if (tool === 'light') {
       intents.upsertLight(map.id, { x: raw.x, y: raw.y, brightRadius: 4, dimRadius: 8 });
     } else if (tool === 'spawn') {
@@ -505,7 +504,7 @@ export function GeometryLayer() {
             strokeWidth: Math.max(2, t.size * 0.12),
             strokeLinejoin: 'round',
             userSelect: 'none',
-            cursor: isDm && tool === 'text' ? 'pointer' : 'default',
+            cursor: isDm && tool === 'text' ? 'move' : 'default',
             pointerEvents: isDm && tool === 'text' ? 'auto' : 'none',
           }}
           onContextMenu={(e) => {
@@ -514,10 +513,91 @@ export function GeometryLayer() {
             e.stopPropagation();
             intents.deleteMapText(map.id, t.id);
           }}
+          onPointerDown={(e) => {
+            if (!isDm || tool !== 'text' || e.button !== 0) return;
+            e.stopPropagation();
+            useGameStore.getState().setSelectedTextId(t.id);
+            // Adopt the label's own style so the toolbar edits it in place
+            // rather than showing whatever the last-placed label used.
+            useGameStore.getState().setTextStyle({
+              size: t.size, color: t.color, font: t.font, bold: !!t.bold, italic: !!t.italic,
+            });
+            setTextDrag({ id: t.id, x: t.x, y: t.y });
+            try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* noop */ }
+          }}
+          onPointerMove={(e) => {
+            if (textDrag?.id !== t.id || !e.currentTarget.hasPointerCapture(e.pointerId)) return;
+            const p = stage.toMap(e.clientX, e.clientY);
+            setTextDrag({ id: t.id, x: p.x, y: p.y });
+          }}
+          onPointerUp={(e) => {
+            if (textDrag?.id !== t.id) return;
+            e.currentTarget.releasePointerCapture(e.pointerId);
+            // Only write if it actually moved — a plain click is a select.
+            if (Math.hypot(textDrag.x - t.x, textDrag.y - t.y) > 1) {
+              intents.upsertMapText(map.id, { ...t, x: textDrag.x, y: textDrag.y });
+            }
+            setTextDrag(null);
+          }}
         >
           {t.text}
         </text>
       ))}
+
+      {/* Selection ring on the label being edited, so the toolbar's size and
+          colour controls have a visible subject. */}
+      {isDm && tool === 'text' && (() => {
+        const sel = (map.texts ?? []).find((t) => t.id === selectedTextId);
+        if (!sel) return null;
+        const pos = textDrag?.id === sel.id ? textDrag : sel;
+        const w = Math.max(sel.size, sel.text.length * sel.size * 0.55);
+        return (
+          <rect
+            x={pos.x - w / 2} y={pos.y - sel.size * 0.8}
+            width={w} height={sel.size * 1.6}
+            fill="none" stroke="#e8d27b" strokeWidth={2} strokeDasharray="6 4"
+            pointerEvents="none"
+          />
+        );
+      })()}
+
+      {/* Typing happens on the map itself: a field anchored where the DM
+          clicked, styled as the label will look once committed. */}
+      {isDm && tool === 'text' && textDraft && (
+        <foreignObject
+          x={textDraft.x - 200} y={textDraft.y - textStyle.size}
+          width={400} height={textStyle.size * 2.2}
+          style={{ overflow: 'visible' }}
+        >
+          <input
+            autoFocus
+            value={textDraft.value}
+            placeholder="Type a label…"
+            onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') setTextDraft(null);
+              if (e.key !== 'Enter') return;
+              if (textDraft.value.trim()) {
+                intents.upsertMapText(map.id, {
+                  x: textDraft.x, y: textDraft.y, text: textDraft.value.trim(),
+                  size: textStyle.size, color: textStyle.color, font: textStyle.font,
+                  bold: textStyle.bold, italic: textStyle.italic,
+                });
+              }
+              setTextDraft(null);
+            }}
+            onBlur={() => setTextDraft(null)}
+            style={{
+              width: '100%', textAlign: 'center', background: 'rgba(16,19,26,0.75)',
+              border: '1px dashed #e8d27b', borderRadius: 4, margin: 0, padding: '2px 6px',
+              color: textStyle.color, fontFamily: textStyle.font, fontSize: textStyle.size,
+              fontWeight: textStyle.bold ? 700 : 400,
+              fontStyle: textStyle.italic ? 'italic' : 'normal',
+            }}
+          />
+        </foreignObject>
+      )}
 
       {/* lights (DM only) — interactive in the light tool AND the select cursor */}
       {lights.map((l) => (

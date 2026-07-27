@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { intents, useGameStore } from '../store/game';
 import { CardChip } from '../util/PlayingCardView';
 
-const DEFAULT_POS = { x: 16, y: 140 }; // from the bottom-left corner
+/** The tool rail owns the left edge: a 40px button plus 6px padding either
+ *  side plus its border. Starting at 16 put the tracker on top of it. */
+const TOOL_RAIL_W = 53;
+const DEFAULT_POS = { x: TOOL_RAIL_W + 16, y: 140 }; // from the bottom-left corner
 
 /**
  * A small floating, draggable readout of the initiative order — visible to

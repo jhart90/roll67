@@ -228,6 +228,10 @@ export function GeometryLayer() {
   const [textDraft, setTextDraft] = useState<{ x: number; y: number; value: string } | null>(null);
   /** A label being dragged: its id and the live position under the cursor. */
   const [textDrag, setTextDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const draftRef = useRef<HTMLInputElement>(null);
+  // autoFocus is unreliable on an input inside a foreignObject, so focus it
+  // once it has actually mounted.
+  useEffect(() => { if (textDraft) draftRef.current?.focus(); }, [textDraft?.x, textDraft?.y]);
   const selectedLightId = useGameStore((s) => s.selectedLightId);
   const selectedWallId = useGameStore((s) => s.selectedWallId);
   const selectedDoorId = useGameStore((s) => s.selectedDoorId);
@@ -567,10 +571,13 @@ export function GeometryLayer() {
         <foreignObject
           x={textDraft.x - 200} y={textDraft.y - textStyle.size}
           width={400} height={textStyle.size * 2.2}
-          style={{ overflow: 'visible' }}
+          // The svg root is pointer-events:none so the tools beneath it still
+          // work; every interactive child has to opt back in, or the field
+          // renders but cannot be clicked or focused.
+          style={{ overflow: 'visible', pointerEvents: 'auto' }}
         >
           <input
-            autoFocus
+            ref={draftRef}
             value={textDraft.value}
             placeholder="Type a label…"
             onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
@@ -587,7 +594,16 @@ export function GeometryLayer() {
               }
               setTextDraft(null);
             }}
-            onBlur={() => setTextDraft(null)}
+            onBlur={() => {
+              if (textDraft.value.trim()) {
+                intents.upsertMapText(map.id, {
+                  x: textDraft.x, y: textDraft.y, text: textDraft.value.trim(),
+                  size: textStyle.size, color: textStyle.color, font: textStyle.font,
+                  bold: textStyle.bold, italic: textStyle.italic,
+                });
+              }
+              setTextDraft(null);
+            }}
             style={{
               width: '100%', textAlign: 'center', background: 'rgba(16,19,26,0.75)',
               border: '1px dashed #e8d27b', borderRadius: 4, margin: 0, padding: '2px 6px',

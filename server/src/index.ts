@@ -8,7 +8,7 @@ import { PORT, UPLOADS_DIR, ensureDataDirs } from './config.js';
 import { socketAuth } from './auth.js';
 import { authRouter, campaignRouter } from './routes/authRoutes.js';
 import { uploadRouter } from './routes/uploadRoutes.js';
-import { mapPackRouter } from './routes/mapPackRoutes.js';
+import { attachMapPackIo, mapPackRouter } from './routes/mapPackRoutes.js';
 import { registerSessionHandlers } from './live/handlers/session.js';
 import { registerMapEditHandlers } from './live/handlers/mapEdit.js';
 import { registerTokenHandlers } from './live/handlers/tokens.js';
@@ -54,6 +54,7 @@ if (fs.existsSync(clientDist)) {
 
 const httpServer = http.createServer(app);
 const io = new Server(httpServer);
+attachMapPackIo(io);
 
 io.use(socketAuth);
 

@@ -5,6 +5,18 @@ import path from 'node:path';
 import { UPLOADS_DIR } from '../config.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { assets, campaigns, maps } from '../db/repos.js';
+import { S2C } from 'shared';
+import type { Server } from 'socket.io';
+import { dmRoom } from '../live/hub.js';
+import { broadcastDirectory } from '../live/directory.js';
+
+/**
+ * The socket server, injected once it exists — routes are mounted before it is
+ * constructed. An import happens over HTTP, so without this the new map sits
+ * in the database unannounced and the DM only sees it after rejoining.
+ */
+let ioRef: Server | null = null;
+export function attachMapPackIo(io: Server): void { ioRef = io; }
 
 /**
  * .r67 map packs — a map moved between campaigns, and between game systems.
@@ -134,5 +146,11 @@ mapPackRouter.post('/maps/import', requireAuth, upload.single('file'), (req, res
     maps.update(map.id, { bgAssetId: asset.id });
   }
 
+  // Announce it: the map list is socket-pushed, and this created a map
+  // outside that flow entirely.
+  if (ioRef) {
+    ioRef.to(dmRoom(campaignId)).emit(S2C.MAP_LIST, { maps: maps.forCampaign(campaignId) });
+    broadcastDirectory(ioRef, campaignId);
+  }
   return res.json({ mapId: map.id, name: map.name });
 });

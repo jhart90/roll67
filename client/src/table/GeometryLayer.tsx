@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Door, Light, Point, Wall } from 'shared';
 import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -225,7 +226,7 @@ export function GeometryLayer() {
   const textStyle = useGameStore((s) => s.textStyle);
   const selectedTextId = useGameStore((s) => s.selectedTextId);
   /** Where the DM is typing a brand-new label, before it is committed. */
-  const [textDraft, setTextDraft] = useState<{ x: number; y: number; value: string } | null>(null);
+  const [textDraft, setTextDraft] = useState<{ x: number; y: number; sx: number; sy: number; value: string } | null>(null);
   /** A label being dragged: its id and the live position under the cursor. */
   const [textDrag, setTextDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const draftRef = useRef<HTMLInputElement>(null);
@@ -411,7 +412,7 @@ export function GeometryLayer() {
     } else if (tool === 'text') {
       // Type where you clicked. A browser prompt would take the DM's eyes off
       // the map at exactly the moment they are choosing where the words go.
-      setTextDraft({ x: raw.x, y: raw.y, value: '' });
+      setTextDraft({ x: raw.x, y: raw.y, sx: e.clientX, sy: e.clientY, value: '' });
       useGameStore.getState().setSelectedTextId(null);
     } else if (tool === 'light') {
       intents.upsertLight(map.id, { x: raw.x, y: raw.y, brightRadius: 4, dimRadius: 8 });
@@ -638,18 +639,21 @@ export function GeometryLayer() {
     </svg>
 
     {/*
-      The label field is a plain HTML input, deliberately NOT a foreignObject.
-      This layer's svg is pointer-events:none and React's namespace handling
-      inside foreignObject is fragile — the field rendered but could never take
-      focus. As a sibling it sits in the same transformed map container, where
-      map pixels are CSS pixels, so it scales and pans with everything else and
-      is just an ordinary focusable input.
+      The label field is portalled to document.body and positioned in SCREEN
+      coordinates. Two earlier attempts put it inside the map — first as a
+      foreignObject, then as a sibling of this layer's svg — and neither ever
+      took focus. Rather than keep guessing which of the transform, the
+      stacking order or the svg's pointer-events:none was eating it, this
+      sidesteps all three: it is a plain input on top of everything, at the
+      point that was clicked. It does not pan with the map while open, which
+      is a fair trade for a field that lives for one sentence.
     */}
-    {isDm && tool === 'text' && textDraft && (
+    {isDm && tool === 'text' && textDraft && createPortal(
       <input
         ref={draftRef}
+        autoFocus
         value={textDraft.value}
-        placeholder="Type a label…"
+        placeholder="Type a label, Enter to place…"
         onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
         onKeyDown={(e) => {
           e.stopPropagation();
@@ -659,24 +663,25 @@ export function GeometryLayer() {
         }}
         onBlur={commitDraft}
         style={{
-          position: 'absolute',
-          left: textDraft.x - 200,
-          top: textDraft.y - textStyle.size,
-          width: 400,
+          position: 'fixed',
+          left: Math.max(8, textDraft.sx - 150),
+          top: Math.max(8, textDraft.sy - 20),
+          width: 300,
+          zIndex: 9999,
           textAlign: 'center',
-          background: 'rgba(16,19,26,0.75)',
+          background: 'rgba(16,19,26,0.92)',
           border: '1px dashed #e8d27b',
           borderRadius: 4,
           margin: 0,
-          padding: '2px 6px',
-          pointerEvents: 'auto',
+          padding: '4px 8px',
           color: textStyle.color,
           fontFamily: textStyle.font,
-          fontSize: textStyle.size,
+          fontSize: Math.min(28, textStyle.size),
           fontWeight: textStyle.bold ? 700 : 400,
           fontStyle: textStyle.italic ? 'italic' : 'normal',
         }}
-      />
+      />,
+      document.body,
     )}
     </>
   );

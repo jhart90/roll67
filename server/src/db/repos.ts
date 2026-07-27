@@ -1,7 +1,7 @@
 import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, Door, Drawing, GameSystem,
-  GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta,
+  GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
 import { db, newId, now, stmt } from './db.js';
@@ -621,6 +621,7 @@ interface MapRow {
   walls_json: string;
   doors_json: string;
   lights_json: string;
+  texts_json: string;
   spawn_json: string | null;
   terrain_json: string;
   sort_order: number;
@@ -664,6 +665,7 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     walls: safeParse(row.walls_json, []),
     doors: safeParse(row.doors_json, []),
     lights: safeParse(row.lights_json, []),
+    texts: safeParse(row.texts_json, []),
     spawn: row.spawn_json ? safeParse(row.spawn_json, null) : null,
     terrain: safeParse(row.terrain_json, []),
   };
@@ -713,6 +715,9 @@ export const maps = {
   },
   setDoors(id: string, doors: Door[]): void {
     stmt('UPDATE maps SET doors_json = ? WHERE id = ?').run(JSON.stringify(doors), id);
+  },
+  setTexts(id: string, texts: MapText[]): void {
+    stmt('UPDATE maps SET texts_json = ? WHERE id = ?').run(JSON.stringify(texts), id);
   },
   setLights(id: string, lights: Light[]): void {
     stmt('UPDATE maps SET lights_json = ? WHERE id = ?').run(JSON.stringify(lights), id);

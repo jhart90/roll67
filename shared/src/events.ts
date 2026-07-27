@@ -5,7 +5,7 @@ import type {
   AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
-  MapDef, MapMeta, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
+  MapDef, MapMeta, MapText, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
   RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
@@ -36,6 +36,8 @@ export const C2S = {
   TOGGLE_DOOR: 'toggleDoor',
   UPSERT_LIGHT: 'upsertLight',
   DELETE_LIGHT: 'deleteLight',
+  UPSERT_MAP_TEXT: 'upsertMapText',
+  DELETE_MAP_TEXT: 'deleteMapText',
   // tokens
   CREATE_TOKEN: 'createToken',
   DELETE_TOKEN: 'deleteToken',
@@ -204,6 +206,12 @@ export interface UpsertLightPayload {
   light: { id?: string; name?: string; x: number; y: number; brightRadius: number; dimRadius: number; color?: string };
 }
 export interface DeleteLightPayload { mapId: string; lightId: string }
+/** Place or edit a map label. Omit id to create one. */
+export interface UpsertMapTextPayload {
+  mapId: string;
+  text: { id?: string; x: number; y: number; text: string; size?: number; color?: string; font?: string; bold?: boolean; italic?: boolean };
+}
+export interface DeleteMapTextPayload { mapId: string; textId: string }
 
 export interface CreateTokenPayload {
   mapId: string;

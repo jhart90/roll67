@@ -154,6 +154,25 @@ export interface Light {
   color?: string;
 }
 
+/**
+ * A label the DM paints onto the map — a room name, a warning, a signpost.
+ * Persistent map furniture like walls, but unlike walls it is meant to be READ,
+ * so players receive it too.
+ */
+export interface MapText {
+  id: string;
+  /** Anchor in background-image pixels; the text is centred on it. */
+  x: number;
+  y: number;
+  text: string;
+  /** Font size in map pixels, so labels zoom with the map. */
+  size: number;
+  color: string;
+  font: string;
+  bold?: boolean;
+  italic?: boolean;
+}
+
 export interface MapMeta {
   id: string;
   name: string;
@@ -175,6 +194,7 @@ export interface MapDef extends MapMeta {
   spawn: Hex | null;
   /** Packed hex keys painted as rough terrain. */
   terrain: number[];
+  texts: MapText[];
 }
 
 /** What players receive: geometry stripped, doors reduced to known state. */
@@ -186,6 +206,8 @@ export interface MapView extends MapMeta {
   spawn?: Hex | null;
   /** Packed hex keys painted as rough terrain. */
   terrain: number[];
+  /** Labels are for reading, so players get them too. */
+  texts: MapText[];
 }
 
 // ---------- Tokens ----------

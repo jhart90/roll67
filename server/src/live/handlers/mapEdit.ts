@@ -3,7 +3,7 @@ import {
   C2S, S2C, hexToPixel, rows, str,
   type AutoTraceWallsPayload,
   type CreateMapPayload, type DeleteMapPayload, type DeleteDoorPayload,
-  type DeleteLightPayload, type DeleteWallPayload, type Door, type MapEditedPayload,
+  type DeleteLightPayload, type DeleteMapTextPayload, type DeleteWallPayload, type Door, type MapEditedPayload, type MapText, type UpsertMapTextPayload,
   type LinkLightToTokenPayload, type MoveLightToMapPayload,
   type Point, type RenameLightPayload, type UnlinkLightFromTokenPayload, type Wall,
   type SetGridConfigPayload, type SetSpawnPayload, type SetTerrainPayload,
@@ -301,6 +301,38 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     io.to(dmRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, lights });
     syncMapVision(io, d.campaignId!, mapId);
   }, 'DELETE_LIGHT'));
+
+  // Map labels. Unlike walls and lights these are meant to be read, so the
+  // whole map is re-sent rather than whispered to the DM room — syncMapVision
+  // pushes the new MapView to everyone looking at this map.
+  socket.on(C2S.UPSERT_MAP_TEXT, safe(socket, ({ mapId, text }: UpsertMapTextPayload) => {
+    const { d, map } = requireDmMap(socket, mapId);
+    const body = String(text?.text ?? '').slice(0, 200);
+    if (!body.trim()) return;
+    const next: MapText = {
+      id: text.id ?? newId(),
+      x: Number(text.x) || 0,
+      y: Number(text.y) || 0,
+      text: body,
+      size: Math.max(6, Math.min(400, Number(text.size) || 28)),
+      color: /^#[0-9a-fA-F]{6}$/.test(String(text.color)) ? text.color! : '#f4f6fb',
+      font: String(text.font ?? 'sans-serif').slice(0, 60),
+      ...(text.bold ? { bold: true } : {}),
+      ...(text.italic ? { italic: true } : {}),
+    };
+    const existing = map.texts ?? [];
+    const texts = existing.some((t) => t.id === next.id)
+      ? existing.map((t) => (t.id === next.id ? next : t))
+      : [...existing, next];
+    maps.setTexts(mapId, texts);
+    syncMapVision(io, d.campaignId!, mapId);
+  }, 'UPSERT_MAP_TEXT'));
+
+  socket.on(C2S.DELETE_MAP_TEXT, safe(socket, ({ mapId, textId }: DeleteMapTextPayload) => {
+    const { d, map } = requireDmMap(socket, mapId);
+    maps.setTexts(mapId, (map.texts ?? []).filter((t) => t.id !== textId));
+    syncMapVision(io, d.campaignId!, mapId);
+  }, 'DELETE_MAP_TEXT'));
 
   socket.on(C2S.RENAME_LIGHT, safe(socket, ({ lightId, mapId, name }: RenameLightPayload) => {
     const { d, map } = requireDmMap(socket, mapId);

@@ -40,6 +40,17 @@ const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'erase', icon: '🧽', label: 'Erase your drawings' },
 ];
 
+/** Fonts offered for map labels — web-safe stacks, so every client renders
+ *  the same label the DM placed. */
+const LABEL_FONTS = [
+  { name: 'Sans', css: 'sans-serif' },
+  { name: 'Serif', css: 'Georgia, serif' },
+  { name: 'Slab', css: '"Times New Roman", serif' },
+  { name: 'Mono', css: '"Courier New", monospace' },
+  { name: 'Display', css: 'Impact, sans-serif' },
+  { name: 'Script', css: '"Brush Script MT", cursive' },
+];
+
 const DM_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'wall', icon: '🧱', label: 'Walls (block movement & sight)' },
   { id: 'door', icon: '🚪', label: 'Doors' },
@@ -47,6 +58,7 @@ const DM_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'loot', icon: '💰', label: 'Place loot (items & chests)' },
   { id: 'spawn', icon: '🎯', label: 'Set token spawn point (where dropped tokens appear)' },
   { id: 'terrain', icon: '🏔️', label: 'Paint rough terrain' },
+  { id: 'text', icon: '🅣', label: 'Place a text label on the map (right-click a label to remove it)' },
 ];
 
 export function Table({ campaignId, onExit }: { campaignId: string; onExit: () => void }) {
@@ -67,6 +79,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const wallRainbow = useGameStore((s) => s.wallRainbow);
   const doorType = useGameStore((s) => s.doorType);
   const lootKind = useGameStore((s) => s.lootKind);
+  const textStyle = useGameStore((s) => s.textStyle);
   const terrainBrush = useGameStore((s) => s.terrainBrush);
   const terrainErase = useGameStore((s) => s.terrainErase);
   const [showMaps, setShowMaps] = useState(false);
@@ -262,6 +275,60 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               </button>
             ))}
             <span className="dim" style={{ fontSize: 11 }}>click map to place · right-click to edit</span>
+          </div>
+        )}
+
+        {tool === 'text' && map && isDm && (
+          <div className="draw-options">
+            <span className="dim" style={{ fontSize: 12 }}>Font:</span>
+            <select
+              style={{ fontSize: 12, width: 'auto' }}
+              value={textStyle.font}
+              onChange={(e) => useGameStore.getState().setTextStyle({ font: e.target.value })}
+            >
+              {LABEL_FONTS.map((f) => (
+                <option key={f.css} value={f.css} style={{ fontFamily: f.css }}>{f.name}</option>
+              ))}
+            </select>
+            <span className="dim" style={{ fontSize: 12 }}>Size:</span>
+            <input
+              type="number" min={6} max={400} step={2}
+              style={{ fontSize: 12, width: 64, margin: 0 }}
+              value={textStyle.size}
+              onChange={(e) => useGameStore.getState().setTextStyle({ size: Number(e.target.value) || 28 })}
+            />
+            <button
+              className={textStyle.bold ? 'active' : ''}
+              style={{ fontSize: 12, fontWeight: 700 }}
+              title="Bold"
+              onClick={() => useGameStore.getState().setTextStyle({ bold: !textStyle.bold })}
+            >
+              B
+            </button>
+            <button
+              className={textStyle.italic ? 'active' : ''}
+              style={{ fontSize: 12, fontStyle: 'italic' }}
+              title="Italic"
+              onClick={() => useGameStore.getState().setTextStyle({ italic: !textStyle.italic })}
+            >
+              I
+            </button>
+            {DRAW_COLORS.map((c) => (
+              <button
+                key={c}
+                className={`swatch ${textStyle.color === c ? 'active' : ''}`}
+                style={{ background: c }}
+                onClick={() => useGameStore.getState().setTextStyle({ color: c })}
+              />
+            ))}
+            <input
+              type="color"
+              className="dice-color-custom"
+              value={textStyle.color}
+              title="Custom colour"
+              onChange={(e) => useGameStore.getState().setTextStyle({ color: e.target.value })}
+            />
+            <span className="dim" style={{ fontSize: 11 }}>click map to place · right-click a label to remove</span>
           </div>
         )}
 

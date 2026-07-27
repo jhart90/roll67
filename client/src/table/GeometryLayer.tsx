@@ -222,6 +222,7 @@ export function GeometryLayer() {
   const dmGeometry = useGameStore((s) => s.dmGeometry);
   const knownDoors = useGameStore((s) => s.knownDoors);
   const tool = useGameStore((s) => s.tool);
+  const textStyle = useGameStore((s) => s.textStyle);
   const selectedLightId = useGameStore((s) => s.selectedLightId);
   const selectedWallId = useGameStore((s) => s.selectedWallId);
   const selectedDoorId = useGameStore((s) => s.selectedDoorId);
@@ -235,7 +236,7 @@ export function GeometryLayer() {
 
   const { width, height } = mapPixelSize(map);
   const grid = map.grid;
-  const editing = isDm && (tool === 'wall' || tool === 'door' || tool === 'light' || tool === 'erase' || tool === 'spawn');
+  const editing = isDm && (tool === 'wall' || tool === 'door' || tool === 'light' || tool === 'erase' || tool === 'spawn' || tool === 'text');
 
   const walls = isDm ? dmGeometry?.walls ?? [] : [];
   const doors = isDm ? dmGeometry?.doors ?? [] : knownDoors;
@@ -398,6 +399,17 @@ export function GeometryLayer() {
         intents.upsertDoor(map.id, { a: draft[0], b: p, open: false, type: doorType });
         setDraft([]);
       }
+    } else if (tool === 'text') {
+      // A label needs words, so it asks for them rather than dropping an
+      // empty box the DM then has to find and fill in.
+      const body = window.prompt('Label text');
+      if (body?.trim()) {
+        intents.upsertMapText(map.id, {
+          x: raw.x, y: raw.y, text: body.trim(),
+          size: textStyle.size, color: textStyle.color, font: textStyle.font,
+          bold: textStyle.bold, italic: textStyle.italic,
+        });
+      }
     } else if (tool === 'light') {
       intents.upsertLight(map.id, { x: raw.x, y: raw.y, brightRadius: 4, dimRadius: 8 });
     } else if (tool === 'spawn') {
@@ -470,6 +482,42 @@ export function GeometryLayer() {
           onContextMenu={onOverlayContextMenu}
         />
       )}
+
+      {/* Map labels. Unlike walls and lights these are meant to be read, so
+          they render for players too. Right-click removes one (DM only). */}
+      {(map.texts ?? []).map((t) => (
+        <text
+          key={t.id}
+          x={t.x}
+          y={t.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill={t.color}
+          fontSize={t.size}
+          fontFamily={t.font}
+          fontWeight={t.bold ? 700 : 400}
+          fontStyle={t.italic ? 'italic' : 'normal'}
+          // A dark halo keeps light text readable over a light map, and vice
+          // versa — the DM can't know what's underneath every label.
+          style={{
+            paintOrder: 'stroke',
+            stroke: 'rgba(0,0,0,0.65)',
+            strokeWidth: Math.max(2, t.size * 0.12),
+            strokeLinejoin: 'round',
+            userSelect: 'none',
+            cursor: isDm && tool === 'text' ? 'pointer' : 'default',
+            pointerEvents: isDm && tool === 'text' ? 'auto' : 'none',
+          }}
+          onContextMenu={(e) => {
+            if (!isDm || tool !== 'text') return;
+            e.preventDefault();
+            e.stopPropagation();
+            intents.deleteMapText(map.id, t.id);
+          }}
+        >
+          {t.text}
+        </text>
+      ))}
 
       {/* lights (DM only) — interactive in the light tool AND the select cursor */}
       {lights.map((l) => (

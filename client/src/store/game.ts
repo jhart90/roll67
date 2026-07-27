@@ -115,7 +115,7 @@ function resetChatQueue(): void {
   lastRollEndedAt = 0;
 }
 
-export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain';
+export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain' | 'text';
 export type DockTab = 'chat' | 'initiative' | 'world';
 
 export type TerrainBrush = 'brush' | 'rect' | 'circle';
@@ -263,7 +263,10 @@ interface GameState {
   setClientMuted(m: boolean): void;
   drawColor: string;
   drawLayer: DrawingLayerName;
+  /** Style the next map label is placed with. */
+  textStyle: { size: number; color: string; font: string; bold: boolean; italic: boolean };
   setDrawColor(c: string): void;
+  setTextStyle(patch: Partial<GameState['textStyle']>): void;
   setDrawLayer(l: DrawingLayerName): void;
   lootKind: 'item' | 'chest';
   setLootKind(k: 'item' | 'chest'): void;
@@ -476,8 +479,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   clientMuted: false,
   setClientMuted(clientMuted) { set({ clientMuted }); },
   drawColor: '#e8d27b',
+  textStyle: { size: 28, color: '#f4f6fb', font: 'sans-serif', bold: true, italic: false },
   drawLayer: 'map',
   setDrawColor(drawColor) { set({ drawColor }); },
+  setTextStyle(patch) { set((st) => ({ textStyle: { ...st.textStyle, ...patch } })); },
   setDrawLayer(drawLayer) { set({ drawLayer }); },
   lootKind: 'item',
   setLootKind(lootKind) { set({ lootKind }); },
@@ -1125,6 +1130,9 @@ export const intents = {
   upsertLight: (mapId: string, light: { id?: string; x: number; y: number; brightRadius: number; dimRadius: number; color?: string }) =>
     socket.emit(C2S.UPSERT_LIGHT, { mapId, light }),
   deleteLight: (mapId: string, lightId: string) => socket.emit(C2S.DELETE_LIGHT, { mapId, lightId }),
+  upsertMapText: (mapId: string, text: { id?: string; x: number; y: number; text: string; size?: number; color?: string; font?: string; bold?: boolean; italic?: boolean }) =>
+    socket.emit(C2S.UPSERT_MAP_TEXT, { mapId, text }),
+  deleteMapText: (mapId: string, textId: string) => socket.emit(C2S.DELETE_MAP_TEXT, { mapId, textId }),
   renameLight: (lightId: string, mapId: string, name: string) => socket.emit(C2S.RENAME_LIGHT, { lightId, mapId, name }),
   moveLightToMap: (lightId: string, sourceMapId: string, targetMapId: string) =>
     socket.emit(C2S.MOVE_LIGHT_TO_MAP, { lightId, sourceMapId, targetMapId }),

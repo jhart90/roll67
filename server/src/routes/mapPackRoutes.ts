@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
+import { imageSize } from 'image-size';
 import { UPLOADS_DIR } from '../config.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { assets, campaigns, maps } from '../db/repos.js';
@@ -25,7 +26,7 @@ export function attachMapPackIo(io: Server): void { ioRef = io; }
  * archive dependency, and readable enough to diff when something goes wrong.
  *
  * It carries only what a map is physically made of — the background image,
- * grid, walls, doors, lights, spawn point and rough terrain. Everything that
+ * grid, walls, doors, lights, spawn point, rough terrain and any labels. Everything that
  * belongs to a particular table's game stays behind: no characters, no tokens,
  * no handouts, and no loot or chests. That's what makes a pack safe to hand to
  * another DM, and what makes it system-agnostic — none of it references rules.
@@ -47,6 +48,8 @@ interface MapPack {
     lights: unknown[];
     spawn: unknown;
     terrain: number[];
+    /** Optional so a pack written before labels existed still reads. */
+    texts?: unknown[];
   };
   image: { ext: string; mime: string; dataB64: string } | null;
 }
@@ -89,6 +92,7 @@ mapPackRouter.get('/maps/:mapId/export', requireAuth, (req, res) => {
       lights: map.lights,
       spawn: map.spawn,
       terrain: map.terrain,
+      texts: map.texts ?? [],
     },
     image,
   };
@@ -126,10 +130,20 @@ mapPackRouter.post('/maps/import', requireAuth, upload.single('file'), (req, res
   maps.setDoors(map.id, (pack.map?.doors ?? []) as never);
   maps.setLights(map.id, (pack.map?.lights ?? []) as never);
   maps.setTerrain(map.id, pack.map?.terrain ?? []);
+  // Labels are map furniture like walls, so they travel with the pack.
+  maps.setTexts(map.id, (pack.map?.texts ?? []) as never);
   if (pack.map?.spawn) maps.setSpawn(map.id, pack.map.spawn as { q: number; r: number });
 
   if (pack.image?.dataB64) {
     const buf = Buffer.from(pack.image.dataB64, 'base64');
+    // Wall and door coordinates are in background-image pixels, so the asset's
+    // real dimensions are load-bearing: with 0x0 the client has nothing to
+    // scale against and every piece of geometry lands off the map.
+    let dims = { width: 0, height: 0 };
+    try {
+      const m = imageSize(buf);
+      dims = { width: m.width ?? 0, height: m.height ?? 0 };
+    } catch { /* unreadable image: fall through with zeros, as before */ }
     const asset = assets.create({
       campaign_id: campaignId,
       uploaderId: areq.user!.id,
@@ -138,8 +152,8 @@ mapPackRouter.post('/maps/import', requireAuth, upload.single('file'), (req, res
       ext: pack.image.ext,
       mime: pack.image.mime,
       bytes: buf.length,
-      width: 0,
-      height: 0,
+      width: dims.width,
+      height: dims.height,
       title: map.name,
     });
     fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${asset.ext}`), buf);

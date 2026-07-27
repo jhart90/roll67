@@ -2004,3 +2004,8 @@ th > .term { border-bottom-style: dotted; }
 .roll-outcome { margin-top: 3px; font-size: 12px; font-weight: 700; }
 .roll-card.crit .roll-outcome { color: var(--ok); }
 .roll-card.fumble .roll-outcome { color: var(--danger); }
+
+/* New map / Import .r67 sit side by side; the import is a label wrapping a
+   hidden file input, so it needs the button's own centring. */
+.map-actions { display: flex; gap: 8px; align-items: stretch; }
+.map-actions .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; margin: 0; cursor: pointer; }

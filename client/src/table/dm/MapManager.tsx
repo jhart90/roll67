@@ -4,6 +4,7 @@ import { intents, useGameStore } from '../../store/game';
 import { openWindow } from '../../store/windowManager';
 import { UploadProgressBar } from '../../util/UploadProgressBar';
 import { useUploadProgress } from '../../util/useUploadProgress';
+import { authHeaders } from '../../api';
 
 function GridField({
   label, value, onCommit, step = 1, min, max,
@@ -169,11 +170,52 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new'; onC
   );
 }
 
+/**
+ * Download a map as a .r67 pack. Goes through fetch rather than a plain link
+ * because the endpoint is bearer-authenticated — a bare href would arrive
+ * without the token and bounce.
+ */
+async function exportMap(mapId: string, name: string): Promise<void> {
+  try {
+    const res = await fetch(`/api/maps/${mapId}/export`, { headers: authHeaders() });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Export failed');
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'map'}.r67`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'Export failed');
+  }
+}
+
 export function MapManager({ onClose }: { onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign);
   const mapsMeta = useGameStore((s) => s.mapsMeta);
   const map = useGameStore((s) => s.map);
   const activeMapId = campaign?.activeMapId ?? null;
+  const [importing, setImporting] = useState(false);
+
+  async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // so re-picking the same file still fires
+    if (!file || !campaign) return;
+    setImporting(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      body.append('campaignId', campaign.id);
+      const res = await fetch('/api/maps/import', { method: 'POST', headers: authHeaders(), body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Import failed');
+      // The map list is pushed over the socket, so it refreshes on its own.
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  }
 
   if (!campaign) return null;
 
@@ -215,6 +257,13 @@ export function MapManager({ onClose }: { onClose: () => void }) {
               </button>
             )}
             <button
+              className="link"
+              title="Export as a .r67 pack — image, grid and geometry only"
+              onClick={() => exportMap(m.id, m.name)}
+            >
+              ⭳
+            </button>
+            <button
               className="link danger"
               title="Delete map"
               onClick={() => {
@@ -230,7 +279,13 @@ export function MapManager({ onClose }: { onClose: () => void }) {
         Click a map to view it · ✏️ edits its details · ⭐ makes it the party map for players.
       </p>
 
-      <button className="btn" onClick={() => openWindow('mapEditor', 'new', {}, 'New map')}>+ New map</button>
+      <div className="map-actions">
+        <button className="btn" onClick={() => openWindow('mapEditor', 'new', {}, 'New map')}>+ New map</button>
+        <label className="btn" title="Import a .r67 map pack from another campaign">
+          {importing ? 'importing…' : '⭱ Import .r67'}
+          <input type="file" accept=".r67,application/json" style={{ display: 'none' }} disabled={importing} onChange={onImport} />
+        </label>
+      </div>
     </div>
   );
 }

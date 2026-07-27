@@ -79,3 +79,10 @@ export async function uploadFile(
     xhr.send(form);
   });
 }
+
+/** Bearer header for the fetch calls that bypass request() — file up/downloads
+ *  that deal in blobs and FormData rather than JSON. */
+export function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}

@@ -8,6 +8,7 @@ import { PORT, UPLOADS_DIR, ensureDataDirs } from './config.js';
 import { socketAuth } from './auth.js';
 import { authRouter, campaignRouter } from './routes/authRoutes.js';
 import { uploadRouter } from './routes/uploadRoutes.js';
+import { mapPackRouter } from './routes/mapPackRoutes.js';
 import { registerSessionHandlers } from './live/handlers/session.js';
 import { registerMapEditHandlers } from './live/handlers/mapEdit.js';
 import { registerTokenHandlers } from './live/handlers/tokens.js';
@@ -34,6 +35,7 @@ app.get('/healthz', (_req, res) => {
 app.use('/api', authRouter);
 app.use('/api/campaigns', campaignRouter);
 app.use('/api', uploadRouter);
+app.use('/api', mapPackRouter);
 
 // Uploaded assets (map backgrounds, token art, handout images).
 app.use('/uploads', express.static(UPLOADS_DIR, { immutable: true, maxAge: '365d' }));

@@ -465,7 +465,21 @@ export function GeometryLayer() {
     }
   }
 
+  /** Save what's typed and dismiss the field. Empty input just dismisses. */
+  function commitDraft() {
+    if (!textDraft) return;
+    if (textDraft.value.trim()) {
+      intents.upsertMapText(map.id, {
+        x: textDraft.x, y: textDraft.y, text: textDraft.value.trim(),
+        size: textStyle.size, color: textStyle.color, font: textStyle.font,
+        bold: textStyle.bold, italic: textStyle.italic,
+      });
+    }
+    setTextDraft(null);
+  }
+
   return (
+    <>
     <svg
       width={width}
       height={height}
@@ -565,55 +579,7 @@ export function GeometryLayer() {
         );
       })()}
 
-      {/* Typing happens on the map itself: a field anchored where the DM
-          clicked, styled as the label will look once committed. */}
-      {isDm && tool === 'text' && textDraft && (
-        <foreignObject
-          x={textDraft.x - 200} y={textDraft.y - textStyle.size}
-          width={400} height={textStyle.size * 2.2}
-          // The svg root is pointer-events:none so the tools beneath it still
-          // work; every interactive child has to opt back in, or the field
-          // renders but cannot be clicked or focused.
-          style={{ overflow: 'visible', pointerEvents: 'auto' }}
-        >
-          <input
-            ref={draftRef}
-            value={textDraft.value}
-            placeholder="Type a label…"
-            onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Escape') setTextDraft(null);
-              if (e.key !== 'Enter') return;
-              if (textDraft.value.trim()) {
-                intents.upsertMapText(map.id, {
-                  x: textDraft.x, y: textDraft.y, text: textDraft.value.trim(),
-                  size: textStyle.size, color: textStyle.color, font: textStyle.font,
-                  bold: textStyle.bold, italic: textStyle.italic,
-                });
-              }
-              setTextDraft(null);
-            }}
-            onBlur={() => {
-              if (textDraft.value.trim()) {
-                intents.upsertMapText(map.id, {
-                  x: textDraft.x, y: textDraft.y, text: textDraft.value.trim(),
-                  size: textStyle.size, color: textStyle.color, font: textStyle.font,
-                  bold: textStyle.bold, italic: textStyle.italic,
-                });
-              }
-              setTextDraft(null);
-            }}
-            style={{
-              width: '100%', textAlign: 'center', background: 'rgba(16,19,26,0.75)',
-              border: '1px dashed #e8d27b', borderRadius: 4, margin: 0, padding: '2px 6px',
-              color: textStyle.color, fontFamily: textStyle.font, fontSize: textStyle.size,
-              fontWeight: textStyle.bold ? 700 : 400,
-              fontStyle: textStyle.italic ? 'italic' : 'normal',
-            }}
-          />
-        </foreignObject>
-      )}
+
 
       {/* lights (DM only) — interactive in the light tool AND the select cursor */}
       {lights.map((l) => (
@@ -670,5 +636,48 @@ export function GeometryLayer() {
       })()}
 
     </svg>
+
+    {/*
+      The label field is a plain HTML input, deliberately NOT a foreignObject.
+      This layer's svg is pointer-events:none and React's namespace handling
+      inside foreignObject is fragile — the field rendered but could never take
+      focus. As a sibling it sits in the same transformed map container, where
+      map pixels are CSS pixels, so it scales and pans with everything else and
+      is just an ordinary focusable input.
+    */}
+    {isDm && tool === 'text' && textDraft && (
+      <input
+        ref={draftRef}
+        value={textDraft.value}
+        placeholder="Type a label…"
+        onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Escape') { setTextDraft(null); return; }
+          if (e.key !== 'Enter') return;
+          commitDraft();
+        }}
+        onBlur={commitDraft}
+        style={{
+          position: 'absolute',
+          left: textDraft.x - 200,
+          top: textDraft.y - textStyle.size,
+          width: 400,
+          textAlign: 'center',
+          background: 'rgba(16,19,26,0.75)',
+          border: '1px dashed #e8d27b',
+          borderRadius: 4,
+          margin: 0,
+          padding: '2px 6px',
+          pointerEvents: 'auto',
+          color: textStyle.color,
+          fontFamily: textStyle.font,
+          fontSize: textStyle.size,
+          fontWeight: textStyle.bold ? 700 : 400,
+          fontStyle: textStyle.italic ? 'italic' : 'normal',
+        }}
+      />
+    )}
+    </>
   );
 }

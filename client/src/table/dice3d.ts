@@ -286,9 +286,12 @@ function targetOrientation(geom: DieGeometry, value: number): Quat {
 
 // ---------- colors ----------
 
+// Bold, tropical-bright per-size palette — dice should read from across the
+// table, not blend into the felt. Pip colour stays luminance-picked, so the
+// hot yellows get dark ink and the deep blues get white.
 export const DEFAULT_DIE_COLORS: Record<number, string> = {
-  2: '#c9cfdd', 4: '#d26c6c', 6: '#6c9bd2', 8: '#7ed28a',
-  10: '#6cd2c8', 12: '#b06cd2', 20: '#d2a56c', 100: '#d2d26c',
+  2: '#ffc93c', 4: '#ff3d57', 6: '#0aa8ff', 8: '#2fe04a',
+  10: '#00e5d0', 12: '#b444ff', 20: '#ff8a00', 100: '#ffe234',
 };
 
 function hexToRgb(hex: string): [number, number, number] {

@@ -6,9 +6,11 @@ import type { DiceRole } from 'shared';
 const DICE_TYPES = [2, 4, 6, 8, 10, 12, 20, 100];
 const COUNTS = [1, 2, 3, 4, 5, 6];
 
+// Swatch offers match the new bold defaults: starburst brights plus white
+// and near-black for anyone who wants a quiet die anyway.
 const DICE_PALETTE = [
-  '#d26c6c', '#d2a56c', '#d2d26c', '#7ed28a', '#6cd2c8',
-  '#6c9bd2', '#b06cd2', '#d26cb0', '#c9cfdd', '#3a3f4d',
+  '#ff3d57', '#ff8a00', '#ffe234', '#2fe04a', '#00e5d0',
+  '#0aa8ff', '#b444ff', '#ff4fa3', '#ffffff', '#14171d',
 ];
 
 const TEXT_PALETTE = ['#10131a', '#f4f6fb', '#ffe08a', '#ff6b6b', '#7ee89a', '#6cd2c8'];

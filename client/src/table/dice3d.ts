@@ -345,7 +345,10 @@ const WAVE_STAGGER_MS = 110;
  * still bouncing. Defaults below; each slot is overridable per player.
  * Trait black is a shade off pure black so bevels and shadow still read.
  */
-export const DICE_ROLE_DEFAULTS = { trait: '#14171d', wild: '#8b5cf6', raise: '#1f9d55' };
+/** Raise dice are ALWAYS this green with white pips — a raise should look
+ *  identical at every table, so it is not player-customisable. */
+export const RAISE_GREEN = '#0de323'; // rgb(13,227,35)
+export const DICE_ROLE_DEFAULTS = { trait: '#14171d', wild: '#8b5cf6', raise: RAISE_GREEN };
 export type DicePalette = { trait: string; wild: string; raise: string };
 
 /** How long the grey-out takes, and how far down it goes. */
@@ -479,14 +482,14 @@ export function buildSims(
     // Without a palette, every other system keeps the by-size colours and the
     // player's own single-colour override.
     const rgb = hexToRgb(palette
-      ? (die.raise ? palette.raise : die.wild ? palette.wild : palette.trait)
+      ? (die.raise ? RAISE_GREEN : die.wild ? palette.wild : palette.trait)
       : (customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3'));
     // Pips have to stay legible against whatever colour the player picked.
     const contrasting = luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb';
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
-      textColor: palette ? contrasting : (customTextColor ?? contrasting),
+      textColor: die.raise ? '#ffffff' : palette ? contrasting : (customTextColor ?? contrasting),
       size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
       start, target,
       delay: timing[i].delay,

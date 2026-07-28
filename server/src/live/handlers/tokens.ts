@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, canMoveToken, firstFreeHex, inBounds, packHex, playerColorFor, reachableAlong, systemFor,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type GridConfig, type Hex, type MoveTokenPayload, type UpdateTokenPayload,
+  type GridConfig, type Hex, type MoveTokenPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
 import { campaigns, characters, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
@@ -262,12 +262,21 @@ export function placeCharacterToken(
         const occupied = new Set(tokens.forMap(mapId).map((t) => packHex({ q: t.q, r: t.r })));
         hex = firstFreeHex(spawn, occupied, map.grid);
       }
-      const artAssetId = typeof character.sheet.tokenImageAssetId === 'string' ? character.sheet.tokenImageAssetId : null;
+      // Appearance choices live on the SHEET (tokenColor/Shape/Size, alongside
+      // the existing tokenImageAssetId), so the creator wizard's Customize
+      // Appearance step survives re-placement onto other maps.
+      const sh = character.sheet as Record<string, unknown>;
+      const artAssetId = typeof sh.tokenImageAssetId === 'string' ? sh.tokenImageAssetId : null;
       const hp = systemFor(character.system).hp(character.sheet);
+      const fallbackColor = character.ownerUserId
+        ? colorForOwner(campaignId, character.ownerUserId)
+        : TOKEN_COLORS[Math.abs(hashStr(character.id)) % TOKEN_COLORS.length];
       const created = tokens.create({
         mapId, characterId: character.id, name: character.name, artAssetId,
-        q: hex.q, r: hex.r, layer: character.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
-        color: TOKEN_COLORS[Math.abs(hashStr(character.id)) % TOKEN_COLORS.length],
+        q: hex.q, r: hex.r, layer: character.ownerUserId ? 'token' : 'gm',
+        size: Math.max(1, Math.min(4, Number(sh.tokenSize) || 1)),
+        shape: typeof sh.tokenShape === 'string' ? (sh.tokenShape as TokenShape) : 'circle',
+        color: typeof sh.tokenColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(sh.tokenColor) ? sh.tokenColor : fallbackColor,
         vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
       });
       touchedMaps.add(mapId);

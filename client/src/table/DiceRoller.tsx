@@ -14,7 +14,7 @@ const DICE_PALETTE = [
 const TEXT_PALETTE = ['#10131a', '#f4f6fb', '#ffe08a', '#ff6b6b', '#7ee89a', '#6cd2c8'];
 
 /** Pick the color everyone sees when your 3D dice roll across the table. */
-function DiceColorPicker() {
+export function DiceColorPicker() {
   const you = useGameStore((s) => s.you);
   const members = useGameStore((s) => s.members);
   const current = you ? members.find((m) => m.userId === you.userId)?.diceColor ?? null : null;
@@ -51,7 +51,7 @@ function DiceColorPicker() {
 }
 
 /** Pick the color of the pips/numbers painted on your own dice. */
-function DiceTextColorPicker() {
+export function DiceTextColorPicker() {
   const you = useGameStore((s) => s.you);
   const members = useGameStore((s) => s.members);
   const current = you ? members.find((m) => m.userId === you.userId)?.diceTextColor ?? null : null;
@@ -95,10 +95,9 @@ function DiceTextColorPicker() {
 const DICE_ROLES: Array<{ role: DiceRole; label: string; hint: string }> = [
   { role: 'trait', label: 'Trait', hint: 'Your skill or attribute die' },
   { role: 'wild', label: 'Wild', hint: 'The d6 Wild Die a Wild Card rolls alongside it' },
-  { role: 'raise', label: 'Raise', hint: 'The bonus d6 earned by beating the target number by 4+' },
 ];
 
-function SwadeDicePalettePicker() {
+export function SwadeDicePalettePicker() {
   const you = useGameStore((s) => s.you);
   const members = useGameStore((s) => s.members);
   const me = you ? members.find((m) => m.userId === you.userId) : undefined;

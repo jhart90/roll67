@@ -4,6 +4,7 @@ import {
   buildSwnCharacterSheet, roll3d6, swn, swnMod, termDesc, type SwnAttrId, type SwnCreationInput,
 } from 'shared';
 import { intents } from '../store/game';
+import { AppearanceStep, appearancePatch, DEFAULT_APPEARANCE, type AppearanceChoice } from './AppearanceStep';
 import { Term } from '../util/Term';
 
 /** Glossary tooltip shorthand for this wizard's system. */
@@ -12,7 +13,7 @@ function T({ children, term, desc }: { children?: React.ReactNode; term?: string
   return <Term desc={desc ?? termDesc('swn', term ?? String(label))}>{label}</Term>;
 }
 
-type Step = 'concept' | 'attributes' | 'class' | 'background' | 'skills' | 'gear' | 'review';
+type Step = 'concept' | 'attributes' | 'class' | 'background' | 'skills' | 'gear' | 'appearance' | 'review';
 const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'concept', label: 'Concept' },
   { id: 'attributes', label: 'Attributes' },
@@ -20,6 +21,7 @@ const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'background', label: 'Background' },
   { id: 'skills', label: 'Skills & Focus' },
   { id: 'gear', label: 'Gear' },
+  { id: 'appearance', label: 'Appearance' },
   { id: 'review', label: 'Review' },
 ];
 
@@ -38,6 +40,7 @@ function emptyAttrs(): Record<SwnAttrId, number> {
  */
 export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
   const [stepIdx, setStepIdx] = useState(0);
+  const [appearance, setAppearance] = useState<AppearanceChoice>(DEFAULT_APPEARANCE);
   const step = STEPS[stepIdx].id;
 
   const [name, setName] = useState('');
@@ -94,6 +97,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
     || step === 'background'
     || (step === 'skills' && skillSpent <= skillPool)
     || step === 'gear'
+    || step === 'appearance'
     || step === 'review';
 
   const filteredSkills = SKILLS_SWN.filter((s) => !skillSearch.trim() || s.toLowerCase().includes(skillSearch.trim().toLowerCase()));
@@ -113,7 +117,7 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
 
   function create() {
     const sheetPatch = { ...buildSwnCharacterSheet(buildInput()), species };
-    intents.createCharacter(name.trim(), 'swn', undefined, undefined, { sheetPatch, placeToken: true });
+    intents.createCharacter(name.trim(), 'swn', undefined, undefined, { sheetPatch: { ...sheetPatch, ...appearancePatch(appearance) }, placeToken: true });
     onClose();
   }
 
@@ -269,6 +273,8 @@ export function SwnCharacterCreator({ onClose }: { onClose: () => void }) {
             </div>
           </>
         )}
+
+        {step === 'appearance' && <AppearanceStep value={appearance} onChange={setAppearance} />}
 
         {step === 'review' && previewSheet && (
           <div className="swc-review">

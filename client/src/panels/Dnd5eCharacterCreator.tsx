@@ -7,11 +7,12 @@ import {
   type AbilityId, type Dnd5eCreationInput,
 } from 'shared';
 import { intents } from '../store/game';
+import { AppearanceStep, appearancePatch, DEFAULT_APPEARANCE, type AppearanceChoice } from './AppearanceStep';
 import { makeTerm } from '../util/Term';
 
 const T = makeTerm('dnd5e');
 
-type Step = 'concept' | 'race' | 'class' | 'abilities' | 'background' | 'skills' | 'gear' | 'review';
+type Step = 'concept' | 'race' | 'class' | 'abilities' | 'background' | 'skills' | 'gear' | 'appearance' | 'review';
 const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'concept', label: 'Concept' },
   { id: 'race', label: 'Race' },
@@ -20,6 +21,7 @@ const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'background', label: 'Background' },
   { id: 'skills', label: 'Skills' },
   { id: 'gear', label: 'Equipment' },
+  { id: 'appearance', label: 'Appearance' },
   { id: 'review', label: 'Review' },
 ];
 
@@ -41,6 +43,7 @@ function fmt(mod: number): string {
  *  map they're viewing. */
 export function Dnd5eCharacterCreator({ onClose }: { onClose: () => void }) {
   const [stepIdx, setStepIdx] = useState(0);
+  const [appearance, setAppearance] = useState<AppearanceChoice>(DEFAULT_APPEARANCE);
   const step = STEPS[stepIdx].id;
 
   const [name, setName] = useState('');
@@ -141,6 +144,7 @@ export function Dnd5eCharacterCreator({ onClose }: { onClose: () => void }) {
     || step === 'background'
     || (step === 'skills' && skillsOk)
     || step === 'gear'
+    || step === 'appearance'
     || step === 'review';
 
   function buildInput(): Dnd5eCreationInput {
@@ -156,7 +160,7 @@ export function Dnd5eCharacterCreator({ onClose }: { onClose: () => void }) {
 
   function create() {
     const sheetPatch = buildDnd5eCharacterSheet(buildInput());
-    intents.createCharacter(name.trim(), 'dnd5e', undefined, undefined, { sheetPatch, placeToken: true });
+    intents.createCharacter(name.trim(), 'dnd5e', undefined, undefined, { sheetPatch: { ...sheetPatch, ...appearancePatch(appearance) }, placeToken: true });
     onClose();
   }
 
@@ -410,6 +414,8 @@ export function Dnd5eCharacterCreator({ onClose }: { onClose: () => void }) {
             )}
           </>
         )}
+
+        {step === 'appearance' && <AppearanceStep value={appearance} onChange={setAppearance} />}
 
         {step === 'review' && previewSheet && (
           <div className="swc-review">

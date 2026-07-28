@@ -10,6 +10,7 @@ import {
   type CustomRaceTrait, type RaceTraitPick, type SwadeAttrId, type SwadeCreationInput,
 } from 'shared';
 import { intents } from '../store/game';
+import { AppearanceStep, appearancePatch, DEFAULT_APPEARANCE, type AppearanceChoice } from './AppearanceStep';
 import { Term } from '../util/Term';
 
 /** Glossary tooltip shorthand for this wizard's system. */
@@ -18,7 +19,7 @@ function T({ children, term, desc }: { children?: React.ReactNode; term?: string
   return <Term desc={desc ?? termDesc('swade', term ?? String(label))}>{label}</Term>;
 }
 
-type Step = 'concept' | 'ancestry' | 'hindrances' | 'attributes' | 'skills' | 'edges' | 'review';
+type Step = 'concept' | 'ancestry' | 'hindrances' | 'attributes' | 'skills' | 'edges' | 'appearance' | 'review';
 const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'concept', label: 'Concept' },
   { id: 'ancestry', label: 'Ancestry' },
@@ -26,6 +27,7 @@ const STEPS: Array<{ id: Step; label: string }> = [
   { id: 'attributes', label: 'Attributes' },
   { id: 'skills', label: 'Skills' },
   { id: 'edges', label: 'Edges' },
+  { id: 'appearance', label: 'Appearance' },
   { id: 'review', label: 'Review' },
 ];
 
@@ -42,6 +44,7 @@ function attrIdOf(label: string): SwadeAttrId {
  *  swadeCreation.ts, so this file is UI only. */
 export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   const [stepIdx, setStepIdx] = useState(0);
+  const [appearance, setAppearance] = useState<AppearanceChoice>(DEFAULT_APPEARANCE);
   const step = STEPS[stepIdx].id;
 
   const [name, setName] = useState('');
@@ -179,6 +182,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
     || (step === 'attributes' && attrOk)
     || (step === 'skills' && skillOk)
     || (step === 'edges' && edgeOk)
+    || step === 'appearance'
     || step === 'review';
 
   const filteredSkills = SKILLS_SWADE.filter((s) => !skillSearch.trim() || s.toLowerCase().includes(skillSearch.trim().toLowerCase()));
@@ -199,7 +203,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
 
   function create() {
     const sheetPatch = buildSwadeCharacterSheet(buildInput());
-    intents.createCharacter(name.trim(), 'swade', undefined, undefined, { sheetPatch, placeToken: true });
+    intents.createCharacter(name.trim(), 'swade', undefined, undefined, { sheetPatch: { ...sheetPatch, ...appearancePatch(appearance) }, placeToken: true });
     onClose();
   }
 
@@ -490,6 +494,8 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
             </div>
           </>
         )}
+
+        {step === 'appearance' && <AppearanceStep value={appearance} onChange={setAppearance} />}
 
         {step === 'review' && previewSheet && (
           <div className="swc-review">

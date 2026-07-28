@@ -12,6 +12,9 @@ const SHAPES: Array<{ id: TokenShape; label: string }> = [
   { id: 'star', label: 'Star' },
   { id: 'rect-v', label: 'Rectangle (vertical)' },
   { id: 'rect-h', label: 'Rectangle (horizontal)' },
+  // The uploaded art at its own aspect ratio — scaled to one hex wide / tall.
+  { id: 'original', label: 'Original (fit width)' },
+  { id: 'original-alt', label: 'Original (fit height)' },
 ];
 
 /** DM-only floating panel for a token — opened by right-clicking it. */

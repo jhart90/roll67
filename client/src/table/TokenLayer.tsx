@@ -32,6 +32,24 @@ function useRevealFade(revealedAt: number | null | undefined): number {
   return Math.max(0, Math.min(1, elapsed / REVEAL_FADE_MS));
 }
 
+/**
+ * Natural aspect ratio (w/h) of a token's art, for the two 'original' shapes
+ * that show the upload at its own proportions. Null until the image loads.
+ */
+function useImageAspect(url: string | null): number | null {
+  const [aspect, setAspect] = useState<number | null>(null);
+  useEffect(() => {
+    setAspect(null);
+    if (!url) return;
+    let live = true;
+    const img = new Image();
+    img.onload = () => { if (live && img.naturalHeight > 0) setAspect(img.naturalWidth / img.naturalHeight); };
+    img.src = url;
+    return () => { live = false; };
+  }, [url]);
+  return aspect;
+}
+
 const DRAG_THROTTLE_MS = 100;
 
 type TargetState = 'off' | 'valid' | 'invalid';
@@ -88,6 +106,16 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // that isn't art keeps the original size.
   const drawR = token.artUrl ? radius * ART_SCALE : radius;
   const shape = token.shape ?? 'circle';
+  const aspect = useImageAspect(token.artUrl);
+  // The two 'original' shapes show the art at its own aspect ratio: 'original'
+  // spans one hex WIDE, 'original-alt' one hex TALL. Without art (or before
+  // the image loads) they fall back to a circle so the token never vanishes.
+  const isOriginal = (shape === 'original' || shape === 'original-alt') && !!token.artUrl && aspect !== null;
+  const effShape: TokenShape = shape === 'original' || shape === 'original-alt' ? 'circle' : shape;
+  const hexW = map.grid.hexSize * Math.sqrt(3) * token.size;
+  const hexH = map.grid.hexSize * 2 * token.size;
+  const halfW = isOriginal ? (shape === 'original' ? hexW : hexH * (aspect ?? 1)) / 2 : drawR;
+  const halfH = isOriginal ? (shape === 'original' ? hexW / (aspect ?? 1) : hexH) / 2 : drawR;
   const ringColor = targetEffect === 'heal' ? '#7ed28a' : '#d26c6c';
   // The DM stages a scene by moving pieces onto the visible layer; players see
   // them arrive gradually rather than pop in.
@@ -246,20 +274,38 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </>
       )}
       {targetState === 'valid' && (
-        <circle className="target-ring" r={drawR + 6} fill="none" stroke={ringColor} strokeWidth={3} />
+        <circle className="target-ring" r={Math.max(halfW, halfH) + 6} fill="none" stroke={ringColor} strokeWidth={3} />
       )}
       {selected && (
-        <circle r={drawR + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" />
+        <circle r={Math.max(halfW, halfH) + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" />
       )}
-      {shapeNode(shape, drawR, {
-        fill: token.color,
-        stroke: token.color,
-        strokeWidth: token.artUrl ? 3 : 2,
-      })}
-      {token.artUrl ? (
+      {isOriginal && token.artUrl ? (
+        // The art at its own aspect ratio, full-bleed, outlined once in the
+        // token's colour. No clip: the whole uploaded image IS the token.
+        <>
+          <image
+            href={token.artUrl}
+            x={-halfW}
+            y={-halfH}
+            width={halfW * 2}
+            height={halfH * 2}
+            preserveAspectRatio="none"
+          />
+          <rect x={-halfW} y={-halfH} width={halfW * 2} height={halfH * 2} fill="none" stroke={token.color} strokeWidth={2} />
+        </>
+      ) : (
+        <>
+          {shapeNode(effShape, drawR, {
+            fill: token.color,
+            stroke: token.color,
+            strokeWidth: token.artUrl ? 3 : 2,
+          })}
+        </>
+      )}
+      {!isOriginal && token.artUrl ? (
         <>
           <clipPath id={`clip-${token.id}`}>
-            {shapeNode(shape, drawR - 2, {})}
+            {shapeNode(effShape, drawR - 2, {})}
           </clipPath>
           <image
             href={token.artUrl}
@@ -271,7 +317,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
             preserveAspectRatio="xMidYMid slice"
           />
         </>
-      ) : (
+      ) : isOriginal && token.artUrl ? null : (
         <text
           y={radius * 0.28}
           textAnchor="middle"
@@ -284,7 +330,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </text>
       )}
       {hpFrac !== null && (
-        <g transform={`translate(${-barW / 2}, ${drawR + 4})`}>
+        <g transform={`translate(${-barW / 2}, ${halfH + 4})`}>
           <rect width={barW} height={5} rx={2} fill="#10131a" />
           <rect
             width={barW * hpFrac}
@@ -296,7 +342,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       )}
       {conditionIcons.length > 0 && (
         <text
-          y={-drawR - 5}
+          y={-halfH - 5}
           textAnchor="middle"
           fontSize={13}
           style={{ userSelect: 'none', pointerEvents: 'none' }}
@@ -305,7 +351,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </text>
       )}
       <text
-        y={drawR + (hpFrac !== null ? 20 : 14)}
+        y={halfH + (hpFrac !== null ? 20 : 14)}
         textAnchor="middle"
         fontSize={12}
         fill="#e6e8ee"

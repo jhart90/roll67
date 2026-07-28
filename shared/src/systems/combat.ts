@@ -32,6 +32,7 @@ export function combatActions(character: Character): CombatAction[] {
     const save = str(atk, 'save', '');
     const aoeShape = str(atk, 'aoeShape', '');
     const aoeSize = num(atk, 'aoeSize', 0);
+    const aoeHexes = num(atk, 'aoeHexes', 0);
     const aoeWidth = num(atk, 'aoeWidth', 0);
     // Condition rider: on a save-based attack it lands with the failed main
     // save; on a to-hit attack it triggers after a hit, gated by its own
@@ -56,8 +57,8 @@ export function combatActions(character: Character): CombatAction[] {
       ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
         ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),
       ...(save ? { saveId: save, onSave: str(atk, 'onSave', 'half') === 'negate' ? 'negate' as const : 'half' as const, fixedDc: num(atk, 'saveDc', 13) } : {}),
-      ...(aoeShape && aoeSize > 0
-        ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
+      ...(aoeShape && (aoeSize > 0 || aoeHexes > 0)
+        ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeHexes > 0 ? { sizeHexes: aoeHexes } : {}), ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
         : {}),
       ...(condition ? { appliesCondition: condition } : {}),
       ...(condition && !save && conditionSave && conditionDc > 0
@@ -89,6 +90,7 @@ export function combatActions(character: Character): CombatAction[] {
       const rangeFt = Math.max(0, num(sp, 'range', 0));
       const aoeShape = str(sp, 'aoeShape', '');
       const aoeSize = num(sp, 'aoeSize', 0);
+      const aoeHexes = num(sp, 'aoeHexes', 0);
       const aoeWidth = num(sp, 'aoeWidth', 0);
       out.push({
         id: `${prefix}:${i}`,
@@ -105,8 +107,8 @@ export function combatActions(character: Character): CombatAction[] {
         ...(leveled ? { slotLevel: Math.max(1, num(sp, 'level', 1)) } : {}),
         ...(save && save !== 'attack' && effect === 'damage' ? { saveId: save, onSave } : {}),
         ...(sp.conc === true ? { concentration: true, spellName: name } : {}),
-        ...(aoeShape && aoeSize > 0
-          ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
+        ...(aoeShape && (aoeSize > 0 || aoeHexes > 0)
+          ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeHexes > 0 ? { sizeHexes: aoeHexes } : {}), ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
           : {}),
         ...(condition ? { appliesCondition: condition } : {}),
       });
@@ -136,7 +138,8 @@ export function combatActions(character: Character): CombatAction[] {
       const rangeFt = Math.max(0, num(pw, 'range', 0));
       const aoeShape = str(pw, 'aoeShape', '');
       const aoeSize = num(pw, 'aoeSize', 0);
-      const isAoe = !!aoeShape && aoeSize > 0;
+      const aoeHexes = num(pw, 'aoeHexes', 0);
+      const isAoe = !!aoeShape && (aoeSize > 0 || aoeHexes > 0);
       // A direct damaging power with no save and no area rolls the arcane
       // skill to hit vs the fixed TN 4 (a raise adds +1d6! server-side).
       const attackExpr = effect === 'damage' && !save && !isAoe && arcane ? arcane : null;
@@ -155,7 +158,7 @@ export function combatActions(character: Character): CombatAction[] {
         ppCost: Math.max(0, num(pw, 'cost', 1)),
         ...(attackExpr ? { fixedTn: 4 } : {}),
         ...(save && effect === 'damage' ? { saveId: save, onSave } : {}),
-        ...(isAoe ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize } } : {}),
+        ...(isAoe ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeHexes > 0 ? { sizeHexes: aoeHexes } : {}) } } : {}),
         ...(condition ? { appliesCondition: condition } : {}),
       });
     });

@@ -402,7 +402,12 @@ export function TokenLayer() {
     const geo = { originPx: hexToPixel(aoeTargeting!.originHex, map.grid), aimPx: hexToPixel(aoeTargeting!.aimHex, map.grid) };
     const hit = new Set<string>();
     for (const t of Object.values(tokens)) {
-      if (pointInAoe(hexToPixel({ q: t.q, r: t.r }, map.grid), aoe, geo, pxPerFt)) hit.add(t.id);
+      // Tile-sized blasts (SWADE) hit by exact hex distance — mirror of the
+      // server's tokensInAoe, so the aiming preview never lies.
+      const inside = aoe.sizeHexes != null && (aoe.shape === 'sphere' || aoe.shape === 'cylinder')
+        ? hexDistance(aoeTargeting!.aimHex, { q: t.q, r: t.r }) <= aoe.sizeHexes
+        : pointInAoe(hexToPixel({ q: t.q, r: t.r }, map.grid), aoe, geo, pxPerFt);
+      if (inside) hit.add(t.id);
     }
     return hit;
   }, [aoeTargeting, tokens, map.grid]);

@@ -59,11 +59,11 @@ function emitProjectile(
  *  get a projectile flight before the burst; self-origin shapes (cone) burst
  *  immediately with no travel time. */
 function emitAoeBurst(
-  io: Server, campaignId: string, mapId: string, shape: AoeShape, sizeFt: number, widthFt: number | undefined,
+  io: Server, campaignId: string, mapId: string, shape: AoeShape, sizeFt: number, sizeHexes: number | undefined, widthFt: number | undefined,
   originHex: Hex, aimHex: Hex, damageType?: string,
 ): void {
   const flightMs = shape === 'sphere' || shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
-  io.to(campaignRoom(campaignId)).emit(S2C.AOE_BURST, { mapId, shape, sizeFt, widthFt, originHex, aimHex, damageType, flightMs });
+  io.to(campaignRoom(campaignId)).emit(S2C.AOE_BURST, { mapId, shape, sizeFt, sizeHexes, widthFt, originHex, aimHex, damageType, flightMs });
 }
 
 /** Players never receive hidden entries; the DM sees everything. The card
@@ -128,7 +128,7 @@ interface GroupSaveSpec {
   // Set only when this save was triggered by an AoE spell template (not the
   // DM's manual "call for save" tool) -- lets postDamage broadcast the
   // burst/ripple animation once the damage roll settles.
-  aoeVisual?: { mapId: string; shape: AoeShape; sizeFt: number; widthFt?: number; originHex: Hex; aimHex: Hex };
+  aoeVisual?: { mapId: string; shape: AoeShape; sizeFt: number; sizeHexes?: number; widthFt?: number; originHex: Hex; aimHex: Hex };
   /** Condition inflicted on each character target that FAILS its save. */
   appliesCondition?: string;
   /** When the source spell is concentration: the caster to record the
@@ -225,7 +225,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     if (spec.aoeVisual) {
       const v = spec.aoeVisual;
       const flightMs = v.shape === 'sphere' || v.shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
-      setTimeout(() => emitAoeBurst(io, spec.campaignId, v.mapId, v.shape, v.sizeFt, v.widthFt, v.originHex, v.aimHex, spec.damageType),
+      setTimeout(() => emitAoeBurst(io, spec.campaignId, v.mapId, v.shape, v.sizeFt, v.sizeHexes, v.widthFt, v.originHex, v.aimHex, spec.damageType),
         Math.max(0, settleMs - flightMs));
     }
   };
@@ -933,7 +933,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           ...(action.concentration ? { concentrationCasterId: actor.id } : {}),
         } : {}),
         aoeVisual: {
-          mapId: src.mapId, shape: action.aoe.shape, sizeFt: action.aoe.sizeFt, widthFt: action.aoe.widthFt,
+          mapId: src.mapId, shape: action.aoe.shape, sizeFt: action.aoe.sizeFt, sizeHexes: action.aoe.sizeHexes, widthFt: action.aoe.widthFt,
           originHex, aimHex: p.aimHex,
         },
       });
@@ -982,7 +982,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }, noSaveSettleMs);
     const noSaveFlightMs = action.aoe.shape === 'sphere' || action.aoe.shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
     setTimeout(
-      () => emitAoeBurst(io, d.campaignId, src.mapId, action.aoe!.shape, action.aoe!.sizeFt, action.aoe!.widthFt, originHex, p.aimHex, action.damageType),
+      () => emitAoeBurst(io, d.campaignId, src.mapId, action.aoe!.shape, action.aoe!.sizeFt, action.aoe!.sizeHexes, action.aoe!.widthFt, originHex, p.aimHex, action.damageType),
       Math.max(0, noSaveSettleMs - noSaveFlightMs),
     );
   }, 'CAST_AOE'));

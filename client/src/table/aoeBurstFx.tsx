@@ -7,6 +7,7 @@ export interface AoeBurstState {
   id: number;
   shape: 'sphere' | 'cone' | 'line' | 'cube' | 'cylinder';
   sizeFt: number;
+  sizeHexes?: number;
   widthFt?: number;
   originHex: Hex;
   aimHex: Hex;
@@ -61,7 +62,9 @@ export function AoeBurst({ burst, grid }: { burst: AoeBurstState; grid: GridConf
   const aim = hexToPixel(burst.aimHex, grid);
   const color = impactColor('aoe', burst.damageType);
   const pxPerFt = feetToPx(grid);
-  const sizePx = burst.sizeFt * pxPerFt;
+  const sizePx = burst.sizeHexes != null && (burst.shape === 'sphere' || burst.shape === 'cylinder')
+    ? (burst.sizeHexes + 0.5) * grid.hexSize * Math.sqrt(3)
+    : burst.sizeFt * pxPerFt;
 
   if (burst.shape === 'sphere' || burst.shape === 'cylinder') {
     return (

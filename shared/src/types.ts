@@ -71,6 +71,12 @@ export interface AoeSpec {
   shape: AoeShape;
   /** Radius (sphere/cylinder), length (cone/line/cube), in feet. */
   sizeFt: number;
+  /** SWADE blast templates are sized in TILES, not feet: the number of rings
+   *  beyond the targeted tile (Small=1, Medium=3, Large=5, i.e. 2/4/6 tiles
+   *  counting the target). When set it overrides sizeFt, and membership is
+   *  exact hex distance — the same tiles on every map whatever a hex is
+   *  worth in feet. */
+  sizeHexes?: number;
   /** Line width in feet; defaults to 5 ft if omitted. */
   widthFt?: number;
 }
@@ -459,6 +465,7 @@ export interface MeasureInfo {
 export interface AoePreviewInfo {
   shape: AoeShape;
   sizeFt: number;
+  sizeHexes?: number;
   widthFt?: number;
   /** Where the shape originates (the caster's hex, for cone/line/cube). */
   originHex: Hex;

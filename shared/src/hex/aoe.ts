@@ -5,6 +5,7 @@
 
 import type { AoeSpec, GridConfig, Hex, Point } from '../types.js';
 import { hexToPixel } from './pixel.js';
+import { hexDistance } from './coords.js';
 
 const SQRT3 = Math.sqrt(3);
 
@@ -75,6 +76,12 @@ export function tokensInAoe<T extends { id: string; q: number; r: number }>(
   grid: GridConfig,
   tokens: T[],
 ): string[] {
+  // Tile-sized blasts hit by exact hex distance: the template is defined as
+  // "this many tiles", so a pixel-circle approximation would leak or clip
+  // hexes on the diagonals. Feet-based shapes keep the pixel-space test.
+  if (spec.sizeHexes != null && (spec.shape === 'sphere' || spec.shape === 'cylinder')) {
+    return tokens.filter((t) => hexDistance(aimHex, { q: t.q, r: t.r }) <= spec.sizeHexes!).map((t) => t.id);
+  }
   const geo: AoeGeometry = { originPx: hexToPixel(originHex, grid), aimPx: hexToPixel(aimHex, grid) };
   const pxPerFt = pxPerFoot(grid);
   return tokens.filter((t) => pointInAoe(hexToPixel({ q: t.q, r: t.r }, grid), spec, geo, pxPerFt)).map((t) => t.id);

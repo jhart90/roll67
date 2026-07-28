@@ -67,16 +67,16 @@ export function AoeTemplateLayer() {
     useGameStore.getState().confirmAoeTargeting();
   }
 
-  const templates: Array<{ key: string; shape: AoeShape; sizeFt: number; widthFt?: number; originHex: Hex; aimHex: Hex; color: string; byName: string }> = [];
+  const templates: Array<{ key: string; shape: AoeShape; sizeFt: number; sizeHexes?: number; widthFt?: number; originHex: Hex; aimHex: Hex; color: string; byName: string }> = [];
   if (mine?.action.aoe) {
     templates.push({
-      key: 'mine', shape: mine.action.aoe.shape, sizeFt: mine.action.aoe.sizeFt, widthFt: mine.action.aoe.widthFt,
+      key: 'mine', shape: mine.action.aoe.shape, sizeFt: mine.action.aoe.sizeFt, sizeHexes: mine.action.aoe.sizeHexes, widthFt: mine.action.aoe.widthFt,
       originHex: mine.originHex, aimHex: mine.aimHex, color: MY_COLOR, byName: 'you',
     });
   }
   for (const [userId, p] of Object.entries(others)) {
     if (userId === you?.userId) continue;
-    templates.push({ key: userId, shape: p.shape, sizeFt: p.sizeFt, widthFt: p.widthFt, originHex: p.originHex, aimHex: p.aimHex, color: p.color, byName: p.byName });
+    templates.push({ key: userId, shape: p.shape, sizeFt: p.sizeFt, sizeHexes: p.sizeHexes, widthFt: p.widthFt, originHex: p.originHex, aimHex: p.aimHex, color: p.color, byName: p.byName });
   }
 
   return (
@@ -99,7 +99,11 @@ export function AoeTemplateLayer() {
       {templates.map((t) => {
         const originPx = hexToPixel(t.originHex, grid);
         const aimPx = hexToPixel(t.aimHex, grid);
-        const sizePx = t.sizeFt * pxPerFt;
+        // A tile-sized blast draws half a tile past the last covered ring, so
+        // the circle visibly encloses every hex it mechanically hits.
+        const sizePx = t.sizeHexes != null && (t.shape === 'sphere' || t.shape === 'cylinder')
+          ? (t.sizeHexes + 0.5) * grid.hexSize * Math.sqrt(3)
+          : t.sizeFt * pxPerFt;
         const widthPx = (t.widthFt ?? 5) * pxPerFt;
         return (
           <g key={t.key} pointerEvents="none">
@@ -109,7 +113,7 @@ export function AoeTemplateLayer() {
               textAnchor="middle" fontSize={9} fontWeight={600}
               fill={t.color} stroke="#10131a" strokeWidth={2} paintOrder="stroke"
             >
-              {t.byName} · {t.shape} {t.sizeFt}ft{t.key === 'mine' ? ' · click to cast' : ''}
+              {t.byName} · {t.sizeHexes != null ? `${t.sizeHexes + 1}-tile blast` : `${t.shape} ${t.sizeFt}ft`}{t.key === 'mine' ? ' · click to cast' : ''}
             </text>
           </g>
         );

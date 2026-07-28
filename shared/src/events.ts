@@ -777,7 +777,7 @@ export interface ProjectilePayload { mapId: string; fromTokenId: string; toToken
  *  (flightMs: 0) and the wave instead ripples from the caster outward along
  *  the cone to its full length. */
 export interface AoeBurstPayload {
-  mapId: string; shape: AoeShape; sizeFt: number; widthFt?: number;
+  mapId: string; shape: AoeShape; sizeFt: number; sizeHexes?: number; widthFt?: number;
   originHex: Hex; aimHex: Hex; damageType?: string; flightMs: number;
 }
 /** A rollable-table result to flash on-screen (same text as the chat card). */

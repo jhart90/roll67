@@ -50,7 +50,7 @@ export interface SpellData {
   /** True if `damage` is healing rather than harm. */
   heal?: boolean;
   /** Area shape/size, for spells that hit a zone rather than one target. */
-  aoe?: { shape: AoeShape; sizeFt: number; widthFt?: number };
+  aoe?: { shape: AoeShape; sizeFt?: number; sizeHexes?: number; widthFt?: number };
   /** Status condition (id from effects.ts CONDITIONS) the spell inflicts on
    *  its target — on a failed save when `save` is set, else automatically
    *  (e.g. Invisibility). Duration/expiry stays manual (no turn clock). */
@@ -76,7 +76,7 @@ export interface PowerData {
   /** SWADE: outcome of a successful resistance roll. */
   onSave?: 'half' | 'negate';
   /** SWADE: area template (Burst's cone, Blast's sphere). */
-  aoe?: { shape: AoeShape; sizeFt: number; widthFt?: number };
+  aoe?: { shape: AoeShape; sizeFt?: number; sizeHexes?: number; widthFt?: number };
   /** SWADE: status condition the power inflicts (effects.ts CONDITIONS id). */
   condition?: string;
 }
@@ -283,6 +283,14 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       const parryDown = propText.match(/Parry [−-](\d+)/i);
       const parryBonus = parryUp ? Number(parryUp[1]) : parryDown ? -Number(parryDown[1]) : 0;
       const mag = propText.match(/\bmag (\d+)/i);
+      // SWADE template weapons: the props already say which template the book
+      // gives them — 'small/medium/large blast' becomes a tile-sized sphere
+      // (2/4/6 tiles counting the target), 'cone template' the Cone. A weapon
+      // whose props promise a Vigor-or-Stunned rider gets it mechanically too.
+      const blastMatch = propText.match(/\b(small|medium|large) blast/i);
+      const blastHexes = blastMatch ? ({ small: 1, medium: 3, large: 5 } as Record<string, number>)[blastMatch[1].toLowerCase()] : 0;
+      const coneTemplate = /cone template/i.test(propText);
+      const stunRider = /vigor roll or stunned/i.test(propText);
       return {
         listId: 'attacks',
         row: {
@@ -290,6 +298,9 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           dtype: w.damageType, range: melee ? 5 : weaponRangeFtSwn(w.props),
           ap, parryBonus, wielded: false,
           ...(mag ? { ammo: Number(mag[1]) } : {}),
+          ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
+          ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),
+          ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
           notes: propText,
         },
         label: `${entry.name} added to weapons`,
@@ -386,7 +397,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           range: p.rangeFt ?? 0,
           save: p.save ?? '',
           onSave: p.onSave ?? 'negate',
-          ...(p.aoe ? { aoeShape: p.aoe.shape, aoeSize: p.aoe.sizeFt } : { aoeShape: '', aoeSize: 0 }),
+          ...(p.aoe ? { aoeShape: p.aoe.shape, aoeSize: p.aoe.sizeFt ?? 0, aoeHexes: p.aoe.sizeHexes ?? 0 } : { aoeShape: '', aoeSize: 0 }),
           condition: p.condition ?? '',
         },
         label: `${entry.name} added to powers`,

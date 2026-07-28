@@ -270,7 +270,7 @@ describe('SWADE library & compendium', () => {
     const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet: { ...sheet, powers: [blastRow, stunRow] } } as unknown as Character;
     const actions = combatActions(character);
     const blast = actions.find((a) => a.label === 'Blast')!;
-    expect(blast.aoe).toEqual({ shape: 'sphere', sizeFt: 24 });
+    expect(blast.aoe).toEqual({ shape: 'sphere', sizeFt: 0, sizeHexes: 3 });
     expect(blast.saveId).toBeUndefined();
     const stun = actions.find((a) => a.label === 'Stun')!;
     expect(stun.saveId).toBe('vigor');

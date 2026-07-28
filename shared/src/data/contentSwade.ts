@@ -115,7 +115,7 @@ interface PowerMech {
   rangeFt?: number;
   save?: string;
   onSave?: 'half' | 'negate';
-  aoe?: { shape: 'sphere' | 'cone' | 'line' | 'cube'; sizeFt: number };
+  aoe?: { shape: 'sphere' | 'cone' | 'line' | 'cube'; sizeFt?: number; sizeHexes?: number };
   condition?: string;
 }
 type P = [string, number, string, string, PowerMech?];
@@ -123,7 +123,7 @@ const POWERS: P[] = [
   ['Arcane Protection', 1, 'Novice', 'Foes suffer a penalty to affect you with powers'],
   ['Armor', 1, 'Novice', '+2 Armor for 5 rounds — toggle "Armor" on the sheet while maintained'],
   // Medium Blast Template ≈ 24 ft across; no dodging it by the book.
-  ['Blast', 3, 'Seasoned', 'Medium blast template of damage', { damage: '2d6!', rangeFt: 144, aoe: { shape: 'sphere', sizeFt: 24 } }],
+  ['Blast', 3, 'Seasoned', 'Medium blast template of damage', { damage: '2d6!', rangeFt: 144, aoe: { shape: 'sphere', sizeHexes: 3 } }],
   // Direct missile: arcane skill vs TN 4 to hit (raise = +1d6!).
   ['Bolt', 1, 'Novice', 'A missile of arcane energy', { damage: '2d6!', rangeFt: 144 }],
   ['Boost/Lower Trait', 2, 'Novice', 'Raise or lower a target trait one die type'],
@@ -167,7 +167,7 @@ const POWERS: P[] = [
   ['Elemental Manipulation', 1, 'Novice', 'Shape a small amount of air, earth, fire, or water'],
   ['Farsight', 2, 'Seasoned', 'See distant places as though present'],
   ['Growth/Shrink', 2, 'Novice', 'Change a target’s Size, Strength, and Toughness'],
-  ['Havoc', 2, 'Novice', 'Fling everyone in a blast area 2d6″ and knock them Prone', { rangeFt: 144, save: 'strength', onSave: 'negate', aoe: { shape: 'sphere', sizeFt: 24 }, condition: 'prone' }],
+  ['Havoc', 2, 'Novice', 'Fling everyone in a blast area 2d6″ and knock them Prone', { rangeFt: 144, save: 'strength', onSave: 'negate', aoe: { shape: 'sphere', sizeHexes: 3 }, condition: 'prone' }],
   ['Intangibility', 5, 'Veteran', 'Become insubstantial and pass through matter'],
   ['Mind Link', 1, 'Novice', 'Silent communication with willing allies'],
   ['Mind Reading', 2, 'Novice', 'Pull one honest answer from a subject’s thoughts', { rangeFt: 30, save: 'smarts', onSave: 'negate' }],

@@ -348,7 +348,7 @@ const WAVE_STAGGER_MS = 110;
 /** Raise dice are ALWAYS this green with white pips — a raise should look
  *  identical at every table, so it is not player-customisable. */
 export const RAISE_GREEN = '#0de323'; // rgb(13,227,35)
-export const DICE_ROLE_DEFAULTS = { trait: '#14171d', wild: '#8b5cf6', raise: RAISE_GREEN };
+export const DICE_ROLE_DEFAULTS = { trait: '#ffffff', wild: '#8b5cf6', raise: RAISE_GREEN };
 export type DicePalette = { trait: string; wild: string; raise: string };
 
 /** How long the grey-out takes, and how far down it goes. */

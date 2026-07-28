@@ -4,6 +4,9 @@ import { useGameStore } from '../store/game';
 import { useUploadProgress } from '../util/useUploadProgress';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { DiceColorPicker, DiceTextColorPicker, SwadeDicePalettePicker } from '../table/DiceRoller';
+import { DieShape } from '../table/DiceShapes';
+import { DEFAULT_DIE_COLORS, DICE_ROLE_DEFAULTS } from '../table/dice3d';
+import { readableOn } from '../util/playerColor';
 
 /** What the Customize Appearance step collects. Written into the new sheet as
  *  tokenColor / tokenShape / tokenSize / tokenImageAssetId, which
@@ -40,6 +43,39 @@ const SHAPES: Array<{ id: TokenShape; label: string }> = [
   { id: 'original', label: 'Original (fit width)' },
   { id: 'original-alt', label: 'Original (fit height)' },
 ];
+
+/**
+ * Two d6 glyphs showing faces 1 and 6, live in the colours currently picked —
+ * so the pickers below have an immediate "this is what the table will see".
+ * In SWADE the pair is the trait die and the Wild Die; elsewhere both wear
+ * the single custom colour.
+ */
+function DicePreview() {
+  const you = useGameStore((s) => s.you);
+  const members = useGameStore((s) => s.members);
+  const isSwade = useGameStore((s) => s.campaign?.system) === 'swade';
+  const me = you ? members.find((m) => m.userId === you.userId) : undefined;
+  const pair = isSwade
+    ? [
+      { label: 'Trait', fill: me?.diceTraitColor ?? DICE_ROLE_DEFAULTS.trait, value: 1 },
+      { label: 'Wild', fill: me?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild, value: 6 },
+    ]
+    : [
+      { label: '', fill: me?.diceColor ?? DEFAULT_DIE_COLORS[6], value: 1 },
+      { label: '', fill: me?.diceColor ?? DEFAULT_DIE_COLORS[6], value: 6 },
+    ];
+  const text = !isSwade && me?.diceTextColor ? me.diceTextColor : undefined;
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+      {pair.map((d, i) => (
+        <div key={i} style={{ textAlign: 'center' }}>
+          <DieShape sides={6} size={54} value={d.value} fill={d.fill} textFill={text ?? readableOn(d.fill)} />
+          {d.label && <span className="dim" style={{ fontSize: 10 }}>{d.label}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /**
  * The last step of every character creator: how your piece looks on the map,
@@ -114,6 +150,7 @@ export function AppearanceStep({ value, onChange }: {
       )}
 
       <h4>Your dice</h4>
+      <DicePreview />
       {isSwade ? <SwadeDicePalettePicker /> : (
         <>
           <DiceColorPicker />

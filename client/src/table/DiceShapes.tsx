@@ -93,8 +93,8 @@ function facets(sides: number) {
   }
 }
 
-function outline(sides: number): React.ReactNode {
-  const fill = DIE_COLORS[sides] ?? '#9aa1b3';
+function outline(sides: number, fillOverride?: string): React.ReactNode {
+  const fill = fillOverride ?? DIE_COLORS[sides] ?? '#9aa1b3';
   switch (sides) {
     case 2: return <circle cx={50} cy={52} r={46} fill={fill} />;
     case 4: return <polygon points="50,4 96,90 4,90" fill={fill} />;
@@ -110,13 +110,17 @@ function outline(sides: number): React.ReactNode {
 }
 
 export function DieShape({
-  sides, size = 48, value, dim = false,
+  sides, size = 48, value, dim = false, fill, textFill,
 }: {
   sides: number;
   size?: number;
   /** Optional face value rendered in the middle. */
   value?: number | string;
   dim?: boolean;
+  /** Override the body colour (e.g. previewing a player's dice palette). */
+  fill?: string;
+  /** Override the pip/number colour; defaults to the usual dark ink. */
+  textFill?: string;
 }) {
   // d4 numbers sit lower (triangle); coin/kite slightly high-center.
   const valueY = sides === 4 ? 72 : 58;
@@ -127,7 +131,7 @@ export function DieShape({
       viewBox="0 0 100 104"
       style={{ display: 'block', opacity: dim ? 0.55 : 1 }}
     >
-      {outline(sides)}
+      {outline(sides, fill)}
       {facets(sides)}
       {value !== undefined && (
         <text
@@ -136,7 +140,7 @@ export function DieShape({
           textAnchor="middle"
           fontSize={sides >= 100 ? 30 : 38}
           fontWeight={800}
-          fill="#10131a"
+          fill={textFill ?? '#10131a'}
           style={{ userSelect: 'none' }}
         >
           {value}

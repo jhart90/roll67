@@ -75,6 +75,35 @@ const WEAPONS: W[] = [
   ['Smoke Grenade', 'Ranged', '0', '', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'blocks line of sight']],
   ['Stun Grenade', 'Ranged', '0', 'energy', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'Vigor roll or Stunned']],
   ['Molotov Cocktail', 'Ranged', '2d10!', 'fire', 'ranged', ['range 18/36/72', 'thrown', 'small blast', 'may set fires']],
+  // --- era parity variants ---
+  // The same killing power expressed by different centuries: a master archer's
+  // war bow, a gunslinger's revolver and a laser sidearm all sit on one
+  // damage tier, with identical damage, AP, range and riders. Magazines and
+  // reload speeds stay period flavour. The RAW-priced originals above are
+  // untouched; these are for cross-era campaigns where the eras must be fair.
+  ['Composite War Bow', 'Ranged', '2d6!', 'piercing', 'ranged', ['range 72/144/288', 'AP 1', 'era: ancient — sidearm parity with 9mm Pistol & Pulse Laser Pistol']],
+  ['Chu-Ko-Nu Repeating Crossbow', 'Ranged', '2d6!', 'piercing', 'ranged', ['range 72/144/288', 'AP 1', 'mag 10', 'era: medieval — sidearm parity']],
+  ['Peacemaker Revolver (.45)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 72/144/288', 'AP 1', 'mag 6', 'era: old west — sidearm parity']],
+  ['Pulse Laser Pistol', 'Ranged', '2d6!', 'energy', 'ranged', ['range 72/144/288', 'AP 1', 'mag 24', 'era: future — sidearm parity']],
+  ['Gastraphetes (Belly Bow)', 'Ranged', '2d6!+1', 'piercing', 'ranged', ['range 72/144/288', 'AP 1', '1 action to reload', 'era: ancient Greece — heavy sidearm parity with .44 Magnum & Revolver (.357)']],
+  ['Heavy Blaster Pistol', 'Ranged', '2d6!+1', 'energy', 'ranged', ['range 72/144/288', 'AP 1', 'mag 12', 'era: future — heavy sidearm parity']],
+  ['English Longbow (War Shaft)', 'Ranged', '2d8!', 'piercing', 'ranged', ['range 144/288/576', 'AP 2', 'min Str d8', 'era: medieval — longarm parity with Hunting Rifle & Bolt-Action Rifle']],
+  ['Winchester Repeater', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 144/288/576', 'AP 2', 'mag 15', 'era: old west — longarm parity']],
+  ['Phase Carbine', 'Ranged', '2d8!', 'energy', 'ranged', ['range 144/288/576', 'AP 2', 'mag 30', 'era: future — longarm parity']],
+  ['Siege Arbalest', 'Ranged', '2d10!', 'piercing', 'ranged', ['range 300/600/1200', 'AP 4', 'snapfire', '2 actions to reload', 'era: medieval — marksman parity with Sniper Rifle']],
+  ['Buffalo Gun (.50-90)', 'Ranged', '2d10!', 'kinetic', 'ranged', ['range 300/600/1200', 'AP 4', 'snapfire', 'mag 1', 'era: old west — marksman parity']],
+  ['Photon Lance', 'Ranged', '2d10!', 'energy', 'ranged', ['range 300/600/1200', 'AP 4', 'snapfire', 'mag 10', 'era: future — marksman parity']],
+  ['Grapeshot Hand-Mortar', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', '2 actions to reload', 'damage 3d6/2d6/1d6 by range band', 'era: black powder — scattergun parity with Pump Shotgun']],
+  ['Scatter Blaster', 'Ranged', '3d6!', 'energy', 'ranged', ['range 72/144/288', 'mag 8', 'damage 3d6/2d6/1d6 by range band', 'era: future — scattergun parity']],
+  ['Thunderclap Powder Bomb', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'era: medieval China — grenade parity with Frag Grenade']],
+  ['Micro-Frag Sphere', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'era: future — grenade parity']],
+  ['Gladius', 'Melee', '1d6!', 'slashing', 'str', ['era: ancient Rome — blade parity with Short Sword & Bowie Knife']],
+  ['Bowie Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: old west — blade parity']],
+  ['Carbon-Edge Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: future — blade parity']],
+  ['Khopesh', 'Melee', '1d8!', 'slashing', 'str', ['era: ancient Egypt — sword parity with Long Sword']],
+  ['Cavalry Saber', 'Melee', '1d8!', 'slashing', 'str', ['era: old west — sword parity']],
+  ['Ceramic Longblade', 'Melee', '1d8!', 'slashing', 'str', ['era: future — sword parity (Vibro-Blade is the AP 4 upgrade, not this tier)']],
+  ['Rhomphaia', 'Melee', '1d10!', 'slashing', 'str', ['two-handed', 'Parry −1', 'era: ancient Thrace — greatblade parity with Great Sword']],
 ];
 
 // [name, category, bonus, rangedArmor, notes] — category 'Shield' means the

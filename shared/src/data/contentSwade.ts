@@ -104,6 +104,19 @@ const WEAPONS: W[] = [
   ['Cavalry Saber', 'Melee', '1d8!', 'slashing', 'str', ['era: old west — sword parity']],
   ['Ceramic Longblade', 'Melee', '1d8!', 'slashing', 'str', ['era: future — sword parity (Vibro-Blade is the AP 4 upgrade, not this tier)']],
   ['Rhomphaia', 'Melee', '1d10!', 'slashing', 'str', ['two-handed', 'Parry −1', 'era: ancient Thrace — greatblade parity with Great Sword']],
+  // --- 1960s FBI / CIA (JFK era) ---
+  // What agents of various junior ranks actually carried: revolvers as
+  // standard issue, a pistol and carbine from the field office armory, and
+  // the Agency's quieter tools. Sidearm-tier damage throughout — right for
+  // Novice opposition or Novice player agents.
+  ['S&W Model 10 (.38 Special)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 72/144/288', 'mag 6', 'era: 1960s — FBI standard issue']],
+  ['Colt Detective Special (Snub)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 30/60/120', 'mag 6', 'concealable', 'era: 1960s — FBI/CIA plainclothes']],
+  ['Browning Hi-Power', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 72/144/288', 'AP 1', 'mag 13', 'era: 1960s — CIA field issue']],
+  ['High Standard HDM (Suppressed .22)', 'Ranged', '2d4!', 'kinetic', 'ranged', ['range 30/60/120', 'mag 10', 'suppressed — nearly silent (Notice −4 to hear the shot)', 'era: 1960s — CIA covert work']],
+  ['M1 Carbine', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 120/240/480', 'mag 15', 'era: 1960s — FBI armory long gun']],
+  ['Thompson M1928 SMG', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 1', 'mag 30', 'RoF 3', 'era: 1960s — FBI armory, senior agents only']],
+  ['Lipstick Pistol (Single Shot)', 'Ranged', '2d4!', 'kinetic', 'ranged', ['range 6/12/24', 'mag 1', 'concealable anywhere, passes any search', 'era: 1960s — CIA gadget']],
+  ['Blackjack (Sap)', 'Melee', '1d4!', 'bludgeoning', 'str', ['nonlethal', 'Vigor roll or Stunned', 'concealable', 'era: 1960s — FBI/CIA close work']],
 ];
 
 // [name, category, bonus, rangedArmor, notes] — category 'Shield' means the

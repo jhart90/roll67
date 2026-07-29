@@ -137,7 +137,10 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
 
         {step === 'choose' && (
           <>
-            <p className="dim" style={{ fontSize: 12 }}>Pick how to spend this Advance.</p>
+            <h4>How do you want to spend this Advance?</h4>
+            <p className="dim" style={{ fontSize: 12 }}>
+              One Advance buys exactly one of these. Greyed options explain why they are unavailable right now.
+            </p>
             <div className="swc-hindrance-cols" style={{ gridTemplateColumns: '1fr' }}>
               {options.map((o) => (
                 <label key={o.kind} className={`lu-skill ${kind === o.kind ? 'on' : ''}`} style={o.available ? undefined : { opacity: 0.5 }}>
@@ -158,6 +161,11 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
 
         {step === 'pick' && kind === 'edge' && (
           <>
+            <h4>Which Edge?</h4>
+            <p className="dim" style={{ fontSize: 12 }}>
+              Edges are your character's signature talents — most add a live bonus or a new action the moment
+              you take them. Greyed Edges show the requirement you are missing.
+            </p>
             <input placeholder="Filter Edges…" value={edgeFilter} onChange={(e) => setEdgeFilter(e.target.value)} style={{ marginBottom: 8 }} />
             <div className="swc-skill-grid" style={{ gridTemplateColumns: '1fr' }}>
               {eligibleEdges.map((e: EdgeEligibility) => (
@@ -180,8 +188,10 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
 
         {step === 'pick' && kind === 'skillHigh' && (
           <>
+            <h4>Which skill goes up a die?</h4>
             <p className="dim" style={{ fontSize: 12 }}>
               These skills are at or above their linked attribute, so each costs a whole Advance to raise.
+              A bigger die means higher trait rolls — and more chances to ace.
             </p>
             {highSkills.map((s) => (
               <label key={s.name} className={`lu-skill ${skillHigh === s.name ? 'on' : ''}`}>
@@ -200,7 +210,11 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
             <div className={`swc-budget ${skillsLow.length === 2 ? 'full' : ''}`}>
               Choose two skills ({skillsLow.length}/2)
             </div>
-            <p className="dim" style={{ fontSize: 12 }}>Both are still below their linked attributes, so one Advance raises the pair.</p>
+            <h4>Which two skills go up a die each?</h4>
+            <p className="dim" style={{ fontSize: 12 }}>
+              Both are still below their linked attributes, so one Advance raises the pair — the best value
+              an Advance offers when it is available.
+            </p>
             <div className="swc-skill-grid" style={{ gridTemplateColumns: '1fr' }}>
               {lowSkills.map((s) => (
                 <label key={s.name} className={`lu-skill ${skillsLow.includes(s.name) ? 'on' : ''}`}>
@@ -221,7 +235,11 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
 
         {step === 'pick' && kind === 'newSkill' && (
           <>
-            <p className="dim" style={{ fontSize: 12 }}>A skill you have never trained starts at d4.</p>
+            <h4>Which new skill do you learn?</h4>
+            <p className="dim" style={{ fontSize: 12 }}>
+              A skill you have never trained starts at d4. Until now these rolled an unskilled d4−2, so even
+              d4 is a real improvement.
+            </p>
             <div className="swc-skill-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
               {untaken.map((name) => (
                 <label key={name} className={`lu-skill ${newSkill === name ? 'on' : ''}`}>
@@ -235,8 +253,10 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
 
         {step === 'pick' && kind === 'attribute' && (
           <>
+            <h4>Which attribute goes up a die?</h4>
             <p className="dim" style={{ fontSize: 12 }}>
-              One attribute goes up a die type. This is allowed once per <T>Rank</T>.
+              Allowed once per <T>Rank</T> — the rarest and broadest improvement, since an attribute feeds
+              every skill linked to it, and raising one can make future raises of those skills cheaper.
             </p>
             {attrs.map((a) => (
               <label key={a.id} className={`lu-skill ${attrId === a.id ? 'on' : ''}`}>

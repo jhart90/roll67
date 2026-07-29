@@ -7,8 +7,14 @@ import {
 import { intents } from '../store/game';
 import { PickerModal } from './SwnFeatures';
 
-/** Guided SWN level-up: sets class, HP (max at 1 / average / roll), attack bonus,
- *  and — on the first level — a background with its free skill. */
+type Step = 'class' | 'hp' | 'background' | 'focus' | 'review';
+
+/**
+ * Guided SWN level-up, one decision per pane: class (first time only, with
+ * each class's actual trade-offs spelled out), hit points, background with its
+ * free skill (level 1 only), an optional focus, and a review. The rules math
+ * lives in shared/systems/swnData.ts; this file is presentation and pacing.
+ */
 export function SwnLevelUpWizard({ character, onClose }: { character: Character; onClose: () => void }) {
   const sheet = character.sheet;
   const curLevel = Number(sheet.level) || 1;
@@ -21,16 +27,31 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
   const [hpMode, setHpMode] = useState<'avg' | 'roll'>('avg');
   const [background, setBackground] = useState('');
   const [showFocus, setShowFocus] = useState(false);
+  const [focusPicked, setFocusPicked] = useState('');
+  const [stepIdx, setStepIdx] = useState(0);
 
   const plan = useMemo(
     () => planLevelUpSwn(sheet, classId, toLevel),
     [sheet, classId, toLevel],
   );
 
+  // One decision per pane. The class pane only exists before the class is
+  // locked in; the background pane only at level 1, when SWN grants one.
+  const STEPS = useMemo<Array<{ id: Step; label: string }>>(() => {
+    const s: Array<{ id: Step; label: string }> = [];
+    if (!established) s.push({ id: 'class', label: 'Class' });
+    s.push({ id: 'hp', label: 'Hit Points' });
+    if (plan?.first) s.push({ id: 'background', label: 'Background' });
+    s.push({ id: 'focus', label: 'Focus' });
+    s.push({ id: 'review', label: 'Review' });
+    return s;
+  }, [established, plan?.first]);
+  const step = STEPS[Math.min(stepIdx, STEPS.length - 1)].id;
+
   const conMod = swnMod(Number(sheet.con ?? 10));
   const rolling = !!plan && !plan.first && hpMode === 'roll';
-
   const valid = !!plan && (curLevel < 10 || !established);
+  const skillPoints = 2 + (classId === 'expert' || (classId === 'adventurer' && String(sheet.secondaryClass ?? '').toLowerCase() === 'expert') ? 1 : 0);
 
   function apply() {
     if (!plan) return;
@@ -56,14 +77,15 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
     const already = takenFocusIds(sheet).includes(id);
     intents.updateCharacter(character.id, applyFocus(sheet, id));
     intents.chat(`${character.name} ${already ? 'advances' : 'gains'} the ${f.name} focus.`);
+    setFocusPicked(f.name);
     setShowFocus(false);
   }
 
   return (
     <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="panel levelup">
+      <div className="panel levelup swc-wizard">
         <div className="dock-header">
-          <h3>Level Up — {character.name}</h3>
+          <h3>Level Up — {character.name}{plan ? ` → level ${plan.toLevel}` : ''}</h3>
           <button className="link" onClick={onClose}>close</button>
         </div>
 
@@ -71,68 +93,140 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
           <p className="dim">Already at level 10 (the SWN maximum).</p>
         ) : plan && (
           <>
-            <label className="lu-field">
-              Class
-              <select value={classId} onChange={(e) => setClassId(e.target.value)} disabled={established}>
-                {SWN_CLASS_LIST.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </label>
-
-            <p className="lu-summary">
-              {plan.first
-                ? <>New level <strong>1 {plan.className}</strong></>
-                : <>Level <strong>{plan.fromLevel}</strong> → <strong>{plan.toLevel}</strong></>}
-              {' '}· d6 hit die · attack bonus{' '}
-              {plan.first || Number(sheet.attackBonus ?? 0) === plan.attackBonus
-                ? <strong>+{plan.attackBonus}</strong>
-                : <><strong>+{Number(sheet.attackBonus ?? 0)}</strong> → <strong>+{plan.attackBonus}</strong></>}
-              {' '}· +{2 + (classId === 'expert' || (classId === 'adventurer' && String(sheet.secondaryClass ?? '').toLowerCase() === 'expert') ? 1 : 0)} skill points
-            </p>
-
-            <div className="lu-field">
-              <span>Hit points</span>
-              {plan.first ? (
-                <span className="dim">Level 1 takes the maximum: <strong>+{plan.firstHp} HP</strong> (6 + CON{plan.hpBonusPerLevel ? ` + ${plan.hpBonusPerLevel} Warrior` : ''}).</span>
-              ) : (
-                <div className="lu-hp">
-                  <label className="check-row" style={{ margin: 0 }}>
-                    <input type="radio" checked={hpMode === 'avg'} onChange={() => setHpMode('avg')} />
-                    Average (+{plan.avgHp})
-                  </label>
-                  <label className="check-row" style={{ margin: 0 }}>
-                    <input type="radio" checked={hpMode === 'roll'} onChange={() => setHpMode('roll')} />
-                    Roll 1d6{conMod + plan.hpBonusPerLevel !== 0 ? ` ${conMod + plan.hpBonusPerLevel > 0 ? '+' : ''}${conMod + plan.hpBonusPerLevel}` : ''}
-                  </label>
-                  {hpMode === 'roll' && <span className="dim" style={{ fontSize: 11 }}>rolled on apply, shown in chat</span>}
-                </div>
-              )}
+            <div className="swc-steps">
+              {STEPS.map((s, i) => (
+                <button key={s.id} className={i === stepIdx ? 'active' : ''} disabled={i > stepIdx} onClick={() => setStepIdx(i)}>
+                  {s.label}
+                </button>
+              ))}
             </div>
 
-            {plan.first && (
-              <label className="lu-field">
-                Background (grants a free skill)
-                <select value={background} onChange={(e) => setBackground(e.target.value)}>
-                  <option value="">Choose… (optional)</option>
-                  {SWN_BACKGROUNDS.map((b) => <option key={b.id} value={b.id}>{b.name} — {b.freeSkill}</option>)}
-                </select>
-              </label>
+            {step === 'class' && (
+              <>
+                <h4>What class is {character.name}?</h4>
+                <p className="dim" style={{ fontSize: 12 }}>
+                  The class fixes your attack bonus curve, per-level HP, skill points, and your once-per-scene
+                  class ability. It can't be changed after this.
+                </p>
+                {SWN_CLASS_LIST.map((c) => (
+                  <label key={c.id} className={`lu-skill ${classId === c.id ? 'on' : ''}`}>
+                    <input type="radio" checked={classId === c.id} onChange={() => setClassId(c.id)} />
+                    <span>
+                      <strong>{c.name}</strong>
+                      <br />
+                      <span className="dim" style={{ fontSize: 11 }}>{c.ability}</span>
+                    </span>
+                  </label>
+                ))}
+              </>
             )}
 
-            <div className="lu-field">
-              <span>Class ability</span>
-              <span className="dim" style={{ fontSize: 12 }}>{plan.ability}</span>
-            </div>
+            {step === 'hp' && (
+              <>
+                <h4>How do you take your new hit points?</h4>
+                {plan.first ? (
+                  <>
+                    <p className="lu-summary">
+                      Level 1 takes the maximum: <strong>+{plan.firstHp} HP</strong> (6 + CON{plan.hpBonusPerLevel ? ` + ${plan.hpBonusPerLevel} Warrior` : ''}).
+                    </p>
+                    <p className="dim" style={{ fontSize: 12 }}>
+                      No decision here — a starting character always gets a full hit die. Hit next to continue.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="dim" style={{ fontSize: 12 }}>
+                      SWN characters stay fragile; a d6 hit die means every point matters. Average is guaranteed.
+                      Rolling can beat it or come up short, and it happens in chat in front of everyone on Apply.
+                    </p>
+                    <label className={`lu-skill ${hpMode === 'avg' ? 'on' : ''}`}>
+                      <input type="radio" checked={hpMode === 'avg'} onChange={() => setHpMode('avg')} />
+                      <span><strong>Take the average: +{plan.avgHp} HP</strong><br />
+                        <span className="dim" style={{ fontSize: 11 }}>Guaranteed, no drama.</span></span>
+                    </label>
+                    <label className={`lu-skill ${hpMode === 'roll' ? 'on' : ''}`}>
+                      <input type="radio" checked={hpMode === 'roll'} onChange={() => setHpMode('roll')} />
+                      <span><strong>Roll 1d6{conMod + plan.hpBonusPerLevel !== 0 ? ` ${conMod + plan.hpBonusPerLevel > 0 ? '+' : ''}${conMod + plan.hpBonusPerLevel}` : ''}</strong><br />
+                        <span className="dim" style={{ fontSize: 11 }}>Rolled in chat when you Apply — no taking it back.</span></span>
+                    </label>
+                  </>
+                )}
+              </>
+            )}
 
-            <div className="lu-field">
-              <span>Focus (optional — foci can also be picked any time from the Core tab)</span>
-              <button type="button" className="btn btn-sm" onClick={() => setShowFocus(true)}>+ Pick a focus</button>
-            </div>
+            {step === 'background' && (
+              <>
+                <h4>Where did {character.name} come from?</h4>
+                <p className="dim" style={{ fontSize: 12 }}>
+                  A background is who you were before the campaign, and it grants its free skill at level-0
+                  immediately. Optional — skip if none fits.
+                </p>
+                <div className="swc-skill-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                  {SWN_BACKGROUNDS.map((b) => (
+                    <label key={b.id} className={`lu-skill ${background === b.id ? 'on' : ''}`}>
+                      <input
+                        type="radio" checked={background === b.id}
+                        onChange={() => setBackground(background === b.id ? '' : b.id)}
+                      />
+                      <span>
+                        <strong>{b.name}</strong> <span className="dim" style={{ fontSize: 11 }}>· free {b.freeSkill}</span>
+                        <br />
+                        <span className="dim" style={{ fontSize: 11 }}>{b.desc}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {step === 'focus' && (
+              <>
+                <h4>Pick a focus? (optional)</h4>
+                <p className="dim" style={{ fontSize: 12 }}>
+                  Foci are your edge — trained specialities like Gunslinger or Die Hard that grant skills and
+                  live mechanical hooks. Taking one you already have advances it to level 2. You can also add
+                  foci any time from the Core tab, so skipping here costs nothing.
+                </p>
+                {focusPicked
+                  ? <p className="lu-summary">Added: <strong>{focusPicked}</strong> ✓</p>
+                  : <button type="button" className="btn" onClick={() => setShowFocus(true)}>Browse foci…</button>}
+              </>
+            )}
+
+            {step === 'review' && (
+              <>
+                <h4>{plan.first ? `Become a level 1 ${plan.className}` : `Become level ${plan.toLevel}`}</h4>
+                <p className="lu-summary">
+                  {rolling ? 'HP rolled on Apply' : `+${plan.first ? plan.firstHp : plan.avgHp} HP`}
+                  {' '}· attack bonus{' '}
+                  {plan.first || Number(sheet.attackBonus ?? 0) === plan.attackBonus
+                    ? <strong>+{plan.attackBonus}</strong>
+                    : <><strong>+{Number(sheet.attackBonus ?? 0)}</strong> → <strong>+{plan.attackBonus}</strong></>}
+                  {' '}· +{skillPoints} skill points to spend on the Skills list
+                  {plan.first && background ? <> · {SWN_BACKGROUNDS.find((b) => b.id === background)?.name}</> : null}
+                </p>
+                <div className="lu-field">
+                  <span>Your class ability</span>
+                  <span className="dim" style={{ fontSize: 12 }}>{plan.ability}</span>
+                </div>
+                <p className="dim" style={{ fontSize: 12 }}>
+                  HP, attack bonus and skill points apply to the sheet automatically; spend the points from the
+                  sheet's Skills section whenever you like.
+                </p>
+              </>
+            )}
 
             <div className="row" style={{ marginTop: 12 }}>
-              <button className="primary" style={{ width: 'auto' }} disabled={!valid} onClick={apply}>
-                Apply — become level {plan.toLevel}
-              </button>
-              <button onClick={onClose}>Cancel</button>
+              {stepIdx > 0 && <button onClick={() => setStepIdx((i) => i - 1)}>◀ back</button>}
+              {step !== 'review' ? (
+                <button className="primary" style={{ width: 'auto' }} onClick={() => setStepIdx((i) => i + 1)}>
+                  next ▶
+                </button>
+              ) : (
+                <button className="primary" style={{ width: 'auto' }} disabled={!valid} onClick={apply}>
+                  Apply — become level {plan.toLevel}
+                </button>
+              )}
             </div>
           </>
         )}

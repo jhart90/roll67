@@ -56,6 +56,16 @@ let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 let gapTimer: ReturnType<typeof setTimeout> | null = null;
 /** When the last roll's dice finished landing; the gaps are measured from it. */
 let lastRollEndedAt = 0;
+/**
+ * Anim ids with a MOUNTED overlay still animating them. The fallback timer
+ * consults this before finishing a roll: while the overlay is demonstrably
+ * alive it is the sole authority on when its dice have landed, so a stale or
+ * miscomputed estimate can never cut a chain off mid-air. The fallback only
+ * ever acts when no overlay exists to report (hidden window, unmounted view).
+ */
+const liveOverlays = new Set<number>();
+export function overlayMounted(id: number): void { liveOverlays.add(id); }
+export function overlayUnmounted(id: number): void { liveOverlays.delete(id); }
 
 function pumpChatQueue(): void {
   if (activeRoll) return; // a roll is still on screen

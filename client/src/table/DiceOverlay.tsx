@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DieRoll } from 'shared';
-import { diceAnimationFinished, useGameStore } from '../store/game';
+import { diceAnimationFinished, overlayMounted, overlayUnmounted, useGameStore } from '../store/game';
 import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette } from './dice3d';
 
 function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette }: {
@@ -23,6 +23,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
     canvas.style.height = `${h}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    overlayMounted(animId);
     const sims = buildSims(dice, w, h, color, textColor, palette);
     const settleAt = simsSettleTime(sims);
     const t0 = performance.now();
@@ -45,7 +46,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
       else drawFrame(ctx, sims, settleAt + 401, w, h); // final resting frame
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => { overlayUnmounted(animId); cancelAnimationFrame(raf); };
     // A new roll remounts this component (key on anim id), so run-once is right.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

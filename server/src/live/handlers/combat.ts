@@ -36,9 +36,31 @@ const SAVE_STEP_DELAY_MS = 2800;
 // effect (and the floating number over the token) actually lands until after
 // its own dice have visibly finished — never before, or the token reacts
 // before the player has seen why.
-function diceSettleDelayMs(diceCount: number): number {
-  const n = Math.max(1, Math.min(diceCount, 12));
-  return (n - 1) * 110 + 1700 + 1000;
+/**
+ * How long the client will plausibly animate a roll, plus a beat. MUST stay
+ * chain-aware: ace chains animate sequentially (each bonus die waits for its
+ * predecessor to land, flash and sit readable), so a count-based estimate
+ * undershoots a 3-die chain by seconds and fires impacts/HP while dice are
+ * still mid-air. Constants mirror client dice3d.ts: 110 wave stagger, 1700
+ * max throw, 1250 ace gap, 12-die display cap, 20s ceiling.
+ */
+function diceSettleDelayMs(dice: number | Array<{ ace?: boolean }>): number {
+  if (typeof dice === 'number') {
+    const n = Math.max(1, Math.min(dice, 12));
+    return (n - 1) * 110 + 1700 + 1000;
+  }
+  const shown = dice.slice(0, 12);
+  if (shown.length === 0) return 1000;
+  const settle: number[] = [];
+  let wave = 0;
+  let latest = 0;
+  shown.forEach((d, i) => {
+    const cont = i > 0 && shown[i - 1].ace === true;
+    const delay = cont ? settle[i - 1] + 1250 : (wave += i === 0 ? 0 : 110);
+    settle[i] = delay + 1700;
+    latest = Math.max(latest, settle[i]);
+  });
+  return Math.min(latest, 20000) + 1000;
 }
 
 // How long a ranged shot's travel animation takes on screen (see
@@ -216,7 +238,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       text: `${spec.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
-    const settleMs = diceSettleDelayMs(dmg.dice.length);
+    const settleMs = diceSettleDelayMs(dmg.dice);
     setTimeout(() => {
       for (const apply of applications) apply();
       applyConditions();
@@ -314,7 +336,7 @@ function activatePsychicPower(
         });
         io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg: dmgMsg });
         for (const t of tokens.forCharacter(afterChar.id)) floatHp(io, campaignId, t.mapId, t.id, -dmg);
-      }, diceSettleDelayMs(checkRoll.dice.length));
+      }, diceSettleDelayMs(checkRoll.dice));
     }
     return { actor: updated, undo };
   }
@@ -568,7 +590,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
         });
         io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-        if (!passed) setTimeout(applyCondition, diceSettleDelayMs(br.dice.length));
+        if (!passed) setTimeout(applyCondition, diceSettleDelayMs(br.dice));
       }, delayMs);
     };
 
@@ -692,7 +714,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
 
       if (applyToTarget) {
-        const settleMs = diceSettleDelayMs(cardRoll.dice.length);
+        const settleMs = diceSettleDelayMs(cardRoll.dice);
         // A single-target ranged hit gets a shot flying across the map,
         // launched so its flight lands exactly when the damage does -- melee
         // (no travel to show) and AoE (its own shockwave, no single target
@@ -712,7 +734,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // rolls its own save first (when it has one); a failed spell save's
       // rider applies outright; a roll-less action's applies with its amount.
       if (conditionId) {
-        const settleMs = diceSettleDelayMs(cardRoll.dice.length);
+        const settleMs = diceSettleDelayMs(cardRoll.dice);
         if (attackBreakdown && hit && action.conditionSaveId && action.conditionDc) scheduleRiderSave(settleMs);
         else if ((attackBreakdown && hit)
           || (deferredSave && !deferredSave.passed)
@@ -797,12 +819,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
               }, [{ t: 'hp', characterId: targetId, delta: -dmg }]);
               io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: shockMsg });
               floatHp(io, d.campaignId, src.mapId, tgt.id, -dmg, 'melee', action.damageType);
-            }, diceSettleDelayMs(attackBreakdown.dice.length));
+            }, diceSettleDelayMs(attackBreakdown.dice));
           }
         }
         return;
       }
-      setTimeout(resolveDamage, diceSettleDelayMs(attackBreakdown.dice.length));
+      setTimeout(resolveDamage, diceSettleDelayMs(attackBreakdown.dice));
       return;
     }
     // No roll at all AND nothing to roll for: a pure-condition cast like
@@ -975,7 +997,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-    const noSaveSettleMs = diceSettleDelayMs(dmg.dice.length);
+    const noSaveSettleMs = diceSettleDelayMs(dmg.dice);
     setTimeout(() => {
       for (const apply of applications) apply();
       syncMapVision(io, d.campaignId, src.mapId);
@@ -1088,7 +1110,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         applyHpDelta(io, d.campaignId, fresh, 1); // clears unconscious, posts "is back up!"
         persistSheet(io, d.campaignId, characters.byId(characterId)!, { deathSuccesses: 0, deathFailures: 0 });
         for (const t of tokens.forCharacter(characterId)) floatHp(io, d.campaignId, t.mapId, t.id, 1, 'heal');
-      }, diceSettleDelayMs(br.dice.length));
+      }, diceSettleDelayMs(br.dice));
       return;
     }
     if (v === 1) fail += 2;

@@ -31,7 +31,7 @@ import { estimateDiceAnimMs } from '../table/dice3d';
  * Long, deliberately: an attack and its damage are two separate results and
  * the table needs to read the first before the second starts throwing.
  */
-const ROLL_TO_ROLL_GAP_MS = 2000;
+const ROLL_TO_ROLL_GAP_MS = 3000;
 /**
  * Everything else — a projectile, a chat line — waits this much instead. It
  * only has to clear the dice, not give them time to be read.
@@ -89,7 +89,7 @@ function pumpChatQueue(): void {
     return;
   }
   activeRoll = next;
-  useGameStore.setState({ diceAnim: next.roll.anim });
+  useGameStore.setState({ diceAnim: next.roll.anim, diceAnimEnding: false });
   // The overlay reports the true finish via diceAnimationFinished(); this only
   // covers the case where no overlay is mounted to report back.
   const animMs = estimateDiceAnimMs(next.roll.dice);
@@ -228,6 +228,8 @@ interface GameState {
   errorToast: string | null;
   /** Live 3D dice animation for the latest roll. */
   diceAnim: { id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string } | null;
+  /** True once the settled dice have had their sit time and may fade out. */
+  diceAnimEnding: boolean;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
@@ -378,6 +380,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   targetPreviews: {},
   errorToast: null,
   diceAnim: null,
+  diceAnimEnding: false,
   targeting: null,
   aoeTargeting: null,
   floats: [],

@@ -3,8 +3,8 @@ import type { DieRoll } from 'shared';
 import { diceAnimationFinished, overlayMounted, overlayUnmounted, useGameStore } from '../store/game';
 import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette } from './dice3d';
 
-function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette }: {
-  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null;
+function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette, ending }: {
+  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null; ending: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [settled, setSettled] = useState(false);
@@ -52,7 +52,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
   }, []);
 
   return (
-    <div className="dice-overlay">
+    <div className={`dice-overlay ${ending ? 'ending' : ''}`}>
       <canvas ref={canvasRef} className="dice3d-canvas" />
       <div className="dice-roller-name">
         {byName} rolls {expression}{settled ? <span className="dice-total"> = {total}</span> : '…'}
@@ -64,6 +64,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
 /** Full-screen (non-interactive) 3D dice for the latest roll in chat. */
 export function DiceOverlay() {
   const anim = useGameStore((s) => s.diceAnim);
+  const ending = useGameStore((s) => s.diceAnimEnding);
   const members = useGameStore((s) => s.members);
   const system = useGameStore((s) => s.campaign?.system);
   if (!anim) return null;
@@ -90,6 +91,7 @@ export function DiceOverlay() {
       color={color}
       textColor={textColor}
       palette={palette}
+      ending={ending}
     />
   );
 }

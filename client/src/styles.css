@@ -1858,10 +1858,16 @@ th > .term { border-bottom-style: dotted; }
   inset: 0;
   z-index: 80;
   pointer-events: none;
-  animation: dice-overlay-in 0.2s ease-out, dice-overlay-out 0.5s ease-in 4.4s forwards;
+  /* Fade-out is STATE-driven (.ending, set by the store once the dice have
+     had their full sit time after landing) — never a fixed delay from mount.
+     A hardcoded 4.4s fade-out keyframe here used to hide the overlay while
+     ace chains were still rolling, and survived three timing fixes because
+     it lived in CSS while every fix looked at the JS. */
+  animation: dice-overlay-in 0.2s ease-out;
+  transition: opacity 0.5s ease-in;
 }
+.dice-overlay.ending { opacity: 0; }
 @keyframes dice-overlay-in { from { opacity: 0; } }
-@keyframes dice-overlay-out { to { opacity: 0; } }
 
 .dice3d-canvas {
   position: absolute;

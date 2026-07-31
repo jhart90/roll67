@@ -354,6 +354,46 @@ function applySwadeDamage(
   return { character: cur, note: ` — ${out.summary}` };
 }
 
+/**
+ * Last trait/damage roll per SWADE character — what "Reroll a trait test" and
+ * "Reroll damage" Bennies re-roll. Records expire so a stale morning roll
+ * can't be Benny'd back at the evening table.
+ */
+export interface BennyRollRec { expr: string; total: number; label: string; at: number }
+export const lastBennyRolls = new Map<string, { trait?: BennyRollRec; damage?: BennyRollRec }>();
+const BENNY_REROLL_TTL_MS = 5 * 60_000;
+
+function freshBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRollRec | null {
+  const rec = lastBennyRolls.get(characterId)?.[kind];
+  return rec && Date.now() - rec.at <= BENNY_REROLL_TTL_MS ? rec : null;
+}
+
+/** Tell the owner which Benny reroll buttons are currently live. */
+export function emitBennyState(io: Server, ch: Character): void {
+  if (!ch.ownerUserId) return;
+  io.to(userRoom(ch.ownerUserId)).emit(S2C.BENNY_STATE, {
+    characterId: ch.id,
+    canRerollTrait: freshBennyRoll(ch.id, 'trait') !== null,
+    canRerollDamage: freshBennyRoll(ch.id, 'damage') !== null,
+  });
+}
+
+export function recordBennyRoll(
+  io: Server, campaignId: string, ch: Character, kind: 'trait' | 'damage',
+  expr: string, total: number, label: string,
+): void {
+  if (ch.system !== 'swade') return;
+  const rec = lastBennyRolls.get(ch.id) ?? {};
+  rec[kind] = { expr, total, label, at: Date.now() };
+  lastBennyRolls.set(ch.id, rec);
+  emitBennyState(io, ch);
+}
+
+/** The reroll a Benny buys, if the original is still fresh. */
+export function takeBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRollRec | null {
+  return freshBennyRoll(characterId, kind);
+}
+
 /** Consume a soak offer if it is still fresh. */
 export function takeSoakOffer(characterId: string): { wounds: number } | null {
   const offer = pendingSoaks.get(characterId);

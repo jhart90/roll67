@@ -11,7 +11,7 @@ import { applyUndo } from '../undo.js';
 // NOTE: hp.ts also imports applyAdv from this file -- a deliberate, safe
 // circular import (both sides are hoisted function declarations used only at
 // call time, never during module evaluation).
-import { clearConcentrationEffects } from '../hp.js';
+import { clearConcentrationEffects, recordBennyRoll } from '../hp.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -190,6 +190,8 @@ function runSheetRoll(
   const rollable = systemFor(character.system).rollables(character.sheet).find((r) => r.id === rollableId);
   if (!rollable) throw new Error('That roll is no longer on the sheet.');
   const breakdown = roll(rollable.expr);
+  // Any SWADE sheet roll is a trait test a Benny may reroll.
+  recordBennyRoll(io, campaignId, character, 'trait', rollable.expr, breakdown.total, rollable.label);
   const msg = chat.add(campaignId, {
     userId, fromName: username, fromCharacter: character.name, kind: 'roll',
     text: rollable.label, roll: breakdown, recipients: null,

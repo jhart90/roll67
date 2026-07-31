@@ -115,6 +115,8 @@ export const C2S = {
   INIT_END_TURN: 'initEndTurn',
   /** SWADE: spend a Benny to Soak wounds just taken (or decline). */
   SOAK_ROLL: 'soakRoll',
+  /** SWADE: spend a Benny from the Benny menu (reroll, recover, redraw…). */
+  BENNY_USE: 'bennyUse',
   // table
   DRAW: 'draw',
   ERASE_DRAWING: 'eraseDrawing',
@@ -658,6 +660,8 @@ export const S2C = {
   SFX_PLAY: 'sfxPlay',
   /** SWADE: your Wild Card took wounds and may Soak them with a Benny. */
   SOAK_OFFER: 'soakOffer',
+  /** SWADE: which Benny reroll options are currently live for your character. */
+  BENNY_STATE: 'bennyState',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -844,6 +848,11 @@ export interface SetDiceRoleColorPayload { role: DiceRole; color: string | null 
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }
 export interface SoakOfferPayload { characterId: string; name: string; wounds: number; bennies: number }
+/** The Benny-menu uses the server can automate. Soak rides the existing SOAK_ROLL flow. */
+export type BennyUseId =
+  | 'reroll-trait' | 'recover-shaken' | 'redraw-card' | 'reroll-damage' | 'regain-pp' | 'influence';
+export interface BennyUsePayload { characterId: string; use: BennyUseId }
+export interface BennyStatePayload { characterId: string; canRerollTrait: boolean; canRerollDamage: boolean }
 /** Set the color of the pips/numbers painted on your own dice ("#rrggbb", or null for automatic contrast). */
 export interface SetDiceTextColorPayload { color: string | null }
 /** Set your own presence-dot / chat-name color ("#rrggbb", or null for the deterministic default). */

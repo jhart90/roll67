@@ -2027,3 +2027,20 @@ th > .term { border-bottom-style: dotted; }
   background: var(--panel); border: 2px solid #d26c6c;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
+
+/* SWADE Benny menu: a coin chip that unfolds the Benny Uses table. */
+.benny-menu { position: fixed; right: 14px; bottom: 90px; z-index: 69; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.benny-chip {
+  width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
+  background: var(--panel); border: 2px solid #d9a520; color: var(--text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: pointer;
+}
+.benny-panel {
+  display: flex; flex-direction: column; gap: 5px; width: 220px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--panel); border: 2px solid #d9a520;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+.benny-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.benny-panel button { width: 100%; text-align: left; }
+.benny-panel button:disabled { opacity: 0.45; cursor: not-allowed; }

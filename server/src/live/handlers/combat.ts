@@ -4,7 +4,7 @@ import {
   MAX_WOUNDS, dieSides, soakSuccesses, swadeDamageOutcome, traitExpr,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type BennyUsePayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -14,7 +14,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, takeSoakOffer } from '../hp.js';
+import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 
@@ -614,6 +614,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         advTag = netAdv === 'adv' ? ' [+2]' : ' [−2]';
       }
       attackBreakdown = roll(expr);
+      if (actor.system === 'swade') {
+        recordBennyRoll(io, d.campaignId, actor, 'trait', expr, attackBreakdown.total, `their ${action.label} roll`);
+      }
       const d20s = attackBreakdown.dice.filter((x) => x.sides === 20 && x.kept);
       // Champion Improved Critical lowers the crit threshold (19, or 18 at 15).
       const critAt = critRange(actor.sheet);
@@ -740,6 +743,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           undo.push({ t: 'field', characterId: actor.id, key: 'res_savageAttacker', value: used });
           actor = persistSheet(io, d.campaignId, actor, { res_savageAttacker: used + 1 });
         }
+      }
+      if (actor.system === 'swade' && hit) {
+        recordBennyRoll(io, d.campaignId, actor, 'damage', action.amountExpr, amountRoll.total, `their ${action.label} damage`);
       }
       let magnitude = Math.max(0, amountRoll.total);
       // Save-based spells scale the rolled damage (half / none on a save).
@@ -1456,7 +1462,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (removed > 0) patch.wounds = woundsAfter;
     let conds = conditionsOf(ch.sheet);
     if (removed === offer.wounds && removed > 0) conds = conds.filter((c) => c !== 'shaken');
-    if (woundsAfter <= MAX_WOUNDS) conds = conds.filter((c) => c !== 'incapacitated');
+    if (woundsAfter <= MAX_WOUNDS) conds = conds.filter((c) => c !== 'incapacitated' && c !== 'bleeding');
     patch.conditions = conds;
     persistSheet(io, d.campaignId, ch, patch);
     const text = removed > 0
@@ -1468,6 +1474,118 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'SOAK_ROLL'));
+
+  // The Benny menu: every automatable use from the SWADE Benny table. Soak
+  // rides the existing SOAK_ROLL flow; everything else lands here.
+  socket.on(C2S.BENNY_USE, safe(socket, ({ characterId, use }: BennyUsePayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) {
+      emitError(socket, 'That is not your character.');
+      return;
+    }
+    const bennies = num(ch.sheet, 'bennies', 0);
+    if (bennies <= 0) {
+      emitError(socket, `${ch.name} has no Bennies left.`);
+      return;
+    }
+    const spendBenny = (extra: Record<string, unknown> = {}): Character =>
+      persistSheet(io, d.campaignId, characters.byId(ch.id) ?? ch,
+        { bennies: num((characters.byId(ch.id) ?? ch).sheet, 'bennies', 0) - 1, ...extra });
+    const postRoll = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, fromCharacter: ch.name, kind: 'roll', text,
+        roll: { ...breakdown, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    };
+
+    switch (use) {
+      case 'recover-shaken': {
+        // Spending a Benny removes Shaken outright — no roll needed.
+        if (!conditionsOf(ch.sheet).includes('shaken')) {
+          emitError(socket, `${ch.name} isn't Shaken.`);
+          return;
+        }
+        spendBenny({ conditions: conditionsOf(ch.sheet).filter((c) => c !== 'shaken') });
+        postStatusLine(io, d.campaignId, `🪙 ${ch.name} spends a Benny and is no longer Shaken.`);
+        break;
+      }
+      case 'reroll-trait':
+      case 'reroll-damage': {
+        const kind = use === 'reroll-trait' ? 'trait' as const : 'damage' as const;
+        const rec = takeBennyRoll(ch.id, kind);
+        if (!rec) {
+          emitError(socket, `No recent ${kind} roll to reroll.`);
+          return;
+        }
+        spendBenny();
+        const b = roll(rec.expr);
+        const better = b.total > rec.total;
+        // The reroll stands beside the original; whichever is higher counts.
+        recordBennyRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, kind, rec.expr, Math.max(rec.total, b.total), rec.label);
+        postRoll(
+          `🪙 ${ch.name} spends a Benny to reroll ${rec.label} — ${b.total} vs the original ${rec.total}: ${better ? 'the reroll counts!' : 'keep the original.'}`,
+          b, better,
+        );
+        break;
+      }
+      case 'redraw-card': {
+        const state = initiative.get(d.campaignId);
+        if (!state.active || !state.cardMode) {
+          emitError(socket, 'No action cards are in play.');
+          return;
+        }
+        const entry = state.entries.find((e) => {
+          const t = e.tokenId ? tokens.byId(e.tokenId) : undefined;
+          return t?.characterId === ch.id;
+        });
+        if (!entry) {
+          emitError(socket, `${ch.name} isn't in the initiative order.`);
+          return;
+        }
+        if (!state.deck || state.deck.length === 0) state.deck = shuffleDeck(buildDeck());
+        const card = state.deck.shift()!;
+        state.drawCounter = (state.drawCounter ?? 0) + 1;
+        const currentId = state.entries[state.turnIdx]?.id;
+        entry.card = card;
+        entry.value = card.rank;
+        entry.drawSeq = state.drawCounter;
+        state.entries.sort(compareCardEntries);
+        // Re-sorting must not steal the current combatant's turn.
+        const keep = state.entries.findIndex((e) => e.id === currentId);
+        if (keep >= 0) state.turnIdx = keep;
+        initiative.set(d.campaignId, state);
+        spendBenny();
+        broadcastInitiative(io, d.campaignId);
+        const msg = chat.add(d.campaignId, {
+          userId: d.userId, fromName: d.username, kind: 'system',
+          text: `🂠 ${ch.name} spends a Benny to redraw — draws the ${cardName(card)} ${cardShort(card)}${card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''}`,
+          roll: null, recipients: null,
+        });
+        io.to(entry.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+        break;
+      }
+      case 'regain-pp': {
+        const maxPp = num(ch.sheet, 'maxPp', 10);
+        const pp = num(ch.sheet, 'pp', 0);
+        if (pp >= maxPp) {
+          emitError(socket, `${ch.name}'s Power Points are already full.`);
+          return;
+        }
+        const after = Math.min(maxPp, pp + 5);
+        spendBenny({ pp: after });
+        postStatusLine(io, d.campaignId, `🪙 ${ch.name} spends a Benny to regain 5 Power Points (${pp} → ${after}).`);
+        break;
+      }
+      case 'influence': {
+        spendBenny();
+        postStatusLine(io, d.campaignId, `🎭 ${ch.name} spends a Benny to influence the story.`);
+        break;
+      }
+    }
+  }, 'BENNY_USE'));
 
   socket.on(C2S.INIT_PREV, safe(socket, () => {
     const d = requireCampaign(socket);

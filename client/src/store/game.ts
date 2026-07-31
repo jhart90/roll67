@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -232,6 +232,8 @@ interface GameState {
   diceAnimEnding: boolean;
   /** SWADE: your Wild Card just took wounds it may Soak with a Benny. */
   soakOffer: SoakOfferPayload | null;
+  /** SWADE: per-character flags for which Benny rerolls are currently live. */
+  bennyState: Record<string, BennyStatePayload>;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
@@ -384,6 +386,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceAnim: null,
   diceAnimEnding: false,
   soakOffer: null,
+  bennyState: {},
   targeting: null,
   aoeTargeting: null,
   floats: [],
@@ -966,6 +969,10 @@ export function wireSocket(): void {
     useGameStore.setState({ soakOffer: p });
   });
 
+  socket.on(S2C.BENNY_STATE, (p: BennyStatePayload) => {
+    useGameStore.setState((s) => ({ bennyState: { ...s.bennyState, [p.characterId]: p } }));
+  });
+
   socket.on(S2C.SFX_PLAY, ({ url }: SfxPlayPayload) => {
     if (useGameStore.getState().clientMuted) return;
     const el = new Audio(url);
@@ -1320,6 +1327,8 @@ export const intents = {
     socket.emit(C2S.SOAK_ROLL, { characterId, spend });
     useGameStore.setState({ soakOffer: null });
   },
+  /** Spend a Benny from the Benny menu. */
+  bennyUse: (characterId: string, use: BennyUseId) => socket.emit(C2S.BENNY_USE, { characterId, use }),
   setSoundboardSlot: (slotIndex: number, assetId: string, label: string) =>
     socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),
   clearSoundboardSlot: (slotIndex: number) => socket.emit(C2S.CLEAR_SOUNDBOARD_SLOT, { slotIndex }),

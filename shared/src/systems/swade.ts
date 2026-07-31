@@ -11,7 +11,7 @@ import {
   fmtMod, num, rows, str,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
-import { DAMAGE_TYPES } from './effects.js';
+import { conditionsOf, DAMAGE_TYPES } from './effects.js';
 
 export const ATTRIBUTES_SWADE = [
   { id: 'agility', label: 'Agility' },
@@ -91,8 +91,15 @@ export function woundPenalty(sheet: SheetData): number {
 }
 
 /** Trait roll expression: acing trait die, plus a d6 wild die for Wild Cards. */
+/** Conditions that carry Distracted's −2 to every Trait roll. */
+const DISTRACTED_LIKE = ['distracted', 'entangled', 'bound', 'stunned'];
+function conditionTraitPenalty(sheet: SheetData): number {
+  const conds = conditionsOf(sheet);
+  return DISTRACTED_LIKE.some((c) => conds.includes(c)) ? -2 : 0;
+}
+
 export function traitExpr(sheet: SheetData, sides: number, mod = 0): string {
-  const penalty = woundPenalty(sheet) + mod;
+  const penalty = woundPenalty(sheet) + conditionTraitPenalty(sheet) + mod;
   const tail = penalty !== 0 ? fmtMod(penalty) : '';
   const wild = sheet.wildCard !== false;
   // Unskilled is d4−2 — but a Wild Card still throws its Wild Die alongside it.
@@ -146,7 +153,9 @@ function wieldedWeaponParry(sheet: SheetData): number {
  *  carried here as +2 Parry). */
 export function swadeParry(sheet: SheetData): number {
   const fighting = skillDie(sheet, 'Fighting');
-  return 2 + Math.floor(fighting / 2) + equippedGearBonuses(sheet).parry
+  // Prone: −2 Parry until the character stands.
+  const prone = conditionsOf(sheet).includes('prone') ? -2 : 0;
+  return 2 + prone + Math.floor(fighting / 2) + equippedGearBonuses(sheet).parry
     + wieldedWeaponParry(sheet) + (sheet.deflectionActive === true ? 2 : 0)
     + traitLineBonuses(sheet).parry;
 }
@@ -191,7 +200,8 @@ function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number;
 
 /** Pace after Edge/Hindrance modifiers (Fleet-Footed +2, Slow −2). */
 export function swadePace(sheet: SheetData): number {
-  return Math.max(1, num(sheet, 'pace', 6) + traitLineBonuses(sheet).pace);
+  // Wounded: −1 Pace per Wound level, but never below 1.
+  return Math.max(1, num(sheet, 'pace', 6) + traitLineBonuses(sheet).pace - num(sheet, 'wounds', 0));
 }
 
 // ---------- Tab 1: Core ----------

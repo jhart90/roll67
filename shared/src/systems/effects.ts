@@ -68,6 +68,8 @@ export interface ConditionDef {
   icon: string;
   /** Which systems offer this condition in their picker. */
   systems: GameSystem[];
+  /** Bearer cannot voluntarily move (Entangled, Bound, Stunned, restraints). */
+  blocksMove?: boolean;
   /** Attackers targeting this creature roll with advantage ('melee' = only melee attackers, e.g. prone). */
   grantsAttackAdv?: boolean | 'melee';
   /** Attackers targeting this creature roll with disadvantage ('ranged' = only ranged attackers, e.g. prone). */
@@ -94,15 +96,16 @@ export const CONDITIONS: ConditionDef[] = [
   { id: 'poisoned', label: 'Poisoned', icon: '🤢', systems: ['dnd5e', 'swn'], selfAttackDis: true, desc: 'Disadvantage on attack rolls and ability checks.' },
   { id: 'prone', label: 'Prone', icon: '⬇️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: 'melee', grantsAttackDis: 'ranged', selfAttackDis: true, desc: 'Melee attackers have advantage, ranged have disadvantage; its attacks have disadvantage.' },
   { id: 'restrained', label: 'Restrained', icon: '🕸️', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, selfAttackDis: true, desc: 'Speed 0; attacks against have advantage; its attacks have disadvantage; disadvantage on DEX saves.' },
-  { id: 'stunned', label: 'Stunned', icon: '⭐', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated; attacks against have advantage; auto-fails STR/DEX saves.' },
+  { id: 'stunned', label: 'Stunned', icon: '⭐', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, blocksMove: true, desc: '5e/SWN: incapacitated, attacks against have advantage. SWADE: Distracted, falls Prone, can’t move or act, subject to The Drop; free Vigor roll at turn start to recover (Vulnerable + Distracted; raise clears all).' },
   { id: 'unconscious', label: 'Unconscious', icon: '💤', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated and prone; melee hits crit; auto-fails STR/DEX saves.' },
   { id: 'dead', label: 'Dead', icon: '💀', systems: ['dnd5e', 'swn', 'swade'], incapacitated: true, desc: 'Out of the fight.' },
   // SWADE-only states.
-  { id: 'shaken', label: 'Shaken', icon: '😵', systems: ['swade'], incapacitated: true, desc: 'Can only move and take free actions; make a Spirit roll to recover (or spend a Benny).' },
-  { id: 'distracted', label: 'Distracted', icon: '😖', systems: ['swade'], selfAttackDis: true, desc: '−2 on all trait rolls until end of next turn.' },
-  { id: 'vulnerable', label: 'Vulnerable', icon: '🎯', systems: ['swade'], grantsAttackAdv: true, desc: 'Actions against this character get +2 until end of its next turn.' },
-  { id: 'entangled', label: 'Entangled', icon: '🕸️', systems: ['swade'], selfAttackDis: true, desc: 'Cannot move; Distracted until free.' },
-  { id: 'bound', label: 'Bound', icon: '⛓️', systems: ['swade'], grantsAttackAdv: true, selfAttackDis: true, incapacitated: true, desc: 'Cannot move; Distracted and Vulnerable; can take no actions other than trying to break free.' },
+  { id: 'shaken', label: 'Shaken', icon: '😵', systems: ['swade'], incapacitated: true, desc: 'May only take free actions. At the start of the character’s turn, a free Spirit roll removes Shaken.' },
+  { id: 'distracted', label: 'Distracted', icon: '😖', systems: ['swade'], selfAttackDis: true, desc: '−2 to all Trait rolls. Goes away at the end of the character’s next turn if not caused by another condition.' },
+  { id: 'vulnerable', label: 'Vulnerable', icon: '🎯', systems: ['swade'], grantsAttackAdv: true, desc: 'Actions against the character are made at +2 (does not stack with The Drop). Goes away at the end of the character’s next turn if not caused by another condition.' },
+  { id: 'entangled', label: 'Entangled', icon: '🕸️', systems: ['swade'], selfAttackDis: true, blocksMove: true, desc: 'Distracted and can’t move until free.' },
+  { id: 'bound', label: 'Bound', icon: '⛓️', systems: ['swade'], grantsAttackAdv: true, selfAttackDis: true, incapacitated: true, blocksMove: true, desc: 'Vulnerable, Distracted, and cannot move or take physical actions other than trying to break free.' },
+  { id: 'bleeding', label: 'Bleeding Out', icon: '🩸', systems: ['swade'], incapacitated: true, blocksMove: true, desc: 'Dying: at the start of the character’s turn make a Vigor roll — die on a failure, hang on with a success, stop Bleeding Out on a raise.' },
 ];
 
 const CONDITION_MAP = new Map(CONDITIONS.map((c) => [c.id, c]));
@@ -129,6 +132,11 @@ export interface ConditionCombat {
 }
 
 /** Fold a set of condition ids into their combined combat implications. */
+/** Whether any held condition pins the bearer in place. */
+export function blocksMovement(conditionIds: string[]): boolean {
+  return conditionIds.some((id) => CONDITION_MAP.get(id)?.blocksMove === true);
+}
+
 export function conditionCombat(conditionIds: string[]): ConditionCombat {
   const out: ConditionCombat = { selfAttackDis: false, grantsAttackAdv: false, grantsAttackDis: false, incapacitated: false };
   for (const id of conditionIds) {

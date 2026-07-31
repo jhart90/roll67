@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { dieSides, swade, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
+import { dieSides, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
-import { combatResources, conditionsFor } from '../src/systems/effects.js';
+import { blocksMovement, combatResources, conditionsFor } from '../src/systems/effects.js';
 import { generateNpc } from '../src/data/npcGen.js';
 import { NPCS_SWADE } from '../src/data/npcsSwade.js';
 import { applyEntry, contentForSystem } from '../src/data/compendium.js';
@@ -388,5 +388,41 @@ describe('SWADE library & compendium', () => {
     const rolls = swade.rollables(npc.sheet);
     expect(rolls.find((r) => r.id === 'attack_0')).toBeDefined();
     for (const r of rolls) expect(() => roll(r.expr, seededRng(4))).not.toThrow();
+  });
+});
+
+describe('SWADE conditions engine', () => {
+  const base = {
+    agility: 'd8', spirit: 'd6', vigor: 'd6', pace: 6,
+    skills: [{ name: 'Fighting', die: 'd8' }, { name: 'Shooting', die: 'd8' }],
+  };
+
+  it('blocksMovement pins Bound, Entangled, Stunned, and Bleeding Out characters', () => {
+    expect(blocksMovement(['bound'])).toBe(true);
+    expect(blocksMovement(['entangled'])).toBe(true);
+    expect(blocksMovement(['stunned'])).toBe(true);
+    expect(blocksMovement(['bleeding'])).toBe(true);
+    expect(blocksMovement(['shaken', 'vulnerable', 'distracted', 'prone'])).toBe(false);
+    expect(blocksMovement([])).toBe(false);
+  });
+
+  it('Distracted (and conditions that include it) takes −2 on every trait roll', () => {
+    expect(traitExpr(base, 8)).toBe('best(1d8!, 1d6!)');
+    for (const cond of ['distracted', 'entangled', 'bound', 'stunned']) {
+      expect(traitExpr({ ...base, conditions: [cond] }, 8)).toBe('best(1d8!, 1d6!)-2');
+    }
+    // Non-stacking: two Distracted-family conditions still cost only −2.
+    expect(traitExpr({ ...base, conditions: ['distracted', 'bound'] }, 8)).toBe('best(1d8!, 1d6!)-2');
+  });
+
+  it('Prone drops Parry by 2', () => {
+    expect(swadeParry(base)).toBe(2 + 4); // Fighting d8
+    expect(swadeParry({ ...base, conditions: ['prone'] })).toBe(2 + 4 - 2);
+  });
+
+  it('Wounds slow Pace by 1 each, never below 1', () => {
+    expect(swadePace(base)).toBe(6);
+    expect(swadePace({ ...base, wounds: 2 })).toBe(4);
+    expect(swadePace({ ...base, wounds: 9 })).toBe(1);
   });
 });

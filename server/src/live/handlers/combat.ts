@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   MAX_WOUNDS, dieSides, soakSuccesses, swadeDamageOutcome, traitExpr,
-  applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
+  applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
@@ -113,27 +113,100 @@ function withOwners(campaignId: string, entries: InitiativeEntry[]): InitiativeE
   });
 }
 
-/**
- * SWADE: whoever's turn just began rolls Spirit to recover from Shaken —
- * automatically, so the ladder actually turns over without bookkeeping.
- */
-function autoRecoverShaken(io: Server, campaignId: string, state: InitiativeState): void {
-  const entry = state.entries[state.turnIdx];
+function combatantChar(state: InitiativeState, idx: number): Character | undefined {
+  const entry = state.entries[idx];
   const tok = entry?.tokenId ? tokens.byId(entry.tokenId) : undefined;
-  const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
-  if (!ch || ch.system !== 'swade' || !conditionsOf(ch.sheet).includes('shaken')) return;
-  const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4')));
-  const breakdown = roll(expr);
-  const recovered = breakdown.total >= 4;
-  if (recovered) {
-    persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'shaken') });
+  return tok?.characterId ? characters.byId(tok.characterId) : undefined;
+}
+
+/**
+ * End of a SWADE combatant's turn: Vulnerable and Distracted expire — unless
+ * a condition that inflicts them (Stunned, Bound, Entangled) is still active.
+ */
+function expireTurnConditions(io: Server, campaignId: string, ch: Character): void {
+  const conds = conditionsOf(ch.sheet);
+  const drop: string[] = [];
+  if (conds.includes('vulnerable') && !conds.includes('stunned')) drop.push('vulnerable');
+  if (conds.includes('distracted') && !['bound', 'entangled', 'stunned'].some((c) => conds.includes(c))) drop.push('distracted');
+  if (drop.length === 0) return;
+  persistSheet(io, campaignId, ch, { conditions: conds.filter((c) => !drop.includes(c)) });
+  for (const id of drop) {
+    postStatusLine(io, campaignId, `${ch.name} is no longer ${getCondition(id)?.label ?? id}.`);
   }
-  const msg = chat.add(campaignId, {
-    userId: null, fromName: 'System', fromCharacter: ch.name, kind: 'roll',
-    text: recovered ? `${ch.name} shakes it off — Spirit roll` : `${ch.name} is still Shaken — Spirit roll`,
-    roll: { ...breakdown, outcome: recovered ? 'success' as const : 'failure' as const }, recipients: null,
-  });
-  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+}
+
+/**
+ * Start of a SWADE combatant's turn: Bleeding Out (Vigor or die), Stunned
+ * (free Vigor to come to), then Shaken (Spirit to shake it off) — automatic,
+ * so the damage ladder actually turns over without bookkeeping.
+ */
+function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): void {
+  let ch = chIn;
+  const reread = () => { ch = characters.byId(ch.id) ?? ch; };
+  const recoveryRoll = (attr: 'vigor' | 'spirit') =>
+    roll(traitExpr(ch.sheet, dieSides(String(ch.sheet[attr] ?? 'd4'))));
+  const post = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
+    const msg = chat.add(campaignId, {
+      userId: null, fromName: 'System', fromCharacter: ch.name, kind: 'roll',
+      text, roll: { ...breakdown, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+    });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  };
+
+  // Bleeding Out: die on a failure, hang on with a success, stabilize on a raise.
+  if (conditionsOf(ch.sheet).includes('bleeding')) {
+    const b = recoveryRoll('vigor');
+    if (b.total >= 8) {
+      persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'bleeding') });
+      post(`${ch.name} stabilizes — Vigor roll (raise)`, b, true);
+    } else if (b.total >= 4) {
+      post(`${ch.name} clings to life — Vigor roll`, b, true);
+    } else {
+      persistSheet(io, campaignId, ch, { hp: 0 });
+      post(`${ch.name} succumbs to their wounds — Vigor roll failed`, b, false);
+      postStatusLine(io, campaignId, `💀 ${ch.name} has died.`);
+      return;
+    }
+    reread();
+  }
+  // Down is down: no Stunned/Shaken recovery while Incapacitated.
+  if (conditionsOf(ch.sheet).includes('incapacitated')) return;
+
+  // Stunned: success leaves them Vulnerable and Distracted until the end of
+  // their next turn; a raise clears those too. Prone stays until they stand.
+  if (conditionsOf(ch.sheet).includes('stunned')) {
+    const b = recoveryRoll('vigor');
+    if (b.total >= 4) {
+      const raise = b.total >= 8;
+      let conds = conditionsOf(ch.sheet).filter((c) => c !== 'stunned');
+      conds = raise
+        ? conds.filter((c) => c !== 'vulnerable' && c !== 'distracted')
+        : [...new Set([...conds, 'vulnerable', 'distracted'])];
+      persistSheet(io, campaignId, ch, { conditions: conds });
+      post(`${ch.name} is no longer Stunned${raise ? '' : ' (but Vulnerable and Distracted)'} — Vigor roll`, b, true);
+    } else {
+      post(`${ch.name} is still Stunned — Vigor roll`, b, false);
+    }
+    reread();
+  }
+
+  // Shaken: Spirit to shake it off.
+  if (conditionsOf(ch.sheet).includes('shaken')) {
+    const b = recoveryRoll('spirit');
+    const recovered = b.total >= 4;
+    if (recovered) {
+      persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'shaken') });
+    }
+    post(recovered ? `${ch.name} shakes it off — Spirit roll` : `${ch.name} is still Shaken — Spirit roll`, b, recovered);
+  }
+}
+
+/** SWADE bookkeeping at every turn handover, for both advance paths. */
+function processTurnTransition(io: Server, campaignId: string, state: InitiativeState, prevIdx: number): void {
+  const prev = combatantChar(state, prevIdx);
+  if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
+  const ch = combatantChar(state, state.turnIdx);
+  if (ch?.system === 'swade') startOfTurnRecovery(io, campaignId, ch);
 }
 
 export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaignId: string): InitiativeState {
@@ -427,6 +500,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       emitError(socket, `${actor.name} is incapacitated and can't act.`);
       return;
     }
+    // Stunned (both 5e and SWADE) means no actions until it clears.
+    if (attackerConditions.includes('stunned')) {
+      emitError(socket, `${actor.name} is stunned and can't act.`);
+      return;
+    }
+    // SWADE Shaken: free actions and movement only — no attacks or powers.
+    if (actor.system === 'swade' && attackerConditions.includes('shaken')) {
+      emitError(socket, `${actor.name} is Shaken — only free actions until they recover.`);
+      return;
+    }
     const targetConditions = targetChar ? conditionsOf(targetChar.sheet) : [];
 
     // Casting a spell spends a slot (leveled) and sets concentration on the
@@ -514,6 +597,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (isD20) {
         expr = applyAdv(expr, netAdv);
         advTag = netAdv === 'adv' ? ' [adv]' : netAdv === 'dis' ? ' [dis]' : '';
+      } else if (actor.system === 'swade') {
+        // SWADE folds situation into flat modifiers, not adv/dis dice. The
+        // attacker's own Distracted −2 is already baked into the trait
+        // expression, so only positional and target-side effects apply here.
+        let mod = p.adv === 'adv' ? 2 : p.adv === 'dis' ? -2 : 0;
+        const tags: string[] = mod ? [mod > 0 ? '+2' : '−2'] : [];
+        if (!action.ranged && attackerConditions.includes('prone')) { mod -= 2; tags.push('−2 Prone'); }
+        if (targetConditions.includes('stunned')) { mod += 4; tags.push('+4 The Drop'); }
+        else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
+        if (action.ranged && targetConditions.includes('prone')) { mod -= 2; tags.push('−2 vs Prone'); }
+        if (mod) expr = mod > 0 ? `${expr}+${mod}` : `${expr}${mod}`;
+        if (tags.length) advTag = ` [${tags.join(', ')}]`;
       } else if (netAdv) {
         expr = `${expr}${netAdv === 'adv' ? '+2' : '-2'}`;
         advTag = netAdv === 'adv' ? ' [+2]' : ' [−2]';
@@ -1283,6 +1378,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
     if (state.entries.length === 0) return;
+    const prevIdx = state.turnIdx;
     state.turnIdx++;
     if (state.turnIdx >= state.entries.length) {
       state.turnIdx = 0;
@@ -1290,7 +1386,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-    autoRecoverShaken(io, d.campaignId, state);
+    processTurnTransition(io, d.campaignId, state, prevIdx);
   }, 'INIT_NEXT'));
 
   /**
@@ -1312,6 +1408,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         return;
       }
     }
+    const prevIdx = state.turnIdx;
     state.turnIdx++;
     if (state.turnIdx >= state.entries.length) {
       state.turnIdx = 0;
@@ -1319,7 +1416,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-    autoRecoverShaken(io, d.campaignId, state);
+    processTurnTransition(io, d.campaignId, state, prevIdx);
     const next = state.entries[state.turnIdx];
     const msg = chat.add(d.campaignId, {
       userId: null, fromName: 'System', kind: 'system',

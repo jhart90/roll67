@@ -58,8 +58,13 @@ export function applyConditionTo(
 ): Character | undefined {
   const label = getCondition(conditionId)?.label ?? conditionId;
   let caster = concentrationCaster;
+  // Re-read: the caller's copy may predate an earlier persist in the same tick.
+  target = characters.byId(target.id) ?? target;
   if (!conditionsOf(target.sheet).includes(conditionId)) {
-    persistSheet(io, campaignId, target, { conditions: [...conditionsOf(target.sheet), conditionId] });
+    const next = [...conditionsOf(target.sheet), conditionId];
+    // SWADE: a Stunned character also falls Prone.
+    if (conditionId === 'stunned' && target.system === 'swade' && !next.includes('prone')) next.push('prone');
+    persistSheet(io, campaignId, target, { conditions: next });
     postStatusChange(io, campaignId, `${target.name} is now ${label}!`, sourceLabel);
   }
   if (caster) {
@@ -321,9 +326,17 @@ function applySwadeDamage(
 
   let cur = character;
   if (out.woundsDealt > 0) cur = persistSheet(io, campaignId, cur, { wounds: out.woundsAfter });
-  cur = applyConditionTo(io, campaignId, cur, 'shaken', sourceLabel ?? 'damage') ?? cur;
+  applyConditionTo(io, campaignId, cur, 'shaken', sourceLabel ?? 'damage');
+  cur = characters.byId(cur.id) ?? cur;
   if (out.incapacitated) {
-    cur = applyConditionTo(io, campaignId, cur, 'incapacitated', sourceLabel ?? 'damage') ?? cur;
+    applyConditionTo(io, campaignId, cur, 'incapacitated', sourceLabel ?? 'damage');
+    cur = characters.byId(cur.id) ?? cur;
+    // A Wild Card cut down past their last wound is dying — Bleeding Out
+    // until stabilized (Vigor each turn) or healed.
+    if (wildCard) {
+      applyConditionTo(io, campaignId, cur, 'bleeding', sourceLabel ?? 'damage');
+      cur = characters.byId(cur.id) ?? cur;
+    }
     // An Extra that drops is out of the fight: empty its bar so the token
     // reads as down. A Wild Card keeps its pool — Soak may yet stand it up.
     if (!wildCard) cur = persistSheet(io, campaignId, cur, { hp: 0 });
@@ -363,7 +376,7 @@ function applySwadeHeal(
   // Healing below the incapacitation line stands a Wild Card back up.
   if (woundsHealed > 0 && woundsAfter <= MAX_WOUNDS && conditionsOf(cur.sheet).includes('incapacitated')) {
     patch.conditions = (Array.isArray(patch.conditions) ? patch.conditions as string[] : conditionsOf(cur.sheet))
-      .filter((c) => c !== 'incapacitated' && c !== 'shaken');
+      .filter((c) => c !== 'incapacitated' && c !== 'shaken' && c !== 'bleeding');
   }
   if (Object.keys(patch).length > 0) cur = persistSheet(io, campaignId, cur, patch);
   const bits: string[] = [];

@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canMoveToken, firstFreeHex, inBounds, packHex, playerColorFor, reachableAlong, systemFor,
+  C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, inBounds, packHex,
+  playerColorFor, reachableAlong, systemFor,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type MoveTokenPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
@@ -155,6 +156,15 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     }
     if (!inBounds({ q, r }, map.grid)) {
       emitError(socket, 'That is off the map.');
+      return;
+    }
+    // Bound, Entangled, Stunned, Bleeding Out… pinned characters stay put
+    // until the condition clears. The DM can always reposition tokens.
+    if (d.role !== 'dm' && character && blocksMovement(conditionsOf(character.sheet))) {
+      const held = conditionsOf(character.sheet)
+        .map((id) => getCondition(id))
+        .find((c) => c?.blocksMove);
+      emitError(socket, `${character.name} cannot move while ${held?.label ?? 'held'}.`);
       return;
     }
     // Players can't cross walls or closed doors: the token stops on the last

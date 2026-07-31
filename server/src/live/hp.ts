@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { S2C, conditionsOf, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, str, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, conditionsOf, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, str, swadeDamageOutcome, swadeHealOutcome, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { syncMapVision } from './visionService.js';
@@ -208,6 +208,15 @@ export function computeHpDelta(
 export function applyHpDelta(
   io: Server, campaignId: string, character: Character, delta: number, sourceLabel?: string,
 ): { character: Character; note: string } {
+  // SWADE characters use the real damage ladder — Shaken and Wounds against
+  // Toughness — never the HP pool. Every damage/heal site funnels through
+  // here, so branching once covers single-target hits, both AoE paths and
+  // heals alike.
+  if (character.system === 'swade') {
+    return delta < 0
+      ? applySwadeDamage(io, campaignId, character, -delta, sourceLabel)
+      : applySwadeHeal(io, campaignId, character, delta);
+  }
   const { patch, note, status, concCheck } = computeHpDelta(character, delta);
   let updated = persistSheet(io, campaignId, character, patch);
 
@@ -284,4 +293,81 @@ export function dropCarriedLoot(io: Server, campaignId: string, characterId: str
     io.to(campaignRoom(campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
   }
   io.to(campaignRoom(campaignId)).emit(S2C.WORLD_FOLDERS, { folders: worldFolders.forCampaign(campaignId) });
+}
+
+// ---------- SWADE wound ladder ----------
+
+/**
+ * A Wild Card who just took wounds may spend a Benny to Soak them. The offer
+ * is recorded here when the wounds land and consumed by the SOAK_ROLL
+ * handler; stale offers (the player ignored it) simply expire.
+ */
+export const pendingSoaks = new Map<string, { wounds: number; at: number }>();
+const SOAK_OFFER_TTL_MS = 60_000;
+
+/** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
+function applySwadeDamage(
+  io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
+): { character: Character; note: string } {
+  const derived = systemFor('swade').derive(character.sheet);
+  const toughness = Number(derived.toughness) || 4;
+  const wildCard = character.sheet.wildCard !== false;
+  const out = swadeDamageOutcome(damage, toughness, {
+    alreadyShaken: conditionsOf(character.sheet).includes('shaken'),
+    wildCard,
+    currentWounds: num(character.sheet, 'wounds', 0),
+  });
+  if (!out.shaken) return { character, note: ` — ${out.summary}` };
+
+  let cur = character;
+  if (out.woundsDealt > 0) cur = persistSheet(io, campaignId, cur, { wounds: out.woundsAfter });
+  cur = applyConditionTo(io, campaignId, cur, 'shaken', sourceLabel ?? 'damage') ?? cur;
+  if (out.incapacitated) {
+    cur = applyConditionTo(io, campaignId, cur, 'incapacitated', sourceLabel ?? 'damage') ?? cur;
+    // An Extra that drops is out of the fight: empty its bar so the token
+    // reads as down. A Wild Card keeps its pool — Soak may yet stand it up.
+    if (!wildCard) cur = persistSheet(io, campaignId, cur, { hp: 0 });
+    postStatusLine(io, campaignId, `${cur.name} is Incapacitated!`);
+  }
+
+  // Offer the Soak: a Wild Card with a Benny and an owner to ask.
+  const bennies = num(cur.sheet, 'bennies', 0);
+  if (wildCard && out.woundsDealt > 0 && bennies > 0 && cur.ownerUserId) {
+    pendingSoaks.set(cur.id, { wounds: out.woundsDealt, at: Date.now() });
+    io.to(userRoom(cur.ownerUserId)).emit(S2C.SOAK_OFFER, {
+      characterId: cur.id, name: cur.name, wounds: out.woundsDealt, bennies,
+    });
+  }
+  return { character: cur, note: ` — ${out.summary}` };
+}
+
+/** Consume a soak offer if it is still fresh. */
+export function takeSoakOffer(characterId: string): { wounds: number } | null {
+  const offer = pendingSoaks.get(characterId);
+  pendingSoaks.delete(characterId);
+  if (!offer || Date.now() - offer.at > SOAK_OFFER_TTL_MS) return null;
+  return { wounds: offer.wounds };
+}
+
+/** Healing steadies the Shaken and restores a wound per full 4 points. */
+function applySwadeHeal(
+  io: Server, campaignId: string, character: Character, amount: number,
+): { character: Character; note: string } {
+  const wounds = num(character.sheet, 'wounds', 0);
+  const { woundsHealed, woundsAfter } = swadeHealOutcome(amount, wounds);
+  const wasShaken = conditionsOf(character.sheet).includes('shaken');
+  let cur = character;
+  const patch: SheetData = {};
+  if (woundsHealed > 0) patch.wounds = woundsAfter;
+  if (wasShaken) patch.conditions = conditionsOf(cur.sheet).filter((c) => c !== 'shaken');
+  // Healing below the incapacitation line stands a Wild Card back up.
+  if (woundsHealed > 0 && woundsAfter <= MAX_WOUNDS && conditionsOf(cur.sheet).includes('incapacitated')) {
+    patch.conditions = (Array.isArray(patch.conditions) ? patch.conditions as string[] : conditionsOf(cur.sheet))
+      .filter((c) => c !== 'incapacitated' && c !== 'shaken');
+  }
+  if (Object.keys(patch).length > 0) cur = persistSheet(io, campaignId, cur, patch);
+  const bits: string[] = [];
+  if (woundsHealed > 0) bits.push(`heals ${woundsHealed} Wound${woundsHealed === 1 ? '' : 's'} (now ${woundsAfter})`);
+  if (wasShaken) bits.push('no longer Shaken');
+  return { character: cur, note: bits.length ? ` — ${bits.join(', ')}` : ' — already steady' };
 }

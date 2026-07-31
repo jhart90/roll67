@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
+  MAX_WOUNDS, dieSides, soakSuccesses, swadeDamageOutcome, traitExpr,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -8,12 +9,12 @@ import {
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
-  type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative,
+  type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine } from '../hp.js';
+import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, takeSoakOffer } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 
@@ -110,6 +111,29 @@ function withOwners(campaignId: string, entries: InitiativeEntry[]): InitiativeE
       color: tok?.color ?? null,
     };
   });
+}
+
+/**
+ * SWADE: whoever's turn just began rolls Spirit to recover from Shaken —
+ * automatically, so the ladder actually turns over without bookkeeping.
+ */
+function autoRecoverShaken(io: Server, campaignId: string, state: InitiativeState): void {
+  const entry = state.entries[state.turnIdx];
+  const tok = entry?.tokenId ? tokens.byId(entry.tokenId) : undefined;
+  const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+  if (!ch || ch.system !== 'swade' || !conditionsOf(ch.sheet).includes('shaken')) return;
+  const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4')));
+  const breakdown = roll(expr);
+  const recovered = breakdown.total >= 4;
+  if (recovered) {
+    persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'shaken') });
+  }
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', fromCharacter: ch.name, kind: 'roll',
+    text: recovered ? `${ch.name} shakes it off — Spirit roll` : `${ch.name} is still Shaken — Spirit roll`,
+    roll: { ...breakdown, outcome: recovered ? 'success' as const : 'failure' as const }, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
 export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaignId: string): InitiativeState {
@@ -657,9 +681,20 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       let applyToTarget: (() => void) | null = null;
       if (applied !== 0) {
         if (targetChar) {
-          const { patch, note } = computeHpDelta(targetChar, delta);
-          const nh = systemFor(targetChar.system).hp({ ...targetChar.sheet, ...patch });
-          hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
+          if (targetChar.system === 'swade' && delta < 0) {
+            // The wound ladder, not the HP pool: preview the same outcome
+            // applyHpDelta will compute when it actually lands.
+            const out = swadeDamageOutcome(-delta, Number(systemFor('swade').derive(targetChar.sheet).toughness) || 4, {
+              alreadyShaken: conditionsOf(targetChar.sheet).includes('shaken'),
+              wildCard: targetChar.sheet.wildCard !== false,
+              currentWounds: num(targetChar.sheet, 'wounds', 0),
+            });
+            hpNote = ` — ${out.summary}`;
+          } else {
+            const { patch, note } = computeHpDelta(targetChar, delta);
+            const nh = systemFor(targetChar.system).hp({ ...targetChar.sheet, ...patch });
+            hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
+          }
           undo.push({ t: 'hp', characterId: targetChar.id, delta });
           const targetId = targetChar.id;
           applyToTarget = () => {
@@ -1255,6 +1290,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
+    autoRecoverShaken(io, d.campaignId, state);
   }, 'INIT_NEXT'));
 
   /**
@@ -1283,6 +1319,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
+    autoRecoverShaken(io, d.campaignId, state);
     const next = state.entries[state.turnIdx];
     const msg = chat.add(d.campaignId, {
       userId: null, fromName: 'System', kind: 'system',
@@ -1294,6 +1331,46 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'INIT_END_TURN'));
+
+  /**
+   * SWADE Soak: spend a Benny, roll Vigor, and the success plus each raise
+   * removes one of the wounds just taken. Soaking every one of them shakes
+   * off the Shaken too, and dropping back to MAX_WOUNDS or fewer stands an
+   * incapacitated Wild Card back up. The offer was recorded when the wounds
+   * landed; it expires if ignored.
+   */
+  socket.on(C2S.SOAK_ROLL, safe(socket, ({ characterId, spend }: SoakRollPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) return;
+    const offer = takeSoakOffer(characterId);
+    if (!offer) return;
+    if (!spend) return; // declined — the wounds stand
+    const bennies = num(ch.sheet, 'bennies', 0);
+    if (bennies <= 0) return;
+    // The new wounds do not penalise the roll to soak them: offset the wound
+    // penalty by the wounds in this offer.
+    const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')), offer.wounds);
+    const breakdown = roll(expr);
+    const removed = Math.min(offer.wounds, soakSuccesses(breakdown.total));
+    const woundsAfter = Math.max(0, num(ch.sheet, 'wounds', 0) - removed);
+    const patch: Record<string, unknown> = { bennies: bennies - 1 };
+    if (removed > 0) patch.wounds = woundsAfter;
+    let conds = conditionsOf(ch.sheet);
+    if (removed === offer.wounds && removed > 0) conds = conds.filter((c) => c !== 'shaken');
+    if (woundsAfter <= MAX_WOUNDS) conds = conds.filter((c) => c !== 'incapacitated');
+    patch.conditions = conds;
+    persistSheet(io, d.campaignId, ch, patch);
+    const text = removed > 0
+      ? `${ch.name} spends a Benny to Soak — ${removed} Wound${removed === 1 ? '' : 's'} soaked (now ${woundsAfter})${removed === offer.wounds ? ', no longer Shaken' : ''}`
+      : `${ch.name} spends a Benny to Soak — Vigor roll fails, the wounds stand`;
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, fromCharacter: ch.name, kind: 'roll', text,
+      roll: { ...breakdown, outcome: removed > 0 ? 'success' as const : 'failure' as const }, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'SOAK_ROLL'));
 
   socket.on(C2S.INIT_PREV, safe(socket, () => {
     const d = requireCampaign(socket);

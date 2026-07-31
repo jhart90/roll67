@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type SfxPlayPayload, type Shop, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -230,6 +230,8 @@ interface GameState {
   diceAnim: { id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string } | null;
   /** True once the settled dice have had their sit time and may fade out. */
   diceAnimEnding: boolean;
+  /** SWADE: your Wild Card just took wounds it may Soak with a Benny. */
+  soakOffer: SoakOfferPayload | null;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
@@ -381,6 +383,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   errorToast: null,
   diceAnim: null,
   diceAnimEnding: false,
+  soakOffer: null,
   targeting: null,
   aoeTargeting: null,
   floats: [],
@@ -959,6 +962,10 @@ export function wireSocket(): void {
 
   // One-shot effect. Each gets its own Audio element so overlapping hits stack
   // rather than cutting each other off, and so the music track is untouched.
+  socket.on(S2C.SOAK_OFFER, (p: SoakOfferPayload) => {
+    useGameStore.setState({ soakOffer: p });
+  });
+
   socket.on(S2C.SFX_PLAY, ({ url }: SfxPlayPayload) => {
     if (useGameStore.getState().clientMuted) return;
     const el = new Audio(url);
@@ -1309,6 +1316,10 @@ export const intents = {
 
   /** End the current combatant's turn (your own character, or any if DM). */
   endTurn: () => socket.emit(C2S.INIT_END_TURN, {}),
+  soakRoll: (characterId: string, spend: boolean) => {
+    socket.emit(C2S.SOAK_ROLL, { characterId, spend });
+    useGameStore.setState({ soakOffer: null });
+  },
   setSoundboardSlot: (slotIndex: number, assetId: string, label: string) =>
     socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),
   clearSoundboardSlot: (slotIndex: number) => socket.emit(C2S.CLEAR_SOUNDBOARD_SLOT, { slotIndex }),

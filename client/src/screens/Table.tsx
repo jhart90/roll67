@@ -21,6 +21,7 @@ import { InitiativeFloat } from '../table/InitiativeFloat';
 import { TokenNameplateCard } from '../table/TokenNameplateCard';
 import { CardDrawOverlay } from '../table/CardDrawOverlay';
 import { InitiativeRollPrompt } from '../table/InitiativeRollPrompt';
+import { SoakPrompt } from '../table/SoakPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -413,6 +414,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <InitiativeFloat />
         <CardDrawOverlay />
         <InitiativeRollPrompt />
+        <SoakPrompt />
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />

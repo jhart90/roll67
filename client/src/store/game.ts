@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -232,6 +232,8 @@ interface GameState {
   diceAnimEnding: boolean;
   /** SWADE: your Wild Card just took wounds it may Soak with a Benny. */
   soakOffer: SoakOfferPayload | null;
+  /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
+  bleedPrompt: BleedPromptPayload | null;
   /** SWADE: per-character flags for which Benny rerolls are currently live. */
   bennyState: Record<string, BennyStatePayload>;
   /** In-progress combat action awaiting a target selection. */
@@ -387,6 +389,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceAnimEnding: false,
   soakOffer: null,
   bennyState: {},
+  bleedPrompt: null,
   targeting: null,
   aoeTargeting: null,
   floats: [],
@@ -969,6 +972,10 @@ export function wireSocket(): void {
     useGameStore.setState({ soakOffer: p });
   });
 
+  socket.on(S2C.BLEED_PROMPT, (p: BleedPromptPayload) => {
+    useGameStore.setState({ bleedPrompt: p });
+  });
+
   socket.on(S2C.BENNY_STATE, (p: BennyStatePayload) => {
     useGameStore.setState((s) => ({ bennyState: { ...s.bennyState, [p.characterId]: p } }));
   });
@@ -1329,6 +1336,11 @@ export const intents = {
   },
   /** Spend a Benny from the Benny menu. */
   bennyUse: (characterId: string, use: BennyUseId) => socket.emit(C2S.BENNY_USE, { characterId, use }),
+  /** Make the Bleeding Out Vigor roll the prompt asked for. */
+  bleedRoll: (characterId: string) => {
+    socket.emit(C2S.BLEED_ROLL, { characterId });
+    useGameStore.setState({ bleedPrompt: null });
+  },
   setSoundboardSlot: (slotIndex: number, assetId: string, label: string) =>
     socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),
   clearSoundboardSlot: (slotIndex: number) => socket.emit(C2S.CLEAR_SOUNDBOARD_SLOT, { slotIndex }),

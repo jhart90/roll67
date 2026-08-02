@@ -117,6 +117,8 @@ export const C2S = {
   SOAK_ROLL: 'soakRoll',
   /** SWADE: spend a Benny from the Benny menu (reroll, recover, redraw…). */
   BENNY_USE: 'bennyUse',
+  /** SWADE: a Bleeding Out player makes their start-of-turn Vigor roll. */
+  BLEED_ROLL: 'bleedRoll',
   // table
   DRAW: 'draw',
   ERASE_DRAWING: 'eraseDrawing',
@@ -662,6 +664,8 @@ export const S2C = {
   SOAK_OFFER: 'soakOffer',
   /** SWADE: which Benny reroll options are currently live for your character. */
   BENNY_STATE: 'bennyState',
+  /** SWADE: your character is Bleeding Out and owes a Vigor roll. */
+  BLEED_PROMPT: 'bleedPrompt',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -852,6 +856,8 @@ export interface SoakOfferPayload { characterId: string; name: string; wounds: n
 export type BennyUseId =
   | 'reroll-trait' | 'recover-shaken' | 'redraw-card' | 'reroll-damage' | 'regain-pp' | 'influence';
 export interface BennyUsePayload { characterId: string; use: BennyUseId }
+export interface BleedRollPayload { characterId: string }
+export interface BleedPromptPayload { characterId: string; name: string }
 export interface BennyStatePayload { characterId: string; canRerollTrait: boolean; canRerollDamage: boolean }
 /** Set the color of the pips/numbers painted on your own dice ("#rrggbb", or null for automatic contrast). */
 export interface SetDiceTextColorPayload { color: string | null }

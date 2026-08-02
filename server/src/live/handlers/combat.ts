@@ -4,7 +4,7 @@ import {
   MAX_WOUNDS, dieSides, gangUpBonus, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type BennyUsePayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type BennyUsePayload, type BleedRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -137,6 +137,32 @@ function expireTurnConditions(io: Server, campaignId: string, ch: Character): vo
 }
 
 /**
+ * The Bleeding Out Vigor roll: die on a failure, hang on with a success,
+ * stabilize on a raise. Returns false if the character died.
+ */
+function resolveBleedingOut(io: Server, campaignId: string, ch: Character): boolean {
+  const b = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4'))));
+  const ok = b.total >= 4;
+  if (b.total >= 8) {
+    persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'bleeding') });
+  } else if (!ok) {
+    persistSheet(io, campaignId, ch, { hp: 0 });
+  }
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', fromCharacter: ch.name, kind: 'roll',
+    text: b.total >= 8
+      ? `${ch.name} stabilizes — Vigor roll (raise)`
+      : ok
+        ? `${ch.name} clings to life — Vigor roll`
+        : `${ch.name} succumbs to their wounds — Vigor roll failed`,
+    roll: { ...b, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  if (!ok) postStatusLine(io, campaignId, `💀 ${ch.name} has died.`);
+  return ok;
+}
+
+/**
  * Start of a SWADE combatant's turn: Bleeding Out (Vigor or die), Stunned
  * (free Vigor to come to), then Shaken (Spirit to shake it off) — automatic,
  * so the damage ladder actually turns over without bookkeeping.
@@ -154,20 +180,16 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
   };
 
-  // Bleeding Out: die on a failure, hang on with a success, stabilize on a raise.
+  // Bleeding Out: die on a failure, hang on with a success, stabilize on a
+  // raise. A player-owned character gets the prompt and rolls it themself;
+  // ownerless NPCs roll automatically.
   if (conditionsOf(ch.sheet).includes('bleeding')) {
-    const b = recoveryRoll('vigor');
-    if (b.total >= 8) {
-      persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'bleeding') });
-      post(`${ch.name} stabilizes — Vigor roll (raise)`, b, true);
-    } else if (b.total >= 4) {
-      post(`${ch.name} clings to life — Vigor roll`, b, true);
-    } else {
-      persistSheet(io, campaignId, ch, { hp: 0 });
-      post(`${ch.name} succumbs to their wounds — Vigor roll failed`, b, false);
-      postStatusLine(io, campaignId, `💀 ${ch.name} has died.`);
+    if (ch.ownerUserId) {
+      io.to(userRoom(ch.ownerUserId)).emit(S2C.BLEED_PROMPT, { characterId: ch.id, name: ch.name });
+      postStatusLine(io, campaignId, `🩸 ${ch.name} is Bleeding Out — waiting on their Vigor roll…`);
       return;
     }
+    if (!resolveBleedingOut(io, campaignId, ch)) return;
     reread();
   }
   // Down is down: no Stunned/Shaken recovery while Incapacitated.
@@ -1495,6 +1517,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'SOAK_ROLL'));
+
+  // A Bleeding Out player answers the prompt: make the Vigor roll now.
+  socket.on(C2S.BLEED_ROLL, safe(socket, ({ characterId }: BleedRollPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) return;
+    // Healed (or already stabilized) since the prompt went out? Nothing owed.
+    if (!conditionsOf(ch.sheet).includes('bleeding')) return;
+    resolveBleedingOut(io, d.campaignId, ch);
+  }, 'BLEED_ROLL'));
 
   // The Benny menu: every automatable use from the SWADE Benny table. Soak
   // rides the existing SOAK_ROLL flow; everything else lands here.

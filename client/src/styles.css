@@ -2028,6 +2028,9 @@ th > .term { border-bottom-style: dotted; }
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
 
+/* Bleeding Out: same shell as the Soak prompt, but unmistakably dire. */
+.bleed-prompt { border-color: #b91c1c; bottom: 170px; }
+
 /* SWADE Benny menu: a coin chip that unfolds the Benny Uses table. */
 .benny-menu { position: fixed; right: 14px; bottom: 90px; z-index: 69; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .benny-chip {

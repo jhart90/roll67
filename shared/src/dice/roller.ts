@@ -91,12 +91,30 @@ function evalNode(node: DiceNode, rng: RNG, allDice: DieRoll[]): EvalResult {
   }
 }
 
+/**
+ * When set, every roll() call with no explicit rng draws from this provider
+ * instead of Math.random. The server installs IronDice here at boot: a
+ * cryptographic keystream plus the {idx, commit} tag stamped onto the
+ * breakdown so each card is independently verifiable.
+ */
+export type RollRngProvider = () => { rng: RNG; tag?: { idx: number; commit: string } };
+let rngProvider: RollRngProvider | null = null;
+export function setRollRngProvider(p: RollRngProvider | null): void {
+  rngProvider = p;
+}
+
 /** Parse and evaluate a dice expression. Throws DiceParseError on bad input. */
-export function roll(expression: string, rng: RNG = Math.random): RollBreakdown {
+export function roll(expression: string, rng?: RNG): RollBreakdown {
   const node = parseDice(expression);
   const dice: DieRoll[] = [];
-  const { total, detail } = evalNode(node, rng, dice);
-  return { expression: expression.trim(), total, dice, detail };
+  let tag: { idx: number; commit: string } | undefined;
+  let r = rng;
+  if (!r) {
+    const p = rngProvider?.();
+    if (p) { r = p.rng; tag = p.tag; } else r = Math.random;
+  }
+  const { total, detail } = evalNode(node, r, dice);
+  return { expression: expression.trim(), total, dice, detail, ...(tag ? { iron: tag } : {}) };
 }
 
 /** Seeded RNG (mulberry32) for deterministic tests and replayable rolls. */

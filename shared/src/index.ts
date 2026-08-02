@@ -12,6 +12,7 @@ export * from './vision/visibilityPolygon.js';
 export * from './vision/movement.js';
 export * from './dice/parser.js';
 export * from './dice/roller.js';
+export * from './dice/iron.js';
 export * from './systems/nameplate.js';
 export * from './systems/swadeDamage.js';
 export * from './systems/rollStats.js';

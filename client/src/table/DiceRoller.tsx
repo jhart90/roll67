@@ -161,6 +161,13 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
         >
           📊 stats
         </button>
+        <button
+          className="link iron-footer"
+          title="Provably-fair rolling: server-side, cryptographically random, verifiable"
+          onClick={() => openWindow('ironDice', 'main', {}, 'IronDice')}
+        >
+          🛡 IronDice
+        </button>
         <button className="link" onClick={onClose}>close</button>
       </div>
       <table className="dice-grid">

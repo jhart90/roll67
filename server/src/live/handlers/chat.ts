@@ -13,6 +13,7 @@ import { applyUndo } from '../undo.js';
 // circular import (both sides are hoisted function declarations used only at
 // call time, never during module evaluation).
 import { clearConcentrationEffects, recordBennyRoll } from '../hp.js';
+import { ironDiceInfo, rotateIronDice } from '../ironDice.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -78,6 +79,26 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     });
     deliver(io, d.campaignId, msg);
   }, 'SHEET_ROLL'));
+
+  // IronDice: current seed commitment + revealed history — public to anyone
+  // at the table. Rotation (reveal + fresh seed) is DM-only and announced.
+  socket.on(C2S.IRON_DICE_GET, safe(socket, () => {
+    requireCampaign(socket);
+    socket.emit(S2C.IRON_DICE, ironDiceInfo());
+  }, 'IRON_DICE_GET'));
+
+  socket.on(C2S.IRON_DICE_ROTATE, safe(socket, () => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can rotate the IronDice seed.'); return; }
+    rotateIronDice();
+    socket.emit(S2C.IRON_DICE, ironDiceInfo());
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: '🛡 IronDice seed rotated — the previous seed is now revealed, so every roll thrown under it can be independently verified.',
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'IRON_DICE_ROTATE'));
 
   // Lifetime roll statistics: account-wide for every member (no characterId),
   // or one character's rolls broken out by who was rolling (characterId set).

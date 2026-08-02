@@ -116,7 +116,17 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
         <span className="roll-total">{r.total}</span>
       </div>
       <DiceEquation r={r} />
-      <div className="roll-detail">{r.detail}</div>
+      <div className="roll-detail">
+        {r.detail}
+        {r.iron && (
+          <span
+            className="iron-badge"
+            title={`🛡 IronDice — rolled server-side from a cryptographic keystream, provably fair.\nRoll #${r.iron.idx} · expression ${r.expression}\nSeed commitment ${r.iron.commit}\nVerify it from the 🛡 IronDice panel once the seed is revealed.`}
+          >
+            🛡
+          </span>
+        )}
+      </div>
       {/* Why it landed, last — the dice come first, the verdict reads as their
           conclusion rather than a spoiler above them. */}
       {msg.outcomeNote && <div className="roll-outcome">{msg.outcomeNote}</div>}

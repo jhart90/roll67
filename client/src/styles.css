@@ -2028,6 +2028,20 @@ th > .term { border-bottom-style: dotted; }
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
 
+/* IronDice: barely-there provenance badge + the explainer window. */
+.iron-badge { margin-left: 6px; font-size: 9px; opacity: 0.45; cursor: help; }
+.iron-badge:hover { opacity: 1; }
+.iron-footer { font-size: 11px; opacity: 0.6; }
+.iron-footer:hover { opacity: 1; }
+.irondice-window { max-width: 460px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+.irondice-commit, .irondice-revealed {
+  display: flex; flex-direction: column; gap: 2px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.irondice-commit code, .irondice-revealed code { font-size: 11px; word-break: break-all; }
+.irondice-seed { opacity: 0.7; }
+.irondice-verify { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; }
+
 /* Lifetime roll statistics: topline, per-key rows, mini histograms. */
 .rollstats-window { min-width: 380px; max-width: 520px; max-height: 70vh; overflow-y: auto; }
 .rollstats { display: flex; flex-direction: column; gap: 10px; padding: 6px 8px; }

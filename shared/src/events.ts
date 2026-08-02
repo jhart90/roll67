@@ -121,6 +121,10 @@ export const C2S = {
   BLEED_ROLL: 'bleedRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
+  /** IronDice: fetch the current seed commitment + revealed seed history. */
+  IRON_DICE_GET: 'ironDiceGet',
+  /** IronDice: DM reveals the current seed and mints a fresh one. */
+  IRON_DICE_ROTATE: 'ironDiceRotate',
   // table
   DRAW: 'draw',
   ERASE_DRAWING: 'eraseDrawing',
@@ -670,6 +674,8 @@ export const S2C = {
   BLEED_PROMPT: 'bleedPrompt',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
+  /** IronDice public state: active commitment + revealed seeds. */
+  IRON_DICE: 'ironDice',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -862,6 +868,16 @@ export type BennyUseId =
 export interface BennyUsePayload { characterId: string; use: BennyUseId }
 export interface BleedRollPayload { characterId: string }
 export interface BleedPromptPayload { characterId: string; name: string }
+export interface IronDicePayload {
+  /** SHA-256 of the ACTIVE secret seed — published before its rolls happen. */
+  commit: string;
+  firstIdx: number;
+  createdAt: number;
+  /** Rolls thrown under the active seed so far. */
+  rolls: number;
+  /** Rotated-out seeds, now public: recompute any roll in their idx range. */
+  revealed: Array<{ commit: string; seedHex: string; firstIdx: number; lastIdx: number; revealedAt: number }>;
+}
 export interface RollStatsGetPayload { characterId?: string | null }
 export interface RollStatsUserBlock { userId: string; username: string; summary: import('./systems/rollStats.js').RollStatsSummary }
 /** characterId null = account-wide stats for every member of this campaign. */

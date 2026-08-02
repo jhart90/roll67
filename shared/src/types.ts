@@ -318,6 +318,9 @@ export interface RollBreakdown {
   detail: string;
   /** Set for pass/fail rolls (e.g. a saving throw) so chat can theme the card red/green. */
   outcome?: 'success' | 'failure';
+  /** IronDice provenance: keystream index + the seed commitment published
+   *  before this roll was thrown, so the card is independently verifiable. */
+  iron?: { idx: number; commit: string };
 }
 
 export interface ChatMessage {

@@ -14,6 +14,7 @@ import { AssetLibrary } from '../panels/AssetLibrary';
 import { AccountDetails } from '../panels/AccountDetails';
 import { Soundboard } from '../panels/Soundboard';
 import { RollStatsWindow } from '../panels/RollStats';
+import { IronDiceWindow } from '../panels/IronDice';
 
 /** Mounted once at the top level: renders every open window instance,
  *  each in its own draggable/poppable WindowFrame, so multiple windows
@@ -36,6 +37,9 @@ export function WindowHost() {
             break;
           case 'rollStats':
             content = <RollStatsWindow />;
+            break;
+          case 'ironDice':
+            content = <IronDiceWindow />;
             break;
           case 'characterSheet':
             content = <CharacterSheetWindow characterId={w.key} onClose={onClose} />;

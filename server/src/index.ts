@@ -10,6 +10,7 @@ import { authRouter, campaignRouter } from './routes/authRoutes.js';
 import { uploadRouter } from './routes/uploadRoutes.js';
 import { attachMapPackIo, mapPackRouter } from './routes/mapPackRoutes.js';
 import { registerSessionHandlers } from './live/handlers/session.js';
+import { initIronDice } from './live/ironDice.js';
 import { registerMapEditHandlers } from './live/handlers/mapEdit.js';
 import { registerTokenHandlers } from './live/handlers/tokens.js';
 import { registerCharacterHandlers } from './live/handlers/characters.js';
@@ -24,6 +25,7 @@ import { flushAllVisionMemory } from './live/visionService.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 ensureDataDirs();
+initIronDice();
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));

@@ -12,6 +12,7 @@ export type WindowKind =
   | 'assetLibrary'
   | 'soundboard'
   | 'rollStats'
+  | 'ironDice'
   | 'accountDetails';
 
 export interface WindowInstance {

@@ -1151,13 +1151,17 @@ export const chat = {
     roll: RollBreakdown | null; recipients: string[] | null;
     /** Who the roll belongs to for lifetime stats (not shown in the message). */
     characterId?: string | null;
+    /** Stats-only override for whose ACCOUNT made the roll — for cards posted
+     *  by one user but rolled by another's character (a target's save). */
+    statsUserId?: string | null;
   }, undo?: unknown): ChatMessage {
     const at = now();
-    // Every roll that lands in chat feeds the lifetime stats. System rolls
-    // (recovery, Bleeding Out…) carry no userId — credit the character's owner.
+    // Every roll that lands in chat feeds the lifetime stats, credited to
+    // whoever actually made the roll. System rolls (recovery, Bleeding Out…)
+    // carry no userId — credit the character's owner.
     if (msg.roll && Array.isArray(msg.roll.dice) && msg.roll.dice.length > 0) {
       const chId = msg.characterId ?? '';
-      let uid = msg.userId ?? '';
+      let uid = (msg.statsUserId !== undefined ? msg.statsUserId : msg.userId) ?? '';
       if (!uid && chId) {
         const r = stmt('SELECT owner_user_id FROM characters WHERE id = ?').get(chId) as { owner_user_id: string | null } | undefined;
         uid = r?.owner_user_id ?? '';

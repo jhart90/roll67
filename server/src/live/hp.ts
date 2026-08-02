@@ -255,7 +255,8 @@ export function applyHpDelta(
       updated = persistSheet(io, campaignId, updated, { concentration: '' });
     }
     const text = `${updated.name} concentration (${concCheck.spell}) — CON save ${br.total} vs DC ${dc}: ${passed ? 'holds' : 'BROKEN'}`;
-    const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'roll', text, roll: br, recipients: null });
+    // The concentration save is the damaged caster's own roll — their stats.
+    const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'roll', text, characterId: updated.id, roll: br, recipients: null });
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
   }
   return { character: updated, note };

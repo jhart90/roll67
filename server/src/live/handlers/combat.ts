@@ -381,6 +381,8 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
       text: `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+      // The save is the TARGET's roll — their stats, not the caster's.
+      characterId: ch?.id ?? null, statsUserId: ch?.ownerUserId ?? null,
       roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
     });
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
@@ -750,8 +752,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         const br = roll(sc.expr);
         const passed = br.total >= sc.threshold;
         const msg = chat.add(d.campaignId, {
-          userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
+          userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll',
           text: `${tgt.name} — ${sc.label} vs ${action.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+          // The rider save is the TARGET's roll — their stats, not the caster's.
+          characterId: fresh.id, statsUserId: fresh.ownerUserId,
           roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
         });
         io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
@@ -940,7 +944,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           : (dealsDamage ? 'full damage' : 'effect applies');
       const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${thName} ${threshold} · ${passed ? 'SAVE' : 'FAIL'} (${consequence})`;
       const saveMsg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: saveText,
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: saveText,
+        // The dice on this card are the TARGET's saving throw.
+        characterId: targetChar?.id ?? null, statsUserId: targetChar?.ownerUserId ?? null,
         roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       }, noDamage && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: saveMsg });
@@ -1280,7 +1286,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // so this roll's own message just reports the roll itself.
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'roll',
-        text: `${character.name} death save: natural 20!`, roll: br, recipients: null,
+        text: `${character.name} death save: natural 20!`, characterId: character.id, roll: br, recipients: null,
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
       setTimeout(() => {
@@ -1317,7 +1323,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     persistSheet(io, d.campaignId, characters.byId(characterId)!, patch);
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'roll',
-      text: `${character.name} death save: ${v} — ${outcome}`, roll: br, recipients: null,
+      text: `${character.name} death save: ${v} — ${outcome}`, characterId: character.id, roll: br, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     if (statusText) {

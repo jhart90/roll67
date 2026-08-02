@@ -6,7 +6,8 @@
 // for the wound track — Wounds/Fatigue are tracked on the sheet and feed the
 // standard −1/level penalty into every trait roll.
 
-import type { SheetData, VisionStats } from '../types.js';
+import type { Hex, SheetData, VisionStats } from '../types.js';
+import { hexDistance } from '../hex/coords.js';
 import {
   fmtMod, num, rows, str,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
@@ -202,6 +203,20 @@ function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number;
 export function swadePace(sheet: SheetData): number {
   // Wounded: −1 Pace per Wound level, but never below 1.
   return Math.max(1, num(sheet, 'pace', 6) + traitLineBonuses(sheet).pace - num(sheet, 'wounds', 0));
+}
+
+/** A bystander that matters for Gang Up: whose side, where, and can they fight? */
+export interface GangUpCombatant { hex: Hex; side: 'attacker' | 'defender'; canFight: boolean }
+
+/**
+ * Gang Up: +1 Fighting for each of the attacker's able allies adjacent to the
+ * defender (the attacker themself doesn't count), max +4 — and each of the
+ * defender's able allies adjacent to the attacker cancels one out.
+ */
+export function gangUpBonus(attackerHex: Hex, defenderHex: Hex, others: GangUpCombatant[]): number {
+  const raw = others.filter((o) => o.side === 'attacker' && o.canFight && hexDistance(o.hex, defenderHex) === 1).length;
+  const cancel = others.filter((o) => o.side === 'defender' && o.canFight && hexDistance(o.hex, attackerHex) === 1).length;
+  return Math.max(0, Math.min(4, raw - cancel));
 }
 
 // ---------- Tab 1: Core ----------

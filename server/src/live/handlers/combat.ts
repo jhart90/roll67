@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  MAX_WOUNDS, dieSides, soakSuccesses, swadeDamageOutcome, traitExpr,
+  MAX_WOUNDS, dieSides, gangUpBonus, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type BennyUsePayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -17,6 +17,7 @@ import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom
 import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
+import { resetSwadeTurnMoves } from './tokens.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -203,6 +204,7 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
 
 /** SWADE bookkeeping at every turn handover, for both advance paths. */
 function processTurnTransition(io: Server, campaignId: string, state: InitiativeState, prevIdx: number): void {
+  resetSwadeTurnMoves(campaignId);
   const prev = combatantChar(state, prevIdx);
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
@@ -604,6 +606,25 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         let mod = p.adv === 'adv' ? 2 : p.adv === 'dis' ? -2 : 0;
         const tags: string[] = mod ? [mod > 0 ? '+2' : '−2'] : [];
         if (!action.ranged && attackerConditions.includes('prone')) { mod -= 2; tags.push('−2 Prone'); }
+        // Gang Up: melee only. Sides split PC (player-owned) vs NPC; a
+        // bystander too hurt to threaten anyone doesn't count for either.
+        if (!action.ranged && targetChar) {
+          const mySide = actor.ownerUserId ? 'pc' : 'npc';
+          const others = tokens.forMap(src.mapId).flatMap((t): GangUpCombatant[] => {
+            if (t.id === src.id || t.id === tgt.id || !t.characterId) return [];
+            const c = characters.byId(t.characterId);
+            if (!c) return [];
+            const cond = conditionsOf(c.sheet);
+            const canFight = !cond.includes('incapacitated') && !cond.includes('stunned') && !cond.includes('bleeding');
+            return [{
+              hex: { q: t.q, r: t.r },
+              side: (c.ownerUserId ? 'pc' : 'npc') === mySide ? 'attacker' : 'defender',
+              canFight,
+            }];
+          });
+          const gang = gangUpBonus({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r }, others);
+          if (gang > 0) { mod += gang; tags.push(`+${gang} Gang Up`); }
+        }
         if (targetConditions.includes('stunned')) { mod += 4; tags.push('+4 The Drop'); }
         else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
         if (action.ranged && targetConditions.includes('prone')) { mod -= 2; tags.push('−2 vs Prone'); }
@@ -1616,6 +1637,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
+    resetSwadeTurnMoves(d.campaignId);
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_CLEAR'));
 

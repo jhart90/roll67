@@ -1,14 +1,23 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, inBounds, packHex,
-  playerColorFor, reachableAlong, systemFor,
+  C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, inBounds, packHex,
+  playerColorFor, reachableAlong, roll, swadePace, systemFor,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type MoveTokenPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
-import { campaigns, characters, maps, tokens } from '../../db/repos.js';
+import { campaigns, characters, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
 import { dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
-import { persistSheet } from '../hp.js';
+import { persistSheet, postStatusLine } from '../hp.js';
+
+/** SWADE combat movement spent this turn, per campaign → token. */
+interface TurnMoveRec { moved: number; runBonus: number | null }
+const swadeTurnMoves = new Map<string, Map<string, TurnMoveRec>>();
+
+/** New turn (or combat over): everyone's movement budget refills. */
+export function resetSwadeTurnMoves(campaignId: string): void {
+  swadeTurnMoves.delete(campaignId);
+}
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
@@ -179,6 +188,37 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       );
       if (stop.q === token.q && stop.r === token.r) return; // held up — no move
       dest = stop;
+    }
+    // SWADE combat movement: Pace is a real per-turn budget (1 hex = 1").
+    // Standing from Prone costs 2" first; pushing past Pace automatically
+    // rolls the d6 running die, once per turn.
+    if (d.role !== 'dm' && character?.system === 'swade') {
+      const prone = conditionsOf(character.sheet).includes('prone');
+      const combat = initiative.get(d.campaignId).active;
+      if (combat) {
+        const per = swadeTurnMoves.get(d.campaignId) ?? new Map<string, TurnMoveRec>();
+        swadeTurnMoves.set(d.campaignId, per);
+        const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
+        const pace = Math.max(1, swadePace(character.sheet) - (prone ? 2 : 0));
+        const stepDist = hexDistance({ q: token.q, r: token.r }, dest);
+        if (rec.moved + stepDist > pace + (rec.runBonus ?? 0)) {
+          if (rec.runBonus === null) {
+            rec.runBonus = roll('1d6').total;
+            per.set(tokenId, rec);
+            postStatusLine(io, d.campaignId, `🏃 ${character.name} runs — +${rec.runBonus} Pace this turn.`);
+          }
+          if (rec.moved + stepDist > pace + rec.runBonus) {
+            emitError(socket, `Not enough movement: Pace ${pace} +${rec.runBonus} run, already moved ${rec.moved}.`);
+            return;
+          }
+        }
+        rec.moved += stepDist;
+        per.set(tokenId, rec);
+      }
+      if (prone) {
+        persistSheet(io, d.campaignId, character, { conditions: conditionsOf(character.sheet).filter((c) => c !== 'prone') });
+        postStatusLine(io, d.campaignId, combat ? `${character.name} stands up (2″ of Pace).` : `${character.name} stands up.`);
+      }
     }
     const fromHex = { q: token.q, r: token.r };
     tokens.move(tokenId, dest.q, dest.r);

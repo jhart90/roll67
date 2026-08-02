@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dieSides, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
+import { dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
 import { blocksMovement, combatResources, conditionsFor } from '../src/systems/effects.js';
 import { generateNpc } from '../src/data/npcGen.js';
@@ -424,5 +424,36 @@ describe('SWADE conditions engine', () => {
     expect(swadePace(base)).toBe(6);
     expect(swadePace({ ...base, wounds: 2 })).toBe(4);
     expect(swadePace({ ...base, wounds: 9 })).toBe(1);
+  });
+});
+
+describe('Gang Up', () => {
+  const A = { q: 0, r: 0 }; // attacker
+  const D = { q: 1, r: 0 }; // defender
+  const ally = (hex: { q: number; r: number }, canFight = true) =>
+    ({ hex, side: 'attacker' as const, canFight });
+  const foe = (hex: { q: number; r: number }, canFight = true) =>
+    ({ hex, side: 'defender' as const, canFight });
+
+  it('+1 per able ally adjacent to the defender, capped at +4', () => {
+    expect(gangUpBonus(A, D, [])).toBe(0);
+    expect(gangUpBonus(A, D, [ally({ q: 2, r: 0 })])).toBe(1);
+    expect(gangUpBonus(A, D, [
+      ally({ q: 2, r: 0 }), ally({ q: 1, r: -1 }), ally({ q: 0, r: 1 }),
+      ally({ q: 2, r: -1 }), ally({ q: 1, r: 1 }),
+    ])).toBe(4);
+  });
+
+  it('ignores allies out of reach or unable to fight', () => {
+    expect(gangUpBonus(A, D, [ally({ q: 5, r: 5 })])).toBe(0);
+    expect(gangUpBonus(A, D, [ally({ q: 2, r: 0 }, false)])).toBe(0);
+  });
+
+  it("defender's allies adjacent to the attacker cancel one each, never below 0", () => {
+    expect(gangUpBonus(A, D, [ally({ q: 2, r: 0 }), foe({ q: -1, r: 0 })])).toBe(0);
+    expect(gangUpBonus(A, D, [ally({ q: 2, r: 0 }), ally({ q: 1, r: -1 }), foe({ q: -1, r: 0 })])).toBe(1);
+    expect(gangUpBonus(A, D, [foe({ q: -1, r: 0 }), foe({ q: 0, r: -1 })])).toBe(0);
+    // A downed foe cancels nothing.
+    expect(gangUpBonus(A, D, [ally({ q: 2, r: 0 }), foe({ q: -1, r: 0 }, false)])).toBe(1);
   });
 });

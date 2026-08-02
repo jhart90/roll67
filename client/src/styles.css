@@ -2076,10 +2076,15 @@ th > .term { border-bottom-style: dotted; }
   display: flex; align-items: flex-end; gap: 2px; height: 56px; margin-top: 6px;
   overflow-x: auto; padding-bottom: 14px; position: relative;
 }
-.rollstats-bar {
+.rollstats-bar-stack {
   flex: 1 0 14px; max-width: 26px; min-height: 4px; border-radius: 3px 3px 0 0;
-  background: linear-gradient(180deg, #6ea8fe, #3d6fd4); position: relative;
+  position: relative; display: flex; flex-direction: column;
 }
+.rollstats-bar-stack .rollstats-seg:first-child { border-radius: 3px 3px 0 0; }
+.rollstats-seg { width: 100%; min-height: 2px; }
+.rollstats-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; }
+.rollstats-legend-chip { display: inline-flex; align-items: center; gap: 4px; }
+.rollstats-legend-chip i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .rollstats-bar-label {
   position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
   font-size: 9px; color: var(--dim, #889); white-space: nowrap;

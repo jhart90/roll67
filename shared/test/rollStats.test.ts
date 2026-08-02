@@ -10,7 +10,8 @@ describe('statEntriesFromDice', () => {
     expect(entries).toContainEqual({ kind: 'die', key: 'd4', value: 3 });
     expect(entries).toContainEqual({ kind: 'die', key: 'd4', value: 1 });
     expect(entries).toContainEqual({ kind: 'expr', key: '2d4', value: 4 });
-    expect(entries).toHaveLength(3);
+    expect(entries).toContainEqual({ kind: 'expr', key: 'roll', value: 0 });
+    expect(entries).toHaveLength(4);
   });
 
   it('mixed sizes split into separate amount groups', () => {
@@ -32,11 +33,14 @@ describe('summarizeRollStats', () => {
     { kind: 'die', key: 'd4', value: 4, count: 3 },
     { kind: 'expr', key: '2d4', value: 8, count: 2 },
     { kind: 'expr', key: '2d4', value: 3, count: 1 },
+    { kind: 'expr', key: 'roll', value: 0, count: 5 },
   ];
 
-  it('lifetime counts individual dice; luck is pips over max pips', () => {
+  it('lifetime counts individual dice AND whole rolls; luck is pips over max pips', () => {
     const s = summarizeRollStats(rows);
     expect(s.lifetime).toBe(7); // 4 d20s + 3 d4s
+    expect(s.rolls).toBe(5); // the once-per-roll meta rows
+    expect(s.byAmount.some((k) => k.key === 'roll')).toBe(false);
     // pips: 40+1+10 + 12 = 63; max: 80 + 12 = 92
     expect(s.luck).toBeCloseTo((63 / 92) * 100, 5);
   });

@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type IronDicePayload, type RollStatsPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -234,6 +234,8 @@ interface GameState {
   soakOffer: SoakOfferPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
+  /** Public-facing sheets fetched for tokens we don't control. */
+  publicSheets: Record<string, PublicSheetPayload>;
   /** IronDice public state: active seed commitment + revealed history. */
   ironDice: IronDicePayload | null;
   /** Lifetime roll stats keyed by scope: 'account' or a characterId. */
@@ -396,6 +398,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   bleedPrompt: null,
   rollStatsData: {},
   ironDice: null,
+  publicSheets: {},
   targeting: null,
   aoeTargeting: null,
   floats: [],
@@ -982,6 +985,10 @@ export function wireSocket(): void {
     useGameStore.setState({ bleedPrompt: p });
   });
 
+  socket.on(S2C.PUBLIC_SHEET, (p: PublicSheetPayload) => {
+    useGameStore.setState((s) => ({ publicSheets: { ...s.publicSheets, [p.characterId]: p } }));
+  });
+
   socket.on(S2C.IRON_DICE, (p: IronDicePayload) => {
     useGameStore.setState({ ironDice: p });
   });
@@ -1354,6 +1361,8 @@ export const intents = {
   bennyUse: (characterId: string, use: BennyUseId) => socket.emit(C2S.BENNY_USE, { characterId, use }),
   /** Fetch lifetime roll stats (account-wide, or one character's). */
   getRollStats: (characterId?: string) => socket.emit(C2S.ROLL_STATS_GET, { characterId: characterId ?? null }),
+  /** Fetch the public-facing sheet of a character you don't control. */
+  getPublicSheet: (characterId: string) => socket.emit(C2S.PUBLIC_SHEET_GET, { characterId }),
   /** IronDice: fetch commitment state / rotate the seed (DM). */
   getIronDice: () => socket.emit(C2S.IRON_DICE_GET, {}),
   rotateIronDice: () => socket.emit(C2S.IRON_DICE_ROTATE, {}),

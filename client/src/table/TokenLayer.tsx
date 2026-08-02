@@ -3,6 +3,7 @@ import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
 import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, pointInAoe, pxPerFoot } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { openWindow } from '../store/windowManager';
 import { mapPixelSize, useStage } from '../util/stage';
 import { worldDrag } from '../store/worldDrag';
 
@@ -212,6 +213,9 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     // Open the linked character sheet. We only hold characters we're allowed
     // to see (DM: all; player: their own), so a found character == permitted.
     if (character) useGameStore.getState().openSheet(character.id);
+    // Somebody else's token: open the safe, public-facing sheet instead —
+    // nameplate info, portrait, bio, and roll stats; never the real sheet.
+    else if (token.characterId) openWindow('publicSheet', token.characterId, {}, token.name);
   }
 
   function onContextMenu(e: React.MouseEvent<SVGGElement>) {

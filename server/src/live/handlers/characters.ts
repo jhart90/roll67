@@ -5,8 +5,8 @@ import {
   type DeleteCustomNpcPayload, type LevelUpRollPayload,
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
-import type { Character, CreateNpcPayload, CreateRandomNpcPayload, GameSystem } from 'shared';
-import { generateNpc, generateNpcFromModel, npcById } from 'shared';
+import type { Character, CreateNpcPayload, CreateRandomNpcPayload, GameSystem, PublicSheetGetPayload, PublicSheetPayload } from 'shared';
+import { generateNpc, generateNpcFromModel, nameplateFor, npcById } from 'shared';
 import { campaigns, characters, chat, customNpcs, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
@@ -29,6 +29,42 @@ function emitCharacter(io: Server, campaignId: string, character: Character): vo
 }
 
 export function registerCharacterHandlers(io: Server, socket: Socket): void {
+  // The public-facing sheet: exactly what the nameplate already exposes,
+  // plus portrait, token art, and the free-text bio sections — never stats,
+  // gear, or anything mechanical. Any member of the campaign may look.
+  socket.on(C2S.PUBLIC_SHEET_GET, safe(socket, ({ characterId }: PublicSheetGetPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    const tok = tokens.forCharacter(ch.id)[0];
+    const plate = nameplateFor(ch, tok?.color ?? '#8899aa', tok?.artUrl ?? null);
+    // Bio = the schema's own appearance/personality/backstory/bio sections,
+    // so each system decides what counts as flavor text.
+    const BIO_SECTIONS = new Set(['appearance', 'personality', 'backstory', 'bio', 'proficiencies']);
+    const bio: PublicSheetPayload['bio'] = [];
+    for (const tab of systemFor(ch.system).tabs) {
+      for (const section of tab.sections) {
+        if (section.kind !== 'fields' || !BIO_SECTIONS.has(section.id)) continue;
+        const entries = (section.fields ?? [])
+          .filter((f) => f.type === 'text' || f.type === 'textarea')
+          .map((f) => ({ label: f.label, text: str(ch.sheet, f.id, '').trim() }))
+          .filter((e) => e.text.length > 0);
+        if (entries.length > 0) bio.push({ title: section.title ?? 'Bio', entries });
+      }
+    }
+    const payload: PublicSheetPayload = {
+      characterId: ch.id,
+      name: ch.name,
+      system: ch.system,
+      color: plate.color,
+      lines: plate.lines,
+      portraitUrl: plate.portraitUrl,
+      tokenImageUrl: str(ch.sheet, 'tokenImage', '').trim() || tok?.artUrl || null,
+      bio,
+    };
+    socket.emit(S2C.PUBLIC_SHEET, payload);
+  }, 'PUBLIC_SHEET_GET'));
+
   socket.on(C2S.CREATE_CHARACTER, safe(socket, (payload: CreateCharacterPayload) => {
     const d = requireCampaign(socket);
     const campaign = campaigns.byId(d.campaignId)!;

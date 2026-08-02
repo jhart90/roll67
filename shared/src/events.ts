@@ -121,6 +121,8 @@ export const C2S = {
   BLEED_ROLL: 'bleedRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
+  /** Fetch the public-facing sheet of a character you don't control. */
+  PUBLIC_SHEET_GET: 'publicSheetGet',
   /** IronDice: fetch the current seed commitment + revealed seed history. */
   IRON_DICE_GET: 'ironDiceGet',
   /** IronDice: DM reveals the current seed and mints a fresh one. */
@@ -676,6 +678,8 @@ export const S2C = {
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
   IRON_DICE: 'ironDice',
+  /** The public-facing sheet for one character. */
+  PUBLIC_SHEET: 'publicSheet',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -877,6 +881,20 @@ export interface IronDicePayload {
   rolls: number;
   /** Rotated-out seeds, now public: recompute any roll in their idx range. */
   revealed: Array<{ commit: string; seedHex: string; firstIdx: number; lastIdx: number; revealedAt: number }>;
+}
+export interface PublicSheetGetPayload { characterId: string }
+/** The safe, anyone-at-the-table view of a character: exactly the nameplate
+ *  info plus portrait, token art, and free-text bio — never the sheet. */
+export interface PublicSheetPayload {
+  characterId: string;
+  name: string;
+  system: GameSystem;
+  color: string;
+  /** The nameplate's descriptive lines (rank/level, concept/quip, ancestry…). */
+  lines: string[];
+  portraitUrl: string | null;
+  tokenImageUrl: string | null;
+  bio: Array<{ title: string; entries: Array<{ label: string; text: string }> }>;
 }
 export interface RollStatsGetPayload { characterId?: string | null }
 export interface RollStatsUserBlock { userId: string; username: string; summary: import('./systems/rollStats.js').RollStatsSummary }

@@ -13,6 +13,7 @@ export type WindowKind =
   | 'soundboard'
   | 'rollStats'
   | 'ironDice'
+  | 'publicSheet'
   | 'accountDetails';
 
 export interface WindowInstance {

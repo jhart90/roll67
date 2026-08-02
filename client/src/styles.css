@@ -2028,6 +2028,22 @@ th > .term { border-bottom-style: dotted; }
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
 
+/* Public-facing sheet: nameplate header + bio + roll stats, nothing private. */
+.public-sheet { min-width: 340px; max-width: 480px; }
+.public-sheet-head {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 8px 8px 0 0;
+}
+.public-sheet-portrait, .public-sheet-token {
+  width: 56px; height: 56px; object-fit: cover; border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+}
+.public-sheet-token { width: 40px; height: 40px; margin-left: auto; }
+.public-sheet-id { display: flex; flex-direction: column; gap: 1px; font-size: 12px; }
+.public-sheet-id strong { font-size: 15px; }
+.public-sheet-bio { padding: 8px 10px; font-size: 13px; max-height: 50vh; overflow-y: auto; }
+.public-sheet-bio h4 { margin: 8px 0 2px; }
+
 /* IronDice: barely-there provenance badge + the explainer window. */
 .iron-badge { margin-left: 6px; font-size: 9px; opacity: 0.45; cursor: help; }
 .iron-badge:hover { opacity: 1; }

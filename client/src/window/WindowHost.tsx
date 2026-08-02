@@ -13,6 +13,7 @@ import { RandomizeNpcModal } from '../panels/RandomizeNpcModal';
 import { AssetLibrary } from '../panels/AssetLibrary';
 import { AccountDetails } from '../panels/AccountDetails';
 import { Soundboard } from '../panels/Soundboard';
+import { RollStatsWindow } from '../panels/RollStats';
 
 /** Mounted once at the top level: renders every open window instance,
  *  each in its own draggable/poppable WindowFrame, so multiple windows
@@ -32,6 +33,9 @@ export function WindowHost() {
         switch (w.kind) {
           case 'soundboard':
             content = <Soundboard />;
+            break;
+          case 'rollStats':
+            content = <RollStatsWindow />;
             break;
           case 'characterSheet':
             content = <CharacterSheetWindow characterId={w.key} onClose={onClose} />;

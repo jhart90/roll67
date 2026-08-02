@@ -15,6 +15,10 @@ import { SwnFeatures } from './SwnFeatures';
 import { SwadeAdvanceWizard } from './SwadeAdvanceWizard';
 import { CombatStatus } from './CombatStatus';
 import { SheetTerm } from '../util/Term';
+import { RollStatsTab } from './RollStats';
+
+/** Synthetic tab id for the lifetime roll-stats view (not part of the schema). */
+const STATS_TAB = '__stats';
 
 type AdvMode = null | 'adv' | 'dis';
 
@@ -588,12 +592,22 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (
-            <button key={t.id} className={t.id === activeTab.id ? 'active' : ''} onClick={() => setTabId(t.id)}>
+            <button key={t.id} className={t.id === activeTab.id && tabId !== STATS_TAB ? 'active' : ''} onClick={() => setTabId(t.id)}>
               {t.title}
             </button>
           ))}
+          <button className={tabId === STATS_TAB ? 'active' : ''} onClick={() => setTabId(STATS_TAB)}>
+            📊 Roll Stats
+          </button>
         </div>
 
+        {tabId === STATS_TAB ? (
+          <div className="sheet-body">
+            <div className="sheet-main">
+              <RollStatsTab characterId={character.id} />
+            </div>
+          </div>
+        ) : (
         <div className="sheet-body">
           <div className="sheet-main">
             {activeTab.id === 'spells' && <SpellSlotTracker character={character} editable={editable} />}
@@ -640,6 +654,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
           </div>
           <RollsColumn character={character} canRoll={editable} />
         </div>
+        )}
       </div>
 
       {pickingField && (

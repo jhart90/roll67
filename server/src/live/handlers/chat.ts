@@ -1,11 +1,12 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, splitRollLabel, str, systemFor,
+  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
-  type ModerateMessagePayload, type ReorderMacrosPayload, type SaveMacroPayload,
+  type ModerateMessagePayload, type ReorderMacrosPayload, type RollStatRow, type RollStatsGetPayload,
+  type RollStatsUserBlock, type SaveMacroPayload,
   type SheetData, type SheetRollPayload, type UndoEntry,
 } from 'shared';
-import { campaigns, characters, chat, macros, redactChat } from '../../db/repos.js';
+import { campaigns, characters, chat, macros, redactChat, rollStats } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { applyUndo } from '../undo.js';
 // NOTE: hp.ts also imports applyAdv from this file -- a deliberate, safe
@@ -69,7 +70,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const msg = chat.add(d.campaignId, {
       userId: d.userId,
       fromName: d.username,
-      fromCharacter: character.name,
+      fromCharacter: character.name, characterId: character.id,
       kind: 'roll',
       text: label,
       roll: breakdown,
@@ -77,6 +78,36 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     });
     deliver(io, d.campaignId, msg);
   }, 'SHEET_ROLL'));
+
+  // Lifetime roll statistics: account-wide for every member (no characterId),
+  // or one character's rolls broken out by who was rolling (characterId set).
+  socket.on(C2S.ROLL_STATS_GET, safe(socket, ({ characterId }: RollStatsGetPayload) => {
+    const d = requireCampaign(socket);
+    const members = campaigns.members(d.campaignId);
+    const nameOf = (uid: string) =>
+      members.find((m) => m.userId === uid)?.username ?? (uid ? 'former member' : 'NPCs / system');
+    let users: RollStatsUserBlock[];
+    if (characterId) {
+      const ch = characters.byId(characterId);
+      if (!ch || ch.campaignId !== d.campaignId) return;
+      const byUser = new Map<string, RollStatRow[]>();
+      for (const r of rollStats.forCharacter(d.campaignId, characterId)) {
+        const list = byUser.get(r.user_id) ?? [];
+        list.push(r);
+        byUser.set(r.user_id, list);
+      }
+      users = [...byUser.entries()].map(([uid, rs]) => ({
+        userId: uid, username: nameOf(uid), summary: summarizeRollStats(rs),
+      }));
+    } else {
+      users = members.map((m) => ({
+        userId: m.userId, username: m.username,
+        summary: summarizeRollStats(rollStats.forUser(d.campaignId, m.userId)),
+      }));
+    }
+    users.sort((a, b) => b.summary.lifetime - a.summary.lifetime);
+    socket.emit(S2C.ROLL_STATS, { characterId: characterId ?? null, users });
+  }, 'ROLL_STATS_GET'));
 
   socket.on(C2S.SAVE_MACRO, safe(socket, ({ macro }: SaveMacroPayload) => {
     const d = requireCampaign(socket);
@@ -137,7 +168,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const breakdown = roll(rollable.expr);
     const atLabel = level > minLevel ? ` (cast at level ${level})` : '';
     const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, fromCharacter: character.name, kind: 'roll',
+      userId: d.userId, fromName: d.username, fromCharacter: character.name, characterId: character.id, kind: 'roll',
       text: `${rollable.label}${atLabel}${concNote}`, roll: breakdown, recipients: null,
     }, undo);
     deliver(io, d.campaignId, msg);
@@ -193,7 +224,7 @@ function runSheetRoll(
   // Any SWADE sheet roll is a trait test a Benny may reroll.
   recordBennyRoll(io, campaignId, character, 'trait', rollable.expr, breakdown.total, rollable.label);
   const msg = chat.add(campaignId, {
-    userId, fromName: username, fromCharacter: character.name, kind: 'roll',
+    userId, fromName: username, fromCharacter: character.name, characterId: character.id, kind: 'roll',
     text: rollable.label, roll: breakdown, recipients: null,
   });
   deliver(io, campaignId, msg);

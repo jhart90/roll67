@@ -196,6 +196,24 @@ migrateSystemSwade('custom_npcs', `
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_custom_npcs_user ON custom_npcs(user_id)');
 
+// Lifetime roll statistics: one aggregate row per (scope, key, result). The
+// account view sums rows across characters; the character view groups them by
+// the user who was rolling. Empty-string ids stand in for "none" so the
+// primary key stays NOT NULL.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS roll_stats (
+    campaign_id TEXT NOT NULL,
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL CHECK (kind IN ('die', 'expr')),
+    key TEXT NOT NULL,
+    value INTEGER NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (campaign_id, user_id, character_id, kind, key, value)
+  )
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_roll_stats_character ON roll_stats(campaign_id, character_id)');
+
 // Repair FK references broken by migrateAssetsAudioKind running with foreign_keys=ON.
 // The RENAME redirected FK constraints in maps/tokens/handouts/audio_tracks to point
 // to the temp table name; after DROP that table the constraints became invalid.

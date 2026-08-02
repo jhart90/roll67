@@ -14,6 +14,7 @@ export * from './dice/parser.js';
 export * from './dice/roller.js';
 export * from './systems/nameplate.js';
 export * from './systems/swadeDamage.js';
+export * from './systems/rollStats.js';
 export * from './systems/playerColor.js';
 export * from './systems/index.js';
 export * from './data/npcLibrary.js';

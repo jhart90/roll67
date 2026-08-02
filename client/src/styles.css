@@ -2028,6 +2028,33 @@ th > .term { border-bottom-style: dotted; }
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
 
+/* Lifetime roll statistics: topline, per-key rows, mini histograms. */
+.rollstats-window { min-width: 380px; max-width: 520px; max-height: 70vh; overflow-y: auto; }
+.rollstats { display: flex; flex-direction: column; gap: 10px; padding: 6px 8px; }
+.rollstats h4 { margin: 6px 0 0; }
+.rollstats h4 .dim { font-weight: 400; font-size: 11px; }
+.rollstats-topline {
+  display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: rgba(255, 255, 255, 0.03);
+}
+.rollstats-users { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px 0; }
+.rollstats-users button { width: auto; padding: 3px 10px; font-size: 12px; }
+.rollstats-users button.active { outline: 2px solid var(--accent, #6ea8fe); }
+.rollstats-key { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.rollstats-key-head { display: flex; gap: 12px; align-items: baseline; font-size: 12px; flex-wrap: wrap; }
+.rollstats-hist {
+  display: flex; align-items: flex-end; gap: 2px; height: 56px; margin-top: 6px;
+  overflow-x: auto; padding-bottom: 14px; position: relative;
+}
+.rollstats-bar {
+  flex: 1 0 14px; max-width: 26px; min-height: 4px; border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #6ea8fe, #3d6fd4); position: relative;
+}
+.rollstats-bar-label {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: var(--dim, #889); white-space: nowrap;
+}
+
 /* Bleeding Out: same shell as the Soak prompt, but unmistakably dire. */
 .bleed-prompt { border-color: #b91c1c; bottom: 170px; }
 

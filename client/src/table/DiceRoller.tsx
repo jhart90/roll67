@@ -1,4 +1,5 @@
 import { intents, useGameStore } from '../store/game';
+import { openWindow } from '../store/windowManager';
 import { DieShape } from './DiceShapes';
 import { DICE_ROLE_DEFAULTS } from './dice3d';
 import type { DiceRole } from 'shared';
@@ -153,6 +154,13 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
     <div className="dice-panel">
       <div className="dock-header">
         <h3>Roll dice</h3>
+        <button
+          className="link"
+          title="Lifetime roll statistics for everyone in this campaign"
+          onClick={() => openWindow('rollStats', 'main', {}, 'Roll Stats')}
+        >
+          📊 stats
+        </button>
         <button className="link" onClick={onClose}>close</button>
       </div>
       <table className="dice-grid">

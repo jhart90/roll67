@@ -149,7 +149,7 @@ function resolveBleedingOut(io: Server, campaignId: string, ch: Character): bool
     persistSheet(io, campaignId, ch, { hp: 0 });
   }
   const msg = chat.add(campaignId, {
-    userId: null, fromName: 'System', fromCharacter: ch.name, kind: 'roll',
+    userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
     text: b.total >= 8
       ? `${ch.name} stabilizes — Vigor roll (raise)`
       : ok
@@ -174,7 +174,7 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
     roll(traitExpr(ch.sheet, dieSides(String(ch.sheet[attr] ?? 'd4'))));
   const post = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
     const msg = chat.add(campaignId, {
-      userId: null, fromName: 'System', fromCharacter: ch.name, kind: 'roll',
+      userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
       text, roll: { ...breakdown, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
     });
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
@@ -451,7 +451,7 @@ function activatePsychicPower(
         const { character: afterChar, note } = applyHpDelta(io, campaignId, fresh, -dmg, `${label} mishap`);
         const { hp, maxHp } = systemFor(afterChar.system).hp(afterChar.sheet);
         const dmgMsg = chat.add(campaignId, {
-          userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll',
+          userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
           text: `${afterChar.name} takes ${dmg} backlash damage (${afterChar.name} ${hp}/${maxHp})${note}`.replace(/\s+/g, ' ').trim(),
           roll: dmgRoll, recipients: null,
         });
@@ -750,7 +750,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         const br = roll(sc.expr);
         const passed = br.total >= sc.threshold;
         const msg = chat.add(d.campaignId, {
-          userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll',
+          userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
           text: `${tgt.name} — ${sc.label} vs ${action.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
           roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
         });
@@ -888,7 +888,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         : `${actor.name} ${verb} ${action.effect === 'heal' ? action.label + ' on' : ''} ${tgt.name}${action.effect === 'heal' ? '' : ': ' + action.label}${hitLabel} · ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim();
       const cardRoll = amountRoll;
       const msg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text, roll: cardRoll, recipients: null,
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text, roll: cardRoll, recipients: null,
       }, undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
 
@@ -940,7 +940,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           : (dealsDamage ? 'full damage' : 'effect applies');
       const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${thName} ${threshold} · ${passed ? 'SAVE' : 'FAIL'} (${consequence})`;
       const saveMsg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: saveText,
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: saveText,
         roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       }, noDamage && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: saveMsg });
@@ -969,7 +969,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // outcome in another so it can sit under the dice rather than above.
       const attackText = `${actor.name} attacks ${tgt.name} with`;
       const attackMsg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: attackText,
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: attackText,
         actionName: action.label, outcomeNote: attackOutcome,
         roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
       }, !hit && undo.length > 0 ? undo : undefined);
@@ -1173,7 +1173,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       });
     }
     const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
+      userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
     }, undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     const noSaveSettleMs = diceSettleDelayMs(dmg.dice);
@@ -1512,7 +1512,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       ? `${ch.name} spends a Benny to Soak — ${removed} Wound${removed === 1 ? '' : 's'} soaked (now ${woundsAfter})${removed === offer.wounds ? ', no longer Shaken' : ''}`
       : `${ch.name} spends a Benny to Soak — Vigor roll fails, the wounds stand`;
     const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, fromCharacter: ch.name, kind: 'roll', text,
+      userId: d.userId, fromName: d.username, fromCharacter: ch.name, characterId: ch.id, kind: 'roll', text,
       roll: { ...breakdown, outcome: removed > 0 ? 'success' as const : 'failure' as const }, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
@@ -1549,7 +1549,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         { bennies: num((characters.byId(ch.id) ?? ch).sheet, 'bennies', 0) - 1, ...extra });
     const postRoll = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
       const msg = chat.add(d.campaignId, {
-        userId: d.userId, fromName: d.username, fromCharacter: ch.name, kind: 'roll', text,
+        userId: d.userId, fromName: d.username, fromCharacter: ch.name, characterId: ch.id, kind: 'roll', text,
         roll: { ...breakdown, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });

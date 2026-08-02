@@ -4,6 +4,7 @@ import type {
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
+import { statEntriesFromDice, type DieRoll, type RollStatRow } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
 /** SWADE's dice roles, and the column each one persists to. */
@@ -1114,12 +1115,55 @@ function toChatMsg(r: ChatRow): ChatMessage {
   };
 }
 
+/** Lifetime roll statistics, aggregated so they never grow with playtime. */
+export const rollStats = {
+  /** Fold one roll's dice into the aggregates for this user + character. */
+  record(campaignId: string, userId: string, characterId: string, dice: DieRoll[]): void {
+    const up = stmt(
+      `INSERT INTO roll_stats (campaign_id, user_id, character_id, kind, key, value, count)
+       VALUES (?, ?, ?, ?, ?, ?, 1)
+       ON CONFLICT(campaign_id, user_id, character_id, kind, key, value)
+       DO UPDATE SET count = count + 1`,
+    );
+    for (const e of statEntriesFromDice(dice)) {
+      up.run(campaignId, userId, characterId, e.kind, e.key, e.value);
+    }
+  },
+  /** Everything this account rolled in this campaign, across all its characters. */
+  forUser(campaignId: string, userId: string): RollStatRow[] {
+    return stmt(
+      `SELECT kind, key, value, SUM(count) AS count FROM roll_stats
+       WHERE campaign_id = ? AND user_id = ? GROUP BY kind, key, value`,
+    ).all(campaignId, userId) as RollStatRow[];
+  },
+  /** Everything rolled AS this character, broken out by who was rolling. */
+  forCharacter(campaignId: string, characterId: string): Array<RollStatRow & { user_id: string }> {
+    return stmt(
+      `SELECT user_id, kind, key, value, count FROM roll_stats
+       WHERE campaign_id = ? AND character_id = ? AND character_id != ''`,
+    ).all(campaignId, characterId) as Array<RollStatRow & { user_id: string }>;
+  },
+};
+
 export const chat = {
   add(campaignId: string, msg: {
     userId: string | null; fromName: string; fromCharacter?: string | null; actionName?: string | null; outcomeNote?: string | null; kind: ChatKind; text: string;
     roll: RollBreakdown | null; recipients: string[] | null;
+    /** Who the roll belongs to for lifetime stats (not shown in the message). */
+    characterId?: string | null;
   }, undo?: unknown): ChatMessage {
     const at = now();
+    // Every roll that lands in chat feeds the lifetime stats. System rolls
+    // (recovery, Bleeding Out…) carry no userId — credit the character's owner.
+    if (msg.roll && Array.isArray(msg.roll.dice) && msg.roll.dice.length > 0) {
+      const chId = msg.characterId ?? '';
+      let uid = msg.userId ?? '';
+      if (!uid && chId) {
+        const r = stmt('SELECT owner_user_id FROM characters WHERE id = ?').get(chId) as { owner_user_id: string | null } | undefined;
+        uid = r?.owner_user_id ?? '';
+      }
+      rollStats.record(campaignId, uid, chId, msg.roll.dice);
+    }
     const info = stmt(
       `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,

@@ -43,8 +43,8 @@ export function AccountDetails({ onClose }: { onClose: () => void }) {
     <div className="account-details">
       <div className="account-form">
         <label>
-          Current password <span className="dim">(required)</span>
-          <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+          Current password <span className="dim">(required to change anything)</span>
+          <input type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
         </label>
         <hr />
         <label>
@@ -53,14 +53,15 @@ export function AccountDetails({ onClose }: { onClose: () => void }) {
         </label>
         <label>
           New password <span className="dim">(leave blank to keep current)</span>
-          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <input type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
         </label>
-        {newPassword && (
-          <label>
-            Confirm new password
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-          </label>
-        )}
+        <label>
+          Confirm new password <span className="dim">(type it again to be certain)</span>
+          <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          {newPassword && confirmPassword && newPassword !== confirmPassword && (
+            <span className="account-error" style={{ fontSize: 12 }}>Passwords don't match yet.</span>
+          )}
+        </label>
         {status && (
           <div className={status.ok ? 'account-success' : 'account-error'}>{status.msg}</div>
         )}

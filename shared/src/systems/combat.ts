@@ -53,6 +53,11 @@ export function combatActions(character: Character): CombatAction[] {
       consumesItem: false,
       source: 'attack',
       index: i,
+      // SWADE Rate of Fire, from an explicit column or a "RoF N" note.
+      ...((): { rof?: number } => {
+        const rof = num(atk, 'rof', 0) || Number(/RoF\s*(\d)/i.exec(str(atk, 'notes', ''))?.[1] ?? 0);
+        return rof >= 2 ? { rof: Math.min(6, rof) } : {};
+      })(),
       ...(num(atk, 'ap', 0) > 0 ? { ap: num(atk, 'ap', 0) } : {}),
       ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
         ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),

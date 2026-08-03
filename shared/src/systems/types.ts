@@ -111,6 +111,9 @@ export interface CombatAction {
   /** SWADE: the to-hit roll beats this fixed target number (4) instead of
    *  the target's AC/Parry; beating it by 4+ is a raise (+1d6! damage). */
   fixedTn?: number;
+  /** SWADE: the weapon's Rate of Fire (parsed from its notes). RoF 2+ fires
+   *  a burst: −2 Recoil, extra hits on a raise, table-based ammo use. */
+  rof?: number;
   /** SWADE combat maneuver: resolved as an opposed roll / special attack
    *  instead of the normal to-hit + damage pipeline. */
   maneuver?: 'push' | 'grapple' | 'test' | 'support' | 'touch';

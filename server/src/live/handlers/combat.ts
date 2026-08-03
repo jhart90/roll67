@@ -662,12 +662,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // SWADE range bands: the listed range is Short; Medium (−2) reaches 2×
     // and Long (−4) reaches 4×. Other systems keep the hard single limit.
     const swadeBands = actor.system === 'swade' && action.ranged && rangeHexes > 1;
-    const maxRange = swadeBands ? rangeHexes * 4 + (tgt.size >= 3 ? 1 : 0) : effectiveRange;
+    // Extreme range (4× Long, −8) is only reachable while Aiming.
+    const bandCap = p.adv === 'adv' ? 16 : 4;
+    const maxRange = swadeBands ? rangeHexes * bandCap + (tgt.size >= 3 ? 1 : 0) : effectiveRange;
     if (dist > maxRange) {
-      emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${swadeBands ? action.rangeFt * 4 : action.rangeFt} ft).`);
+      emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${swadeBands ? action.rangeFt * bandCap : action.rangeFt} ft${swadeBands && bandCap === 4 ? ' — Extreme range needs Aim' : ''}).`);
       return;
     }
-    const rangeBandMod = !swadeBands || dist <= rangeHexes ? 0 : dist <= rangeHexes * 2 ? -2 : -4;
+    const rangeBandMod = !swadeBands || dist <= rangeHexes ? 0
+      : dist <= rangeHexes * 2 ? -2 : dist <= rangeHexes * 4 ? -4 : -8;
     // Line of sight: a wall or closed door blocks targeting entirely, the
     // same raycast FOV already uses — never trust the client's own guess.
     const srcPx = hexToPixel({ q: src.q, r: src.r }, map.grid);
@@ -816,10 +819,32 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // hit AND damage, but you're Vulnerable), ranged 'adv' is Aim (+2).
         if (p.adv === 'adv' && !action.ranged) {
           mod += 2; dmgBonus += 2; wildAttack = true; tags.push('+2 Wild Attack');
-        } else if (p.adv === 'adv') { mod += 2; tags.push('+2 Aim'); }
-        else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
-        if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${dist <= rangeHexes * 2 ? 'Medium' : 'Long'} range`); }
-        if (coverPenalty) { mod += coverPenalty; tags.push(`${coverPenalty} Cover`); }
+        } else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
+        if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${dist <= rangeHexes * 2 ? 'Medium' : dist <= rangeHexes * 4 ? 'Long' : 'Extreme'} range`); }
+        if (coverPenalty) { mod += coverPenalty; tags.push(`${coverPenalty} Cover (armor +${-coverPenalty})`); }
+        // Aim: negate up to 4 points of range/cover penalties, else +2 flat.
+        if (p.adv === 'adv' && action.ranged) {
+          const offset = Math.min(4, -(rangeBandMod + coverPenalty));
+          if (offset > 0) { mod += offset; tags.push(`+${offset} Aim`); }
+          else { mod += 2; tags.push('+2 Aim'); }
+        }
+        // Automatic fire: RoF 2+ takes −2 Recoil; a raise lands extra hits.
+        if ((action.rof ?? 1) >= 2) { mod -= 2; tags.push('−2 Recoil'); }
+        // Firing in melee: nothing bigger than a pistol when a foe is adjacent.
+        if (action.ranged && action.rangeFt > 90) {
+          const mySide = actor.ownerUserId ? 'pc' : 'npc';
+          const adjacentFoe = tokens.forMap(src.mapId).some((t) => {
+            if (t.id === src.id || !t.characterId) return false;
+            if (hexDistance({ q: t.q, r: t.r }, { q: src.q, r: src.r }) !== 1) return false;
+            const c = characters.byId(t.characterId);
+            return !!c && (c.ownerUserId ? 'pc' : 'npc') !== mySide
+              && !conditionsOf(c.sheet).includes('incapacitated');
+          });
+          if (adjacentFoe) {
+            emitError(socket, `${action.label} is too big to fire with a foe in reach — pistols only in melee.`);
+            return;
+          }
+        }
         // Bigger targets are easier to hit (Large +2, Huge +4).
         if (tgt.size === 2) { mod += 2; tags.push('+2 Size'); }
         else if (tgt.size >= 3) { mod += 4; tags.push('+4 Size'); }
@@ -930,7 +955,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         const ammo = row ? num(row, 'ammo', -1) : -1;
         if (row && ammo > 0) {
           const before = atks.map((r) => ({ ...r }));
-          atks[action.index] = { ...row, ammo: ammo - 1 };
+          // SWADE RoF→ammo table: 1→1, 2→5, 3→10, 4→20, 5→40, 6→50 rounds.
+          const AMMO_BY_ROF = [1, 1, 5, 10, 20, 40, 50];
+          const spend = actor.system === 'swade' ? AMMO_BY_ROF[Math.min(6, action.rof ?? 1)] : 1;
+          atks[action.index] = { ...row, ammo: Math.max(0, ammo - spend) };
           const sheet = { ...fresh.sheet, attacks: atks };
           characters.update(actor.id, undefined, sheet);
           const updatedActor = characters.byId(actor.id)!;
@@ -988,7 +1016,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // dice can be tagged — otherwise it just shows up as a mystery third die
       // in the breakdown with nothing marking it as earned.
       const rollDamage = (): RollBreakdown => {
-        const baseExpr = dmgBonus > 0 ? `${action.amountExpr}+${dmgBonus}` : action.amountExpr;
+        // Automatic fire: a raise walks a second round onto the target.
+        const hits = actor.system === 'swade' && (action.rof ?? 1) >= 2 && raise ? 2 : 1;
+        const core = hits > 1 ? Array(hits).fill(`(${action.amountExpr})`).join('+') : action.amountExpr;
+        const baseExpr = dmgBonus > 0 ? `${core}+${dmgBonus}` : core;
         if (crit) return roll(critDamageExpr(baseExpr));
         const base = roll(baseExpr);
         if (!raise) return base;
@@ -1010,6 +1041,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         recordBennyRoll(io, d.campaignId, actor, 'damage', action.amountExpr, amountRoll.total, `their ${action.label} damage`);
       }
       let magnitude = Math.max(0, amountRoll.total);
+      // Cover Armor Bonus: the obstacle that made the shot harder also
+      // absorbs part of what gets through (+2 armor per cover grade).
+      if (actor.system === 'swade' && coverPenalty < 0 && hit) {
+        magnitude = Math.max(0, magnitude + coverPenalty);
+      }
       // Save-based spells scale the rolled damage (half / none on a save).
       if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
       let resistTag = '';
@@ -1196,6 +1232,33 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }, !hit && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });
       if (!hit) {
+        // Innocent Bystander: a missed SWADE shot whose skill die shows a 1
+        // hits a random target adjacent to the intended one.
+        if (actor.system === 'swade' && action.ranged && usableAmount(action.amountExpr)) {
+          const skillDieShown = attackBreakdown.dice.find((x) => !x.wild && !x.raise)?.value;
+          if (skillDieShown === 1) {
+            const bystanders = tokens.forMap(src.mapId).filter((t) =>
+              t.id !== tgt.id && t.id !== src.id && t.characterId
+              && hexDistance({ q: t.q, r: t.r }, { q: tgt.q, r: tgt.r }) === 1);
+            if (bystanders.length > 0) {
+              const pick = bystanders[roll(`1d${bystanders.length}`).total - 1];
+              setTimeout(() => {
+                const fresh = pick.characterId ? characters.byId(pick.characterId) : undefined;
+                if (!fresh) return;
+                const dmg = roll(action.amountExpr);
+                const amt = Math.max(0, dmg.total);
+                const { note } = applyHpDelta(io, d.campaignId, fresh, -amt, 'stray shot');
+                const strayMsg = chat.add(d.campaignId, {
+                  userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
+                  text: `💥 The shot goes wild — it hits ${pick.name} instead! ${amt} damage${note}`,
+                  roll: dmg, recipients: null,
+                });
+                io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: strayMsg });
+                floatHp(io, d.campaignId, src.mapId, pick.id, -amt, 'ranged', action.damageType);
+              }, diceSettleDelayMs(attackBreakdown.dice));
+            }
+          }
+        }
         // SWN Shock: a shock weapon still deals its flat shock damage on a
         // MISS against targets whose AC is at or below its threshold — the
         // rule that makes melee dangerous. Lands after the miss card's dice

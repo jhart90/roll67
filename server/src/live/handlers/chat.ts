@@ -326,15 +326,36 @@ function handleChatText(
     return;
   }
 
-  // /w name message — private whisper.
-  const whisperMatch = text.match(/^\/w\s+(\S+)\s+(.+)$/i);
+  // /w <player | character | dm> message — private whisper. The target can
+  // be an account name, one of their characters' names (usually multi-word),
+  // or the literal 'dm'. The longest name that prefixes the text wins; the
+  // rest is the message.
+  const whisperMatch = text.match(/^\/w\s+(.+)$/i);
   if (whisperMatch) {
-    const [, target, body] = whisperMatch;
-    const member = campaigns.members(campaignId).find((m) => m.username.toLowerCase() === target.toLowerCase());
-    if (!member) {
-      emitError(socket, `Nobody called "${target}" here.`);
+    const rest = whisperMatch[1];
+    const members = campaigns.members(campaignId);
+    const campaign = campaigns.byId(campaignId);
+    const candidates: Array<{ name: string; userId: string }> = members.map((m) => ({ name: m.username, userId: m.userId }));
+    if (campaign) candidates.push({ name: 'dm', userId: campaign.dmUserId });
+    for (const c of characters.forCampaign(campaignId)) {
+      if (c.ownerUserId) candidates.push({ name: c.name, userId: c.ownerUserId });
+    }
+    const lower = rest.toLowerCase();
+    let best: { userId: string; len: number } | null = null;
+    for (const cand of candidates) {
+      const n = cand.name.trim().toLowerCase();
+      if (n && lower.startsWith(`${n} `) && (!best || n.length > best.len)) {
+        best = { userId: cand.userId, len: n.length };
+      }
+    }
+    if (!best) {
+      emitError(socket, 'Whisper who? /w <player, character, or dm> <message> — no matching name here.');
       return;
     }
+    const body = rest.slice(best.len).trim();
+    const member = members.find((m) => m.userId === best!.userId);
+    if (!member) { emitError(socket, 'They are not in this campaign.'); return; }
+    if (!body) { emitError(socket, 'Say something: /w <name> <message>.'); return; }
     const msg = chat.add(campaignId, {
       userId, fromName: username, kind: 'whisper', text: body, roll: null,
       recipients: [member.username],
@@ -344,7 +365,7 @@ function handleChatText(
   }
 
   if (text.startsWith('/')) {
-    emitError(socket, 'Commands: /r <dice> [# label], /gr <dice> [# label], /w <player> <message>, #macro');
+    emitError(socket, 'Commands: /r <dice> [# label], /gr <dice> [# label], /w <player, character, or dm> <message>, #macro');
     return;
   }
 

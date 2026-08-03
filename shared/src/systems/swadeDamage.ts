@@ -73,3 +73,27 @@ export function swadeHealOutcome(amount: number, currentWounds: number): { wound
   const healed = Math.min(currentWounds, Math.max(1, Math.floor(amount / 4)));
   return { woundsHealed: healed, woundsAfter: currentWounds - healed };
 }
+
+/** One entry from SWADE's Injury Table (d6 location, d6 sub-effect). */
+export interface InjuryResult { location: string; effect: string }
+
+/**
+ * The Injury Table: where the blow landed and what it costs. `d6` supplies
+ * the die faces (1–6) so the caller decides the randomness source.
+ */
+export function rollInjuryTable(d6: () => number): InjuryResult {
+  const first = d6();
+  if (first === 1) return { location: 'Unmentionables', effect: 'hit somewhere best left unmentioned — no permanent trait loss, but it hurts' };
+  if (first === 2) return { location: 'Arm', effect: 'an arm is unusable until healed' };
+  if (first === 3) {
+    const sub = d6();
+    if (sub <= 2) return { location: 'Guts (broken)', effect: 'Agility reduced a die type (minimum d4)' };
+    if (sub <= 4) return { location: 'Guts (battered)', effect: 'Vigor reduced a die type (minimum d4)' };
+    return { location: 'Guts (busted)', effect: 'Strength reduced a die type (minimum d4)' };
+  }
+  if (first === 4) return { location: 'Leg', effect: 'Pace −1 and the running die drops a die type' };
+  const sub = d6();
+  if (sub <= 2) return { location: 'Head (scarred)', effect: 'an ugly scar — −1 Persuasion' };
+  if (sub <= 4) return { location: 'Head (blinded)', effect: 'blinded in one or both eyes — −2 on tasks needing vision' };
+  return { location: 'Head (brain damage)', effect: 'Smarts reduced a die type (minimum d4)' };
+}

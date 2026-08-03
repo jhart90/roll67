@@ -162,6 +162,30 @@ export function combatActions(character: Character): CombatAction[] {
         ...(condition ? { appliesCondition: condition } : {}),
       });
     });
+
+    // Combat maneuvers from the quick-reference sheet: opposed rolls and
+    // special attacks the server resolves in place of the damage pipeline.
+    const maneuvers: Array<[CombatAction['maneuver'], string, number]> = [
+      ['touch', 'Touch Attack', 5],
+      ['push', 'Push', 5],
+      ['grapple', 'Grapple', 5],
+      ['test', 'Test', 5],
+      ['support', 'Support', 60],
+    ];
+    maneuvers.forEach(([kind, label, rangeFt], i) => out.push({
+      id: `maneuver:${kind}`,
+      label,
+      effect: 'damage',
+      attackExpr: null,
+      amountExpr: '0',
+      rangeFt,
+      damageType: '',
+      ranged: false,
+      consumesItem: false,
+      source: 'attack',
+      index: 1000 + i,
+      maneuver: kind,
+    }));
   }
 
   // SWN psychic powers with an amount become targeted actions too, gated on

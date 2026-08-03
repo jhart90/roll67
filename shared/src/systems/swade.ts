@@ -79,7 +79,7 @@ export function stepDie(die: string, steps: number): string {
 }
 
 /** The die a skill/attribute row holds, or 0 sides when untrained/absent. */
-function skillDie(sheet: SheetData, name: string): number {
+export function skillDie(sheet: SheetData, name: string): number {
   const row = rows(sheet, 'skills').find((sk) => str(sk, 'name', '').toLowerCase() === name.toLowerCase());
   return row ? dieSides(str(row, 'die', 'd4')) : 0;
 }
@@ -154,9 +154,12 @@ function wieldedWeaponParry(sheet: SheetData): number {
  *  carried here as +2 Parry). */
 export function swadeParry(sheet: SheetData): number {
   const fighting = skillDie(sheet, 'Fighting');
-  // Prone: −2 Parry until the character stands.
-  const prone = conditionsOf(sheet).includes('prone') ? -2 : 0;
-  return 2 + prone + Math.floor(fighting / 2) + equippedGearBonuses(sheet).parry
+  // Prone: −2 Parry until the character stands. Defend: the whole turn spent
+  // on defense is +4 until their next turn begins.
+  const conds = conditionsOf(sheet);
+  const prone = conds.includes('prone') ? -2 : 0;
+  const defend = conds.includes('defending') ? 4 : 0;
+  return 2 + prone + defend + Math.floor(fighting / 2) + equippedGearBonuses(sheet).parry
     + wieldedWeaponParry(sheet) + (sheet.deflectionActive === true ? 2 : 0)
     + traitLineBonuses(sheet).parry;
 }

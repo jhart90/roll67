@@ -372,9 +372,14 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
           <button
             key={String(mode)}
             className={adv === mode ? 'active' : ''}
+            title={character.system === 'swade' && mode === 'adv'
+              ? 'Melee: Wild Attack (+2 to hit and damage, but you become Vulnerable). Ranged: Aim (+2).'
+              : undefined}
             onClick={() => setAdv(mode)}
           >
-            {mode === null ? 'normal' : mode === 'adv' ? 'advantage' : 'disadvantage'}
+            {character.system === 'swade'
+              ? mode === null ? 'normal' : mode === 'adv' ? 'wild attack / aim' : 'penalty −2'
+              : mode === null ? 'normal' : mode === 'adv' ? 'advantage' : 'disadvantage'}
           </button>
         ))}
       </div>

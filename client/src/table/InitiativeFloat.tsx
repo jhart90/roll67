@@ -80,15 +80,28 @@ export function InitiativeFloat() {
               <span className="init-round-break">round {state.round + roundOffset}</span>
             )}
             {entry.card ? <CardChip card={entry.card} /> : <span className="init-value">{entry.value}</span>}
-            <span className="init-name">{entry.name}{entry.hidden ? ' 🕶' : ''}</span>
+            <span className="init-name">{entry.name}{entry.hidden ? ' 🕶' : ''}{entry.held ? ' ⏸' : ''}</span>
+            {entry.held && (entry.ownerUserId === you.userId || you.role === 'dm') && (
+              <button className="link" title="Stop holding — act right now" onClick={() => intents.actNow(entry.id)}>▶ act</button>
+            )}
           </li>
         ))}
         {state.entries.length === 0 && <p className="dim" style={{ margin: '4px 8px', fontSize: 12 }}>Nobody in initiative yet.</p>}
       </ol>
       {myTurn && (
-        <button className="init-end-turn" onClick={() => intents.endTurn()}>
-          End {isMine ? 'my' : `${current?.name}’s`} turn
-        </button>
+        <div className="row" style={{ gap: 4 }}>
+          <button className="init-end-turn" onClick={() => intents.endTurn()}>
+            End {isMine ? 'my' : `${current?.name}’s`} turn
+          </button>
+          <button
+            className="init-end-turn"
+            style={{ width: 'auto' }}
+            title="Hold your action — skip for now, jump back in later this round"
+            onClick={() => intents.holdTurn()}
+          >
+            ⏸ Hold
+          </button>
+        </div>
       )}
     </div>
   );

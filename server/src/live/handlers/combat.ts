@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  MAX_WOUNDS, dieSides, gangUpBonus, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant,
+  MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type BennyUsePayload, type BleedRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -15,9 +15,9 @@ import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, takeBennyRoll, takeSoakOffer } from '../hp.js';
-import { syncMapVision } from '../visionService.js';
+import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
-import { resetSwadeTurnMoves } from './tokens.js';
+import { hasRunThisTurn, resetSwadeTurnMoves } from './tokens.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -170,6 +170,12 @@ function resolveBleedingOut(io: Server, campaignId: string, ch: Character): bool
 function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): void {
   let ch = chIn;
   const reread = () => { ch = characters.byId(ch.id) ?? ch; };
+  // Defend's +4 Parry lasts exactly until this moment — their turn is back.
+  if (conditionsOf(ch.sheet).includes('defending')) {
+    persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'defending') });
+    postStatusLine(io, campaignId, `${ch.name} is no longer Defending.`);
+    reread();
+  }
   const recoveryRoll = (attr: 'vigor' | 'spirit') =>
     roll(traitExpr(ch.sheet, dieSides(String(ch.sheet[attr] ?? 'd4'))));
   const post = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
@@ -224,9 +230,147 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
   }
 }
 
+/** SWADE Multi-Action tracking: actions taken this turn, per character. */
+const swadeActionCounts = new Map<string, Map<string, number>>();
+
+/** Count an action for Multi-Action purposes; returns the penalty it takes. */
+function multiActionPenalty(campaignId: string, characterId: string): number {
+  if (!initiative.get(campaignId).active) return 0;
+  const per = swadeActionCounts.get(campaignId) ?? new Map<string, number>();
+  swadeActionCounts.set(campaignId, per);
+  const prior = per.get(characterId) ?? 0;
+  per.set(characterId, prior + 1);
+  return Math.min(2, prior) * -2;
+}
+
+function bestSkillOf(sheet: SheetData, names: string[]): { name: string; sides: number } {
+  let best = { name: names[0], sides: skillDie(sheet, names[0]) };
+  for (const n of names) {
+    const s = skillDie(sheet, n);
+    if (s > best.sides) best = { name: n, sides: s };
+  }
+  return best;
+}
+
+/**
+ * SWADE combat maneuvers — Touch Attack, Support, and the opposed trio
+ * (Push, Grapple, Test). Opposed rolls pace like everything else: attacker's
+ * card, then the defender's resistance once those dice settle, then effects.
+ */
+function resolveSwadeManeuver(
+  io: Server, d: { campaignId: string; userId: string; username: string }, socket: Socket,
+  kind: 'push' | 'grapple' | 'test' | 'support' | 'touch',
+  actor: Character, targetChar: Character | undefined, src: Token, tgt: Token, map: MapDef,
+): void {
+  const campaignId = d.campaignId;
+  if (!targetChar) { emitError(socket, 'That maneuver needs a character target.'); return; }
+  const postRoll = (ch: Character, text: string, br: ReturnType<typeof roll>, ok: boolean | null) => {
+    const msg = chat.add(campaignId, {
+      userId: d.userId, fromName: d.username, fromCharacter: ch.name,
+      characterId: ch.id, statsUserId: ch.ownerUserId, kind: 'roll', text,
+      roll: ok === null ? br : { ...br, outcome: ok ? 'success' as const : 'failure' as const },
+      recipients: null,
+    });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  };
+  const mapMod = multiActionPenalty(campaignId, actor.id);
+
+  if (kind === 'touch') {
+    const br = roll(traitExpr(actor.sheet, skillDie(actor.sheet, 'Fighting'), 2 + mapMod));
+    const parry = Number(systemFor('swade').derive(targetChar.sheet).ac) || 2;
+    const hit = br.total >= parry;
+    postRoll(actor, `${actor.name} makes a touch attack on ${targetChar.name} — Fighting +2 vs Parry ${parry}: ${hit ? 'TOUCHED' : 'MISS'}`, br, hit);
+    return;
+  }
+  if (kind === 'support') {
+    const sk = bestSkillOf(actor.sheet, ['Athletics', 'Common Knowledge', 'Notice', 'Persuasion', 'Stealth']);
+    const br = roll(traitExpr(actor.sheet, sk.sides, mapMod));
+    const gain = br.total >= 8 ? 2 : br.total >= 4 ? 1 : 0;
+    if (gain > 0) {
+      persistSheet(io, campaignId, targetChar, { supportBonus: Math.min(4, num(targetChar.sheet, 'supportBonus', 0) + gain) });
+    }
+    postRoll(actor, `${actor.name} supports ${targetChar.name} (${sk.name}): ${gain > 0 ? `+${gain} on their next roll` : 'no help this time'}`, br, gain > 0);
+    return;
+  }
+
+  // The opposed trio: attacker must score a success (4+) AND beat the
+  // defender's total; beating it by 4+ is a raise.
+  const spec = kind === 'push'
+    ? { aLabel: 'Strength', aSides: dieSides(String(actor.sheet.strength ?? 'd4')), dLabel: 'Strength', dSides: dieSides(String(targetChar.sheet.strength ?? 'd4')) }
+    : kind === 'grapple'
+      ? { aLabel: 'Athletics', aSides: skillDie(actor.sheet, 'Athletics'), dLabel: 'Athletics', dSides: skillDie(targetChar.sheet, 'Athletics') }
+      : (() => {
+        const sk = bestSkillOf(actor.sheet, ['Taunt', 'Intimidation', 'Athletics']);
+        const attr = SKILL_ATTR_SWADE[sk.name] ?? 'smarts';
+        return { aLabel: sk.name, aSides: sk.sides, dLabel: attr[0].toUpperCase() + attr.slice(1), dSides: dieSides(String(targetChar.sheet[attr] ?? 'd4')) };
+      })();
+  const verb = kind === 'push' ? 'push' : kind === 'grapple' ? 'grapple' : 'rattle';
+  const aBr = roll(traitExpr(actor.sheet, spec.aSides, mapMod));
+  postRoll(actor, `${actor.name} tries to ${verb} ${targetChar.name} — ${spec.aLabel}`, aBr, null);
+
+  setTimeout(() => {
+    const freshTarget = characters.byId(targetChar.id);
+    if (!freshTarget) return;
+    const dBr = roll(traitExpr(freshTarget.sheet, spec.dSides));
+    const success = aBr.total >= 4 && aBr.total > dBr.total;
+    const raiseWin = success && aBr.total - dBr.total >= 4;
+    postRoll(freshTarget, `${freshTarget.name} resists — ${spec.dLabel} ${dBr.total} vs ${aBr.total}`, dBr, !success);
+
+    setTimeout(() => {
+      const fresh = characters.byId(targetChar.id);
+      if (!fresh) return;
+      if (!success) {
+        postStatusLine(io, campaignId, `${fresh.name} holds firm against ${actor.name}'s ${verb}.`);
+        return;
+      }
+      if (kind === 'test') {
+        applyConditionTo(io, campaignId, fresh, 'distracted', `${actor.name}'s Test`);
+        if (raiseWin) applyConditionTo(io, campaignId, characters.byId(fresh.id) ?? fresh, 'shaken', `${actor.name}'s Test`);
+        postStatusLine(io, campaignId, `${actor.name}'s Test rattles ${fresh.name}${raiseWin ? ' badly — Distracted and Shaken!' : ' — Distracted!'}`);
+      } else if (kind === 'grapple') {
+        applyConditionTo(io, campaignId, fresh, raiseWin ? 'bound' : 'entangled', `${actor.name}'s Grapple`);
+        // The grappler is wide open while holding on.
+        applyConditionTo(io, campaignId, characters.byId(actor.id) ?? actor, 'vulnerable', 'grappling');
+        postStatusLine(io, campaignId, `${actor.name} grapples ${fresh.name} — ${raiseWin ? 'Bound' : 'Entangled'}!`);
+      } else {
+        // Push: knocked back 1 hex (2 and Prone on a raise), held up by walls.
+        const live = tokens.byId(tgt.id);
+        if (!live) return;
+        let cur = { q: live.q, r: live.r };
+        const steps = raiseWin ? 2 : 1;
+        const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+        for (let s = 0; s < steps; s++) {
+          let bestHex = cur;
+          let bestDist = hexDistance({ q: src.q, r: src.r }, cur);
+          for (const [dq, dr] of DIRS) {
+            const cand = { q: cur.q + dq, r: cur.r + dr };
+            if (!inBounds(cand, map.grid)) continue;
+            const dd = hexDistance({ q: src.q, r: src.r }, cand);
+            if (dd > bestDist) { bestDist = dd; bestHex = cand; }
+          }
+          const stop = reachableAlong(cur, bestHex, { grid: map.grid, walls: map.walls, doors: map.doors });
+          if (stop.q === cur.q && stop.r === cur.r) break;
+          cur = stop;
+        }
+        if (cur.q !== live.q || cur.r !== live.r) {
+          tokens.move(live.id, cur.q, cur.r);
+          const moved = tokens.byId(live.id)!;
+          for (const s of socketsSeeingToken(io, campaignId, moved)) {
+            s.emit(S2C.TOKEN_MOVED, { tokenId: live.id, q: cur.q, r: cur.r });
+          }
+          syncMapVision(io, campaignId, live.mapId, { hexes: [{ q: live.q, r: live.r }, cur] });
+        }
+        if (raiseWin) applyConditionTo(io, campaignId, fresh, 'prone', `${actor.name}'s Push`);
+        postStatusLine(io, campaignId, `${actor.name} shoves ${fresh.name} back${raiseWin ? ' hard — knocked Prone!' : '.'}`);
+      }
+    }, diceSettleDelayMs(dBr.dice));
+  }, diceSettleDelayMs(aBr.dice));
+}
+
 /** SWADE bookkeeping at every turn handover, for both advance paths. */
 function processTurnTransition(io: Server, campaignId: string, state: InitiativeState, prevIdx: number): void {
   resetSwadeTurnMoves(campaignId);
+  swadeActionCounts.delete(campaignId);
   const prev = combatantChar(state, prevIdx);
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
@@ -505,17 +649,36 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const rangeHexes = action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(action.rangeFt / feetPerHex));
     const dist = hexDistance({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
     const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0);
-    if (dist > effectiveRange) {
-      emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${action.rangeFt} ft).`);
+    // SWADE range bands: the listed range is Short; Medium (−2) reaches 2×
+    // and Long (−4) reaches 4×. Other systems keep the hard single limit.
+    const swadeBands = actor.system === 'swade' && action.ranged && rangeHexes > 1;
+    const maxRange = swadeBands ? rangeHexes * 4 + (tgt.size >= 3 ? 1 : 0) : effectiveRange;
+    if (dist > maxRange) {
+      emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${swadeBands ? action.rangeFt * 4 : action.rangeFt} ft).`);
       return;
     }
+    const rangeBandMod = !swadeBands || dist <= rangeHexes ? 0 : dist <= rangeHexes * 2 ? -2 : -4;
     // Line of sight: a wall or closed door blocks targeting entirely, the
     // same raycast FOV already uses — never trust the client's own guess.
     const srcPx = hexToPixel({ q: src.q, r: src.r }, map.grid);
+    const tgtPx = hexToPixel({ q: tgt.q, r: tgt.r }, map.grid);
     const sightSegs = sightSegments(map.walls, map.doors, srcPx);
-    if (rayBlocked(srcPx, hexToPixel({ q: tgt.q, r: tgt.r }, map.grid), sightSegs)) {
+    if (rayBlocked(srcPx, tgtPx, sightSegs)) {
       emitError(socket, `${tgt.name} is out of sight (blocked by a wall or door).`);
       return;
+    }
+    // SWADE cover grades: the center is clear (checked above), so sample four
+    // points around the target hex — each blocked edge deepens the penalty
+    // (Light −2, Medium −4, Heavy −6).
+    let coverPenalty = 0;
+    if (actor.system === 'swade') {
+      const nb = hexToPixel({ q: tgt.q + 1, r: tgt.r }, map.grid);
+      const rad = 0.4 * Math.hypot(nb.x - tgtPx.x, nb.y - tgtPx.y);
+      const blocked = [
+        { x: tgtPx.x + rad, y: tgtPx.y }, { x: tgtPx.x - rad, y: tgtPx.y },
+        { x: tgtPx.x, y: tgtPx.y + rad }, { x: tgtPx.x, y: tgtPx.y - rad },
+      ].filter((pt) => rayBlocked(srcPx, pt, sightSegs)).length;
+      coverPenalty = blocked === 0 ? 0 : blocked === 1 ? -2 : blocked === 2 ? -4 : -6;
     }
 
     const targetChar = tgt.characterId ? characters.byId(tgt.characterId) : undefined;
@@ -537,6 +700,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return;
     }
     const targetConditions = targetChar ? conditionsOf(targetChar.sheet) : [];
+    // SWADE bonuses that carry into the damage roll (Wild Attack, Joker, The
+    // Drop) accumulate here; wildAttack also marks the attacker Vulnerable.
+    let dmgBonus = 0;
+    let wildAttack = false;
+
+    // SWADE combat maneuvers replace the whole attack/damage pipeline.
+    if (action.maneuver && actor.system === 'swade') {
+      resolveSwadeManeuver(io, d, socket, action.maneuver, actor, targetChar, src, tgt, map);
+      return;
+    }
 
     // Casting a spell spends a slot (leveled) and sets concentration on the
     // caster before resolving the effect.
@@ -627,8 +800,34 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // SWADE folds situation into flat modifiers, not adv/dis dice. The
         // attacker's own Distracted −2 is already baked into the trait
         // expression, so only positional and target-side effects apply here.
-        let mod = p.adv === 'adv' ? 2 : p.adv === 'dis' ? -2 : 0;
-        const tags: string[] = mod ? [mod > 0 ? '+2' : '−2'] : [];
+        let mod = 0;
+        const tags: string[] = [];
+        // The adv slot is repurposed: melee 'adv' is a Wild Attack (+2 to
+        // hit AND damage, but you're Vulnerable), ranged 'adv' is Aim (+2).
+        if (p.adv === 'adv' && !action.ranged) {
+          mod += 2; dmgBonus += 2; wildAttack = true; tags.push('+2 Wild Attack');
+        } else if (p.adv === 'adv') { mod += 2; tags.push('+2 Aim'); }
+        else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
+        if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${dist <= rangeHexes * 2 ? 'Medium' : 'Long'} range`); }
+        if (coverPenalty) { mod += coverPenalty; tags.push(`${coverPenalty} Cover`); }
+        // Bigger targets are easier to hit (Large +2, Huge +4).
+        if (tgt.size === 2) { mod += 2; tags.push('+2 Size'); }
+        else if (tgt.size >= 3) { mod += 4; tags.push('+4 Size'); }
+        // Joker: the real +2 to trait rolls and damage, not just card text.
+        const initState = initiative.get(d.campaignId);
+        const myEntry = initState.active ? initState.entries.find((e) => (e.tokenId ? tokens.byId(e.tokenId)?.characterId : undefined) === actor.id) : undefined;
+        if (myEntry?.card?.rank === 15) { mod += 2; dmgBonus += 2; tags.push('+2 Joker'); }
+        // Multi-Action: −2 per extra action this turn (−4 max).
+        const map2 = multiActionPenalty(d.campaignId, actor.id);
+        if (map2) { mod += map2; tags.push(`${map2} Multi-Action`); }
+        // Running die spent this turn: −2 to everything else.
+        if (hasRunThisTurn(d.campaignId, src.id)) { mod -= 2; tags.push('−2 Ran'); }
+        // A Support roll banked for this character: spend it now.
+        const support = num(actor.sheet, 'supportBonus', 0);
+        if (support > 0) {
+          mod += support; tags.push(`+${support} Support`);
+          actor = persistSheet(io, d.campaignId, actor, { supportBonus: 0 });
+        }
         if (!action.ranged && attackerConditions.includes('prone')) { mod -= 2; tags.push('−2 Prone'); }
         // Gang Up: melee only. Sides split PC (player-owned) vs NPC; a
         // bystander too hurt to threaten anyone doesn't count for either.
@@ -649,7 +848,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           const gang = gangUpBonus({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r }, others);
           if (gang > 0) { mod += gang; tags.push(`+${gang} Gang Up`); }
         }
-        if (targetConditions.includes('stunned')) { mod += 4; tags.push('+4 The Drop'); }
+        if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
         else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
         if (action.ranged && targetConditions.includes('prone')) { mod -= 2; tags.push('−2 vs Prone'); }
         if (mod) expr = mod > 0 ? `${expr}+${mod}` : `${expr}${mod}`;
@@ -661,6 +860,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       attackBreakdown = roll(expr);
       if (actor.system === 'swade') {
         recordBennyRoll(io, d.campaignId, actor, 'trait', expr, attackBreakdown.total, `their ${action.label} roll`);
+      }
+      // A Wild Attack leaves you open whether it lands or not.
+      if (wildAttack) {
+        applyConditionTo(io, d.campaignId, characters.byId(actor.id) ?? actor, 'vulnerable', 'Wild Attack');
+        actor = characters.byId(actor.id) ?? actor;
       }
       const d20s = attackBreakdown.dice.filter((x) => x.sides === 20 && x.kept);
       // Champion Improved Critical lowers the crit threshold (19, or 18 at 15).
@@ -774,8 +978,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // dice can be tagged — otherwise it just shows up as a mystery third die
       // in the breakdown with nothing marking it as earned.
       const rollDamage = (): RollBreakdown => {
-        if (crit) return roll(critDamageExpr(action.amountExpr));
-        const base = roll(action.amountExpr);
+        const baseExpr = dmgBonus > 0 ? `${action.amountExpr}+${dmgBonus}` : action.amountExpr;
+        if (crit) return roll(critDamageExpr(baseExpr));
+        const base = roll(baseExpr);
         if (!raise) return base;
         return withRaiseDie(base, roll('1d6!'));
       };
@@ -1647,6 +1852,63 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
   }, 'BENNY_USE'));
 
+  // Hold: skip your turn now, keeping the right to jump back in later.
+  socket.on(C2S.INIT_HOLD, safe(socket, () => {
+    const d = requireCampaign(socket);
+    const state = initiative.get(d.campaignId);
+    if (!state.active || state.entries.length === 0) return;
+    const current = state.entries[state.turnIdx];
+    if (!current) return;
+    if (d.role !== 'dm') {
+      const tok = current.tokenId ? tokens.byId(current.tokenId) : undefined;
+      const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+      if (!ch || ch.ownerUserId !== d.userId) { emitError(socket, "It isn't your turn."); return; }
+    }
+    current.held = true;
+    const prevIdx = state.turnIdx;
+    state.turnIdx = (state.turnIdx + 1) % state.entries.length;
+    if (state.turnIdx === 0 && prevIdx === state.entries.length - 1) state.round++;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    processTurnTransition(io, d.campaignId, state, prevIdx);
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `⏸ ${current.name} holds their action.`, roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'INIT_HOLD'));
+
+  // A held combatant interrupts: they become the current turn right now.
+  socket.on(C2S.INIT_ACT_NOW, safe(socket, ({ entryId }: { entryId: string }) => {
+    const d = requireCampaign(socket);
+    const state = initiative.get(d.campaignId);
+    if (!state.active) return;
+    const idx = state.entries.findIndex((e) => e.id === entryId && e.held);
+    if (idx < 0) return;
+    const entry = state.entries[idx];
+    if (d.role !== 'dm') {
+      const tok = entry.tokenId ? tokens.byId(entry.tokenId) : undefined;
+      const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+      if (!ch || ch.ownerUserId !== d.userId) { emitError(socket, 'You can only act for your own character.'); return; }
+    }
+    entry.held = false;
+    state.entries.splice(idx, 1);
+    const insertAt = idx < state.turnIdx ? state.turnIdx - 1 : state.turnIdx;
+    state.entries.splice(insertAt, 0, entry);
+    state.turnIdx = insertAt;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `▶ ${entry.name} stops holding and acts now!`, roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    // Their turn begins: run the usual start-of-turn recovery checks.
+    const tok = entry.tokenId ? tokens.byId(entry.tokenId) : undefined;
+    const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+    if (ch?.system === 'swade') startOfTurnRecovery(io, d.campaignId, ch);
+  }, 'INIT_ACT_NOW'));
+
   socket.on(C2S.INIT_PREV, safe(socket, () => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
@@ -1677,6 +1939,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
     resetSwadeTurnMoves(d.campaignId);
+    swadeActionCounts.delete(d.campaignId);
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_CLEAR'));
 

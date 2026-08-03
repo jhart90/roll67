@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_WOUNDS, soakSuccesses, swadeDamageOutcome, swadeHealOutcome } from '../src/systems/swadeDamage.js';
+import { MAX_WOUNDS, soakSuccesses, swadeDamageOutcome, swadeHealOutcome, rollInjuryTable } from '../src/systems/swadeDamage.js';
 
 const wc = { alreadyShaken: false, wildCard: true, currentWounds: 0 };
 
@@ -58,5 +58,22 @@ describe('swadeHealOutcome', () => {
     expect(swadeHealOutcome(20, 2).woundsHealed).toBe(2); // capped at current
     expect(swadeHealOutcome(0, 2).woundsHealed).toBe(0);
     expect(swadeHealOutcome(6, 0).woundsHealed).toBe(0);
+  });
+});
+
+describe('Injury Table', () => {
+  const seq = (...vals: number[]) => { let i = 0; return () => vals[i++] ?? 6; };
+
+  it('maps locations from the first d6', () => {
+    expect(rollInjuryTable(seq(1)).location).toBe('Unmentionables');
+    expect(rollInjuryTable(seq(2)).location).toBe('Arm');
+    expect(rollInjuryTable(seq(4)).location).toBe('Leg');
+  });
+
+  it('guts and head roll a sub-effect', () => {
+    expect(rollInjuryTable(seq(3, 1)).location).toBe('Guts (broken)');
+    expect(rollInjuryTable(seq(3, 5)).location).toBe('Guts (busted)');
+    expect(rollInjuryTable(seq(5, 6)).location).toBe('Head (brain damage)');
+    expect(rollInjuryTable(seq(6, 1)).location).toBe('Head (scarred)');
   });
 });

@@ -111,6 +111,9 @@ export interface CombatAction {
   /** SWADE: the to-hit roll beats this fixed target number (4) instead of
    *  the target's AC/Parry; beating it by 4+ is a raise (+1d6! damage). */
   fixedTn?: number;
+  /** SWADE combat maneuver: resolved as an opposed roll / special attack
+   *  instead of the normal to-hit + damage pipeline. */
+  maneuver?: 'push' | 'grapple' | 'test' | 'support' | 'touch';
   /** Area this action affects, if it hits a zone rather than one target. */
   aoe?: AoeSpec;
   /** A save DC baked into the stat block (monster breath weapons) rather

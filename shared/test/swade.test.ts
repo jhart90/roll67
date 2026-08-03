@@ -457,3 +457,11 @@ describe('Gang Up', () => {
     expect(gangUpBonus(A, D, [ally({ q: 2, r: 0 }), foe({ q: -1, r: 0 }, false)])).toBe(1);
   });
 });
+
+describe('Defend', () => {
+  it('grants +4 Parry while the defending condition is held', () => {
+    const base = { skills: [{ name: 'Fighting', die: 'd8' }] };
+    expect(swadeParry(base)).toBe(6);
+    expect(swadeParry({ ...base, conditions: ['defending'] })).toBe(10);
+  });
+});

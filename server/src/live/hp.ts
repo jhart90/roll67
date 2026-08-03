@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, conditionsOf, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, str, swadeDamageOutcome, swadeHealOutcome, systemFor, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, conditionsOf, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { syncMapVision } from './visionService.js';
@@ -332,11 +332,17 @@ function applySwadeDamage(
   if (out.incapacitated) {
     applyConditionTo(io, campaignId, cur, 'incapacitated', sourceLabel ?? 'damage');
     cur = characters.byId(cur.id) ?? cur;
-    // A Wild Card cut down past their last wound is dying — Bleeding Out
-    // until stabilized (Vigor each turn) or healed.
+    // A Wild Card cut down past their last wound makes the Incapacitation
+    // Vigor roll (with an Injury Table result) — delayed a few seconds so a
+    // Soak that stands them back up cancels it.
     if (wildCard) {
-      applyConditionTo(io, campaignId, cur, 'bleeding', sourceLabel ?? 'damage');
-      cur = characters.byId(cur.id) ?? cur;
+      const chId = cur.id;
+      setTimeout(() => {
+        const fresh = characters.byId(chId);
+        if (fresh && conditionsOf(fresh.sheet).includes('incapacitated')) {
+          resolveIncapacitation(io, campaignId, fresh);
+        }
+      }, 4000);
     }
     // An Extra that drops is out of the fight: empty its bar so the token
     // reads as down. A Wild Card keeps its pool — Soak may yet stand it up.
@@ -393,6 +399,35 @@ export function recordBennyRoll(
 /** The reroll a Benny buys, if the original is still fresh. */
 export function takeBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRollRec | null {
   return freshBennyRoll(characterId, kind);
+}
+
+/**
+ * The Incapacitation roll: a downed Wild Card makes an immediate Vigor roll
+ * and takes an Injury Table result — permanent on a failure (and they start
+ * Bleeding Out), until healed on a success, 24 hours on a raise.
+ */
+function resolveIncapacitation(io: Server, campaignId: string, ch: Character): void {
+  const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')));
+  const br = roll(expr);
+  const ok = br.total >= 4;
+  const raise = br.total >= 8;
+  const injury = rollInjuryTable(() => roll('1d6').total);
+  const duration = raise ? 'for 24 hours' : ok ? 'until all Wounds heal' : 'permanently';
+  const prev = str(ch.sheet, 'injuries', '');
+  let cur = persistSheet(io, campaignId, ch, {
+    injuries: (prev ? `${prev}; ` : '') + `${injury.location} ${duration}`,
+  });
+  if (!ok) {
+    applyConditionTo(io, campaignId, cur, 'bleeding', 'Incapacitation');
+    cur = characters.byId(cur.id) ?? cur;
+  }
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', fromCharacter: cur.name, characterId: cur.id, kind: 'roll',
+    text: `${cur.name} Incapacitated — Vigor roll ${raise ? '(raise)' : ok ? '(success)' : 'FAILED'}. `
+      + `Injury: ${injury.location} — ${injury.effect} (${duration})${ok ? '' : ' — Bleeding Out!'}`,
+    roll: { ...br, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
 /** Consume a soak offer if it is still fresh. */

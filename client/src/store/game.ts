@@ -1353,6 +1353,9 @@ export const intents = {
 
   /** End the current combatant's turn (your own character, or any if DM). */
   endTurn: () => socket.emit(C2S.INIT_END_TURN, {}),
+  /** SWADE: hold your action / jump back in with a held one. */
+  holdTurn: () => socket.emit(C2S.INIT_HOLD, {}),
+  actNow: (entryId: string) => socket.emit(C2S.INIT_ACT_NOW, { entryId }),
   soakRoll: (characterId: string, spend: boolean) => {
     socket.emit(C2S.SOAK_ROLL, { characterId, spend });
     useGameStore.setState({ soakOffer: null });

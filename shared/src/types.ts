@@ -383,6 +383,8 @@ export interface InitiativeEntry {
   hidden: boolean;
   /** SWADE card mode: the action card this combatant drew. */
   card?: PlayingCard;
+  /** SWADE: holding their action to act later in the round. */
+  held?: boolean;
   /** Who controls this combatant, resolved server-side from the token's
    *  character. Players cannot look this up themselves - they only receive
    *  their own sheets - so it rides along on the entry. Null for NPCs. */

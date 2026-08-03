@@ -18,6 +18,11 @@ const swadeTurnMoves = new Map<string, Map<string, TurnMoveRec>>();
 export function resetSwadeTurnMoves(campaignId: string): void {
   swadeTurnMoves.delete(campaignId);
 }
+
+/** Did this token spend its running die this turn? (−2 to other actions.) */
+export function hasRunThisTurn(campaignId: string, tokenId: string): boolean {
+  return swadeTurnMoves.get(campaignId)?.get(tokenId)?.runBonus != null;
+}
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';

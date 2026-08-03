@@ -113,6 +113,10 @@ export const C2S = {
   INIT_ROLL_MINE: 'initRollMine',
   /** A player ends their own character's turn. */
   INIT_END_TURN: 'initEndTurn',
+  /** SWADE: hold your action — skip now, act later in the round. */
+  INIT_HOLD: 'initHold',
+  /** SWADE: a held combatant jumps back in and acts now. */
+  INIT_ACT_NOW: 'initActNow',
   /** SWADE: spend a Benny to Soak wounds just taken (or decline). */
   SOAK_ROLL: 'soakRoll',
   /** SWADE: spend a Benny from the Benny menu (reroll, recover, redraw…). */

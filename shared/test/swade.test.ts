@@ -522,3 +522,16 @@ describe('Reload + Suppressive Fire', () => {
     expect(combatActions(pistolChar).some((a) => a.id.startsWith('suppress'))).toBe(false);
   });
 });
+
+describe('Improvised weapons', () => {
+  it('compendium improvised weapons land with the −2 baked into the attack roll', () => {
+    const entry = contentForSystem('swade').find((e) => e.name === 'Improvised Weapon (Medium)')!;
+    const sheet = { ...swade.defaultSheet(), strength: 'd8', skills: [{ name: 'Fighting', die: 'd8' }] };
+    const row = applyEntry(entry, sheet)!.row as Record<string, unknown>;
+    const withIt = { ...sheet, attacks: [row] };
+    const atk = swade.rollables(withIt).find((r) => r.id === 'attack_0')!;
+    expect(atk.expr).toBe('best(1d8!, 1d6!)-2');
+    expect(atk.label).toContain('improvised −2');
+    expect(row.damage).toBe('1d8!+1d6!'); // Str d8 + medium d6
+  });
+});

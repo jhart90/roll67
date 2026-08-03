@@ -528,10 +528,12 @@ export const swade: SystemSchema = {
     rows(sheet, 'attacks').forEach((atk, i) => {
       const name = str(atk, 'name', `Attack ${i + 1}`);
       const skill = str(atk, 'skill', 'Fighting');
+      // Improvised weapons (a chair, a bottle) fight at −2.
+      const improvised = /improvised/i.test(str(atk, 'notes', '')) ? -2 : 0;
       out.push({
         id: `attack_${i}`,
-        label: `${name} (${skill})`,
-        expr: traitExpr(sheet, skillDie(sheet, skill)),
+        label: `${name} (${skill}${improvised ? ', improvised −2' : ''})`,
+        expr: traitExpr(sheet, skillDie(sheet, skill), improvised),
         group: 'Attacks',
         d20: false,
       });

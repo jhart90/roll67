@@ -409,6 +409,24 @@ export function takeBennyRoll(characterId: string, kind: 'trait' | 'damage'): Be
 function resolveIncapacitation(io: Server, campaignId: string, ch: Character): void {
   const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')));
   const br = roll(expr);
+  // Critical Failure — every arm's first die shows a 1 — means the character
+  // dies outright, no injury roll, no Bleeding Out to cling to.
+  const firstByArm = new Map<number, number>();
+  for (const die of br.dice) {
+    const arm = die.arm ?? 0;
+    if (!firstByArm.has(arm)) firstByArm.set(arm, die.value);
+  }
+  if (firstByArm.size >= 2 && [...firstByArm.values()].every((v) => v === 1)) {
+    persistSheet(io, campaignId, ch, { hp: 0 });
+    const msg = chat.add(campaignId, {
+      userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
+      text: `${ch.name} Incapacitated — Vigor roll: CRITICAL FAILURE.`,
+      roll: { ...br, outcome: 'failure' as const }, recipients: null,
+    });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+    postStatusLine(io, campaignId, `💀 ${ch.name} has died.`);
+    return;
+  }
   const ok = br.total >= 4;
   const raise = br.total >= 8;
   const injury = rollInjuryTable(() => roll('1d6').total);

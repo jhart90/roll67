@@ -428,6 +428,8 @@ interface GroupSaveSpec {
   aoeVisual?: { mapId: string; shape: AoeShape; sizeFt: number; sizeHexes?: number; widthFt?: number; originHex: Hex; aimHex: Hex };
   /** Condition inflicted on each character target that FAILS its save. */
   appliesCondition?: string;
+  /** SWADE Evasion: the save is an Agility dive at −2. */
+  evasion?: boolean;
   /** When the source spell is concentration: the caster to record the
    *  inflicted conditions on, so ending concentration lifts them. */
   concentrationCasterId?: string;
@@ -450,6 +452,8 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     touchedMap = tok.mapId;
     const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
     const sc = ch ? systemFor(ch.system).saveCheck(ch.sheet, spec.saveId, spec.dc) : { expr: '1d20', threshold: spec.dc, label: spec.saveId };
+    // Evasion is a desperate dive: the Agility roll takes −2.
+    if (spec.evasion && ch) sc.expr = `${sc.expr}-2`;
     targets.push({ tok, ch, sc });
   }
   if (targets.length === 0) return false;
@@ -822,6 +826,30 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         } else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
         if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${dist <= rangeHexes * 2 ? 'Medium' : dist <= rangeHexes * 4 ? 'Long' : 'Extreme'} range`); }
         if (coverPenalty) { mod += coverPenalty; tags.push(`${coverPenalty} Cover (armor +${-coverPenalty})`); }
+        // Illumination: Dim −2, Dark −4 — unless the target stands in light
+        // (a map light's or a carried torch's bright radius washes it out;
+        // a dim radius still leaves −2).
+        if (map.grid.lighting !== 'light') {
+          const nb2 = hexToPixel({ q: tgt.q + 1, r: tgt.r }, map.grid);
+          const hexStep = Math.hypot(nb2.x - tgtPx.x, nb2.y - tgtPx.y);
+          let lit: 'bright' | 'dim' | 'none' = 'none';
+          for (const L of map.lights) {
+            const dHex = Math.hypot(L.x - tgtPx.x, L.y - tgtPx.y) / hexStep;
+            if (dHex <= L.brightRadius) { lit = 'bright'; break; }
+            if (dHex <= L.dimRadius) lit = 'dim';
+          }
+          if (lit !== 'bright') {
+            for (const t of tokens.forMap(src.mapId)) {
+              if (!t.light) continue;
+              const px = hexToPixel({ q: t.q, r: t.r }, map.grid);
+              const dHex = Math.hypot(px.x - tgtPx.x, px.y - tgtPx.y) / hexStep;
+              if (dHex <= t.light.bright) { lit = 'bright'; break; }
+              if (dHex <= t.light.dim) lit = 'dim';
+            }
+          }
+          const illum = lit === 'bright' ? 0 : lit === 'dim' || map.grid.lighting === 'dim' ? -2 : -4;
+          if (illum) { mod += illum; tags.push(`${illum} ${illum === -2 ? 'Dim light' : 'Darkness'}`); }
+        }
         // Aim: negate up to 4 points of range/cover penalties, else +2 flat.
         if (p.adv === 'adv' && action.ranged) {
           const offset = Math.min(4, -(rangeBandMod + coverPenalty));
@@ -1414,6 +1442,31 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const castLabel = castLevel && action.slotLevel && castLevel > action.slotLevel
       ? `${action.label} (cast at level ${castLevel})` : action.label;
 
+    // SWADE thrown/fired templates can go wide: Athletics (thrown) or
+    // Shooting vs 4 — on a failure the template deviates 1d6″ (thrown) or
+    // 2d6″ (fired) in a random direction before it lands.
+    if (actor.system === 'swade' && action.source === 'attack' && !action.suppressive && usableAmount(action.amountExpr)) {
+      const row = rows(actor.sheet, 'attacks')[action.index];
+      const thrown = /thrown/i.test(str(row ?? {}, 'notes', ''));
+      const skillName = thrown ? 'Athletics' : 'Shooting';
+      const br = roll(traitExpr(actor.sheet, skillDie(actor.sheet, skillName)));
+      const onTarget = br.total >= 4;
+      let text = `${actor.name} lets ${action.label} fly — ${skillName} roll: on target`;
+      if (!onTarget) {
+        const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+        const devDist = roll(thrown ? '1d6' : '2d6').total;
+        const dir = DIRS[roll('1d6').total - 1];
+        const moved = { q: p.aimHex.q + dir[0] * devDist, r: p.aimHex.r + dir[1] * devDist };
+        if (inBounds(moved, map.grid)) p.aimHex = moved;
+        text = `${actor.name} lets ${action.label} fly — ${skillName} roll fails: the ${thrown ? 'throw' : 'shot'} goes wide, deviating ${devDist}″!`;
+      }
+      const devMsg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
+        text, roll: { ...br, outcome: onTarget ? 'success' as const : 'failure' as const }, recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: devMsg });
+    }
+
     const geometricHitIds = tokensInAoe(action.aoe, originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
     const hitIds = geometricHitIds.filter((tid) => {
       const t = tokens.byId(tid);
@@ -1421,14 +1474,19 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     if (hitIds.length === 0) { emitError(socket, `${action.label} caught no one in its area.`); return; }
 
-    if (action.saveId) {
+    // SWADE Evasion: a telegraphed template attack (grenade blast, cone of
+    // flame) can be dived away from — Agility at −2, success takes nothing.
+    const evadeable = actor.system === 'swade' && action.source === 'attack'
+      && !action.suppressive && !action.saveId && usableAmount(action.amountExpr);
+    if (action.saveId || evadeable) {
       // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
       // rather than deriving one from the actor's spellcasting stat.
       const casterDc = action.fixedDc || Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
       runGroupSave(io, {
         campaignId: d.campaignId, userId: d.userId, username: d.username,
-        tokenIds: hitIds, saveId: action.saveId, dc: casterDc,
-        damageExpr: action.amountExpr, onSave: action.onSave ?? 'half',
+        tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
+        ...(evadeable ? { evasion: true } : {}),
+        damageExpr: action.amountExpr, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),
         damageType: action.damageType, label: castLabel,
         ...(action.appliesCondition ? {
           appliesCondition: action.appliesCondition,

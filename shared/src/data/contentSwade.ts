@@ -9,6 +9,10 @@ import { contentSlug, type ContentEntry } from './compendiumTypes.js';
 type W = [string, string, string, string, 'str' | 'ranged' | 'none', string[]];
 const WEAPONS: W[] = [
   ['Unarmed', 'Melee', '', 'bludgeoning', 'str', []],
+  // Grabbed off the floor mid-brawl: −2 to attack rolls, per the quick rules.
+  ['Improvised Weapon (Light)', 'Melee', '1d4!', 'bludgeoning', 'str', ['improvised — −2 to attacks', 'a bottle, a mug, a loose brick']],
+  ['Improvised Weapon (Medium)', 'Melee', '1d6!', 'bludgeoning', 'str', ['improvised — −2 to attacks', 'a chair, a shovel, a lamp']],
+  ['Improvised Weapon (Heavy)', 'Melee', '1d8!', 'bludgeoning', 'str', ['improvised — −2 to attacks', 'a bar stool, a small table', 'min Str d8']],
   ['Dagger', 'Melee', '1d4!', 'piercing', 'str', ['can be thrown']],
   ['Club', 'Melee', '1d4!', 'bludgeoning', 'str', []],
   ['Short Sword', 'Melee', '1d6!', 'slashing', 'str', []],

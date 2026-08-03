@@ -4,7 +4,7 @@ import {
   MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type BennyUsePayload, type BleedRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -190,13 +190,11 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
   // raise. A player-owned character gets the prompt and rolls it themself;
   // ownerless NPCs roll automatically.
   if (conditionsOf(ch.sheet).includes('bleeding')) {
-    if (ch.ownerUserId) {
-      io.to(userRoom(ch.ownerUserId)).emit(S2C.BLEED_PROMPT, { characterId: ch.id, name: ch.name });
-      postStatusLine(io, campaignId, `🩸 ${ch.name} is Bleeding Out — waiting on their Vigor roll…`);
-      return;
-    }
-    if (!resolveBleedingOut(io, campaignId, ch)) return;
-    reread();
+    // Owned characters prompt their player; the DM's own tokens prompt the DM.
+    const room = ch.ownerUserId ? userRoom(ch.ownerUserId) : dmRoom(campaignId);
+    io.to(room).emit(S2C.BLEED_PROMPT, { characterId: ch.id, name: ch.name });
+    postStatusLine(io, campaignId, `🩸 ${ch.name} is Bleeding Out — waiting on their Vigor roll…`);
+    return;
   }
   // Down is down: no Stunned/Shaken recovery while Incapacitated.
   if (conditionsOf(ch.sheet).includes('incapacitated')) return;
@@ -219,15 +217,27 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
     reread();
   }
 
-  // Shaken: Spirit to shake it off.
+  // Shaken: whoever runs this character rolls Spirit themself — the prompt
+  // goes to the owning player, or to the DM's screen for their own tokens.
   if (conditionsOf(ch.sheet).includes('shaken')) {
-    const b = recoveryRoll('spirit');
-    const recovered = b.total >= 4;
-    if (recovered) {
-      persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'shaken') });
-    }
-    post(recovered ? `${ch.name} shakes it off — Spirit roll` : `${ch.name} is still Shaken — Spirit roll`, b, recovered);
+    const room = ch.ownerUserId ? userRoom(ch.ownerUserId) : dmRoom(campaignId);
+    io.to(room).emit(S2C.SHAKEN_PROMPT, { characterId: ch.id, name: ch.name });
   }
+}
+
+/** The Shaken recovery: Spirit vs 4 — success stands them back up. */
+export function resolveShakenRecovery(io: Server, campaignId: string, ch: Character): void {
+  const b = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4'))));
+  const recovered = b.total >= 4;
+  if (recovered) {
+    persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'shaken') });
+  }
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
+    text: recovered ? `${ch.name} shakes it off — Spirit roll` : `${ch.name} is still Shaken — Spirit roll`,
+    roll: { ...b, outcome: recovered ? 'success' as const : 'failure' as const }, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
 /** SWADE Multi-Action tracking: actions taken this turn, per character. */
@@ -1728,6 +1738,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'SOAK_ROLL'));
+
+  // A Shaken combatant answers the prompt: make the Spirit roll now.
+  socket.on(C2S.SHAKEN_ROLL, safe(socket, ({ characterId }: ShakenRollPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) return;
+    if (!conditionsOf(ch.sheet).includes('shaken')) return;
+    resolveShakenRecovery(io, d.campaignId, ch);
+  }, 'SHAKEN_ROLL'));
 
   // A Bleeding Out player answers the prompt: make the Vigor roll now.
   socket.on(C2S.BLEED_ROLL, safe(socket, ({ characterId }: BleedRollPayload) => {

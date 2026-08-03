@@ -3,11 +3,11 @@ import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, inBounds, packHex,
   playerColorFor, reachableAlong, roll, swadePace, systemFor,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type GridConfig, type Hex, type MoveTokenPayload, type TokenShape, type UpdateTokenPayload,
+  type GridConfig, type Hex, type MoveTokenPayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
-import { campaigns, characters, initiative, maps, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
-import { dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
+import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { persistSheet, postStatusLine } from '../hp.js';
 
 /** SWADE combat movement spent this turn, per campaign → token. */
@@ -208,14 +208,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         const stepDist = hexDistance({ q: token.q, r: token.r }, dest);
         if (rec.moved + stepDist > pace + (rec.runBonus ?? 0)) {
           if (rec.runBonus === null) {
-            rec.runBonus = roll('1d6').total;
-            per.set(tokenId, rec);
-            postStatusLine(io, d.campaignId, `🏃 ${character.name} runs — +${rec.runBonus} Pace this turn.`);
-          }
-          if (rec.moved + stepDist > pace + rec.runBonus) {
-            emitError(socket, `Not enough movement: Pace ${pace} +${rec.runBonus} run, already moved ${rec.moved}.`);
+            // Past Pace with no running die spent: ask, never auto-roll —
+            // running costs −2 on everything else this turn.
+            socket.emit(S2C.RUN_PROMPT, { tokenId, name: character.name, pace, moved: rec.moved });
             return;
           }
+          emitError(socket, `Not enough movement: Pace ${pace} +${rec.runBonus} run, already moved ${rec.moved}.`);
+          return;
         }
         rec.moved += stepDist;
         per.set(tokenId, rec);
@@ -244,6 +243,31 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       extraRadius: token.light ? Math.max(token.light.bright, token.light.dim) : 0,
     });
   }, 'MOVE_TOKEN'));
+
+  // The player accepted the run: roll the d6 running die (logged to chat)
+  // and extend this turn's budget. Their next move attempt then goes through.
+  socket.on(C2S.RUN_ROLL, safe(socket, ({ tokenId }: RunRollPayload) => {
+    const d = requireCampaign(socket);
+    const token = tokens.byId(tokenId);
+    if (!token) return;
+    const character = token.characterId ? characters.byId(token.characterId) : undefined;
+    if (!character || character.system !== 'swade') return;
+    if (!canMoveToken(d.role, d.userId, token, character)) return;
+    if (!initiative.get(d.campaignId).active) return;
+    const per = swadeTurnMoves.get(d.campaignId) ?? new Map<string, TurnMoveRec>();
+    swadeTurnMoves.set(d.campaignId, per);
+    const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
+    if (rec.runBonus !== null) return; // already spent the running die
+    const br = roll('1d6');
+    rec.runBonus = br.total;
+    per.set(tokenId, rec);
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, fromCharacter: character.name, characterId: character.id, kind: 'roll',
+      text: `🏃 ${character.name} runs — +${br.total} Pace this turn (−2 to their other actions).`,
+      roll: br, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'RUN_ROLL'));
 
   socket.on(C2S.DRAG_TOKEN, safe(socket, ({ tokenId, x, y, done }: DragTokenPayload) => {
     const d = requireCampaign(socket);

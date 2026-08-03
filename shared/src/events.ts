@@ -123,6 +123,10 @@ export const C2S = {
   BENNY_USE: 'bennyUse',
   /** SWADE: a Bleeding Out player makes their start-of-turn Vigor roll. */
   BLEED_ROLL: 'bleedRoll',
+  /** SWADE: a Shaken combatant makes their start-of-turn Spirit roll. */
+  SHAKEN_ROLL: 'shakenRoll',
+  /** SWADE: roll the running die to move past Pace this turn. */
+  RUN_ROLL: 'runRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
@@ -678,6 +682,10 @@ export const S2C = {
   BENNY_STATE: 'bennyState',
   /** SWADE: your character is Bleeding Out and owes a Vigor roll. */
   BLEED_PROMPT: 'bleedPrompt',
+  /** SWADE: your Shaken character may roll Spirit to recover. */
+  SHAKEN_PROMPT: 'shakenPrompt',
+  /** SWADE: that move needs the running die — confirm or decline. */
+  RUN_PROMPT: 'runPrompt',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
@@ -876,6 +884,10 @@ export type BennyUseId =
 export interface BennyUsePayload { characterId: string; use: BennyUseId }
 export interface BleedRollPayload { characterId: string }
 export interface BleedPromptPayload { characterId: string; name: string }
+export interface ShakenRollPayload { characterId: string }
+export interface ShakenPromptPayload { characterId: string; name: string }
+export interface RunRollPayload { tokenId: string }
+export interface RunPromptPayload { tokenId: string; name: string; pace: number; moved: number }
 export interface IronDicePayload {
   /** SHA-256 of the ACTIVE secret seed — published before its rolls happen. */
   commit: string;

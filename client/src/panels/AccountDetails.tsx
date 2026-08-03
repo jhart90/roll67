@@ -38,13 +38,9 @@ export function AccountDetails({ onClose }: { onClose: () => void }) {
     }
   }
 
+  void onClose; // the WindowFrame's own ✕ closes us — no second header needed
   return (
     <div className="account-details">
-      <div className="dock-header">
-        <h3>Account Details</h3>
-        <span className="spacer" />
-        <button className="link" onClick={onClose}>close</button>
-      </div>
       <div className="account-form">
         <label>
           Current password <span className="dim">(required)</span>

@@ -24,6 +24,8 @@ import { InitiativeRollPrompt } from '../table/InitiativeRollPrompt';
 import { SoakPrompt } from '../table/SoakPrompt';
 import { BennyMenu } from '../table/BennyMenu';
 import { BleedPrompt } from '../table/BleedPrompt';
+import { ShakenPrompt } from '../table/ShakenPrompt';
+import { RunPrompt } from '../table/RunPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -418,6 +420,8 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <InitiativeRollPrompt />
         <SoakPrompt />
         <BleedPrompt />
+        <ShakenPrompt />
+        <RunPrompt />
         <BennyMenu />
         <PresenceBar />
         <AudioPlayer />

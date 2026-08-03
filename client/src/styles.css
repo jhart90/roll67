@@ -2028,8 +2028,13 @@ th > .term { border-bottom-style: dotted; }
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
 
+/* Windowed panels need their own opaque surface — the frame only draws a bar. */
+.account-details { background: var(--panel); padding: 12px; min-width: 300px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
+.rollstats-window, .irondice-window { background: var(--panel); padding: 10px 12px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
+
 /* Public-facing sheet: nameplate header + bio + roll stats, nothing private. */
-.public-sheet { min-width: 340px; max-width: 480px; }
+.public-sheet { min-width: 340px; max-width: 480px; background: var(--panel); border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
+.public-sheet .rollstats-window { border: none; border-radius: 0; }
 .public-sheet-head {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
   border-radius: 8px 8px 0 0;

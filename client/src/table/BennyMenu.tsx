@@ -36,45 +36,51 @@ export function BennyMenu() {
     {
       id: 'reroll-trait', label: 'Reroll a trait test',
       enabled: !!reroll?.canRerollTrait,
-      why: reroll?.canRerollTrait ? 'Reroll your last trait roll — the better result counts.' : 'No recent trait roll to reroll.',
+      why: reroll?.canRerollTrait
+        ? 'Reroll your last trait test from scratch — the entire roll, wild die included — and keep whichever whole set you prefer. You can keep spending Bennies to try again, but a Critical Failure on a reroll must be accepted. (Not allowed if the original was a Critical Failure.)'
+        : 'No recent trait roll to reroll (rolls stay rerollable for 5 minutes).',
     },
     {
       id: 'recover-shaken', label: 'Recover from Shaken',
       enabled: conds(sheet).includes('shaken'),
-      why: conds(sheet).includes('shaken') ? 'Instantly stop being Shaken — no roll needed.' : `${ch.name} isn't Shaken.`,
+      why: conds(sheet).includes('shaken')
+        ? 'Instantly stop being Shaken — no roll needed. This is a free action and may be done at any time, even interrupting another’s action.'
+        : `${ch.name} isn't Shaken.`,
     },
     {
       id: 'soak', label: 'Attempt to Soak damage',
       enabled: soakOffer?.characterId === ch.id,
       why: soakOffer?.characterId === ch.id
-        ? 'Vigor roll — the success and each raise remove a wound just taken.'
-        : 'Only right after taking Wounds (the Soak prompt).',
+        ? 'Make a Vigor roll: the success and each raise remove one of the Wounds just dealt. Soak them all and the Shaken goes too.'
+        : 'Available right after taking Wounds — watch for the Soak prompt.',
     },
     {
       id: 'redraw-card', label: 'Draw a new Action Card',
       enabled: !!init.active && !!init.cardMode && init.entries.some((e) => e.name === ch.name),
       why: init.active && init.cardMode
-        ? 'Discard your Action Card and draw a new one.'
+        ? 'Draw an additional Action Card and act on your choice of all your draws this round. You may keep spending Bennies for more cards.'
         : 'Only during action-card initiative.',
     },
     {
       id: 'reroll-damage', label: 'Reroll damage',
       enabled: !!reroll?.canRerollDamage,
-      why: reroll?.canRerollDamage ? 'Reroll your last damage roll — the better result counts.' : 'No recent damage roll to reroll.',
+      why: reroll?.canRerollDamage
+        ? 'Reroll your attack’s damage — including any bonus raise die — and use whichever result you prefer.'
+        : 'No recent damage roll to reroll (rolls stay rerollable for 5 minutes).',
     },
     {
       id: 'regain-pp', label: 'Regain 5 Power Points',
       enabled: num(sheet.pp) < num(sheet.maxPp, 10) && String(sheet.arcaneBackground ?? '').trim() !== '',
       why: String(sheet.arcaneBackground ?? '').trim() === ''
-        ? `${ch.name} has no Arcane Background.`
+        ? 'Only characters with an Arcane Background can recover Power Points this way.'
         : num(sheet.pp) < num(sheet.maxPp, 10)
-          ? `Recover 5 PP (now ${num(sheet.pp)}/${num(sheet.maxPp, 10)}).`
+          ? `Recover 5 Power Points, up to your maximum (now ${num(sheet.pp)}/${num(sheet.maxPp, 10)}).`
           : 'Power Points are already full.',
     },
     {
       id: 'influence', label: 'Influence the story',
       enabled: true,
-      why: 'Spend a Benny on a narrative edit — the table adjudicates.',
+      why: 'Entirely up to the Game Master: an extra clue when the table is stuck, a mundane but needed item, or a nudge that makes an unimportant NPC more agreeable. Spending it announces the request to the table.',
     },
   ];
 

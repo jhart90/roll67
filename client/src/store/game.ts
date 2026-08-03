@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -232,6 +232,10 @@ interface GameState {
   diceAnimEnding: boolean;
   /** SWADE: your Wild Card just took wounds it may Soak with a Benny. */
   soakOffer: SoakOfferPayload | null;
+  /** SWADE: your Shaken character may roll Spirit to recover. */
+  shakenPrompt: ShakenPromptPayload | null;
+  /** SWADE: that move needs the running die — confirm or decline. */
+  runPrompt: RunPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
   /** Public-facing sheets fetched for tokens we don't control. */
@@ -396,6 +400,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   soakOffer: null,
   bennyState: {},
   bleedPrompt: null,
+  shakenPrompt: null,
+  runPrompt: null,
   rollStatsData: {},
   ironDice: null,
   publicSheets: {},
@@ -985,6 +991,14 @@ export function wireSocket(): void {
     useGameStore.setState({ bleedPrompt: p });
   });
 
+  socket.on(S2C.SHAKEN_PROMPT, (p: ShakenPromptPayload) => {
+    useGameStore.setState({ shakenPrompt: p });
+  });
+
+  socket.on(S2C.RUN_PROMPT, (p: RunPromptPayload) => {
+    useGameStore.setState({ runPrompt: p });
+  });
+
   socket.on(S2C.PUBLIC_SHEET, (p: PublicSheetPayload) => {
     useGameStore.setState((s) => ({ publicSheets: { ...s.publicSheets, [p.characterId]: p } }));
   });
@@ -1373,6 +1387,16 @@ export const intents = {
   bleedRoll: (characterId: string) => {
     socket.emit(C2S.BLEED_ROLL, { characterId });
     useGameStore.setState({ bleedPrompt: null });
+  },
+  /** Make the Shaken-recovery Spirit roll the prompt asked for. */
+  shakenRoll: (characterId: string) => {
+    socket.emit(C2S.SHAKEN_ROLL, { characterId });
+    useGameStore.setState({ shakenPrompt: null });
+  },
+  /** Accept the run: roll the running die to extend this turn's Pace. */
+  runRoll: (tokenId: string) => {
+    socket.emit(C2S.RUN_ROLL, { tokenId });
+    useGameStore.setState({ runPrompt: null });
   },
   setSoundboardSlot: (slotIndex: number, assetId: string, label: string) =>
     socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),

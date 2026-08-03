@@ -287,6 +287,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       // gives them — 'small/medium/large blast' becomes a tile-sized sphere
       // (2/4/6 tiles counting the target), 'cone template' the Cone. A weapon
       // whose props promise a Vigor-or-Stunned rider gets it mechanically too.
+      const rofMatch = propText.match(/\bRoF (\d)/i);
       const blastMatch = propText.match(/\b(small|medium|large) blast/i);
       const blastHexes = blastMatch ? ({ small: 1, medium: 3, large: 5 } as Record<string, number>)[blastMatch[1].toLowerCase()] : 0;
       const coneTemplate = /cone template/i.test(propText);
@@ -298,6 +299,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           dtype: w.damageType, range: melee ? 5 : weaponRangeFtSwn(w.props),
           ap, parryBonus, wielded: false,
           ...(mag ? { ammo: Number(mag[1]) } : {}),
+          ...(rofMatch ? { rof: Number(rofMatch[1]) } : {}),
           ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
           ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),
           ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),

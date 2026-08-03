@@ -214,6 +214,7 @@ const SWADE_SHEET: Record<string, string> = {
   'Armor vs ranged': 'Extra armor that counts only against ranged attacks — a Medium or Large Shield’s +2.',
   'Toughness vs ranged': 'Your effective Toughness against ranged attacks, including any shield bonus.',
   'Ammo left': 'Shots remaining. Firing spends one; at zero the weapon can’t fire until reloaded.',
+  RoF: 'Rate of Fire. RoF 2+ weapons fire bursts: −2 Recoil on the attack, an extra round of damage on a raise, and ammo drains by the RoF table (2→5, 3→10, 4→20, 5→40, 6→50 rounds per attack).',
   'Running die': 'The die added to your Pace when you run — d6 for most characters. Running is a free action.',
   'Boosts trait': 'While equipped, this item adds its bonus to the named skill or attribute roll.',
   'Affects trait': 'The skill or attribute this Hindrance modifies — its penalty folds into that roll automatically.',

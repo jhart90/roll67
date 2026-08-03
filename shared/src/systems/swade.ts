@@ -350,7 +350,8 @@ const gearTab: SheetTab = {
         { id: 'parryBonus', label: 'Parry mod', type: 'number', width: 'sixth', default: 0 },
         { id: 'wielded', label: 'Wielded', type: 'checkbox', width: 'sixth' },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },
-        { id: 'notes', label: 'Notes (RoF…)', type: 'text', width: 'sixth' },
+        { id: 'rof', label: 'RoF', type: 'number', width: 'sixth', default: 1 },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
     {

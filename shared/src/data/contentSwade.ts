@@ -97,6 +97,11 @@ const WEAPONS: W[] = [
   ['Scatter Blaster', 'Ranged', '3d6!', 'energy', 'ranged', ['range 72/144/288', 'mag 8', 'damage 3d6/2d6/1d6 by range band', 'era: future — scattergun parity']],
   ['Thunderclap Powder Bomb', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'era: medieval China — grenade parity with Frag Grenade']],
   ['Micro-Frag Sphere', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'era: future — grenade parity']],
+  // Automatic-fire parity tier (matches the Assault Rifle's 2d8!/AP 2/RoF 3).
+  // No ancient/medieval members: sustained automatic fire simply doesn't
+  // exist before self-contained cartridges.
+  ['Gatling Gun (Crank)', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 144/288/576', 'AP 2', 'mag 40', 'RoF 3', 'snapfire', 'era: old west — automatic parity with Assault Rifle']],
+  ['Pulse Repeater Rifle', 'Ranged', '2d8!', 'energy', 'ranged', ['range 144/288/576', 'AP 2', 'mag 60', 'RoF 3', 'era: future — automatic parity']],
   ['Gladius', 'Melee', '1d6!', 'slashing', 'str', ['era: ancient Rome — blade parity with Short Sword & Bowie Knife']],
   ['Bowie Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: old west — blade parity']],
   ['Carbon-Edge Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: future — blade parity']],

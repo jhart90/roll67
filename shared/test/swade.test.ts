@@ -465,3 +465,30 @@ describe('Defend', () => {
     expect(swadeParry({ ...base, conditions: ['defending'] })).toBe(10);
   });
 });
+
+describe('Rate of Fire', () => {
+  it('compendium automatics carry RoF onto the sheet and into combat actions', () => {
+    const smg = contentForSystem('swade').find((e) => e.name === 'Submachine Gun')!;
+    const res = applyEntry(smg, swade.defaultSheet())!;
+    const row = res.row as Record<string, unknown>;
+    expect(row.rof).toBe(3);
+    expect(row.ammo).toBe(30);
+    const character = {
+      id: 'c1', name: 'Test', system: 'swade',
+      sheet: { ...swade.defaultSheet(), skills: [{ name: 'Shooting', die: 'd8' }], attacks: [row] },
+    } as unknown as Character;
+    expect(combatActions(character).find((a) => a.label === 'Submachine Gun')?.rof).toBe(3);
+  });
+
+  it('every automatic-class compendium weapon declares its RoF', () => {
+    const autos = ['Assault Rifle', 'Submachine Gun', 'Machine Pistol', 'Combat Shotgun',
+      'Light Machine Gun', 'Heavy Machine Gun', 'Gauss Rifle', 'Thompson M1928 SMG',
+      'Gatling Gun (Crank)', 'Pulse Repeater Rifle'];
+    for (const name of autos) {
+      const entry = contentForSystem('swade').find((e) => e.name === name);
+      expect(entry, `${name} missing from compendium`).toBeDefined();
+      const row = applyEntry(entry!, swade.defaultSheet())!.row as Record<string, unknown>;
+      expect(Number(row.rof), `${name} has no RoF`).toBeGreaterThanOrEqual(3);
+    }
+  });
+});

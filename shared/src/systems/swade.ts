@@ -513,6 +513,16 @@ export const swade: SystemSchema = {
       });
     });
     out.push({ id: 'unskilled', label: 'Unskilled (d4−2)', expr: traitExpr(sheet, 0), group: 'Skills', d20: false });
+    // Jumping: 1″ horizontal (2″ with a running start) is free; rolling
+    // Athletics as an action adds +1″, or +2″ on a raise. The roll logs to
+    // chat and the jump's distance still spends Pace like any movement.
+    out.push({
+      id: 'jump',
+      label: 'Jump (base 1″, 2″ running start; +1″ on 4+, +2″ on raise)',
+      expr: traitExpr(sheet, skillDie(sheet, 'Athletics')),
+      group: 'Skills',
+      d20: false,
+    });
     rows(sheet, 'attacks').forEach((atk, i) => {
       const name = str(atk, 'name', `Attack ${i + 1}`);
       const skill = str(atk, 'skill', 'Fighting');

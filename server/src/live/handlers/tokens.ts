@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, inBounds, packHex,
+  C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
   playerColorFor, reachableAlong, roll, swadePace, systemFor,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type MoveTokenPayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
@@ -205,7 +205,12 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         swadeTurnMoves.set(d.campaignId, per);
         const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
         const pace = Math.max(1, swadePace(character.sheet) - (prone ? 2 : 0));
-        const stepDist = hexDistance({ q: token.q, r: token.r }, dest);
+        // Difficult Ground: each hex of rough terrain entered costs 2" of
+        // Pace instead of 1 — walk the hexes the move crosses, not just the
+        // straight-line distance.
+        const rough = new Set(map.terrain);
+        const path = hexLine({ q: token.q, r: token.r }, dest).slice(1);
+        const stepDist = path.reduce((a, h) => a + (rough.has(packHex(h)) ? 2 : 1), 0);
         if (rec.moved + stepDist > pace + (rec.runBonus ?? 0)) {
           if (rec.runBonus === null) {
             // Past Pace with no running die spent: ask, never auto-roll —

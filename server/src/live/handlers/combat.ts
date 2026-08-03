@@ -1320,6 +1320,23 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const action = combatActions(actor).find((a) => a.id === p.actionId);
     if (!action || !action.aoe) { emitError(socket, 'That is not an area spell.'); return; }
 
+    // A SWADE weapon hosing a template (Suppressive Fire, grenades with a mag)
+    // spends ammo like any other attack — suppression burns 3× the RoF table.
+    if (actor.system === 'swade' && action.source === 'attack') {
+      const atks = rows(actor.sheet, 'attacks').map((r) => ({ ...r }));
+      const row = atks[action.index];
+      const ammo = row ? num(row, 'ammo', -1) : -1;
+      if (ammo === 0) { emitError(socket, `${action.label} is out of ammo.`); return; }
+      if (row && ammo > 0) {
+        const AMMO_BY_ROF = [1, 1, 5, 10, 20, 40, 50];
+        const spend = (action.suppressive ? 3 : 1) * AMMO_BY_ROF[Math.min(6, action.rof ?? 1)];
+        atks[action.index] = { ...row, ammo: Math.max(0, ammo - spend) };
+        actor = persistSheet(io, d.campaignId, actor, { attacks: atks });
+      }
+      // Firing the template is an action like any other.
+      multiActionPenalty(d.campaignId, actor.id);
+    }
+
     const src = tokens.byId(p.sourceTokenId);
     if (!src) { emitError(socket, 'Unknown source token.'); return; }
     if (d.role !== 'dm' && src.characterId !== actor.id) { emitError(socket, 'That is not your token.'); return; }
@@ -1515,6 +1532,29 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'You can only act with your own character.');
       return;
     }
+    // SWADE reloads are simpler than SWN's: no tracked ammo boxes, just the
+    // magazine capacity — but topping up IS an action, so it feeds the
+    // Multi-Action penalty for anything else this turn.
+    if (actor.system === 'swade') {
+      const atks = rows(actor.sheet, 'attacks').map((r) => ({ ...r }));
+      const atksBefore = atks.map((r) => ({ ...r }));
+      const row = atks[attackIndex];
+      const maxAmmo = row ? num(row, 'maxAmmo', 0) : 0;
+      const ammo = row ? num(row, 'ammo', 0) : 0;
+      if (!row || maxAmmo <= 0) { emitError(socket, 'That weapon has no magazine to reload.'); return; }
+      if (ammo >= maxAmmo) { emitError(socket, `${str(row, 'name', 'That weapon')} is already loaded.`); return; }
+      atks[attackIndex] = { ...row, ammo: maxAmmo };
+      const updated = persistSheet(io, d.campaignId, actor, { attacks: atks });
+      multiActionPenalty(d.campaignId, actor.id);
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, kind: 'system',
+        text: `🔄 ${updated.name} reloads ${str(row, 'name', 'their weapon')} (${maxAmmo} rounds — an action).`,
+        roll: null, recipients: null,
+      }, [{ t: 'field', characterId: actor.id, key: 'attacks', value: atksBefore }]);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      return;
+    }
+
     const check = swnReloadCheck(actor.sheet, attackIndex);
     if (!check.ok) { emitError(socket, check.reason!); return; }
 

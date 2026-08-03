@@ -492,3 +492,33 @@ describe('Rate of Fire', () => {
     }
   });
 });
+
+describe('Reload + Suppressive Fire', () => {
+  it('compendium magazines land as maxAmmo so Reload knows what to refill to', () => {
+    const smg = contentForSystem('swade').find((e) => e.name === 'Submachine Gun')!;
+    const row = applyEntry(smg, swade.defaultSheet())!.row as Record<string, unknown>;
+    expect(row.maxAmmo).toBe(30);
+  });
+
+  it('RoF 2+ ranged weapons offer a Suppressive Fire template action', () => {
+    const smg = contentForSystem('swade').find((e) => e.name === 'Submachine Gun')!;
+    const row = applyEntry(smg, swade.defaultSheet())!.row as Record<string, unknown>;
+    const character = {
+      id: 'c1', name: 'Test', system: 'swade',
+      sheet: { ...swade.defaultSheet(), skills: [{ name: 'Shooting', die: 'd8' }], attacks: [row] },
+    } as unknown as Character;
+    const sup = combatActions(character).find((a) => a.id === 'suppress:0');
+    expect(sup).toBeDefined();
+    expect(sup?.suppressive).toBe(true);
+    expect(sup?.aoe).toEqual({ shape: 'sphere', sizeFt: 0, sizeHexes: 3 });
+    expect(sup?.saveId).toBe('spirit');
+    expect(sup?.appliesCondition).toBe('distracted');
+    expect(sup?.amountExpr).toBe('0');
+    // A single-shot weapon offers no suppression.
+    const pistolChar = {
+      id: 'c2', name: 'Test2', system: 'swade',
+      sheet: { ...swade.defaultSheet(), attacks: [{ name: 'Derringer', skill: 'Shooting', damage: '2d4!', range: 30, ammo: 2, maxAmmo: 2 }] },
+    } as unknown as Character;
+    expect(combatActions(pistolChar).some((a) => a.id.startsWith('suppress'))).toBe(false);
+  });
+});

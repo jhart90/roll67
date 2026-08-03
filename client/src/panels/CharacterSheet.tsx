@@ -344,6 +344,18 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
   // SWN weapons with a magazine size get a self-only Reload action here —
   // it has no target, so it doesn't belong in combatActions()'s targeted list.
   const reloadable = useMemo(() => {
+    // SWADE: any weapon with a magazine reloads as an action — no tracked
+    // ammo boxes, but it feeds the Multi-Action penalty.
+    if (character.system === 'swade') {
+      return rows(character.sheet, 'attacks')
+        .map((atk, i) => ({
+          atk, i,
+          check: (num(atk, 'ammo', 0) < num(atk, 'maxAmmo', 0)
+            ? { ok: true, ammoItemName: 'the magazine — an action (Multi-Action −2 applies)' }
+            : { ok: false, reason: 'Already fully loaded.' }) as ReturnType<typeof swnReloadCheck>,
+        }))
+        .filter(({ atk }) => num(atk, 'maxAmmo', 0) > 0);
+    }
     if (character.system !== 'swn') return [];
     return rows(character.sheet, 'attacks')
       .map((atk, i) => ({ atk, i, check: swnReloadCheck(character.sheet, i) }))

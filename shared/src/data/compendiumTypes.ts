@@ -298,7 +298,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           name: entry.name, skill: melee ? 'Fighting' : 'Shooting', damage,
           dtype: w.damageType, range: melee ? 5 : weaponRangeFtSwn(w.props),
           ap, parryBonus, wielded: false,
-          ...(mag ? { ammo: Number(mag[1]) } : {}),
+          ...(mag ? { ammo: Number(mag[1]), maxAmmo: Number(mag[1]) } : {}),
           ...(rofMatch ? { rof: Number(rofMatch[1]) } : {}),
           ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
           ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),

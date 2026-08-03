@@ -1,4 +1,4 @@
-import type { AoeShape, Character } from '../types.js';
+import type { AoeShape, Character, SheetData } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
 import { swade, swadeArcaneExpr } from './swade.js';
@@ -18,6 +18,10 @@ export function combatActions(character: Character): CombatAction[] {
   const schema = SYSTEMS[character.system];
   const rollables = schema.rollables(sheet);
   const out: CombatAction[] = [];
+
+  /** SWADE Rate of Fire from an explicit column or a "RoF N" note (max 6). */
+  const swadeRof = (atk: SheetData): number =>
+    Math.min(6, num(atk, 'rof', 0) || Number(/RoF\s*(\d)/i.exec(str(atk, 'notes', ''))?.[1] ?? 0));
 
   rows(sheet, 'attacks').forEach((atk, i) => {
     const name = str(atk, 'name', '').trim() || `Attack ${i + 1}`;
@@ -54,10 +58,7 @@ export function combatActions(character: Character): CombatAction[] {
       source: 'attack',
       index: i,
       // SWADE Rate of Fire, from an explicit column or a "RoF N" note.
-      ...((): { rof?: number } => {
-        const rof = num(atk, 'rof', 0) || Number(/RoF\s*(\d)/i.exec(str(atk, 'notes', ''))?.[1] ?? 0);
-        return rof >= 2 ? { rof: Math.min(6, rof) } : {};
-      })(),
+      ...(swadeRof(atk) >= 2 ? { rof: swadeRof(atk) } : {}),
       ...(num(atk, 'ap', 0) > 0 ? { ap: num(atk, 'ap', 0) } : {}),
       ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
         ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),
@@ -69,6 +70,32 @@ export function combatActions(character: Character): CombatAction[] {
       ...(condition && !save && conditionSave && conditionDc > 0
         ? { conditionSaveId: conditionSave, conditionDc } : {}),
     });
+
+    // SWADE Suppressive Fire: any RoF 2+ ranged weapon can hose down a
+    // medium blast template instead of aiming at one target — everyone under
+    // it rolls Spirit (keep your head down!) or is Distracted. No damage,
+    // triple the autofire ammo.
+    if (character.system === 'swade' && swadeRof(atk) >= 2 && rangeFt > 5) {
+      out.push({
+        id: `suppress:${i}`,
+        label: `Suppressive Fire (${name})`,
+        effect: 'damage',
+        attackExpr: null,
+        amountExpr: '0',
+        rangeFt,
+        damageType: '',
+        ranged: true,
+        consumesItem: false,
+        source: 'attack',
+        index: i,
+        rof: swadeRof(atk),
+        suppressive: true,
+        saveId: 'spirit',
+        onSave: 'negate',
+        appliesCondition: 'distracted',
+        aoe: { shape: 'sphere', sizeFt: 0, sizeHexes: 3 },
+      });
+    }
   });
 
   // Spells & cantrips with an amount become targeted actions: a spell attack

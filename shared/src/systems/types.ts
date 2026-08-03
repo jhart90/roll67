@@ -114,6 +114,9 @@ export interface CombatAction {
   /** SWADE: the weapon's Rate of Fire (parsed from its notes). RoF 2+ fires
    *  a burst: −2 Recoil, extra hits on a raise, table-based ammo use. */
   rof?: number;
+  /** SWADE: Suppressive Fire — a medium blast of lead that Distracts anyone
+   *  who fails to keep their head down. Burns 3× the autofire ammo. */
+  suppressive?: boolean;
   /** SWADE combat maneuver: resolved as an opposed roll / special attack
    *  instead of the normal to-hit + damage pipeline. */
   maneuver?: 'push' | 'grapple' | 'test' | 'support' | 'touch';

@@ -2099,7 +2099,8 @@ th > .term { border-bottom-style: dotted; }
 .bleed-prompt { border-color: #b91c1c; bottom: 170px; }
 
 /* SWADE Benny menu: a coin chip that unfolds the Benny Uses table. */
-.benny-menu { position: fixed; right: 14px; bottom: 90px; z-index: 69; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+/* Sits in the map pane's lower-right corner — clear of the 300px chat dock. */
+.benny-menu { position: fixed; right: 314px; bottom: 16px; z-index: 69; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .benny-chip {
   width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
   background: var(--panel); border: 2px solid #d9a520; color: var(--text);

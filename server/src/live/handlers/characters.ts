@@ -5,9 +5,9 @@ import {
   type DeleteCustomNpcPayload, type LevelUpRollPayload,
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
-import type { Character, CreateNpcPayload, CreateRandomNpcPayload, GameSystem, PublicSheetGetPayload, PublicSheetPayload } from 'shared';
+import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PublicSheetGetPayload, PublicSheetPayload } from 'shared';
 import { generateNpc, generateNpcFromModel, nameplateFor, npcById } from 'shared';
-import { campaigns, characters, chat, customNpcs, maps, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, customNpcs, dmNotes, maps, tokens } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
@@ -29,6 +29,27 @@ function emitCharacter(io: Server, campaignId: string, character: Character): vo
 }
 
 export function registerCharacterHandlers(io: Server, socket: Socket): void {
+  // DM-only secret notes: read and write live in their own store and their
+  // own DM-gated events — they never ride on the sheet, so no client bug can
+  // ever show them to a player.
+  socket.on(C2S.DM_NOTES_GET, safe(socket, ({ characterId }: DmNotesGetPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    socket.emit(S2C.DM_NOTES, { characterId, text: dmNotes.get(characterId) });
+  }, 'DM_NOTES_GET'));
+
+  socket.on(C2S.DM_NOTES_SET, safe(socket, ({ characterId, text }: DmNotesSetPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM keeps secret notes.'); return; }
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    dmNotes.set(d.campaignId, characterId, String(text ?? '').slice(0, 20000));
+    // Echo to ALL DM sockets (a popped-out sheet window is its own socket).
+    io.to(dmRoom(d.campaignId)).emit(S2C.DM_NOTES, { characterId, text: dmNotes.get(characterId) });
+  }, 'DM_NOTES_SET'));
+
   // The public-facing sheet: exactly what the nameplate already exposes,
   // plus portrait, token art, and the free-text bio sections — never stats,
   // gear, or anything mechanical. Any member of the campaign may look.

@@ -131,6 +131,9 @@ export const C2S = {
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
   PUBLIC_SHEET_GET: 'publicSheetGet',
+  /** DM-only: read / write the secret notes attached to a character. */
+  DM_NOTES_GET: 'dmNotesGet',
+  DM_NOTES_SET: 'dmNotesSet',
   /** IronDice: fetch the current seed commitment + revealed seed history. */
   IRON_DICE_GET: 'ironDiceGet',
   /** IronDice: DM reveals the current seed and mints a fresh one. */
@@ -692,6 +695,8 @@ export const S2C = {
   IRON_DICE: 'ironDice',
   /** The public-facing sheet for one character. */
   PUBLIC_SHEET: 'publicSheet',
+  /** DM-only: the secret notes for one character. */
+  DM_NOTES: 'dmNotes',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -899,6 +904,9 @@ export interface IronDicePayload {
   revealed: Array<{ commit: string; seedHex: string; firstIdx: number; lastIdx: number; revealedAt: number }>;
 }
 export interface PublicSheetGetPayload { characterId: string }
+export interface DmNotesGetPayload { characterId: string }
+export interface DmNotesSetPayload { characterId: string; text: string }
+export interface DmNotesPayload { characterId: string; text: string }
 /** The safe, anyone-at-the-table view of a character: exactly the nameplate
  *  info plus portrait, token art, and free-text bio — never the sheet. */
 export interface PublicSheetPayload {

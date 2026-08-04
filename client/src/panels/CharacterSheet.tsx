@@ -16,9 +16,11 @@ import { SwadeAdvanceWizard } from './SwadeAdvanceWizard';
 import { CombatStatus } from './CombatStatus';
 import { SheetTerm } from '../util/Term';
 import { RollStatsTab } from './RollStats';
+import { NotesTab } from './NotesTab';
 
-/** Synthetic tab id for the lifetime roll-stats view (not part of the schema). */
+/** Synthetic tab ids for views that aren't part of the system schema. */
 const STATS_TAB = '__stats';
+const NOTES_TAB = '__notes';
 
 type AdvMode = null | 'adv' | 'dis';
 
@@ -609,19 +611,24 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (
-            <button key={t.id} className={t.id === activeTab.id && tabId !== STATS_TAB ? 'active' : ''} onClick={() => setTabId(t.id)}>
+            <button key={t.id} className={t.id === activeTab.id && tabId !== STATS_TAB && tabId !== NOTES_TAB ? 'active' : ''} onClick={() => setTabId(t.id)}>
               {t.title}
             </button>
           ))}
+          <button className={tabId === NOTES_TAB ? 'active' : ''} onClick={() => setTabId(NOTES_TAB)}>
+            📝 Notes
+          </button>
           <button className={tabId === STATS_TAB ? 'active' : ''} onClick={() => setTabId(STATS_TAB)}>
             📊 Roll Stats
           </button>
         </div>
 
-        {tabId === STATS_TAB ? (
+        {tabId === STATS_TAB || tabId === NOTES_TAB ? (
           <div className="sheet-body">
             <div className="sheet-main">
-              <RollStatsTab characterId={character.id} />
+              {tabId === STATS_TAB
+                ? <RollStatsTab characterId={character.id} />
+                : <NotesTab character={character} editable={editable} />}
             </div>
           </div>
         ) : (

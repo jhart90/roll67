@@ -1115,6 +1115,18 @@ function toChatMsg(r: ChatRow): ChatMessage {
   };
 }
 
+/** DM-only secret notes per character — never part of the sheet payload. */
+export const dmNotes = {
+  get(characterId: string): string {
+    const r = stmt('SELECT text FROM dm_notes WHERE character_id = ?').get(characterId) as { text: string } | undefined;
+    return r?.text ?? '';
+  },
+  set(campaignId: string, characterId: string, text: string): void {
+    stmt(`INSERT INTO dm_notes (character_id, campaign_id, text) VALUES (?, ?, ?)
+          ON CONFLICT(character_id) DO UPDATE SET text = excluded.text`).run(characterId, campaignId, text);
+  },
+};
+
 /** Lifetime roll statistics, aggregated so they never grow with playtime. */
 export const rollStats = {
   /** Fold one roll's dice into the aggregates for this user + character. */

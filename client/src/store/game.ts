@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type DmNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -238,6 +238,8 @@ interface GameState {
   runPrompt: RunPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
+  /** DM-only: secret notes per character (DM clients only ever receive these). */
+  dmNotesData: Record<string, string>;
   /** Public-facing sheets fetched for tokens we don't control. */
   publicSheets: Record<string, PublicSheetPayload>;
   /** IronDice public state: active seed commitment + revealed history. */
@@ -405,6 +407,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   rollStatsData: {},
   ironDice: null,
   publicSheets: {},
+  dmNotesData: {},
   targeting: null,
   aoeTargeting: null,
   floats: [],
@@ -999,6 +1002,10 @@ export function wireSocket(): void {
     useGameStore.setState({ runPrompt: p });
   });
 
+  socket.on(S2C.DM_NOTES, (p: DmNotesPayload) => {
+    useGameStore.setState((s) => ({ dmNotesData: { ...s.dmNotesData, [p.characterId]: p.text } }));
+  });
+
   socket.on(S2C.PUBLIC_SHEET, (p: PublicSheetPayload) => {
     useGameStore.setState((s) => ({ publicSheets: { ...s.publicSheets, [p.characterId]: p } }));
   });
@@ -1380,6 +1387,9 @@ export const intents = {
   getRollStats: (characterId?: string) => socket.emit(C2S.ROLL_STATS_GET, { characterId: characterId ?? null }),
   /** Fetch the public-facing sheet of a character you don't control. */
   getPublicSheet: (characterId: string) => socket.emit(C2S.PUBLIC_SHEET_GET, { characterId }),
+  /** DM-only: read / write the secret notes on a character. */
+  getDmNotes: (characterId: string) => socket.emit(C2S.DM_NOTES_GET, { characterId }),
+  setDmNotes: (characterId: string, text: string) => socket.emit(C2S.DM_NOTES_SET, { characterId, text }),
   /** IronDice: fetch commitment state / rotate the seed (DM). */
   getIronDice: () => socket.emit(C2S.IRON_DICE_GET, {}),
   rotateIronDice: () => socket.emit(C2S.IRON_DICE_ROTATE, {}),

@@ -214,6 +214,16 @@ db.exec(`
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_roll_stats_character ON roll_stats(campaign_id, character_id)');
 
+// DM-only secret notes per character. Deliberately NOT a sheet field: owners
+// receive their full sheets, so anything in there would leak to the player.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS dm_notes (
+    character_id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    text TEXT NOT NULL DEFAULT ''
+  )
+`);
+
 // Repair FK references broken by migrateAssetsAudioKind running with foreign_keys=ON.
 // The RENAME redirected FK constraints in maps/tokens/handouts/audio_tracks to point
 // to the temp table name; after DROP that table the constraints became invalid.

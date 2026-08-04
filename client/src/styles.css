@@ -2032,6 +2032,16 @@ th > .term { border-bottom-style: dotted; }
 .account-details { background: var(--panel); padding: 12px; min-width: 300px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
 .rollstats-window, .irondice-window { background: var(--panel); padding: 10px 12px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
 
+/* Sheet Notes tab: one big field, plus the DM's secret one beneath. */
+.notes-tab { display: flex; flex-direction: column; gap: 4px; padding: 4px 2px; }
+.notes-tab label { font-size: 12px; font-weight: 600; }
+.notes-field {
+  width: 100%; min-height: 260px; resize: vertical; padding: 8px 10px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.04)); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 13px; line-height: 1.45;
+}
+.notes-secret { min-height: 160px; border-color: #7c3aed; background: rgba(124, 58, 237, 0.07); }
+
 /* Public-facing sheet: nameplate header + bio + roll stats, nothing private. */
 .public-sheet { min-width: 340px; max-width: 480px; background: var(--panel); border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; overflow: hidden; }
 .public-sheet .rollstats-window { border: none; border-radius: 0; }

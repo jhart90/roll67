@@ -51,6 +51,13 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
           <h3 style={{ margin: 0 }}>NPC Library</h3>
           <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : system === 'swn' ? 'Stars Without Number' : 'Savage Worlds'}</span>
           <span className="spacer" />
+          <button
+            className="link"
+            title="Build an NPC step by step with the same guided character creator players use"
+            onClick={() => useGameStore.getState().setShowCharacterCreator(true)}
+          >
+            🧙 Creator wizard
+          </button>
           <button className="link" title="Randomize an NPC based on a compendium model" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
 

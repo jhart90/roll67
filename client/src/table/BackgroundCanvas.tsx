@@ -20,7 +20,8 @@ export function BackgroundCanvas({ map }: { map: MapView }) {
     function drawGrid() {
       if (!ctx) return;
       const g = map.grid;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+      ctx.strokeStyle = /^#[0-9a-f]{6}$/i.test(g.gridColor ?? '') ? g.gridColor! : '#ffffff';
+      ctx.globalAlpha = Math.max(0, Math.min(1, g.gridOpacity ?? 0.16));
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let row = 0; row < g.rows; row++) {
@@ -33,6 +34,7 @@ export function BackgroundCanvas({ map }: { map: MapView }) {
         }
       }
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     function paint(img: HTMLImageElement | null) {

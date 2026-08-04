@@ -101,6 +101,10 @@ export interface GridConfig {
   /** Whether the hex grid lines are drawn; the underlying hex math (snapping,
    *  distance, vision) still applies either way. */
   gridEnabled: boolean;
+  /** Hex-line color (#rrggbb); default white. */
+  gridColor?: string;
+  /** Hex-line opacity 0–1; default 0.16. */
+  gridOpacity?: number;
   lighting: LightingLevel;
   /** Label for the ruler, e.g. 5 (ft per hex). */
   feetPerHex: number;

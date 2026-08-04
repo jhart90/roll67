@@ -163,6 +163,26 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new' | 'n
                 <GridField label="Origin Y" value={grid.originY} onCommit={(v) => setGrid({ originY: v })} />
               </div>
             )}
+            {grid.gridEnabled && (
+              <div className="row" style={{ alignItems: 'center', gap: 12 }}>
+                <label className="lu-field" style={{ flex: '0 0 auto' }}>
+                  Hex color
+                  <input
+                    type="color"
+                    value={/^#[0-9a-f]{6}$/i.test(grid.gridColor ?? '') ? grid.gridColor : '#ffffff'}
+                    onChange={(e) => setGrid({ gridColor: e.target.value })}
+                  />
+                </label>
+                <label className="lu-field" style={{ flex: 1 }}>
+                  Hex opacity ({Math.round((grid.gridOpacity ?? 0.16) * 100)}%)
+                  <input
+                    type="range" min={0} max={100}
+                    value={Math.round((grid.gridOpacity ?? 0.16) * 100)}
+                    onChange={(e) => setGrid({ gridOpacity: Number(e.target.value) / 100 })}
+                  />
+                </label>
+              </div>
+            )}
             <label className="lu-field">
               Lighting
               <select value={grid.lighting} onChange={(e) => setGrid({ lighting: e.target.value as GridConfig['lighting'] })}>

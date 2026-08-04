@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useGameStore, intents } from '../store/game';
+import type { WorldVisState } from 'shared';
 import { HandoutsSection } from './HandoutsPanel';
 import { RollableTables } from './RollableTables';
 
@@ -21,6 +22,18 @@ function Branch({ title, count, children, defaultOpen = false }: {
   );
 }
 
+/** DM-only glyph for an entry's player-visibility state. */
+function VisBadge({ vis }: { vis?: WorldVisState }) {
+  if (!vis) return null;
+  const glyph = vis === 'reveal' ? '👁' : vis === 'hide' ? '🚫' : vis === 'seen' ? '·' : '?';
+  const tip = vis === 'reveal' ? 'Force-revealed to all players'
+    : vis === 'hide' ? 'Hidden from all players'
+      : vis === 'seen' ? 'Discovered by the party' : 'Not yet seen by any player';
+  return <span className="dir-vis" title={tip}>{glyph}</span>;
+}
+
+interface VisMenu { kind: 'map' | 'token' | 'character'; key: string; name: string; x: number; y: number }
+
 /** Campaign directory: shared reference of everything introduced so far. */
 export function DirectoryPanel() {
   const you = useGameStore((s) => s.you);
@@ -30,6 +43,12 @@ export function DirectoryPanel() {
   // Refresh when the tab opens so the tree is current.
   useEffect(() => { intents.requestDirectory(); }, []);
 
+  const [visMenu, setVisMenu] = useState<VisMenu | null>(null);
+  const onVisMenu = (kind: VisMenu['kind'], key: string, name: string) => (e: React.MouseEvent) => {
+    if (!isDm) return;
+    e.preventDefault();
+    setVisMenu({ kind, key, name, x: e.clientX, y: e.clientY });
+  };
   const canOpen = (id: string) => useGameStore.getState().characters.some((c) => c.id === id);
 
   return (
@@ -46,13 +65,14 @@ export function DirectoryPanel() {
         {dir && (
           <>
             <Branch title="Maps" count={dir.maps.length} defaultOpen>
-              {dir.maps.map((m) => <div key={m.id} className="dir-item">{m.name}</div>)}
+              {dir.maps.map((m) => <div key={m.id} className="dir-item" onContextMenu={onVisMenu('map', m.id, m.name)}><VisBadge vis={m.vis} />{m.name}</div>)}
               {dir.maps.length === 0 && <div className="dir-empty">No maps yet.</div>}
             </Branch>
 
             <Branch title="Characters" count={dir.characters.length}>
               {dir.characters.map((c) => (
-                <div key={c.id} className="dir-item">
+                <div key={c.id} className="dir-item" onContextMenu={onVisMenu('character', c.id, c.name)}>
+                  <VisBadge vis={c.vis} />
                   {canOpen(c.id)
                     ? <button className="dir-link" onClick={() => useGameStore.getState().openSheet(c.id)}>{c.name}</button>
                     : <span>{c.name}</span>}
@@ -71,8 +91,8 @@ export function DirectoryPanel() {
 
             <Branch title="Tokens on maps" count={dir.tokens.length}>
               {dir.tokens.map((t, i) => (
-                <div key={i} className="dir-item">
-                  {t.name}
+                <div key={t.id ?? i} className="dir-item" onContextMenu={onVisMenu('token', t.id, t.name)}>
+                  <VisBadge vis={t.vis} />{t.name}
                   <span className="dir-tag">{t.mapName}{t.gm ? ' · GM' : ''}</span>
                 </div>
               ))}
@@ -102,6 +122,14 @@ export function DirectoryPanel() {
           </>
         )}
       </div>
+      {visMenu && (
+        <div className="dir-vis-menu" style={{ left: visMenu.x, top: visMenu.y }} onMouseLeave={() => setVisMenu(null)}>
+          <div className="dim" style={{ padding: '2px 8px', fontSize: 11 }}>{visMenu.name}</div>
+          <button onClick={() => { intents.worldOverride(visMenu.kind, visMenu.key, 'reveal'); setVisMenu(null); }}>👁 Reveal to all players</button>
+          <button onClick={() => { intents.worldOverride(visMenu.kind, visMenu.key, 'hide'); setVisMenu(null); }}>🚫 Hide from all players</button>
+          <button onClick={() => { intents.worldOverride(visMenu.kind, visMenu.key, 'clear'); setVisMenu(null); }}>↺ Follow what they've seen</button>
+        </div>
+      )}
     </div>
   );
 }

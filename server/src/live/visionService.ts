@@ -10,7 +10,20 @@ import {
   S2C, type Door, type FovInput, type Hex, type Light, type MapObject, type MapStatePayload, type Point, type Segment, type Token,
   nameplateFor, type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
-import { campaigns, characters, doorMemory, fog, maps, tokens } from '../db/repos.js';
+import { campaigns, characters, doorMemory, fog, maps, tokens, worldVis } from '../db/repos.js';
+import { broadcastDirectory } from './directory.js';
+
+// Debounced world-tab refresh after new discoveries. io is captured from the
+// vision sync calls (always running while anyone is at the table).
+let dirIo: Server | null = null;
+const dirTimers = new Map<string, NodeJS.Timeout>();
+function scheduleDirectoryRefresh(campaignId: string): void {
+  if (dirTimers.has(campaignId)) return;
+  dirTimers.set(campaignId, setTimeout(() => {
+    dirTimers.delete(campaignId);
+    if (dirIo) broadcastDirectory(dirIo, campaignId);
+  }, 600));
+}
 import { campaignSockets, sdata, userRoom } from './hub.js';
 
 type MapRecord = NonNullable<ReturnType<typeof maps.byId>>;
@@ -407,6 +420,16 @@ export function buildMapState(
 
   const targetUser = viewer.viewingAs ?? viewer.userId;
   const view = computeUserMapView(targetUser, map, allTokens);
+  // World-tab knowledge: whatever a real player's vision serves them counts
+  // as discovered by the party (never the DM's own view or their preview).
+  if (!viewer.isDm) {
+    const entries: Array<{ kind: 'map' | 'token' | 'character'; key: string }> = [{ kind: 'map', key: map.id }];
+    for (const t of view.tokens) {
+      entries.push({ kind: 'token', key: t.id });
+      if (t.characterId) entries.push({ kind: 'character', key: t.characterId });
+    }
+    if (worldVis.discover(map.campaignId, entries) > 0) scheduleDirectoryRefresh(map.campaignId);
+  }
   return {
     map: mapView,
     // The DM previewing a player still keeps geometry for their editor overlays.
@@ -437,6 +460,7 @@ export function buildMapState(
  * still safely recompute for every online viewer, unchanged from before.
  */
 export function syncMapVision(io: Server, campaignId: string, mapId: string, hint?: SyncVisionHint): void {
+  dirIo = io;
   withCharCache(() => syncMapVisionInner(io, campaignId, mapId, hint));
 }
 

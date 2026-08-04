@@ -1115,6 +1115,59 @@ function toChatMsg(r: ChatRow): ChatMessage {
   };
 }
 
+export type WorldVisKind = 'map' | 'token' | 'character';
+
+/** In-memory dedupe so the per-vision-sync discovery writes stay cheap. */
+const discoveryCache = new Map<string, Set<string>>();
+
+/**
+ * World-tab knowledge: party-shared discovery (what any player's token has
+ * had in sight) plus the DM's manual reveal/hide overrides.
+ */
+export const worldVis = {
+  /** Record newly-seen things; returns how many were actually new. */
+  discover(campaignId: string, entries: Array<{ kind: WorldVisKind; key: string }>): number {
+    let cache = discoveryCache.get(campaignId);
+    if (!cache) {
+      cache = new Set(
+        (stmt('SELECT kind, key FROM world_discovery WHERE campaign_id = ?').all(campaignId) as Array<{ kind: string; key: string }>)
+          .map((r) => `${r.kind}:${r.key}`),
+      );
+      discoveryCache.set(campaignId, cache);
+    }
+    const ins = stmt('INSERT OR IGNORE INTO world_discovery (campaign_id, kind, key) VALUES (?, ?, ?)');
+    let added = 0;
+    for (const e of entries) {
+      const k = `${e.kind}:${e.key}`;
+      if (cache.has(k)) continue;
+      cache.add(k);
+      ins.run(campaignId, e.kind, e.key);
+      added++;
+    }
+    return added;
+  },
+  discovered(campaignId: string): Set<string> {
+    let cache = discoveryCache.get(campaignId);
+    if (!cache) {
+      this.discover(campaignId, []); // primes the cache
+      cache = discoveryCache.get(campaignId)!;
+    }
+    return cache;
+  },
+  overrides(campaignId: string): Map<string, 'reveal' | 'hide'> {
+    const rows = stmt('SELECT kind, key, mode FROM world_override WHERE campaign_id = ?').all(campaignId) as Array<{ kind: string; key: string; mode: 'reveal' | 'hide' }>;
+    return new Map(rows.map((r) => [`${r.kind}:${r.key}`, r.mode]));
+  },
+  setOverride(campaignId: string, kind: WorldVisKind, key: string, mode: 'reveal' | 'hide' | null): void {
+    if (mode === null) {
+      stmt('DELETE FROM world_override WHERE campaign_id = ? AND kind = ? AND key = ?').run(campaignId, kind, key);
+    } else {
+      stmt(`INSERT INTO world_override (campaign_id, kind, key, mode) VALUES (?, ?, ?, ?)
+            ON CONFLICT(campaign_id, kind, key) DO UPDATE SET mode = excluded.mode`).run(campaignId, kind, key, mode);
+    }
+  },
+};
+
 /** DM-only secret notes per character — never part of the sheet payload. */
 export const dmNotes = {
   get(characterId: string): string {

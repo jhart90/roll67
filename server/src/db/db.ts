@@ -214,6 +214,26 @@ db.exec(`
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_roll_stats_character ON roll_stats(campaign_id, character_id)');
 
+// World-tab knowledge: what the party has actually seen (vision-discovered
+// tokens/characters/maps) and the DM's manual reveal/hide overrides.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS world_discovery (
+    campaign_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'character')),
+    key TEXT NOT NULL,
+    PRIMARY KEY (campaign_id, kind, key)
+  )
+`);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS world_override (
+    campaign_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'character')),
+    key TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('reveal', 'hide')),
+    PRIMARY KEY (campaign_id, kind, key)
+  )
+`);
+
 // DM-only secret notes per character. Deliberately NOT a sheet field: owners
 // receive their full sheets, so anything in there would leak to the player.
 db.exec(`

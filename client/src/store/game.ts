@@ -1395,6 +1395,9 @@ export const intents = {
   getRollStats: (characterId?: string) => socket.emit(C2S.ROLL_STATS_GET, { characterId: characterId ?? null }),
   /** Fetch the public-facing sheet of a character you don't control. */
   getPublicSheet: (characterId: string) => socket.emit(C2S.PUBLIC_SHEET_GET, { characterId }),
+  /** DM-only: force-reveal / force-hide / reset a world-tab entry. */
+  worldOverride: (kind: 'map' | 'token' | 'character', key: string, mode: 'reveal' | 'hide' | 'clear') =>
+    socket.emit(C2S.WORLD_OVERRIDE, { kind, key, mode }),
   /** DM-only: read / write the secret notes on a character. */
   getDmNotes: (characterId: string) => socket.emit(C2S.DM_NOTES_GET, { characterId }),
   setDmNotes: (characterId: string, text: string) => socket.emit(C2S.DM_NOTES_SET, { characterId, text }),

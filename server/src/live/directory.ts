@@ -1,6 +1,6 @@
 import type { Server } from 'socket.io';
-import { S2C, type DirectoryPayload } from 'shared';
-import { campaigns, characters, maps, tokens } from '../db/repos.js';
+import { S2C, type DirectoryPayload, type WorldVisState } from 'shared';
+import { campaigns, characters, maps, tokens, worldVis, type WorldVisKind } from '../db/repos.js';
 import { campaignSockets, sdata } from './hub.js';
 
 function distinct(values: string[]): string[] {
@@ -22,25 +22,29 @@ export function buildDirectory(campaignId: string, isDm: boolean): DirectoryPayl
   const campaignMaps = maps.forCampaign(campaignId);
   const allCharacters = characters.forCampaign(campaignId);
 
+  // Players only see what the party has actually discovered (a controlled
+  // token had it in sight) — unless the DM force-revealed or force-hid it.
+  const disc = worldVis.discovered(campaignId);
+  const ov = worldVis.overrides(campaignId);
+  const visOf = (kind: WorldVisKind, key: string, base: boolean): WorldVisState =>
+    ov.get(`${kind}:${key}`) ?? (base ? 'seen' : 'unseen');
+  const shows = (v: WorldVisState) => v === 'seen' || v === 'reveal';
+
   const tokenList: DirectoryPayload['tokens'] = [];
   const charHasVisibleToken = new Set<string>();
-  const charHasAnyToken = new Set<string>();
   for (const meta of campaignMaps) {
     for (const t of tokens.forMap(meta.id)) {
-      if (t.characterId) {
-        charHasAnyToken.add(t.characterId);
-        if (t.layer !== 'gm') charHasVisibleToken.add(t.characterId);
-      }
-      if (isDm || t.layer !== 'gm') {
-        tokenList.push({ name: t.name, mapName: meta.name, gm: t.layer === 'gm' });
-      }
+      const ownedByPlayer = !!t.characterId && allCharacters.find((c) => c.id === t.characterId)?.ownerUserId != null;
+      const tokVis = visOf('token', t.id, ownedByPlayer || disc.has(`token:${t.id}`));
+      if (t.characterId && t.layer !== 'gm' && shows(tokVis)) charHasVisibleToken.add(t.characterId);
+      if (isDm) tokenList.push({ id: t.id, name: t.name, mapName: meta.name, gm: t.layer === 'gm', vis: tokVis });
+      else if (t.layer !== 'gm' && shows(tokVis)) tokenList.push({ id: t.id, name: t.name, mapName: meta.name, gm: false });
     }
   }
 
-  // Characters shown: DM = all; players = party PCs + any character with a
-  // visible (token-layer) token that they could have encountered.
-  const shownChars = allCharacters.filter((c) =>
-    isDm || c.ownerUserId !== null || charHasVisibleToken.has(c.id));
+  // Characters shown: DM = all; players = party PCs + discovered/revealed.
+  const shownChars = allCharacters.filter((c) => isDm
+    || shows(visOf('character', c.id, c.ownerUserId !== null || disc.has(`character:${c.id}`) || charHasVisibleToken.has(c.id))));
 
   // Aggregate gear/spells: DM from every character; players from party-owned
   // characters only (so NPC inventories/spellbooks aren't leaked).
@@ -54,11 +58,13 @@ export function buildDirectory(campaignId: string, isDm: boolean): DirectoryPayl
     items.push(...namesFrom(c.sheet, 'inventory'), ...namesFrom(c.sheet, 'armor'));
   }
 
+  const shownMaps = campaignMaps.filter((m) => isDm || shows(visOf('map', m.id, disc.has(`map:${m.id}`))));
   return {
-    maps: campaignMaps.map((m) => ({ id: m.id, name: m.name })),
+    maps: shownMaps.map((m) => ({ id: m.id, name: m.name, ...(isDm ? { vis: visOf('map', m.id, disc.has(`map:${m.id}`)) } : {}) })),
     characters: shownChars.map((c) => {
       const owner = c.ownerUserId ? campaigns.members(campaignId).find((m) => m.userId === c.ownerUserId)?.username ?? null : null;
-      return { id: c.id, name: c.name, owner, system: c.system };
+      const base = c.ownerUserId !== null || disc.has(`character:${c.id}`) || charHasVisibleToken.has(c.id);
+      return { id: c.id, name: c.name, owner, system: c.system, ...(isDm ? { vis: visOf('character', c.id, base) } : {}) };
     }),
     tokens: tokenList,
     weapons: distinct(weapons),

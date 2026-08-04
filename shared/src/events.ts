@@ -131,6 +131,8 @@ export const C2S = {
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
   PUBLIC_SHEET_GET: 'publicSheetGet',
+  /** DM-only: force-reveal / force-hide a world-tab entry for all players. */
+  WORLD_OVERRIDE: 'worldOverride',
   /** DM-only: read / write the secret notes attached to a character. */
   DM_NOTES_GET: 'dmNotesGet',
   DM_NOTES_SET: 'dmNotesSet',
@@ -869,13 +871,21 @@ export interface PlaySfxPayload { slotIndex: number }
 export interface SfxPlayPayload { url: string; label: string }
 
 /** Campaign-wide shared reference of everything introduced so far. */
+/** World-tab visibility of one entry, as the DM sees it: has the party
+ *  discovered it, or has the DM force-revealed / force-hidden it? */
+export type WorldVisState = 'seen' | 'unseen' | 'reveal' | 'hide';
 export interface DirectoryPayload {
-  maps: Array<{ id: string; name: string }>;
-  characters: Array<{ id: string; name: string; owner: string | null; system: GameSystem }>;
-  tokens: Array<{ name: string; mapName: string; gm: boolean }>;
+  maps: Array<{ id: string; name: string; vis?: WorldVisState }>;
+  characters: Array<{ id: string; name: string; owner: string | null; system: GameSystem; vis?: WorldVisState }>;
+  tokens: Array<{ id: string; name: string; mapName: string; gm: boolean; vis?: WorldVisState }>;
   weapons: string[];
   spells: string[];
   items: string[];
+}
+export interface WorldOverridePayload {
+  kind: 'map' | 'token' | 'character';
+  key: string;
+  mode: 'reveal' | 'hide' | 'clear';
 }
 export interface MemberPresencePayload {
   userId: string; username: string; online: boolean; mapId: string | null;

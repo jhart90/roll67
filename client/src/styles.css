@@ -2047,6 +2047,15 @@ th > .term { border-bottom-style: dotted; }
 .account-details { background: var(--panel); padding: 12px; min-width: 300px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
 .rollstats-window, .irondice-window { background: var(--panel); padding: 10px 12px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
 
+/* World-tab visibility: DM badge + right-click reveal/hide menu. */
+.dir-vis { margin-right: 5px; font-size: 10px; opacity: 0.75; cursor: help; }
+.dir-vis-menu {
+  position: fixed; z-index: 90; display: flex; flex-direction: column; gap: 2px;
+  padding: 6px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.dir-vis-menu button { width: 100%; text-align: left; font-size: 12px; padding: 4px 8px; }
+
 /* Sheet Notes tab: one big field, plus the DM's secret one beneath. */
 .notes-tab { display: flex; flex-direction: column; gap: 4px; padding: 4px 2px; }
 .notes-tab label { font-size: 12px; font-weight: 600; }

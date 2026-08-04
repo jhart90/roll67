@@ -5,9 +5,9 @@ import {
   type DeleteCustomNpcPayload, type LevelUpRollPayload,
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
-import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PublicSheetGetPayload, PublicSheetPayload } from 'shared';
+import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PublicSheetGetPayload, PublicSheetPayload, WorldOverridePayload } from 'shared';
 import { generateNpc, generateNpcFromModel, nameplateFor, npcById } from 'shared';
-import { campaigns, characters, chat, customNpcs, dmNotes, maps, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, customNpcs, dmNotes, maps, tokens, worldVis } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
@@ -29,6 +29,16 @@ function emitCharacter(io: Server, campaignId: string, character: Character): vo
 }
 
 export function registerCharacterHandlers(io: Server, socket: Socket): void {
+  // DM world-tab curation: force-reveal or force-hide an entry for all
+  // players regardless of what the party has actually seen.
+  socket.on(C2S.WORLD_OVERRIDE, safe(socket, ({ kind, key, mode }: WorldOverridePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM curates the world tab.'); return; }
+    if (!['map', 'token', 'character'].includes(kind) || !key) return;
+    worldVis.setOverride(d.campaignId, kind, key, mode === 'clear' ? null : mode);
+    broadcastDirectory(io, d.campaignId);
+  }, 'WORLD_OVERRIDE'));
+
   // DM-only secret notes: read and write live in their own store and their
   // own DM-gated events — they never ride on the sheet, so no client bug can
   // ever show them to a player.

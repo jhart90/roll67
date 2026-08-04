@@ -516,6 +516,12 @@ export interface InitRollMinePayload { tokenId: string }
 /** SWADE: draw the top card for one pending combatant's token. */
 export interface InitCardDrawPayload { tokenId: string }
 /** SWADE: a card was drawn — drives the flip animation + chat framing. */
+/** Round 2+ auto-deal: every combatant's new card, in deal order, for the
+ *  sequenced face-down → flip-over reveal. Hidden combatants are omitted. */
+export interface RoundCardsPayload {
+  round: number;
+  cards: Array<{ tokenId: string | null; name: string; card: PlayingCard }>;
+}
 export interface InitCardDrawnPayload {
   tokenId: string;
   name: string;
@@ -658,6 +664,8 @@ export const S2C = {
   MACROS: 'macros',
   INITIATIVE: 'initiativeState',
   INIT_CARD_DRAWN: 'initCardDrawn',
+  /** SWADE round 2+: everyone's fresh action cards, revealed in sequence. */
+  ROUND_CARDS: 'roundCards',
   DRAWING_ADDED: 'drawingAdded',
   DRAWING_REMOVED: 'drawingRemoved',
   DRAWINGS_CLEARED: 'drawingsCleared',

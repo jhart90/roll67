@@ -426,6 +426,8 @@ export interface InitiativeState {
   deckRemaining?: number;
   /** Combatants who haven't drawn yet this deal. */
   pendingDraws?: PendingCardDraw[];
+  /** A Joker hit the table this round — the deck reshuffles before the next. */
+  jokerDealt?: boolean;
   /** Server-only counter behind each entry's drawSeq. */
   drawCounter?: number;
   /** Non-card systems: combatants the DM has called on who still owe their

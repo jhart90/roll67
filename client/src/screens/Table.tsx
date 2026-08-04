@@ -25,6 +25,7 @@ import { SoakPrompt } from '../table/SoakPrompt';
 import { BennyMenu } from '../table/BennyMenu';
 import { BleedPrompt } from '../table/BleedPrompt';
 import { ShakenPrompt } from '../table/ShakenPrompt';
+import { RoundCardsOverlay } from '../table/RoundCardsOverlay';
 import { RunPrompt } from '../table/RunPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
@@ -417,6 +418,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <Toolbar />
         <InitiativeFloat />
         <CardDrawOverlay />
+        <RoundCardsOverlay />
         <InitiativeRollPrompt />
         <SoakPrompt />
         <BleedPrompt />

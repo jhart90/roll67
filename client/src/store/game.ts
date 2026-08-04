@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type DmNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type DmNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -238,6 +238,8 @@ interface GameState {
   runPrompt: RunPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
+  /** SWADE round 2+ auto-deal awaiting its sequenced flip reveal. */
+  roundCardsDeal: (RoundCardsPayload & { seq: number }) | null;
   /** DM-only: secret notes per character (DM clients only ever receive these). */
   dmNotesData: Record<string, string>;
   /** Public-facing sheets fetched for tokens we don't control. */
@@ -408,6 +410,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   ironDice: null,
   publicSheets: {},
   dmNotesData: {},
+  roundCardsDeal: null,
   targeting: null,
   aoeTargeting: null,
   floats: [],
@@ -1000,6 +1003,11 @@ export function wireSocket(): void {
 
   socket.on(S2C.RUN_PROMPT, (p: RunPromptPayload) => {
     useGameStore.setState({ runPrompt: p });
+  });
+
+  let roundCardsSeq = 0;
+  socket.on(S2C.ROUND_CARDS, (p: RoundCardsPayload) => {
+    useGameStore.setState({ roundCardsDeal: { ...p, seq: ++roundCardsSeq } });
   });
 
   socket.on(S2C.DM_NOTES, (p: DmNotesPayload) => {

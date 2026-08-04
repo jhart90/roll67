@@ -1115,6 +1115,21 @@ button.link:hover { text-decoration: underline; }
 .init-roll-btn:disabled { opacity: 0.6; cursor: wait; }
 
 /* The flip: back and face stacked, rotated together. */
+/* Round 2+ auto-deal: the whole table's cards flipping in sequence. */
+.round-cards-overlay { bottom: auto; top: 12%; }
+.round-cards-title {
+  font-weight: 700; font-size: 15px; margin-bottom: 10px; color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+.round-cards-grid { display: grid; gap: 14px 16px; justify-content: center; perspective: 900px; }
+.round-card { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 96px; }
+.round-card .card-back { width: 96px; height: 134px; }
+.round-card-name {
+  font-size: 11px; font-weight: 600; color: #fff; max-width: 96px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.8);
+}
+
 .card-flipper {
   position: relative;
   width: 96px;

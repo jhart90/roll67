@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef,
+  MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -379,12 +379,59 @@ function resolveSwadeManeuver(
 
 /** SWADE bookkeeping at every turn handover, for both advance paths. */
 function processTurnTransition(io: Server, campaignId: string, state: InitiativeState, prevIdx: number): void {
+  finishTurnTransition(io, campaignId, state, combatantChar(state, prevIdx));
+}
+
+/** Same, but with the finished combatant already resolved — a round-wrap
+ *  redeal re-sorts the entries, so indexes into the old order go stale. */
+function finishTurnTransition(io: Server, campaignId: string, state: InitiativeState, prev: Character | undefined): void {
   resetSwadeTurnMoves(campaignId);
   swadeActionCounts.delete(campaignId);
-  const prev = combatantChar(state, prevIdx);
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
   if (ch?.system === 'swade') startOfTurnRecovery(io, campaignId, ch);
+}
+
+/**
+ * SWADE round 2+: deal everyone a fresh Action Card automatically — the
+ * order reshuffles every round, per the book. The deck persists across
+ * rounds and reshuffles only after a round in which a Joker was dealt.
+ * Held combatants keep holding and draw no card.
+ */
+function redealRoundCards(io: Server, campaignId: string, state: InitiativeState): void {
+  if (!state.active || !state.cardMode || state.entries.length === 0) return;
+  if (state.jokerDealt) {
+    state.deck = shuffleDeck(buildDeck());
+    postStatusLine(io, campaignId, '🂠 A Joker was dealt last round — the action deck is reshuffled.');
+  }
+  state.jokerDealt = false;
+  const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean }> = [];
+  for (const entry of state.entries) {
+    if (entry.held) continue;
+    if (!state.deck || state.deck.length === 0) state.deck = shuffleDeck(buildDeck());
+    const card = state.deck.shift()!;
+    if (card.rank === 15) state.jokerDealt = true;
+    state.drawCounter = (state.drawCounter ?? 0) + 1;
+    entry.card = card;
+    entry.value = card.rank;
+    entry.drawSeq = state.drawCounter;
+    dealt.push({ tokenId: entry.tokenId, name: entry.name, card, hidden: entry.hidden });
+  }
+  state.entries.sort(compareCardEntries);
+  state.turnIdx = 0;
+  const jokers = dealt.filter((c) => c.card.rank === 15 && !c.hidden).map((c) => c.name);
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', kind: 'system',
+    text: `🂠 Round ${state.round} — new action cards are dealt.${jokers.length ? ` Joker to ${jokers.join(' & ')}!` : ''}`,
+    roll: null, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  // The table-wide reveal: face-down cards flipping in deal order. Hidden
+  // combatants stay off screen; the DM reads theirs from the initiative list.
+  io.to(campaignRoom(campaignId)).emit(S2C.ROUND_CARDS, {
+    round: state.round,
+    cards: dealt.filter((c) => !c.hidden).map(({ hidden: _h, ...rest }) => rest),
+  });
 }
 
 export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaignId: string): InitiativeState {
@@ -1809,15 +1856,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
     if (state.entries.length === 0) return;
-    const prevIdx = state.turnIdx;
+    const prevChar = combatantChar(state, state.turnIdx);
     state.turnIdx++;
     if (state.turnIdx >= state.entries.length) {
       state.turnIdx = 0;
       state.round++;
+      redealRoundCards(io, d.campaignId, state);
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-    processTurnTransition(io, d.campaignId, state, prevIdx);
+    finishTurnTransition(io, d.campaignId, state, prevChar);
   }, 'INIT_NEXT'));
 
   /**
@@ -1839,15 +1887,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         return;
       }
     }
-    const prevIdx = state.turnIdx;
+    const prevChar = combatantChar(state, state.turnIdx);
     state.turnIdx++;
     if (state.turnIdx >= state.entries.length) {
       state.turnIdx = 0;
       state.round++;
+      redealRoundCards(io, d.campaignId, state);
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-    processTurnTransition(io, d.campaignId, state, prevIdx);
+    finishTurnTransition(io, d.campaignId, state, prevChar);
     const next = state.entries[state.turnIdx];
     const msg = chat.add(d.campaignId, {
       userId: null, fromName: 'System', kind: 'system',
@@ -1993,6 +2042,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         }
         if (!state.deck || state.deck.length === 0) state.deck = shuffleDeck(buildDeck());
         const card = state.deck.shift()!;
+        if (card.rank === 15) state.jokerDealt = true;
         state.drawCounter = (state.drawCounter ?? 0) + 1;
         const currentId = state.entries[state.turnIdx]?.id;
         entry.card = card;
@@ -2049,12 +2099,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (!ch || ch.ownerUserId !== d.userId) { emitError(socket, "It isn't your turn."); return; }
     }
     current.held = true;
+    const prevChar = combatantChar(state, state.turnIdx);
     const prevIdx = state.turnIdx;
     state.turnIdx = (state.turnIdx + 1) % state.entries.length;
-    if (state.turnIdx === 0 && prevIdx === state.entries.length - 1) state.round++;
+    if (state.turnIdx === 0 && prevIdx === state.entries.length - 1) {
+      state.round++;
+      redealRoundCards(io, d.campaignId, state);
+    }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-    processTurnTransition(io, d.campaignId, state, prevIdx);
+    finishTurnTransition(io, d.campaignId, state, prevChar);
     const msg = chat.add(d.campaignId, {
       userId: null, fromName: 'System', kind: 'system',
       text: `⏸ ${current.name} holds their action.`, roll: null, recipients: null,
@@ -2316,6 +2370,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     }
     const card = state.deck.shift()!;
+    if (card.rank === 15) state.jokerDealt = true;
     state.drawCounter = (state.drawCounter ?? 0) + 1;
     state.pendingDraws!.splice(idx, 1);
     state.entries.push({

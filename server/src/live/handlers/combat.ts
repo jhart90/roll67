@@ -2010,7 +2010,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           text: `🂠 ${ch.name} spends a Benny to redraw — draws the ${cardName(card)} ${cardShort(card)}${card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''}`,
           roll: null, recipients: null,
         });
-        io.to(entry.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+        const room = entry.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId);
+        io.to(room).emit(S2C.CHAT, { msg });
+        // Same table theater as any draw: the card flips over on screen.
+        io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId: entry.tokenId, name: ch.name, card, byUserId: d.userId });
         break;
       }
       case 'regain-pp': {

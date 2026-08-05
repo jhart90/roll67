@@ -240,7 +240,14 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   }
 
   const bar = token.bar;
-  const hpFrac = bar && bar.maxHp > 0 ? Math.max(0, Math.min(1, bar.hp / bar.maxHp)) : null;
+  // SWADE character tokens carry wound slots in the bar (maxHp 3 = Wild
+  // Card, 1 = Extra): wounds render as red thirds ABOVE the token instead
+  // of the usual HP sliver below it.
+  const system = useGameStore((s) => s.campaign?.system);
+  const swadeWounds = system === 'swade' && token.characterId && bar && bar.maxHp > 0 && bar.maxHp <= 3
+    ? Math.max(0, bar.maxHp - bar.hp)
+    : null;
+  const hpFrac = swadeWounds === null && bar && bar.maxHp > 0 ? Math.max(0, Math.min(1, bar.hp / bar.maxHp)) : null;
   // Beefier creatures get a visibly wider HP bar: the base width (2×radius,
   // same as always) covers up to 20 max HP, scaling linearly to 3× that width
   // at 100+ max HP — so a bandit's sliver and a giant's slab read differently
@@ -344,9 +351,25 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
           />
         </g>
       )}
+      {swadeWounds !== null && swadeWounds > 0 && bar && (
+        <g transform={`translate(${-barW / 2}, ${-halfH - 12})`}>
+          <rect width={barW} height={8} rx={2} fill="#10131a" stroke="#000000" strokeWidth={0.6} />
+          {Array.from({ length: bar.maxHp }, (_, i) => i < swadeWounds && (
+            <rect
+              key={i}
+              x={(barW / bar.maxHp) * i + 1.5}
+              y={1.5}
+              width={barW / bar.maxHp - 3}
+              height={5}
+              rx={1}
+              fill="#d92626"
+            />
+          ))}
+        </g>
+      )}
       {conditionIcons.length > 0 && (
         <text
-          y={-halfH - 5}
+          y={-halfH - (swadeWounds !== null && swadeWounds > 0 ? 17 : 5)}
           textAnchor="middle"
           fontSize={13}
           style={{ userSelect: 'none', pointerEvents: 'none' }}

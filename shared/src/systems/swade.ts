@@ -243,11 +243,6 @@ const combatFields: FieldDef[] = [
   { id: 'fatigue', label: 'Fatigue (0–2)', type: 'number', width: 'sixth', default: 0 },
   { id: 'pace', label: 'Pace', type: 'number', width: 'sixth', default: 6 },
   { id: 'runningDie', label: 'Running die', type: 'select', width: 'sixth', options: TRAIT_DICE, default: 'd6' },
-  // The five sixths above fill a row exactly, so the HP pair is widened to
-  // thirds: that pushes them past 100% and they wrap together onto their own
-  // line, HP beside Max HP.
-  { id: 'hp', label: 'HP (current)', type: 'number', width: 'third', default: 15 },
-  { id: 'maxHp', label: 'Max HP', type: 'number', width: 'third', default: 15 },
   // Damage-type lists hold comma-separated entries and outgrow a third fast,
   // so each takes the full width of the pane.
   { id: 'resist', label: 'Resistances', type: 'text', width: 'full', default: '' },
@@ -256,7 +251,7 @@ const combatFields: FieldDef[] = [
 ];
 
 const sensesFields: FieldDef[] = [
-  { id: 'visionRange', label: 'Vision range (hexes)', type: 'number', width: 'half', default: 24 },
+  { id: 'visionRange', label: 'Vision range (hexes)', type: 'number', width: 'half', default: 10 },
   { id: 'darkvision', label: 'Low-light / infravision (hexes)', type: 'number', width: 'half', default: 0 },
 ];
 
@@ -570,7 +565,7 @@ export const swade: SystemSchema = {
 
   vision(sheet: SheetData): VisionStats {
     return {
-      visionRange: num(sheet, 'visionRange', 24),
+      visionRange: num(sheet, 'visionRange', 10),
       darkvision: num(sheet, 'darkvision', 0),
     };
   },
@@ -582,7 +577,12 @@ export const swade: SystemSchema = {
   },
 
   hp(sheet: SheetData): { hp: number; maxHp: number } {
-    return { hp: num(sheet, 'hp', 0), maxHp: num(sheet, 'maxHp', 0) };
+    // SWADE tracks Wounds, not hit points: the "bar" is wound slots left —
+    // 3 for a Wild Card, 1 for an Extra. Damage flows through the wound
+    // ladder (swadeDamage.ts); these numbers only feed token bars/notes.
+    const maxWounds = sheet.wildCard !== false ? 3 : 1;
+    const wounds = Math.max(0, Math.min(maxWounds, num(sheet, 'wounds', 0)));
+    return { hp: maxWounds - wounds, maxHp: maxWounds };
   },
 
   saveIds(): { id: string; label: string }[] {

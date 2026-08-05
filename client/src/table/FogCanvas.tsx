@@ -96,6 +96,7 @@ export function FogCanvas({
   const visibleScratchRef = useRef<HTMLCanvasElement | null>(null);
   const fadeScratchRef = useRef<HTMLCanvasElement | null>(null);
   const litScratchRef = useRef<HTMLCanvasElement | null>(null);
+  const veilScratchRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -195,6 +196,28 @@ export function FogCanvas({
     else { fadeMaskRef.current = null; if (fade) punch(hexPolys(fade), 0.75); }
     if (visiblePolygons) punchMask(bandMask(visibleMaskRef, visibleScratchRef, visiblePolygons, visibleLitMask), 1);
     else { visibleMaskRef.current = null; punch(hexPolys(visible), 1); }
+
+    // Bright vs dim: under 'dim'/'dark' everything visible gets a faint dark
+    // veil, punched out (soft edge) inside each light's BRIGHT radius — a
+    // torch's core now reads clearly brighter than the dim ring around it.
+    // Drawn on its own scratch layer so the punch-outs can't cut real fog.
+    if (map.grid.lighting !== 'light') {
+      const { canvas: veil, ctx: vctx } = scratchCanvas(veilScratchRef, width, height);
+      vctx.fillStyle = 'rgba(4, 8, 22, 0.34)';
+      vctx.fillRect(0, 0, width, height);
+      vctx.globalCompositeOperation = 'destination-out';
+      for (const c of visibleLitMask?.brightCircles ?? []) {
+        const g = vctx.createRadialGradient(c.x, c.y, Math.max(0, c.r * 0.65), c.x, c.y, c.r);
+        g.addColorStop(0, 'rgba(0, 0, 0, 1)');
+        g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        vctx.fillStyle = g;
+        vctx.beginPath();
+        vctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+        vctx.fill();
+      }
+      vctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(veil, 0, 0);
+    }
   }, [map.grid, visible, fade, exploredLog, exploredLog?.length, visiblePolygons, fadePolygons, visibleLitMask, fadeLitMask, width, height]);
 
   return (

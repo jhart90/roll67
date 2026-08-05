@@ -273,6 +273,10 @@ export interface VisibilityLitMask {
   /** Tinted light cones projected through stained glass windows; each clipped
    *  to its parent lightPolygon on the client via canvas clip(). */
   glassCones?: Array<{ lightIdx: number; cone: Point[]; color: string }>;
+  /** Each light's BRIGHT radius (px). The client dims everything visible
+   *  under 'dim'/'dark' and punches these out, so bright pools read
+   *  brighter than the dim rings around them. */
+  brightCircles?: Array<{ x: number; y: number; r: number }>;
 }
 
 export interface VisibilityBand {
@@ -455,7 +459,14 @@ export function computeUnionVisibilityPolygons(
   const lpResult = precomputed?.lightPolygons
     ? { polygons: precomputed.lightPolygons, colors: precomputed.lightColors ?? [], glassCones: precomputed.glassCones ?? [] }
     : computeLightPolygonsWithColor(input, pxPerHex);
-  const litMaskBase = { lightPolygons: lpResult.polygons, lightColors: lpResult.colors, glassCones: lpResult.glassCones };
+  const litMaskBase = {
+    lightPolygons: lpResult.polygons,
+    lightColors: lpResult.colors,
+    glassCones: lpResult.glassCones,
+    brightCircles: input.lights
+      .filter((l) => l.brightRadius > 0)
+      .map((l) => ({ x: l.x, y: l.y, r: l.brightRadius * pxPerHex })),
+  };
   return {
     full: { reach: full, lit: { circles: fullCircles, ...litMaskBase } },
     fade: { reach: fade, lit: { circles: fadeCircles, ...litMaskBase } },

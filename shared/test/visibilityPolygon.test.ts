@@ -148,11 +148,11 @@ describe('computeUnionVisibilityPolygons', () => {
     for (const p of towardWall) expect(p.x).toBeLessThanOrEqual(30 + 1e-6);
   });
 
-  it('under "dark", reach is still populated but gets a lit-mask (self + darkvision circle, no lights)', () => {
+  it('under "pitch", reach is still populated but gets a lit-mask (self + darkvision circle, no lights)', () => {
     const seeing: VisionStats = { visionRange: 10, darkvision: 4 };
     const bands = computeUnionVisibilityPolygons(
       [{ hex: { q: 0, r: 0 }, stats: seeing }],
-      { grid: { ...GRID, lighting: 'dark' }, walls: [], doors: [], lights: [] },
+      { grid: { ...GRID, lighting: 'pitch' }, walls: [], doors: [], lights: [] },
     );
     const hexPx = Math.sqrt(3) * GRID.hexSize;
     expect(bands.full.reach).toHaveLength(1);
@@ -171,11 +171,11 @@ describe('computeUnionVisibilityPolygons', () => {
     ]);
   });
 
-  it('under "dark" with no darkvision, the lit-mask has just the self-circle unless a light is present', () => {
+  it('under "pitch" with no darkvision, the lit-mask has just the self-circle unless a light is present', () => {
     const blind: VisionStats = { visionRange: 10, darkvision: 0 };
     const noLight = computeUnionVisibilityPolygons(
       [{ hex: { q: 0, r: 0 }, stats: blind }],
-      { grid: { ...GRID, lighting: 'dark' }, walls: [], doors: [], lights: [] },
+      { grid: { ...GRID, lighting: 'pitch' }, walls: [], doors: [], lights: [] },
     );
     expect(noLight.full.lit!.circles).toEqual([{ x: 0, y: 0, r: Math.sqrt(3) * GRID.hexSize }]);
     expect(noLight.full.lit!.lightPolygons).toHaveLength(0);
@@ -183,20 +183,20 @@ describe('computeUnionVisibilityPolygons', () => {
     const torch = { id: 'l1', x: 20, y: 0, brightRadius: 3, dimRadius: 5 };
     const withLight = computeUnionVisibilityPolygons(
       [{ hex: { q: 0, r: 0 }, stats: blind }],
-      { grid: { ...GRID, lighting: 'dark' }, walls: [], doors: [], lights: [torch] },
+      { grid: { ...GRID, lighting: 'pitch' }, walls: [], doors: [], lights: [torch] },
     );
     expect(withLight.full.lit!.lightPolygons).toHaveLength(1);
   });
 
-  it('under "dim", both full and fade get the self-circle plus the (unwidened) ambient-radius circle', () => {
+  it('under "dim", the ambient circle covers the whole vision range (sight unlimited, −2 is mechanical)', () => {
     const blind: VisionStats = { visionRange: 10, darkvision: 0 };
     const bands = computeUnionVisibilityPolygons(
       [{ hex: { q: 0, r: 0 }, stats: blind }],
       { grid: { ...GRID, lighting: 'dim' }, walls: [], doors: [], lights: [] },
     );
     const hexPx = Math.sqrt(3) * GRID.hexSize;
-    const ambientPx = 2 * hexPx; // DIM_AMBIENT_RADIUS = 2
+    const ambientPx = 11 * hexPx; // Dim sight is unlimited: capped only by visionRange + 1
     expect(bands.full.lit!.circles).toEqual([{ x: 0, y: 0, r: hexPx }, { x: 0, y: 0, r: ambientPx }]);
-    expect(bands.fade.lit!.circles).toEqual([{ x: 0, y: 0, r: hexPx }, { x: 0, y: 0, r: ambientPx }]); // ambient NOT widened for fade
+    expect(bands.fade.lit!.circles).toEqual([{ x: 0, y: 0, r: hexPx }, { x: 0, y: 0, r: 12 * hexPx }]); // fade stats widen the cap by one
   });
 });

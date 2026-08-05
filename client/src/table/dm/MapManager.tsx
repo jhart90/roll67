@@ -186,9 +186,10 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new' | 'n
             <label className="lu-field">
               Lighting
               <select value={grid.lighting} onChange={(e) => setGrid({ lighting: e.target.value as GridConfig['lighting'] })}>
-                <option value="dark">Dark</option>
-                <option value="dim">Dim</option>
-                <option value="light">Light</option>
+                <option value="dark">Dark (−4, sight 10 hexes)</option>
+                <option value="pitch">Pitch Darkness (−6, light/darkvision only)</option>
+                <option value="dim">Dim (−2 to sight-based actions)</option>
+                <option value="light">Bright (no penalty)</option>
               </select>
             </label>
           </>

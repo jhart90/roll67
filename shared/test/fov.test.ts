@@ -10,7 +10,10 @@ const GRID: GridConfig = {
   gridEnabled: true, lighting: 'light', feetPerHex: 5,
 };
 
-const DARK_GRID: GridConfig = { ...GRID, lighting: 'dark' };
+// 'pitch' is the old total-darkness behavior; 'dark' now grants 10 hexes of
+// ambient sight per the SWADE lighting ladder.
+const DARK_GRID: GridConfig = { ...GRID, lighting: 'pitch' };
+const SWADE_DARK_GRID: GridConfig = { ...GRID, lighting: 'dark' };
 const DIM_GRID: GridConfig = { ...GRID, lighting: 'dim' };
 
 const EYES: VisionStats = { visionRange: 10, darkvision: 0 };
@@ -221,11 +224,19 @@ describe('lighting', () => {
     expect(lit.has(packHex({ q: 11, r: 10 }))).toBe(true); // torch side
   });
 
-  it('dim lighting: sees an ambient radius around itself with no light source or darkvision', () => {
-    const visible = fov({ grid: DIM_GRID });
-    for (const h of hexRange(VIEWER, 5)) {
+  it('dim lighting: sight is unlimited (the −2 is mechanical, not distance)', () => {
+    const visible = fov({ grid: DIM_GRID, stats: { visionRange: 5, darkvision: 0 } });
+    for (const h of hexRange(VIEWER, 6)) {
       if (!inBounds(h, DIM_GRID)) continue;
-      expect(visible.has(packHex(h)), `hex ${h.q},${h.r}`).toBe(hexDistance(VIEWER, h) <= 2);
+      expect(visible.has(packHex(h)), `hex ${h.q},${h.r}`).toBe(hexDistance(VIEWER, h) <= 5);
+    }
+  });
+
+  it('dark lighting: unlit targets visible out to 10 hexes, nothing beyond', () => {
+    const visible = fov({ grid: SWADE_DARK_GRID, stats: { visionRange: 20, darkvision: 0 } });
+    for (const h of hexRange(VIEWER, 12)) {
+      if (!inBounds(h, SWADE_DARK_GRID)) continue;
+      expect(visible.has(packHex(h)), `hex ${h.q},${h.r}`).toBe(hexDistance(VIEWER, h) <= 10);
     }
   });
 

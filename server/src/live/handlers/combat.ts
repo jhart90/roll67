@@ -894,8 +894,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
               if (dHex <= t.light.dim) lit = 'dim';
             }
           }
-          const illum = lit === 'bright' ? 0 : lit === 'dim' || map.grid.lighting === 'dim' ? -2 : -4;
-          if (illum) { mod += illum; tags.push(`${illum} ${illum === -2 ? 'Dim light' : 'Darkness'}`); }
+          const base = map.grid.lighting === 'dim' ? -2 : map.grid.lighting === 'dark' ? -4 : -6;
+          const illum = lit === 'bright' ? 0 : lit === 'dim' ? -2 : base;
+          if (illum) { mod += illum; tags.push(`${illum} ${illum === -2 ? 'Dim light' : illum === -4 ? 'Darkness' : 'Pitch darkness'}`); }
         }
         // Aim: negate up to 4 points of range/cover penalties, else +2 flat.
         if (p.adv === 'adv' && action.ranged) {

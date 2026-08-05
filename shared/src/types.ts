@@ -88,7 +88,7 @@ export interface AoeSpec {
  * around each viewer; 'dark' = true darkness, only lit hexes or darkvision
  * reveal anything.
  */
-export type LightingLevel = 'dark' | 'dim' | 'light';
+export type LightingLevel = 'dark' | 'dim' | 'light' | 'pitch';
 
 export interface GridConfig {
   /** Center-to-corner radius of a hex, in background-image pixels. */

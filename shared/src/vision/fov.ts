@@ -18,6 +18,18 @@ export const MAX_VISION_RADIUS = 40;
  *  themselves without needing a light source or darkvision. */
 export const DIM_AMBIENT_RADIUS = 2;
 
+/** SWADE Dark: unlit targets are visible out to 10" (10 hexes). */
+export const DARK_AMBIENT_RADIUS = 10;
+
+/**
+ * Ambient sight (hexes) with no light source, per the SWADE lighting ladder:
+ * Bright and Dim see without limit (Dim costs −2 instead of distance),
+ * Dark reaches 10 hexes, Pitch Darkness nothing but darkvision/lights.
+ */
+export function ambientSightRadius(lighting: string): number {
+  return lighting === "dark" ? DARK_AMBIENT_RADIUS : lighting === "pitch" ? 0 : Infinity;
+}
+
 /**
  * Under global daylight ('light'), sight isn't limited by a character's own
  * vision stat at all -- only by obstructions (walls/doors) and the hard
@@ -123,7 +135,7 @@ export function computeFov(
     if (needLightCheck) {
       const isLit = lit!.has(key);
       const inDarkvision = dist <= stats.darkvision;
-      const inDimAmbient = lighting === 'dim' && dist <= DIM_AMBIENT_RADIUS;
+      const inDimAmbient = dist <= ambientSightRadius(lighting);
       if (!isLit && !inDarkvision && !inDimAmbient) continue;
       if ((isLit || inDimAmbient) && dist > stats.visionRange && !inDarkvision) continue;
     }
@@ -199,7 +211,7 @@ function computeFovBands(
     if (needLightCheck) {
       const isLit = lit!.has(key);
       const inDarkvisionWide = dist <= fs.darkvision;
-      const inDimAmbient = lighting === 'dim' && dist <= DIM_AMBIENT_RADIUS;
+      const inDimAmbient = dist <= ambientSightRadius(lighting);
       if (!isLit && !inDarkvisionWide && !inDimAmbient) reachable = false;
       else if ((isLit || inDimAmbient) && dist > fs.visionRange && !inDarkvisionWide) reachable = false;
     }
@@ -214,7 +226,7 @@ function computeFovBands(
     if (isFull && needLightCheck) {
       const isLit = lit!.has(key);
       const inDarkvision = dist <= stats.darkvision;
-      const inDimAmbient = lighting === 'dim' && dist <= DIM_AMBIENT_RADIUS;
+      const inDimAmbient = dist <= ambientSightRadius(lighting);
       if (!isLit && !inDarkvision && !inDimAmbient) isFull = false;
       else if ((isLit || inDimAmbient) && dist > stats.visionRange && !inDarkvision) isFull = false;
     }
@@ -433,13 +445,13 @@ export function computeUnionVisibilityPolygons(
       fadeCircles.push({ x: originPx.x, y: originPx.y, r: pxPerHex });
       if (v.stats.darkvision > 0) fullCircles.push({ x: originPx.x, y: originPx.y, r: v.stats.darkvision * pxPerHex });
       if (fs.darkvision > 0) fadeCircles.push({ x: originPx.x, y: originPx.y, r: fs.darkvision * pxPerHex });
-      if (isDim) {
-        // Unlike darkvision, the ambient radius itself doesn't widen for the
-        // fade rim (matching computeFov's use of the DIM_AMBIENT_RADIUS
-        // constant unchanged for both calls).
-        fullCircles.push({ x: originPx.x, y: originPx.y, r: DIM_AMBIENT_RADIUS * pxPerHex });
-        fadeCircles.push({ x: originPx.x, y: originPx.y, r: DIM_AMBIENT_RADIUS * pxPerHex });
-      }
+      // Ambient sight per the lighting ladder: Dim unlimited (capped by the
+      // viewer's own range), Dark 10 hexes, Pitch nothing. As in the hex
+      // path, the ambient radius itself doesn't widen for the fade rim.
+      const ambFull = Math.min(ambientSightRadius(input.grid.lighting), v.stats.visionRange + 1);
+      const ambFade = Math.min(ambientSightRadius(input.grid.lighting), fs.visionRange + 1);
+      if (ambFull > 0) fullCircles.push({ x: originPx.x, y: originPx.y, r: ambFull * pxPerHex });
+      if (ambFade > 0) fadeCircles.push({ x: originPx.x, y: originPx.y, r: ambFade * pxPerHex });
     }
   }
 

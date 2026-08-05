@@ -203,7 +203,8 @@ export function FogCanvas({
     // Drawn on its own scratch layer so the punch-outs can't cut real fog.
     if (map.grid.lighting !== 'light') {
       const { canvas: veil, ctx: vctx } = scratchCanvas(veilScratchRef, width, height);
-      vctx.fillStyle = 'rgba(4, 8, 22, 0.34)';
+      const veilAlpha = map.grid.lighting === 'dim' ? 0.22 : map.grid.lighting === 'dark' ? 0.34 : 0.5;
+      vctx.fillStyle = `rgba(4, 8, 22, ${veilAlpha})`;
       vctx.fillRect(0, 0, width, height);
       vctx.globalCompositeOperation = 'destination-out';
       for (const c of visibleLitMask?.brightCircles ?? []) {

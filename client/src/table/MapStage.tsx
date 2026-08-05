@@ -71,12 +71,16 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
     });
   }, []);
 
+  // Depends on !!map: on first join the map hasn't arrived yet, so this
+  // effect's first run sees no container div (the "No active map" placeholder
+  // renders instead) and attaches nothing. Without the dep it never ran
+  // again — scroll-wheel zoom stayed dead until something remounted the stage.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [onWheel]);
+  }, [onWheel, !!map]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard: =/- zoom (tap or hold), WASDQE / arrow keys move the selected token.
   useEffect(() => {

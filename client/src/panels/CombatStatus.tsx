@@ -88,7 +88,9 @@ export function CombatStatus({ character, editable }: { character: Character; ed
       {resources.length > 0 && (
         <div className="cs-resources">
           <div className="cs-res-head">
-            {editable && (
+            {/* SWADE has no round/scene resource economy — its per-round
+                bookkeeping resets server-side; the buttons would do nothing. */}
+            {editable && character.system !== 'swade' && (
               <span className="cf-rest">
                 <button className="link" onClick={() => reset('round')}>↻ Round</button>
                 <button className="link" onClick={() => reset('scene')}>↻ Scene</button>
@@ -119,6 +121,41 @@ export function CombatStatus({ character, editable }: { character: Character; ed
               </span>
             </div>
           ))}
+          {/* SWADE: Wounds get the same pip treatment as Bennies, right
+              beneath them — red pips fill as wounds land. */}
+          {character.system === 'swade' && (() => {
+            const wildCard = character.sheet.wildCard !== false;
+            const maxW = wildCard ? 3 : 1;
+            const wounds = Math.max(0, Math.min(maxW, Number(character.sheet.wounds) || 0));
+            return (
+              <div className="cf-res">
+                <span className="cf-res-name">
+                  <Term desc={`Each Wound is −1 to trait rolls and −1 Pace. ${wildCard ? 'A Wild Card is Incapacitated past 3 Wounds' : 'An Extra drops at 1 Wound'}; Soak and Healing remove them.`}>
+                    Wounds
+                  </Term>
+                  <span className="dim"> · −1 trait rolls & Pace each</span>
+                </span>
+                <span className="cf-res-track">
+                  <span className="cf-pips">
+                    {Array.from({ length: maxW }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`slot-pip ${i < wounds ? 'used' : 'open'}`}
+                        style={i < wounds ? { background: '#d92626', borderColor: '#d92626' } : undefined}
+                      />
+                    ))}
+                  </span>
+                  <span className="cf-res-count">{wounds}/{maxW}</span>
+                  {editable && (
+                    <span className="slot-btns">
+                      <button className="icon-btn" title="Heal a wound" disabled={wounds <= 0} onClick={() => intents.updateCharacter(character.id, { wounds: wounds - 1 })}>−</button>
+                      <button className="icon-btn" title="Take a wound" disabled={wounds >= maxW} onClick={() => intents.updateCharacter(character.id, { wounds: wounds + 1 })}>+</button>
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })()}
         </div>
       )}
     </section>

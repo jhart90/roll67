@@ -10,6 +10,7 @@ const SHAPES: Array<{ id: TokenShape; label: string }> = [
   { id: 'square', label: 'Square' },
   { id: 'triangle', label: 'Triangle' },
   { id: 'star', label: 'Star' },
+  { id: 'hexagon', label: 'Hexagon' },
   { id: 'rect-v', label: 'Rectangle (vertical)' },
   { id: 'rect-h', label: 'Rectangle (horizontal)' },
   // The uploaded art at its own aspect ratio — scaled to one hex wide / tall.
@@ -142,8 +143,9 @@ export function TokenInspector() {
             type="number"
             min={1}
             max={4}
+            step={0.5}
             value={token.size}
-            onChange={(e) => intents.updateToken(token.id, { size: Math.max(1, Number(e.target.value) || 1) })}
+            onChange={(e) => intents.updateToken(token.id, { size: Math.max(1, Math.round((Number(e.target.value) || 1) * 2) / 2) })}
           />
         </label>
         <label>

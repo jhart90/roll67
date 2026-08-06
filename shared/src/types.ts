@@ -237,7 +237,7 @@ export interface VisionStats {
 /** Rendered outline of a token piece. */
 /** 'original' shows the uploaded art at its own aspect ratio, scaled so its
  *  WIDTH spans one hex; 'original-alt' scales so its HEIGHT spans one hex. */
-export type TokenShape = 'circle' | 'square' | 'triangle' | 'star' | 'rect-v' | 'rect-h' | 'original' | 'original-alt';
+export type TokenShape = 'circle' | 'square' | 'triangle' | 'star' | 'hexagon' | 'rect-v' | 'rect-h' | 'original' | 'original-alt';
 
 export interface Token {
   id: string;

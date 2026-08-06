@@ -70,9 +70,20 @@ function starPoints(r: number): string {
   return pts.join(' ');
 }
 
+/** Pointy-top hexagon, matching the grid's orientation. */
+function hexagonPoints(r: number): string {
+  const pts: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    const ang = -Math.PI / 2 + (i * Math.PI) / 3;
+    pts.push(`${(Math.cos(ang) * r).toFixed(1)},${(Math.sin(ang) * r).toFixed(1)}`);
+  }
+  return pts.join(' ');
+}
+
 /** SVG element for a token's outline, centered on the origin. */
 function shapeNode(shape: TokenShape, r: number, extra: SVGProps<SVGElement>) {
   switch (shape) {
+    case 'hexagon': return <polygon points={hexagonPoints(r)} {...(extra as SVGProps<SVGPolygonElement>)} />;
     case 'square': return <rect x={-r} y={-r} width={2 * r} height={2 * r} {...(extra as SVGProps<SVGRectElement>)} />;
     case 'rect-v': return <rect x={-r * 0.62} y={-r} width={r * 1.24} height={2 * r} {...(extra as SVGProps<SVGRectElement>)} />;
     case 'rect-h': return <rect x={-r} y={-r * 0.62} width={2 * r} height={r * 1.24} {...(extra as SVGProps<SVGRectElement>)} />;

@@ -38,6 +38,7 @@ const SHAPES: Array<{ id: TokenShape; label: string }> = [
   { id: 'square', label: 'Square' },
   { id: 'triangle', label: 'Triangle' },
   { id: 'star', label: 'Star' },
+  { id: 'hexagon', label: 'Hexagon' },
   { id: 'rect-v', label: 'Rectangle (vertical)' },
   { id: 'rect-h', label: 'Rectangle (horizontal)' },
   { id: 'original', label: 'Original (fit width)' },
@@ -131,9 +132,9 @@ export function AppearanceStep({ value, onChange }: {
         <label>
           Size (hexes)
           <input
-            type="number" min={1} max={4}
+            type="number" min={1} max={4} step={0.5}
             value={value.tokenSize}
-            onChange={(e) => onChange({ ...value, tokenSize: Math.max(1, Math.min(4, Number(e.target.value) || 1)) })}
+            onChange={(e) => onChange({ ...value, tokenSize: Math.max(1, Math.min(4, Math.round((Number(e.target.value) || 1) * 2) / 2)) })}
           />
         </label>
         <label>

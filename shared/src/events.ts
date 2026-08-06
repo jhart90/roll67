@@ -6,7 +6,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
   MapDef, MapMeta, MapText, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
+  Counter, RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
 import type { PlayingCard } from './systems/cards.js';
@@ -179,6 +179,11 @@ export const C2S = {
   // custom compendium
   SAVE_TO_COMPENDIUM: 'saveToCompendium',
   DELETE_CUSTOM_NPC: 'deleteCustomNpc',
+  // DM counters (banner bars over the map)
+  COUNTER_CREATE: 'counterCreate',
+  COUNTER_UPDATE: 'counterUpdate',
+  COUNTER_DELETE: 'counterDelete',
+  COUNTERS_GET: 'countersGet',
   // map loot objects
   PLACE_MAP_OBJECT: 'placeMapObject',
   UPDATE_MAP_OBJECT: 'updateMapObject',
@@ -717,6 +722,8 @@ export const S2C = {
   DM_NOTES: 'dmNotes',
   /** The requesting user's own private notes on one character. */
   PRIVATE_NOTES: 'privateNotes',
+  /** Counters for one map (players receive only the visible ones). */
+  COUNTERS: 'counters',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -936,6 +943,8 @@ export interface PublicSheetGetPayload { characterId: string }
 export interface DmNotesGetPayload { characterId: string }
 export interface DmNotesSetPayload { characterId: string; text: string }
 export interface DmNotesPayload { characterId: string; text: string }
+export interface CounterUpdatePayload { counterId: string; patch: Partial<Pick<Counter, 'mapId' | 'name' | 'color' | 'max' | 'value' | 'visible' | 'position'>> }
+export interface CountersPayload { mapId: string; counters: Counter[] }
 export interface PrivateNotesGetPayload { characterId: string }
 export interface PrivateNotesSetPayload { characterId: string; text: string }
 export interface PrivateNotesPayload { characterId: string; text: string }

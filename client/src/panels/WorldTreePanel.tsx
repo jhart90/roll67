@@ -351,6 +351,7 @@ export function WorldTreePanel() {
           <button className="btn btn-sm" onClick={() => openWindow('handout', 'new', {}, 'New handout')}>+ Handout</button>
           <button className="btn btn-sm" onClick={() => intents.createWorldFolder('New folder', null)}>+ Folder</button>
           <button className="btn btn-sm" onClick={() => intents.createWorldFolder('Chest', null, { displayKind: 'chest' })}>+ Chest</button>
+          <button className="btn btn-sm" title="A giant segmented banner bar over the map (doom clock, boss HP) — hidden from players until you reveal it" onClick={() => { const m = useGameStore.getState().map; if (m) intents.counterCreate(m.id); }}>+ Counter</button>
           <button className="btn btn-sm" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
       )}
@@ -378,6 +379,26 @@ export function WorldTreePanel() {
           </button>
         </p>
       )}
+      {(() => {
+        const cs = useGameStore.getState().counters;
+        if (cs.length === 0) return null;
+        return (
+          <div className="wt-counters">
+            <h5 style={{ margin: '6px 0 2px' }}>Counters (this map)</h5>
+            {cs.map((c) => (
+              <div key={c.id} className="dir-item" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ color: c.color }}>▮</span> {c.name} <span className="dim">{c.value}/{c.max}{!c.visible ? ' · hidden' : ''}</span>
+                {isDm && (
+                  <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                    <button className="link" title={c.visible ? 'Hide from players' : 'Show to players'} onClick={() => intents.counterUpdate(c.id, { visible: !c.visible })}>{c.visible ? '🙈' : '👁'}</button>
+                    <button className="link" title="Delete" onClick={() => { if (confirm('Delete counter "' + c.name + '"?')) intents.counterDelete(c.id); }}>🗑</button>
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
       {isDm && <p className="dim wt-hint">Drag an item onto another to nest it; drag to empty space to move it to the top level.</p>}
 
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}

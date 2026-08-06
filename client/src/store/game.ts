@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -240,6 +240,8 @@ interface GameState {
   bleedPrompt: BleedPromptPayload | null;
   /** SWADE round 2+ auto-deal awaiting its sequenced flip reveal. */
   roundCardsDeal: (RoundCardsPayload & { seq: number }) | null;
+  /** DM counters on the current map (players receive only visible ones). */
+  counters: Counter[];
   /** My own private notes per character (each user only ever gets their own). */
   privateNotesData: Record<string, string>;
   /** DM-only: secret notes per character (DM clients only ever receive these). */
@@ -413,6 +415,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   publicSheets: {},
   dmNotesData: {},
   privateNotesData: {},
+  counters: [],
   roundCardsDeal: null,
   targeting: null,
   aoeTargeting: null,
@@ -699,7 +702,12 @@ export function wireSocket(): void {
     });
   });
 
+  socket.on(S2C.COUNTERS, (p: CountersPayload) => {
+    if (useGameStore.getState().map?.id === p.mapId) useGameStore.setState({ counters: p.counters });
+  });
+
   socket.on(S2C.MAP_STATE, (p: MapStatePayload) => {
+    socket.emit(C2S.COUNTERS_GET, { mapId: p.map.id });
     const s = useGameStore.getState();
     // A map switch invalidates anything anchored to the OLD map's tokens: an
     // in-progress target pick (its source token id no longer resolves, which
@@ -1407,6 +1415,10 @@ export const intents = {
   /** DM-only: force-reveal / force-hide / reset a world-tab entry. */
   worldOverride: (kind: 'map' | 'token' | 'character', key: string, mode: 'reveal' | 'hide' | 'clear') =>
     socket.emit(C2S.WORLD_OVERRIDE, { kind, key, mode }),
+  /** DM counters: banner bars over the map. */
+  counterCreate: (mapId: string) => socket.emit(C2S.COUNTER_CREATE, { mapId }),
+  counterUpdate: (counterId: string, patch: Partial<Counter>) => socket.emit(C2S.COUNTER_UPDATE, { counterId, patch }),
+  counterDelete: (counterId: string) => socket.emit(C2S.COUNTER_DELETE, { counterId }),
   /** My own private notes on a character (public-sheet scratchpad). */
   getPrivateNotes: (characterId: string) => socket.emit(C2S.PRIVATE_NOTES_GET, { characterId }),
   setPrivateNotes: (characterId: string, text: string) => socket.emit(C2S.PRIVATE_NOTES_SET, { characterId, text }),

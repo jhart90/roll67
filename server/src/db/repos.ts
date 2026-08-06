@@ -2,7 +2,7 @@ import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
-  RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
+  Counter, RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
 import { statEntriesFromDice, type DieRoll, type RollStatRow } from 'shared';
 import { db, newId, now, stmt } from './db.js';
@@ -1167,6 +1167,44 @@ export const worldVis = {
     }
   },
 };
+
+/** DM counters: segmented banner bars pinned to a map pane. */
+export const counters = {
+  create(campaignId: string, mapId: string): Counter {
+    const id = newId();
+    stmt(`INSERT INTO counters (id, campaign_id, map_id, created_at) VALUES (?, ?, ?, ?)`).run(id, campaignId, mapId, now());
+    return this.byId(id)!;
+  },
+  byId(id: string): Counter | undefined {
+    const row = stmt('SELECT * FROM counters WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? toCounter(row) : undefined;
+  },
+  forMap(mapId: string): Counter[] {
+    return (stmt('SELECT * FROM counters WHERE map_id = ? ORDER BY created_at').all(mapId) as Array<Record<string, unknown>>).map(toCounter);
+  },
+  forCampaign(campaignId: string): Counter[] {
+    return (stmt('SELECT * FROM counters WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as Array<Record<string, unknown>>).map(toCounter);
+  },
+  update(id: string, patch: Partial<Counter>): void {
+    const cur = this.byId(id);
+    if (!cur) return;
+    const next = { ...cur, ...patch };
+    stmt(`UPDATE counters SET map_id = ?, name = ?, color = ?, max = ?, value = ?, visible = ?, position = ? WHERE id = ?`)
+      .run(next.mapId, next.name, next.color, next.max, next.value, next.visible ? 1 : 0, next.position, id);
+  },
+  delete(id: string): void {
+    stmt('DELETE FROM counters WHERE id = ?').run(id);
+  },
+};
+
+function toCounter(row: Record<string, unknown>): Counter {
+  return {
+    id: String(row.id), campaignId: String(row.campaign_id), mapId: String(row.map_id),
+    name: String(row.name), color: String(row.color),
+    max: Number(row.max), value: Number(row.value),
+    visible: row.visible === 1, position: (row.position === 'bottom' ? 'bottom' : 'top'),
+  };
+}
 
 /** Per-player private notes on characters (the public sheet scratchpad). */
 export const privateNotes = {

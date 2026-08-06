@@ -2133,6 +2133,22 @@ th > .term { border-bottom-style: dotted; }
   font-size: 9px; color: var(--dim, #889); white-space: nowrap;
 }
 
+/* DM counters: giant segmented banner bars over the map pane. */
+.counters-edge { position: absolute; left: 50%; transform: translateX(-50%); width: 75%; z-index: 40; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.counters-top { top: 10px; }
+.counters-bottom { bottom: 14px; }
+.counter-bar {
+  display: flex; align-items: center; gap: 8px; padding: 4px 10px; pointer-events: auto;
+  background: rgba(10, 13, 20, 0.82); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.counter-hidden { opacity: 0.55; border-style: dashed; }
+.counter-name { font-weight: 700; font-size: 13px; white-space: nowrap; max-width: 30%; overflow: hidden; text-overflow: ellipsis; }
+.counter-track { flex: 1; display: flex; gap: 3px; height: 16px; }
+.counter-seg { flex: 1; border-radius: 3px; background: rgba(255, 255, 255, 0.10); }
+.counter-count { font-size: 12px; font-weight: 600; }
+.counter-btns { display: flex; gap: 3px; }
+
 /* RoF picker beside burst-capable weapon actions. */
 .rof-select { width: auto; font-size: 11px; padding: 2px 4px; flex: 0 0 auto; }
 

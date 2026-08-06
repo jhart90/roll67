@@ -223,6 +223,24 @@ export interface MapView extends MapMeta {
   texts: MapText[];
 }
 
+/** A DM counter: a giant segmented banner bar pinned to a map pane's top or
+ *  bottom edge (doom clock, ritual progress, fortress HP). Hidden from
+ *  players until the DM shows it; the DM alone edits and increments it. */
+export interface Counter {
+  id: string;
+  campaignId: string;
+  mapId: string;
+  name: string;
+  /** Fill color of the completed segments. */
+  color: string;
+  /** Total increments. */
+  max: number;
+  /** Filled increments. */
+  value: number;
+  visible: boolean;
+  position: 'top' | 'bottom';
+}
+
 // ---------- Tokens ----------
 
 export type TokenLayer = 'token' | 'gm';

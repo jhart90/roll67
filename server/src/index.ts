@@ -20,6 +20,7 @@ import { registerTableHandlers } from './live/handlers/table.js';
 import { registerLibraryHandlers } from './live/handlers/library.js';
 import { registerWorldHandlers } from './live/handlers/world.js';
 import { registerMapObjectHandlers } from './live/handlers/mapObjects.js';
+import { registerCounterHandlers } from './live/handlers/counters.js';
 import { flushAllVisionMemory } from './live/visionService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -67,6 +68,7 @@ io.on('connection', (socket) => {
   registerMapEditHandlers(io, socket);
   registerTokenHandlers(io, socket);
   registerCharacterHandlers(io, socket);
+  registerCounterHandlers(io, socket);
   registerChatHandlers(io, socket);
   registerCombatHandlers(io, socket);
   registerTableHandlers(io, socket);

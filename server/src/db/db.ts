@@ -234,6 +234,24 @@ db.exec(`
   )
 `);
 
+// DM counters: giant segmented bars pinned to the top/bottom of a map pane
+// (doom clocks, ritual progress, castle HP). Hidden from players until shown.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS counters (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    map_id TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT 'Counter',
+    color TEXT NOT NULL DEFAULT '#d92626',
+    max INTEGER NOT NULL DEFAULT 3,
+    value INTEGER NOT NULL DEFAULT 3,
+    visible INTEGER NOT NULL DEFAULT 0,
+    position TEXT NOT NULL DEFAULT 'top' CHECK (position IN ('top', 'bottom')),
+    created_at INTEGER NOT NULL
+  )
+`);
+db.exec('CREATE INDEX IF NOT EXISTS idx_counters_map ON counters(map_id)');
+
 // Per-player private notes on characters they do not control (public sheet).
 // Keyed by viewer + character: each player sees only their own scribbles.
 db.exec(`

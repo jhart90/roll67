@@ -170,9 +170,14 @@ describe('SWADE sheet', () => {
     for (const id of ['shaken', 'distracted', 'vulnerable', 'stunned', 'prone', 'dead']) {
       expect(ids).toContain(id);
     }
-    const res = combatResources('swade', { ...swade.defaultSheet(), res_bennies: 1 });
+    // The bennies FIELD is the live pool (the Benny menu spends it directly);
+    // the pip row mirrors it rather than tracking a separate res_ counter.
+    const res = combatResources('swade', { ...swade.defaultSheet(), bennies: 2 });
     expect(res).toHaveLength(1);
     expect(res[0]).toMatchObject({ id: 'bennies', max: 3, used: 1, remaining: 2 });
+    // More than the starting three (DM awards) widens the track.
+    const flush = combatResources('swade', { ...swade.defaultSheet(), bennies: 5 });
+    expect(flush[0]).toMatchObject({ max: 5, used: 0, remaining: 5 });
   });
 });
 

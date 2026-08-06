@@ -12,6 +12,7 @@ import { RollStatsTab } from './RollStats';
  */
 export function PublicSheetWindow({ characterId }: { characterId: string }) {
   const sheet = useGameStore((s) => s.publicSheets[characterId]);
+  const isDm = useGameStore((s) => s.you?.role) === 'dm';
   const [tab, setTab] = useState<'profile' | 'stats'>('profile');
   useEffect(() => { intents.getPublicSheet(characterId); }, [characterId]);
 
@@ -27,6 +28,16 @@ export function PublicSheetWindow({ characterId }: { characterId: string }) {
         </div>
         {sheet.tokenImageUrl && sheet.tokenImageUrl !== sheet.portraitUrl && (
           <img className="public-sheet-token" src={sheet.tokenImageUrl} alt="" title="Token art" />
+        )}
+        {isDm && sheet.system === 'swade' && (
+          <button
+            className="link"
+            style={{ marginLeft: 'auto', flex: '0 0 auto' }}
+            title={`Give ${sheet.name} a Benny — announced in chat`}
+            onClick={() => intents.awardBenny(characterId)}
+          >
+            🪙 award
+          </button>
         )}
       </div>
       <div className="sheet-tabs">

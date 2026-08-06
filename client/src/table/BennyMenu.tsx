@@ -30,7 +30,40 @@ export function BennyMenu() {
 
   if (!you || campaign?.system !== 'swade') return null;
   const isDm = you.role === 'dm';
-  const mine = characters.filter((c) => c.system === 'swade' && (isDm || c.ownerUserId === you.userId));
+
+  // The DM's menu awards rather than spends: every player-controlled Wild
+  // Card, one click each, announced in chat. (NPC bennies live on sheets.)
+  if (isDm) {
+    const wildCards = characters.filter((c) =>
+      c.system === 'swade' && c.ownerUserId && (c.sheet as Record<string, unknown>).wildCard !== false);
+    if (wildCards.length === 0) return null;
+    return (
+      <div className={`benny-menu${plateOpen ? ' raised' : ''}`}>
+        <button className="benny-chip" onClick={() => setOpen((o) => !o)} title="Award Bennies">
+          🪙 DM
+        </button>
+        {open && (
+          <div className="benny-panel">
+            <div className="benny-head">
+              <strong>Award Bennies</strong>
+              <span className="dim">announced in chat</span>
+            </div>
+            {wildCards.map((c) => (
+              <button
+                key={c.id}
+                title={`Give ${c.name} a Benny — posts "🪙 The DM awards ${c.name} a Benny!" to chat`}
+                onClick={() => intents.awardBenny(c.id)}
+              >
+                🪙 {c.name} <span className="dim">({num((c.sheet as Record<string, unknown>).bennies)})</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const mine = characters.filter((c) => c.system === 'swade' && c.ownerUserId === you.userId);
   if (mine.length === 0) return null;
   const ch = mine.find((c) => c.id === pickedId) ?? mine[0];
   const sheet = ch.sheet as Record<string, unknown>;

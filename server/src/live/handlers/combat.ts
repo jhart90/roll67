@@ -4,7 +4,7 @@ import {
   MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -1970,6 +1970,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (!conditionsOf(ch.sheet).includes('bleeding')) return;
     resolveBleedingOut(io, d.campaignId, ch);
   }, 'BLEED_ROLL'));
+
+  // DM hands a character a Benny — always a public moment, so it's announced.
+  socket.on(C2S.BENNY_AWARD, safe(socket, ({ characterId }: BennyAwardPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM hands out Bennies.'); return; }
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    persistSheet(io, d.campaignId, ch, { bennies: num(ch.sheet, 'bennies', 0) + 1 });
+    postStatusLine(io, d.campaignId, `🪙 The DM awards ${ch.name} a Benny!`);
+  }, 'BENNY_AWARD'));
 
   // The Benny menu: every automatable use from the SWADE Benny table. Soak
   // rides the existing SOAK_ROLL flow; everything else lands here.

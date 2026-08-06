@@ -121,6 +121,8 @@ export const C2S = {
   SOAK_ROLL: 'soakRoll',
   /** SWADE: spend a Benny from the Benny menu (reroll, recover, redraw…). */
   BENNY_USE: 'bennyUse',
+  /** SWADE: DM hands a character a Benny (announced in chat). */
+  BENNY_AWARD: 'bennyAward',
   /** SWADE: a Bleeding Out player makes their start-of-turn Vigor roll. */
   BLEED_ROLL: 'bleedRoll',
   /** SWADE: a Shaken combatant makes their start-of-turn Spirit roll. */
@@ -905,6 +907,7 @@ export interface SoakOfferPayload { characterId: string; name: string; wounds: n
 export type BennyUseId =
   | 'reroll-trait' | 'recover-shaken' | 'redraw-card' | 'reroll-damage' | 'regain-pp' | 'influence';
 export interface BennyUsePayload { characterId: string; use: BennyUseId }
+export interface BennyAwardPayload { characterId: string }
 export interface BleedRollPayload { characterId: string }
 export interface BleedPromptPayload { characterId: string; name: string }
 export interface ShakenRollPayload { characterId: string }

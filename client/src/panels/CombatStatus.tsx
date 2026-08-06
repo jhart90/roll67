@@ -97,7 +97,18 @@ export function CombatStatus({ character, editable }: { character: Character; ed
               </span>
             )}
           </div>
-          {resources.map((r) => (
+          {resources.map((r) => {
+            // SWADE Bennies: the sheet field IS the live pool the Benny menu
+            // spends, so −/+ write it directly (+ is literally "award a
+            // Benny", uncapped) — and the pips go gold to match the 🪙 menu.
+            const isBennies = character.system === 'swade' && r.id === 'bennies';
+            const spend = isBennies
+              ? () => intents.updateCharacter(character.id, { bennies: Math.max(0, r.remaining - 1) })
+              : () => setUsed(r.id, r.used + 1);
+            const regain = isBennies
+              ? () => intents.updateCharacter(character.id, { bennies: r.remaining + 1 })
+              : () => setUsed(r.id, r.used - 1);
+            return (
             <div key={r.id} className="cf-res">
               <span className="cf-res-name">
                 <Term desc={`${r.note ? `${r.note[0].toUpperCase()}${r.note.slice(1)}. ` : ''}${RESET_DESC[r.reset] ?? ''}`.trim()}>
@@ -108,19 +119,24 @@ export function CombatStatus({ character, editable }: { character: Character; ed
               <span className="cf-res-track">
                 <span className="cf-pips">
                   {Array.from({ length: r.max }).map((_, i) => (
-                    <span key={i} className={`slot-pip ${i < r.remaining ? 'open' : 'used'}`} />
+                    <span
+                      key={i}
+                      className={`slot-pip ${i < r.remaining ? 'open' : 'used'}`}
+                      style={isBennies && i < r.remaining ? { background: '#e8b93c', borderColor: '#e8b93c' } : undefined}
+                    />
                   ))}
                 </span>
                 <span className="cf-res-count">{r.remaining}/{r.max}</span>
                 {editable && (
                   <span className="slot-btns">
-                    <button className="icon-btn" title="Spend" disabled={r.remaining <= 0} onClick={() => setUsed(r.id, r.used + 1)}>−</button>
-                    <button className="icon-btn" title="Regain" disabled={r.used <= 0} onClick={() => setUsed(r.id, r.used - 1)}>+</button>
+                    <button className="icon-btn" title={isBennies ? 'Spend a Benny' : 'Spend'} disabled={r.remaining <= 0} onClick={spend}>−</button>
+                    <button className="icon-btn" title={isBennies ? 'Award a Benny' : 'Regain'} disabled={!isBennies && r.used <= 0} onClick={regain}>+</button>
                   </span>
                 )}
               </span>
             </div>
-          ))}
+            );
+          })}
           {/* SWADE: Wounds get the same pip treatment as Bennies, right
               beneath them — red pips fill as wounds land. */}
           {character.system === 'swade' && (() => {

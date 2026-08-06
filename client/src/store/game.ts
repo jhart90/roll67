@@ -1391,6 +1391,8 @@ export const intents = {
   },
   /** Spend a Benny from the Benny menu. */
   bennyUse: (characterId: string, use: BennyUseId) => socket.emit(C2S.BENNY_USE, { characterId, use }),
+  /** DM: hand a character a Benny (announced in chat). */
+  awardBenny: (characterId: string) => socket.emit(C2S.BENNY_AWARD, { characterId }),
   /** Fetch lifetime roll stats (account-wide, or one character's). */
   getRollStats: (characterId?: string) => socket.emit(C2S.ROLL_STATS_GET, { characterId: characterId ?? null }),
   /** Fetch the public-facing sheet of a character you don't control. */

@@ -215,10 +215,13 @@ export function combatResources(system: GameSystem, sheet: SheetData): CombatRes
   // SWADE has no reaction economy — its universal pool is the Bennies stash
   // (refreshed each session, tracked on the sheet's own bennies field).
   if (system === 'swade') {
-    const max = Math.max(0, num(sheet, 'bennies', 3));
-    const used = num(sheet, 'res_bennies', 0);
+    // The `bennies` field IS the live count (the Benny menu and Soak spend it
+    // directly), so the pip row reads it as-is: pips lit = bennies in hand,
+    // out of at least the standard starting three.
+    const count = Math.max(0, num(sheet, 'bennies', 3));
+    const max = Math.max(3, count);
     return [{
-      id: 'bennies', name: 'Bennies', max, used, remaining: Math.max(0, max - used),
+      id: 'bennies', name: 'Bennies', max, used: max - count, remaining: count,
       reset: 'long', note: 'reroll a trait roll, soak wounds, unshake…',
     }];
   }

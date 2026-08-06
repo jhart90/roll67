@@ -79,9 +79,9 @@ export function TokenNameplateCard() {
       style={{ right: pos.x, bottom: pos.y, background: plate.color, color: fg }}
       onPointerDown={startDrag}
     >
-      {plate.portraitUrl && (
-        <img className="nameplate-portrait" src={plate.portraitUrl} alt="" draggable={false} />
-      )}
+      {plate.portraitUrl
+        ? <img className="nameplate-portrait" src={plate.portraitUrl} alt="" draggable={false} />
+        : <div className="nameplate-portrait-empty">🎭</div>}
       <div className="nameplate-body">
         <strong className="nameplate-name">{plate.name}</strong>
         {plate.lines.map((line, i) => (

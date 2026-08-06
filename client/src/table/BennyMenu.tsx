@@ -21,6 +21,12 @@ export function BennyMenu() {
   const init = useGameStore((s) => s.initiativeState);
   const [open, setOpen] = useState(false);
   const [pickedId, setPickedId] = useState<string | null>(null);
+  // An open nameplate card occupies the same corner — hop above it.
+  const plateOpen = useGameStore((s) => {
+    const t = s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined;
+    if (!t?.nameplate || !s.you) return false;
+    return !(t.characterId && s.characters.some((c) => c.id === t.characterId && c.ownerUserId === s.you!.userId));
+  });
 
   if (!you || campaign?.system !== 'swade') return null;
   const isDm = you.role === 'dm';
@@ -90,7 +96,7 @@ export function BennyMenu() {
   };
 
   return (
-    <div className="benny-menu">
+    <div className={`benny-menu${plateOpen ? ' raised' : ''}`}>
       <button className="benny-chip" onClick={() => setOpen((o) => !o)} title="Benny menu">
         🪙 {bennies}
       </button>

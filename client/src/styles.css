@@ -2133,6 +2133,9 @@ th > .term { border-bottom-style: dotted; }
   font-size: 9px; color: var(--dim, #889); white-space: nowrap;
 }
 
+/* Modifier why-tooltips inside roll expressions and equations. */
+.mod-why { cursor: help; text-decoration: underline dotted; text-underline-offset: 2px; }
+
 /* DM counters: giant segmented banner bars over the map pane. */
 .counters-edge { position: absolute; left: 50%; transform: translateX(-50%); width: 75%; z-index: 40; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .counters-top { top: 10px; }

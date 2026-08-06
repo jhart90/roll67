@@ -75,21 +75,80 @@ const MAX_SHOWN_DICE = 20;
  * back out of the expression, so the equation always balances against the
  * total the server actually sent, whatever the expression did to get there.
  */
+/** Plain-English glosses for the server's situational modifier tags. */
+const TAG_GLOSS: Array<[RegExp, string]> = [
+  [/Medium range/i, 'target past the listed (Short) range, within 2×'],
+  [/Long range/i, 'target past 2×, within 4× of the listed range'],
+  [/Extreme range/i, 'target past 4× the listed range (Aim required)'],
+  [/Recoil/i, 'automatic fire (RoF 2+)'],
+  [/Multi-Action/i, 'extra action taken this turn'],
+  [/Ran/i, 'spent the running die this turn'],
+  [/vs Prone/i, 'shooting at a prone target'],
+  [/Prone/i, 'fighting from the ground'],
+  [/Cover/i, 'target partly behind cover (which also absorbs damage)'],
+  [/Dim light/i, 'poor illumination'],
+  [/Pitch darkness/i, 'near-total darkness'],
+  [/Darkness/i, 'fighting in the dark'],
+  [/Wild Attack/i, 'all-out melee: +2 to hit and damage, but Vulnerable'],
+  [/The Drop/i, 'the target is dead to rights (Stunned or helpless)'],
+  [/Gang Up/i, 'allies crowding the target in melee'],
+  [/Aim/i, 'took time to aim'],
+  [/Support/i, 'an ally’s Support roll aided this'],
+  [/Size/i, 'a bigger target is easier to hit'],
+  [/Joker/i, 'drew the Joker this round: +2 to rolls and damage'],
+];
+function glossTag(tag: string): string {
+  const g = TAG_GLOSS.find(([re]) => re.test(tag));
+  return g ? `${tag} — ${g[1]}` : tag;
+}
+const UNSKILLED_WHY = 'Unskilled penalty (−2): the character has no ranked skill for this roll, so it falls back to d4−2 — and the Wild Die takes the −2 too.';
+
+/** Extract the situational tag list ([−4 Long range, −2 Recoil…]) from card text. */
+function modTags(text: string | undefined): string[] {
+  return (text?.match(/\[([^\]]+)\]/g) ?? [])
+    .map((t) => t.slice(1, -1))
+    .filter((t) => /[+−-]\s?\d|adv|dis/i.test(t))
+    .flatMap((t) => t.split(', '));
+}
+
+/**
+ * The roll expression with each modifier explained on hover: the unskilled
+ * −2 baked into `best(1d4!-2, 1d6!-2)`, and the trailing situational total
+ * (range, recoil, wounds…) itemized from the card's own tags.
+ */
+function ExprWithWhy({ expr, tags }: { expr: string; tags: string[] }) {
+  const tailWhy = tags.length
+    ? `Situational modifiers on this roll:\n• ${tags.map(glossTag).join('\n• ')}`
+    : 'Built-in modifier: wounds, fatigue, conditions, or gear bonuses baked into the roll.';
+  // Trailing +N/−N after the dice = the folded situational/wound total.
+  const tail = expr.match(/([+−-]\d+)\s*$/);
+  const head = tail ? expr.slice(0, tail.index) : expr;
+  // The unskilled fallback's own −2s inside the head get their own story.
+  const headParts = head.split(/(!-2)/g);
+  return (
+    <span className="roll-expr">
+      {headParts.map((p, i) => p === '!-2'
+        ? <span key={i}>!<span className="mod-why" title={UNSKILLED_WHY}>-2</span></span>
+        : <span key={i}>{p}</span>)}
+      {tail && <span className="mod-why" title={tailWhy}>{tail[1]}</span>}
+    </span>
+  );
+}
+
 function DiceEquation({ r, why }: { r: NonNullable<ChatMessage['roll']>; why?: string }) {
   const counted = r.dice.filter((d) => d.kept);
   if (counted.length === 0) return null;
   const shown = counted.slice(0, MAX_SHOWN_DICE);
   const hidden = counted.length - shown.length;
   const mod = r.total - counted.reduce((s, d) => s + d.value, 0);
-  // Hovering the flat modifier explains where it came from: the server tags
-  // every situational bonus/penalty in the card text ([−2 Medium range,
-  // +4 The Drop, −2 Multi-Action…]); anything left is the expression's own
-  // built-in math (wound penalties, weapon bonuses, ability mods).
-  const tags = (why?.match(/\[([^\]]+)\]/g) ?? [])
-    .map((t) => t.slice(1, -1))
-    .filter((t) => /[+−-]\s?\d|adv|dis/i.test(t));
-  const modTitle = tags.length
-    ? `Why this modifier:\n• ${tags.join('\n• ')}\n(plus any built-in bonuses/penalties from the roll itself — wounds, gear, ability mods)`
+  // The equation's flat modifier is the SUM of everything: itemize it.
+  const tags = modTags(why);
+  const lines = [
+    ...(r.expression.includes('!-2') ? [UNSKILLED_WHY] : []),
+    ...tags.map(glossTag),
+  ];
+  const modTitle = lines.length
+    ? `This modifier combines:\n• ${lines.join('\n• ')}${tags.length ? '\n(plus any wound/fatigue/gear math built into the roll)' : ''}`
     : 'Built-in modifier from the roll itself: ability/skill bonuses, wound or fatigue penalties, gear.';
   return (
     <div className="roll-dice">
@@ -126,7 +185,7 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
         </div>
       )}
       <div className="roll-main">
-        <span className="roll-expr">{r.expression}</span>
+        <ExprWithWhy expr={r.expression} tags={modTags(msg.text)} />
         <span className="roll-total">{r.total}</span>
       </div>
       <DiceEquation r={r} why={msg.text} />

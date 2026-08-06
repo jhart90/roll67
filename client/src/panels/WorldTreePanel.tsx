@@ -368,6 +368,16 @@ export function WorldTreePanel() {
         {roots.map((n) => renderNode(n, 0))}
         {roots.length === 0 && <p className="dim" style={{ padding: 8 }}>Nothing here yet.{isDm ? ' Use the buttons above to add locations, NPCs, shops, tables, and handouts.' : ''}</p>}
       </div>
+      {roots.length > 0 && (
+        <p className="dim wt-hint" style={{ display: 'flex', gap: 12 }}>
+          <button className="link dim" style={{ fontSize: 11 }} onClick={() => setExpanded(new Set([...childrenOf.keys()].filter((k): k is string => k !== null)))}>
+            Expand All
+          </button>
+          <button className="link dim" style={{ fontSize: 11 }} onClick={() => setExpanded(new Set())}>
+            Collapse All
+          </button>
+        </p>
+      )}
       {isDm && <p className="dim wt-hint">Drag an item onto another to nest it; drag to empty space to move it to the top level.</p>}
 
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}

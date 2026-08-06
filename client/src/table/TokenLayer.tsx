@@ -431,8 +431,13 @@ export function TokenLayer() {
   // not the attacker itself for a damaging action).
   const src = targeting ? tokens[targeting.sourceTokenId] : undefined;
   const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
+  // SWADE range bands: the listed range is Short — shots reach 4x (Medium
+  // −2 / Long −4), or 16x at −8 while Aiming. Mirror of the server's gate.
+  const bandMult = targeting && useGameStore.getState().campaign?.system === 'swade' && targeting.action.ranged
+    ? (targeting.adv === 'adv' ? 16 : 4)
+    : 1;
   const rangeHexes = targeting
-    ? (targeting.action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(targeting.action.rangeFt / feetPerHex)))
+    ? (targeting.action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil((targeting.action.rangeFt * bandMult) / feetPerHex)))
     : 0;
 
   // While aiming an AoE spell, highlight exactly the tokens the shape covers

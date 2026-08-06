@@ -75,12 +75,22 @@ const MAX_SHOWN_DICE = 20;
  * back out of the expression, so the equation always balances against the
  * total the server actually sent, whatever the expression did to get there.
  */
-function DiceEquation({ r }: { r: NonNullable<ChatMessage['roll']> }) {
+function DiceEquation({ r, why }: { r: NonNullable<ChatMessage['roll']>; why?: string }) {
   const counted = r.dice.filter((d) => d.kept);
   if (counted.length === 0) return null;
   const shown = counted.slice(0, MAX_SHOWN_DICE);
   const hidden = counted.length - shown.length;
   const mod = r.total - counted.reduce((s, d) => s + d.value, 0);
+  // Hovering the flat modifier explains where it came from: the server tags
+  // every situational bonus/penalty in the card text ([−2 Medium range,
+  // +4 The Drop, −2 Multi-Action…]); anything left is the expression's own
+  // built-in math (wound penalties, weapon bonuses, ability mods).
+  const tags = (why?.match(/\[([^\]]+)\]/g) ?? [])
+    .map((t) => t.slice(1, -1))
+    .filter((t) => /[+−-]\s?\d|adv|dis/i.test(t));
+  const modTitle = tags.length
+    ? `Why this modifier:\n• ${tags.join('\n• ')}\n(plus any built-in bonuses/penalties from the roll itself — wounds, gear, ability mods)`
+    : 'Built-in modifier from the roll itself: ability/skill bonuses, wound or fatigue penalties, gear.';
   return (
     <div className="roll-dice">
       {shown.map((d, i) => (
@@ -90,7 +100,11 @@ function DiceEquation({ r }: { r: NonNullable<ChatMessage['roll']> }) {
         </span>
       ))}
       {hidden > 0 && <span className="roll-op">+ {hidden} more</span>}
-      {mod !== 0 && <span className="roll-op">{mod > 0 ? '+' : '−'} {Math.abs(mod)}</span>}
+      {mod !== 0 && (
+        <span className="roll-op" style={{ cursor: 'help', textDecoration: 'underline dotted' }} title={modTitle}>
+          {mod > 0 ? '+' : '−'} {Math.abs(mod)}
+        </span>
+      )}
       <span className="roll-op">=</span>
       <span className="roll-eq-total">{r.total}</span>
     </div>
@@ -115,7 +129,7 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
         <span className="roll-expr">{r.expression}</span>
         <span className="roll-total">{r.total}</span>
       </div>
-      <DiceEquation r={r} />
+      <DiceEquation r={r} why={msg.text} />
       <div className="roll-detail">
         {r.detail}
         {r.iron && (

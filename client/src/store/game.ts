@@ -427,7 +427,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Live-broadcast the range highlight so the DM + other players see the
     // same in-range/out-of-range tokens the caster sees, before they click.
     socket.emit(C2S.TARGET_PREVIEW, {
-      sourceTokenId, rangeFt: action.rangeFt, effect: action.effect, label: action.label, active: true,
+      sourceTokenId, rangeFt: action.rangeFt * (get().campaign?.system === 'swade' && action.ranged ? (adv === 'adv' ? 16 : 4) : 1), effect: action.effect, label: action.label, active: true,
     });
   },
   cancelTargeting() {

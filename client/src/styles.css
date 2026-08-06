@@ -2133,6 +2133,9 @@ th > .term { border-bottom-style: dotted; }
   font-size: 9px; color: var(--dim, #889); white-space: nowrap;
 }
 
+/* RoF picker beside burst-capable weapon actions. */
+.rof-select { width: auto; font-size: 11px; padding: 2px 4px; flex: 0 0 auto; }
+
 /* Bleeding Out: same shell as the Soak prompt, but unmistakably dire. */
 .bleed-prompt { border-color: #b91c1c; bottom: 170px; }
 

@@ -251,7 +251,7 @@ interface GameState {
   /** SWADE: per-character flags for which Benny rerolls are currently live. */
   bennyState: Record<string, BennyStatePayload>;
   /** In-progress combat action awaiting a target selection. */
-  targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null } | null;
+  targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
   aoeTargeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; originHex: Hex; aimHex: Hex } | null;
   /** Floating +/-HP combat text over tokens. */
@@ -266,7 +266,7 @@ interface GameState {
   }>;
   /** On-screen rollable-table result pills (fade out after ~3s). */
   tableToasts: Array<{ id: number; text: string; color: string }>;
-  beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
+  beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null, rof?: number): void;
   cancelTargeting(): void;
   resolveTarget(targetTokenId: string): void;
   beginAoeTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
@@ -417,10 +417,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   projectiles: [],
   aoeBursts: [],
   tableToasts: [],
-  beginTargeting(characterId, sourceTokenId, action, adv) {
+  beginTargeting(characterId, sourceTokenId, action, adv, rof) {
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
-    set({ targeting: { characterId, sourceTokenId, action, adv }, tool: 'select', selectedTokenId: null, selectedTokenIds: [] });
+    set({ targeting: { characterId, sourceTokenId, action, adv, rof }, tool: 'select', selectedTokenId: null, selectedTokenIds: [] });
     // Live-broadcast the range highlight so the DM + other players see the
     // same in-range/out-of-range tokens the caster sees, before they click.
     socket.emit(C2S.TARGET_PREVIEW, {
@@ -442,7 +442,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ dockTab: 'chat' });
     socket.emit(C2S.COMBAT_ACTION, {
       characterId: t.characterId, actionId: t.action.id,
-      sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv,
+      sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv, rof: t.rof,
     });
     set({ targeting: null });
     socket.emit(C2S.TARGET_PREVIEW, {

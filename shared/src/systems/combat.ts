@@ -13,6 +13,10 @@ const SYSTEMS = { dnd5e, swn, swade };
  * Weapon to-hit/damage expressions reuse the system's own rollables() so the
  * math (proficiency, ability mods, SWN attack bonus) is always consistent.
  */
+
+/** SWADE RoF → rounds per attack: 1→1, 2→5, 3→10, 4→20, 5→40, 6→50. */
+export const AMMO_BY_ROF = [1, 1, 5, 10, 20, 40, 50];
+
 export function combatActions(character: Character): CombatAction[] {
   const sheet = character.sheet;
   const schema = SYSTEMS[character.system];

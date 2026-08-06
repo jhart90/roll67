@@ -391,6 +391,9 @@ export interface CombatActionPayload {
   sourceTokenId: string;
   targetTokenId: string;
   adv?: 'adv' | 'dis' | null;
+  /** SWADE: rounds-per-attack setting for this shot, 1..weapon RoF
+   *  (default: the weapon's full RoF). Drives Recoil, burst hits, ammo. */
+  rof?: number;
 }
 
 /** Activate a psychic power that has no target (utility/self powers): commits

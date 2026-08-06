@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, GameSystem, SheetData } from 'shared';
 import {
-  canEditCharacter, castableLevels, combatActions, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -340,6 +340,8 @@ function Section({
 
 function RollsColumn({ character, canRoll }: { character: Character; canRoll: boolean }) {
   const [adv, setAdv] = useState<AdvMode>(null);
+  /** Chosen rounds-per-attack per burst-capable action (defaults to full RoF). */
+  const [rofChoice, setRofChoice] = useState<Record<string, number>>({});
   const schema = systemFor(character.system);
   const rollables = useMemo(() => schema.rollables(character.sheet), [schema, character.sheet]);
   const actions = useMemo(() => combatActions(character), [character]);
@@ -350,12 +352,22 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
     // ammo boxes, but it feeds the Multi-Action penalty.
     if (character.system === 'swade') {
       return rows(character.sheet, 'attacks')
-        .map((atk, i) => ({
-          atk, i,
-          check: (num(atk, 'ammo', 0) < num(atk, 'maxAmmo', 0)
-            ? { ok: true, ammoItemName: 'the magazine — an action (Multi-Action −2 applies)' }
-            : { ok: false, reason: 'Already fully loaded.' }) as ReturnType<typeof swnReloadCheck>,
-        }))
+        .map((atk, i) => {
+          // Rounds come from matching-caliber ammunition in inventory;
+          // caliber-less legacy weapons still reload free.
+          const caliber = str(atk, 'caliber', '').trim().toLowerCase();
+          const rounds = caliber
+            ? rows(character.sheet, 'inventory')
+              .filter((it) => str(it, 'caliber', '').toLowerCase() === caliber)
+              .reduce((a, it) => a + Math.max(0, num(it, 'qty', 0)), 0)
+            : Infinity;
+          const check = num(atk, 'ammo', 0) >= num(atk, 'maxAmmo', 0)
+            ? { ok: false, reason: 'Already fully loaded.' }
+            : rounds <= 0
+              ? { ok: false, reason: `No ${caliber} rounds in inventory — add ammunition from the compendium.` }
+              : { ok: true, ammoItemName: caliber ? `${caliber} rounds in inventory — an action` : 'the magazine — an action' };
+          return { atk, i, check: check as ReturnType<typeof swnReloadCheck> };
+        })
         .filter(({ atk }) => num(atk, 'maxAmmo', 0) > 0);
     }
     if (character.system !== 'swn') return [];
@@ -401,23 +413,58 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
       {actions.length > 0 && (
         <div className="roll-group">
           <h5>Actions</h5>
-          {actions.map((a) => (
+          {actions.map((a) => {
+            // SWADE burst weapons: the shooter picks rounds-per-attack here.
+            // Each RoF setting costs its table ammo; settings the magazine
+            // can't feed are greyed, and the trigger greys when even RoF 1
+            // (or the suppress burst) can't be paid.
+            const ammoLeft = a.source === 'attack'
+              ? num(rows(character.sheet, 'attacks')[a.index] ?? {}, 'ammo', -1)
+              : -1;
+            const maxRof = a.rof ?? 1;
+            const chosen = Math.min(rofChoice[a.id] ?? maxRof, maxRof);
+            const needed = a.suppressive ? 3 * AMMO_BY_ROF[Math.min(6, maxRof)] : AMMO_BY_ROF[Math.min(6, chosen)];
+            const dry = ammoLeft >= 0 && ammoLeft < (a.suppressive ? needed : 1);
+            const cantAfford = ammoLeft >= 0 && ammoLeft < needed;
+            return (
             <div key={a.id} className="roll-row">
               <button
                 className={`roll-btn action-btn ${a.effect}`}
-                disabled={!canRoll || !myToken}
-                title={myToken ? (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`) : "Place this character's token on the map first"}
+                disabled={!canRoll || !myToken || dry || cantAfford}
+                title={!myToken ? "Place this character's token on the map first"
+                  : cantAfford ? `Needs ${needed} rounds — only ${ammoLeft} left. Reload!`
+                    : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`)}
                 onClick={() => {
                   if (!myToken) return;
                   if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null);
-                  else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null);
+                  else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null, maxRof >= 2 ? chosen : undefined);
                 }}
               >
                 <span>{a.effect === 'heal' ? '🧪' : a.aoe ? '💥' : '⚔️'} {a.label}</span>
                 <span className="action-meta">
                   {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
+                  {maxRof >= 2 && !a.suppressive ? ` · ${needed} rounds` : ''}
+                  {a.suppressive ? ` · ${needed} rounds` : ''}
                 </span>
               </button>
+              {maxRof >= 2 && !a.suppressive && (
+                <select
+                  className="rof-select"
+                  value={chosen}
+                  title="Rounds per attack: RoF 1 fires single shots; higher settings burn the ammo table (−2 Recoil, extra hit on a raise)"
+                  onChange={(e) => setRofChoice((m) => ({ ...m, [a.id]: Number(e.target.value) }))}
+                >
+                  {Array.from({ length: maxRof }, (_, i) => i + 1).map((r) => {
+                    const cost = AMMO_BY_ROF[Math.min(6, r)];
+                    const short = ammoLeft >= 0 && ammoLeft < cost;
+                    return (
+                      <option key={r} value={r} disabled={short}>
+                        RoF {r} ({cost}{short ? ' — no ammo' : ''})
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
               {canRoll && (
                 <button
                   className="roll-pin"
@@ -431,7 +478,8 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
           {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
         </div>
       )}

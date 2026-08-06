@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -688,9 +688,23 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const action = combatActions(actor).find((a) => a.id === p.actionId);
     if (!action) { emitError(socket, 'That action is no longer available.'); return; }
 
+    // SWADE: the shooter picks how many rounds this attack fires (1..RoF);
+    // default is the weapon's full RoF. Drives Recoil, burst hits, and ammo.
+    const effRof = actor.system === 'swade'
+      ? Math.max(1, Math.min(action.rof ?? 1, Math.round(p.rof ?? (action.rof ?? 1))))
+      : 1;
+
     // Weapons that track ammo (SWN's optional "Ammo left" column) can't fire empty.
     if (action.source === 'attack') {
       const atkRow = rows(actor.sheet, 'attacks')[action.index];
+      // SWADE burst fire needs its full round count in the magazine.
+      if (actor.system === 'swade' && atkRow && num(atkRow, 'ammo', -1) >= 0) {
+        const need = AMMO_BY_ROF[Math.min(6, effRof)];
+        if (num(atkRow, 'ammo', 0) < need) {
+          emitError(socket, `${action.label} needs ${need} round${need === 1 ? '' : 's'} at RoF ${effRof} — only ${num(atkRow, 'ammo', 0)} left. Reload or fire slower.`);
+          return;
+        }
+      }
       if (atkRow && num(atkRow, 'ammo', -1) === 0) {
         emitError(socket, `${action.label} is out of ammo.`);
         return;
@@ -905,7 +919,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           else { mod += 2; tags.push('+2 Aim'); }
         }
         // Automatic fire: RoF 2+ takes −2 Recoil; a raise lands extra hits.
-        if ((action.rof ?? 1) >= 2) { mod -= 2; tags.push('−2 Recoil'); }
+        if (effRof >= 2) { mod -= 2; tags.push(`−2 Recoil (RoF ${effRof})`); }
         // Firing in melee: nothing bigger than a pistol when a foe is adjacent.
         if (action.ranged && action.rangeFt > 90) {
           const mySide = actor.ownerUserId ? 'pc' : 'npc';
@@ -1031,9 +1045,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         const ammo = row ? num(row, 'ammo', -1) : -1;
         if (row && ammo > 0) {
           const before = atks.map((r) => ({ ...r }));
-          // SWADE RoF→ammo table: 1→1, 2→5, 3→10, 4→20, 5→40, 6→50 rounds.
-          const AMMO_BY_ROF = [1, 1, 5, 10, 20, 40, 50];
-          const spend = actor.system === 'swade' ? AMMO_BY_ROF[Math.min(6, action.rof ?? 1)] : 1;
+          const spend = actor.system === 'swade' ? AMMO_BY_ROF[Math.min(6, effRof)] : 1;
           atks[action.index] = { ...row, ammo: Math.max(0, ammo - spend) };
           const sheet = { ...fresh.sheet, attacks: atks };
           characters.update(actor.id, undefined, sheet);
@@ -1093,7 +1105,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // in the breakdown with nothing marking it as earned.
       const rollDamage = (): RollBreakdown => {
         // Automatic fire: a raise walks a second round onto the target.
-        const hits = actor.system === 'swade' && (action.rof ?? 1) >= 2 && raise ? 2 : 1;
+        const hits = actor.system === 'swade' && effRof >= 2 && raise ? 2 : 1;
         const core = hits > 1 ? Array(hits).fill(`(${action.amountExpr})`).join('+') : action.amountExpr;
         const baseExpr = dmgBonus > 0 ? `${core}+${dmgBonus}` : core;
         if (crit) return roll(critDamageExpr(baseExpr));
@@ -1402,10 +1414,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const atks = rows(actor.sheet, 'attacks').map((r) => ({ ...r }));
       const row = atks[action.index];
       const ammo = row ? num(row, 'ammo', -1) : -1;
-      if (ammo === 0) { emitError(socket, `${action.label} is out of ammo.`); return; }
+      const spend = (action.suppressive ? 3 : 1) * AMMO_BY_ROF[Math.min(6, action.rof ?? 1)];
+      if (ammo >= 0 && ammo < spend) {
+        emitError(socket, `${action.label} needs ${spend} rounds — only ${Math.max(0, ammo)} left.`);
+        return;
+      }
       if (row && ammo > 0) {
-        const AMMO_BY_ROF = [1, 1, 5, 10, 20, 40, 50];
-        const spend = (action.suppressive ? 3 : 1) * AMMO_BY_ROF[Math.min(6, action.rof ?? 1)];
         atks[action.index] = { ...row, ammo: Math.max(0, ammo - spend) };
         actor = persistSheet(io, d.campaignId, actor, { attacks: atks });
       }
@@ -1649,14 +1663,43 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const ammo = row ? num(row, 'ammo', 0) : 0;
       if (!row || maxAmmo <= 0) { emitError(socket, 'That weapon has no magazine to reload.'); return; }
       if (ammo >= maxAmmo) { emitError(socket, `${str(row, 'name', 'That weapon')} is already loaded.`); return; }
-      atks[attackIndex] = { ...row, ammo: maxAmmo };
-      const updated = persistSheet(io, d.campaignId, actor, { attacks: atks });
+      // Rounds come out of matching-caliber ammunition in inventory (partial
+      // reloads allowed). Caliber-less legacy weapons still reload free.
+      const caliber = str(row, 'caliber', '').trim().toLowerCase();
+      let loaded = maxAmmo - ammo;
+      const inv = rows(actor.sheet, 'inventory').map((r) => ({ ...r }));
+      const invBefore = inv.map((r) => ({ ...r }));
+      let fromInv = '';
+      if (caliber) {
+        let available = 0;
+        for (const it of inv) if (str(it, 'caliber', '').toLowerCase() === caliber) available += Math.max(0, num(it, 'qty', 0));
+        if (available <= 0) {
+          emitError(socket, `No ${caliber} rounds in inventory — add ammunition from the compendium.`);
+          return;
+        }
+        loaded = Math.min(loaded, available);
+        let take = loaded;
+        for (const it of inv) {
+          if (take <= 0) break;
+          if (str(it, 'caliber', '').toLowerCase() !== caliber) continue;
+          const q = Math.max(0, num(it, 'qty', 0));
+          const used = Math.min(q, take);
+          it.qty = q - used;
+          take -= used;
+        }
+        fromInv = ` — ${loaded} ${caliber} from inventory`;
+      }
+      atks[attackIndex] = { ...row, ammo: ammo + loaded };
+      const updated = persistSheet(io, d.campaignId, actor, { attacks: atks, ...(caliber ? { inventory: inv } : {}) });
       multiActionPenalty(d.campaignId, actor.id);
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'system',
-        text: `🔄 ${updated.name} reloads ${str(row, 'name', 'their weapon')} (${maxAmmo} rounds — an action).`,
+        text: `🔄 ${updated.name} reloads ${str(row, 'name', 'their weapon')} (${ammo + loaded}/${maxAmmo}${fromInv} — an action).`,
         roll: null, recipients: null,
-      }, [{ t: 'field', characterId: actor.id, key: 'attacks', value: atksBefore }]);
+      }, [
+        { t: 'field', characterId: actor.id, key: 'attacks', value: atksBefore },
+        ...(caliber ? [{ t: 'field' as const, characterId: actor.id, key: 'inventory', value: invBefore }] : []),
+      ]);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
       return;
     }

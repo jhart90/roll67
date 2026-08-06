@@ -30,7 +30,7 @@ export {
 } from './swn.js';
 export {
   swade, ATTRIBUTES_SWADE, SKILLS_SWADE, RANKS_SWADE, ARCANE_BACKGROUNDS_SWADE, ANCESTRIES_SWADE,
-  TRAIT_DICE, dieSides, traitExpr, woundPenalty, swadeParry, swadeToughness,
+  TRAIT_DICE, dieSides, traitExpr, traitModWhy, woundPenalty, swadeParry, swadeToughness,
   swadeRangedArmor, swadeArcaneExpr, gearTraitBonus, swadePace, gangUpBonus, skillDie, type GangUpCombatant,
   FREE_SKILLS_SWADE, SKILL_ATTR_SWADE, dieStepIndex, stepDie,
 } from './swade.js';

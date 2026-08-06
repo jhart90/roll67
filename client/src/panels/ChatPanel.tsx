@@ -116,10 +116,29 @@ function modTags(text: string | undefined): string[] {
  * −2 baked into `best(1d4!-2, 1d6!-2)`, and the trailing situational total
  * (range, recoil, wounds…) itemized from the card's own tags.
  */
-function ExprWithWhy({ expr, tags }: { expr: string; tags: string[] }) {
-  const tailWhy = tags.length
-    ? `Situational modifiers on this roll:\n• ${tags.map(glossTag).join('\n• ')}`
-    : 'Built-in modifier: wounds, fatigue, conditions, or gear bonuses baked into the roll.';
+function whyLines(r: NonNullable<ChatMessage['roll']>, text?: string): string[] {
+  // Server-itemized sources first (wounds/fatigue/conditions + situational
+  // tags); older cards fall back to parsing the tags out of the text.
+  const base = r.modWhy?.length ? r.modWhy : modTags(text);
+  return [
+    ...(r.expression.includes('!-2') ? [UNSKILLED_WHY] : []),
+    ...base.map(glossTag),
+  ];
+}
+
+/** Named source for a modifier we have no itemized breakdown for — always
+ *  specific about WHERE it comes from, never a shrug. */
+function fallbackWhy(system: string | undefined): string {
+  return system === 'swade'
+    ? 'Flat modifier written into this roll’s expression: a weapon or gear bonus, or a manual /r modifier.'
+    : 'Sheet math: the ability-score modifier plus proficiency/skill bonus for this roll.';
+}
+
+function ExprWithWhy({ r, text }: { r: NonNullable<ChatMessage['roll']>; text?: string }) {
+  const system = useGameStore((s) => s.campaign?.system);
+  const expr = r.expression;
+  const lines = whyLines(r, text).filter((l) => l !== UNSKILLED_WHY);
+  const tailWhy = lines.length ? `This modifier combines:\n• ${lines.join('\n• ')}` : fallbackWhy(system);
   // Trailing +N/−N after the dice = the folded situational/wound total.
   const tail = expr.match(/([+−-]\d+)\s*$/);
   const head = tail ? expr.slice(0, tail.index) : expr;
@@ -142,14 +161,11 @@ function DiceEquation({ r, why }: { r: NonNullable<ChatMessage['roll']>; why?: s
   const hidden = counted.length - shown.length;
   const mod = r.total - counted.reduce((s, d) => s + d.value, 0);
   // The equation's flat modifier is the SUM of everything: itemize it.
-  const tags = modTags(why);
-  const lines = [
-    ...(r.expression.includes('!-2') ? [UNSKILLED_WHY] : []),
-    ...tags.map(glossTag),
-  ];
+  const system = useGameStore((s) => s.campaign?.system);
+  const lines = whyLines(r, why);
   const modTitle = lines.length
-    ? `This modifier combines:\n• ${lines.join('\n• ')}${tags.length ? '\n(plus any wound/fatigue/gear math built into the roll)' : ''}`
-    : 'Built-in modifier from the roll itself: ability/skill bonuses, wound or fatigue penalties, gear.';
+    ? `This modifier combines:\n• ${lines.join('\n• ')}`
+    : fallbackWhy(system);
   return (
     <div className="roll-dice">
       {shown.map((d, i) => (
@@ -185,7 +201,7 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
         </div>
       )}
       <div className="roll-main">
-        <ExprWithWhy expr={r.expression} tags={modTags(msg.text)} />
+        <ExprWithWhy r={r} text={msg.text} />
         <span className="roll-total">{r.total}</span>
       </div>
       <DiceEquation r={r} why={msg.text} />

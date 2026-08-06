@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -985,6 +985,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       attackBreakdown = roll(expr);
       if (actor.system === 'swade') {
         recordBennyRoll(io, d.campaignId, actor, 'trait', expr, attackBreakdown.total, `their ${action.label} roll`);
+        // Itemize every flat modifier for the chat tooltip: sheet-borne
+        // penalties plus the situational tags computed above.
+        attackBreakdown.modWhy = [
+          ...traitModWhy(actor.sheet),
+          ...advTag.replace(/^\s*\[/, '').replace(/\]\s*$/, '').split(', ').filter(Boolean),
+        ];
       }
       // A Wild Attack leaves you open whether it lands or not.
       if (wildAttack) {

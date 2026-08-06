@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor,
+  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor, traitModWhy,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
   type ModerateMessagePayload, type ReorderMacrosPayload, type RollStatRow, type RollStatsGetPayload,
   type RollStatsUserBlock, type SaveMacroPayload,
@@ -67,6 +67,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     if (!rollable) throw new Error('Unknown roll.');
     const expr = applyAdv(rollable.expr, rollable.d20 ? adv : null);
     const breakdown = roll(expr);
+    if (character.system === 'swade') breakdown.modWhy = traitModWhy(character.sheet);
     const label = `${rollable.label}${adv === 'adv' ? ' (advantage)' : adv === 'dis' ? ' (disadvantage)' : ''}`;
     const msg = chat.add(d.campaignId, {
       userId: d.userId,
@@ -187,6 +188,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     if (updated.ownerUserId) io.to(userRoom(updated.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
 
     const breakdown = roll(rollable.expr);
+  if (character.system === 'swade') breakdown.modWhy = traitModWhy(character.sheet);
     const atLabel = level > minLevel ? ` (cast at level ${level})` : '';
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, fromCharacter: character.name, characterId: character.id, kind: 'roll',
@@ -242,6 +244,7 @@ function runSheetRoll(
   const rollable = systemFor(character.system).rollables(character.sheet).find((r) => r.id === rollableId);
   if (!rollable) throw new Error('That roll is no longer on the sheet.');
   const breakdown = roll(rollable.expr);
+  if (character.system === 'swade') breakdown.modWhy = traitModWhy(character.sheet);
   // Any SWADE sheet roll is a trait test a Benny may reroll.
   recordBennyRoll(io, campaignId, character, 'trait', rollable.expr, breakdown.total, rollable.label);
   const msg = chat.add(campaignId, {

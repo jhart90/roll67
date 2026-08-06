@@ -99,6 +99,19 @@ function conditionTraitPenalty(sheet: SheetData): number {
   return DISTRACTED_LIKE.some((c) => conds.includes(c)) ? -2 : 0;
 }
 
+/** Itemized sources of the flat penalty traitExpr folds into every roll. */
+export function traitModWhy(sheet: SheetData): string[] {
+  const out: string[] = [];
+  const wounds = Math.min(3, Math.max(0, num(sheet, 'wounds', 0)));
+  const fatigue = Math.min(2, Math.max(0, num(sheet, 'fatigue', 0)));
+  if (wounds > 0) out.push(`−${wounds} Wounds — −1 per wound carried`);
+  if (fatigue > 0) out.push(`−${fatigue} Fatigue — −1 per fatigue level`);
+  const conds = conditionsOf(sheet);
+  const dLike = DISTRACTED_LIKE.find((c) => conds.includes(c));
+  if (dLike) out.push(`−2 Distracted — from being ${dLike}`);
+  return out;
+}
+
 export function traitExpr(sheet: SheetData, sides: number, mod = 0): string {
   const penalty = woundPenalty(sheet) + conditionTraitPenalty(sheet) + mod;
   const tail = penalty !== 0 ? fmtMod(penalty) : '';

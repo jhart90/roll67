@@ -5,9 +5,9 @@ import {
   type DeleteCustomNpcPayload, type LevelUpRollPayload,
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
-import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PublicSheetGetPayload, PublicSheetPayload, WorldOverridePayload } from 'shared';
+import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PrivateNotesGetPayload, PrivateNotesSetPayload, PublicSheetGetPayload, PublicSheetPayload, WorldOverridePayload } from 'shared';
 import { generateNpc, generateNpcFromModel, nameplateFor, npcById } from 'shared';
-import { campaigns, characters, chat, customNpcs, dmNotes, maps, tokens, worldVis } from '../../db/repos.js';
+import { campaigns, characters, chat, customNpcs, dmNotes, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
@@ -59,6 +59,24 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     // Echo to ALL DM sockets (a popped-out sheet window is its own socket).
     io.to(dmRoom(d.campaignId)).emit(S2C.DM_NOTES, { characterId, text: dmNotes.get(characterId) });
   }, 'DM_NOTES_SET'));
+
+  // Per-player private notes on any character (the public sheet's scratchpad):
+  // keyed by viewer + character, echoed only to that viewer's own sockets —
+  // nobody else, DM included, ever receives them.
+  socket.on(C2S.PRIVATE_NOTES_GET, safe(socket, ({ characterId }: PrivateNotesGetPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    socket.emit(S2C.PRIVATE_NOTES, { characterId, text: privateNotes.get(d.userId, characterId) });
+  }, 'PRIVATE_NOTES_GET'));
+
+  socket.on(C2S.PRIVATE_NOTES_SET, safe(socket, ({ characterId, text }: PrivateNotesSetPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    privateNotes.set(d.userId, d.campaignId, characterId, String(text ?? '').slice(0, 20000));
+    io.to(userRoom(d.userId)).emit(S2C.PRIVATE_NOTES, { characterId, text: privateNotes.get(d.userId, characterId) });
+  }, 'PRIVATE_NOTES_SET'));
 
   // The public-facing sheet: exactly what the nameplate already exposes,
   // plus portrait, token art, and the free-text bio sections — never stats,

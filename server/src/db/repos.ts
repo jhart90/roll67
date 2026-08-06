@@ -1168,6 +1168,18 @@ export const worldVis = {
   },
 };
 
+/** Per-player private notes on characters (the public sheet scratchpad). */
+export const privateNotes = {
+  get(userId: string, characterId: string): string {
+    const row = stmt('SELECT text FROM private_notes WHERE user_id = ? AND character_id = ?').get(userId, characterId) as { text: string } | undefined;
+    return row?.text ?? '';
+  },
+  set(userId: string, campaignId: string, characterId: string, text: string): void {
+    stmt(`INSERT INTO private_notes (user_id, character_id, campaign_id, text) VALUES (?, ?, ?, ?)
+          ON CONFLICT(user_id, character_id) DO UPDATE SET text = excluded.text`).run(userId, characterId, campaignId, text);
+  },
+};
+
 /** DM-only secret notes per character — never part of the sheet payload. */
 export const dmNotes = {
   get(characterId: string): string {

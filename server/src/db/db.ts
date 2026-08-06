@@ -234,6 +234,18 @@ db.exec(`
   )
 `);
 
+// Per-player private notes on characters they do not control (public sheet).
+// Keyed by viewer + character: each player sees only their own scribbles.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS private_notes (
+    user_id TEXT NOT NULL,
+    character_id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    text TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (user_id, character_id)
+  )
+`);
+
 // DM-only secret notes per character. Deliberately NOT a sheet field: owners
 // receive their full sheets, so anything in there would leak to the player.
 db.exec(`

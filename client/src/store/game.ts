@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type DmNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -240,6 +240,8 @@ interface GameState {
   bleedPrompt: BleedPromptPayload | null;
   /** SWADE round 2+ auto-deal awaiting its sequenced flip reveal. */
   roundCardsDeal: (RoundCardsPayload & { seq: number }) | null;
+  /** My own private notes per character (each user only ever gets their own). */
+  privateNotesData: Record<string, string>;
   /** DM-only: secret notes per character (DM clients only ever receive these). */
   dmNotesData: Record<string, string>;
   /** Public-facing sheets fetched for tokens we don't control. */
@@ -410,6 +412,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   ironDice: null,
   publicSheets: {},
   dmNotesData: {},
+  privateNotesData: {},
   roundCardsDeal: null,
   targeting: null,
   aoeTargeting: null,
@@ -1010,6 +1013,10 @@ export function wireSocket(): void {
     useGameStore.setState({ roundCardsDeal: { ...p, seq: ++roundCardsSeq } });
   });
 
+  socket.on(S2C.PRIVATE_NOTES, (p: PrivateNotesPayload) => {
+    useGameStore.setState((s) => ({ privateNotesData: { ...s.privateNotesData, [p.characterId]: p.text } }));
+  });
+
   socket.on(S2C.DM_NOTES, (p: DmNotesPayload) => {
     useGameStore.setState((s) => ({ dmNotesData: { ...s.dmNotesData, [p.characterId]: p.text } }));
   });
@@ -1400,6 +1407,9 @@ export const intents = {
   /** DM-only: force-reveal / force-hide / reset a world-tab entry. */
   worldOverride: (kind: 'map' | 'token' | 'character', key: string, mode: 'reveal' | 'hide' | 'clear') =>
     socket.emit(C2S.WORLD_OVERRIDE, { kind, key, mode }),
+  /** My own private notes on a character (public-sheet scratchpad). */
+  getPrivateNotes: (characterId: string) => socket.emit(C2S.PRIVATE_NOTES_GET, { characterId }),
+  setPrivateNotes: (characterId: string, text: string) => socket.emit(C2S.PRIVATE_NOTES_SET, { characterId, text }),
   /** DM-only: read / write the secret notes on a character. */
   getDmNotes: (characterId: string) => socket.emit(C2S.DM_NOTES_GET, { characterId }),
   setDmNotes: (characterId: string, text: string) => socket.emit(C2S.DM_NOTES_SET, { characterId, text }),

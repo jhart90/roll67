@@ -138,6 +138,9 @@ export const C2S = {
   /** DM-only: read / write the secret notes attached to a character. */
   DM_NOTES_GET: 'dmNotesGet',
   DM_NOTES_SET: 'dmNotesSet',
+  /** Any member: read / write their own private notes on a character. */
+  PRIVATE_NOTES_GET: 'privateNotesGet',
+  PRIVATE_NOTES_SET: 'privateNotesSet',
   /** IronDice: fetch the current seed commitment + revealed seed history. */
   IRON_DICE_GET: 'ironDiceGet',
   /** IronDice: DM reveals the current seed and mints a fresh one. */
@@ -712,6 +715,8 @@ export const S2C = {
   PUBLIC_SHEET: 'publicSheet',
   /** DM-only: the secret notes for one character. */
   DM_NOTES: 'dmNotes',
+  /** The requesting user's own private notes on one character. */
+  PRIVATE_NOTES: 'privateNotes',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -931,6 +936,9 @@ export interface PublicSheetGetPayload { characterId: string }
 export interface DmNotesGetPayload { characterId: string }
 export interface DmNotesSetPayload { characterId: string; text: string }
 export interface DmNotesPayload { characterId: string; text: string }
+export interface PrivateNotesGetPayload { characterId: string }
+export interface PrivateNotesSetPayload { characterId: string; text: string }
+export interface PrivateNotesPayload { characterId: string; text: string }
 /** The safe, anyone-at-the-table view of a character: exactly the nameplate
  *  info plus portrait, token art, and free-text bio — never the sheet. */
 export interface PublicSheetPayload {

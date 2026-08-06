@@ -10,10 +10,41 @@ import { RollStatsTab } from './RollStats';
  * stats, gear, HP, or anything mechanical; the server builds the payload,
  * the full sheet never reaches this client.
  */
+/**
+ * The viewer's OWN scratchpad about this character — what you suspect, what
+ * they owe you, where you saw them last. Keyed per user + character on the
+ * server and only ever sent back to your own sockets: not the token's owner,
+ * not the DM, nobody else can read it.
+ */
+function PrivateNotesTab({ characterId, name }: { characterId: string; name: string }) {
+  const saved = useGameStore((s) => s.privateNotesData[characterId]);
+  const [draft, setDraft] = useState('');
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => { intents.getPrivateNotes(characterId); }, [characterId]);
+  useEffect(() => { if (!dirty) setDraft(saved ?? ''); }, [saved, dirty]);
+  return (
+    <div className="notes-tab" style={{ padding: '8px 10px' }}>
+      <label>
+        My notes on {name} <span className="dim">(only you can see this; saved when you click away)</span>
+      </label>
+      <textarea
+        className="notes-field"
+        value={draft}
+        placeholder="Suspicions, debts, favors, where you last saw them…"
+        onChange={(e) => { setDraft(e.target.value); setDirty(true); }}
+        onBlur={() => {
+          if (dirty && draft !== (saved ?? '')) intents.setPrivateNotes(characterId, draft);
+          setDirty(false);
+        }}
+      />
+    </div>
+  );
+}
+
 export function PublicSheetWindow({ characterId }: { characterId: string }) {
   const sheet = useGameStore((s) => s.publicSheets[characterId]);
   const isDm = useGameStore((s) => s.you?.role) === 'dm';
-  const [tab, setTab] = useState<'profile' | 'stats'>('profile');
+  const [tab, setTab] = useState<'profile' | 'stats' | 'notes'>('profile');
   useEffect(() => { intents.getPublicSheet(characterId); }, [characterId]);
 
   if (!sheet) return <p className="dim" style={{ margin: 8 }}>Loading…</p>;
@@ -42,9 +73,12 @@ export function PublicSheetWindow({ characterId }: { characterId: string }) {
       </div>
       <div className="sheet-tabs">
         <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>Profile</button>
+        <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>📝 My Notes</button>
         <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}>📊 Roll Stats</button>
       </div>
-      {tab === 'profile' ? (
+      {tab === 'notes' ? (
+        <PrivateNotesTab characterId={characterId} name={sheet.name} />
+      ) : tab === 'profile' ? (
         <div className="public-sheet-bio">
           {sheet.bio.length === 0 && <p className="dim">Nothing written about {sheet.name} yet.</p>}
           {sheet.bio.map((section) => (

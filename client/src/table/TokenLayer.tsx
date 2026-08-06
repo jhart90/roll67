@@ -255,6 +255,10 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // Card, 1 = Extra): wounds render as red thirds ABOVE the token instead
   // of the usual HP sliver below it.
   const system = useGameStore((s) => s.campaign?.system);
+  // Names counter-scale as the player zooms OUT so they stay legible, capped
+  // at 2.5× so a far zoom doesn't wallpaper the map in text. Quantized to
+  // 0.05 steps so continuous wheel-zoom doesn't re-render every token per tick.
+  const nameScale = useGameStore((s) => Math.round(Math.min(2.5, Math.max(1, 1 / s.camera.scale)) * 20) / 20);
   const swadeWounds = system === 'swade' && token.characterId && bar && bar.maxHp > 0 && bar.maxHp <= 3
     ? Math.max(0, bar.maxHp - bar.hp)
     : null;
@@ -389,12 +393,12 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         </text>
       )}
       <text
-        y={halfH + (hpFrac !== null ? 20 : 14)}
+        y={halfH + (hpFrac !== null ? 20 : 14) * nameScale}
         textAnchor="middle"
-        fontSize={12}
+        fontSize={12 * nameScale}
         fill="#e6e8ee"
         stroke="#10131a"
-        strokeWidth={3}
+        strokeWidth={3 * nameScale}
         paintOrder="stroke"
         style={{ userSelect: 'none', pointerEvents: 'none' }}
       >

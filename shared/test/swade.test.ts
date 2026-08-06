@@ -540,3 +540,47 @@ describe('Improvised weapons', () => {
     expect(row.damage).toBe('1d8!+1d6!'); // Str d8 + medium d6
   });
 });
+
+describe('Ammunition & caliber', () => {
+  it('ammo items land in inventory as batches with their caliber', () => {
+    const ammo = contentForSystem('swade').find((e) => e.name === 'Bullets, Medium (50)')!;
+    expect(ammo.category).toBe('Ammunition');
+    const res = applyEntry(ammo, swade.defaultSheet())!;
+    expect(res.listId).toBe('inventory');
+    const row = res.row as Record<string, unknown>;
+    expect(row.qty).toBe(50);
+    expect(row.caliber).toBe('bullets-medium');
+  });
+
+  it('guns import with a matching caliber column', () => {
+    const cases: Array<[string, string]> = [
+      ['9mm Pistol', 'bullets-medium'],
+      ['Sniper Rifle', 'bullets-large'],
+      ['Laser Pistol', 'battery-pistol'],
+      ['Pump Shotgun', 'shells'],
+      ['Bow', 'arrows'],
+      ['Musket', 'shot'],
+    ];
+    for (const [name, caliber] of cases) {
+      const entry = contentForSystem('swade').find((e) => e.name === name)!;
+      const row = applyEntry(entry, swade.defaultSheet())!.row as Record<string, unknown>;
+      expect(row.caliber, name).toBe(caliber);
+    }
+  });
+
+  it('every ammunition caliber is chambered by at least one weapon (and vice versa)', () => {
+    const all = contentForSystem('swade');
+    const ammoCalibers = new Set(all.filter((e) => e.category === 'Ammunition').map((e) => e.gear!.caliber));
+    const gunCalibers = new Set(
+      all.filter((e) => e.kind === 'weapon' && e.weapon)
+        .map((e) => /caliber: ([a-z-]+)/i.exec(e.weapon!.props.join(', '))?.[1])
+        .filter(Boolean),
+    );
+    for (const c of gunCalibers) expect(ammoCalibers.has(c as string), `no ammo item for ${c}`).toBe(true);
+    // Slugs are an alternate load for shell-firing shotguns, not their own gun.
+    for (const c of ammoCalibers) {
+      if (c === 'slugs' || c === 'battery-gatling') continue;
+      expect(gunCalibers.has(c as string), `no weapon chambers ${c}`).toBe(true);
+    }
+  });
+});

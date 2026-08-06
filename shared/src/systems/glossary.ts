@@ -215,6 +215,7 @@ const SWADE_SHEET: Record<string, string> = {
   'Toughness vs ranged': 'Your effective Toughness against ranged attacks, including any shield bonus.',
   'Ammo left': 'Shots remaining. Firing spends one; at zero the weapon can’t fire until reloaded.',
   RoF: 'Rate of Fire. RoF 2+ weapons fire bursts: −2 Recoil on the attack, an extra round of damage on a raise, and ammo drains by the RoF table (2→5, 3→10, 4→20, 5→40, 6→50 rounds per attack).',
+  Caliber: 'The ammunition type this weapon chambers (or this ammo feeds): arrows, bolts, bullets small/medium/large, laser batteries, shot, shells, slugs, stones. Match the gun to its rounds.',
   Mag: 'Magazine capacity — what a Reload refills Ammo left to. Reloading is an action (it counts toward the Multi-Action penalty).',
   'Running die': 'The die added to your Pace when you run — d6 for most characters. Running is a free action.',
   'Boosts trait': 'While equipped, this item adds its bonus to the named skill or attribute roll.',

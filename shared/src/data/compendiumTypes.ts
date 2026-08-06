@@ -85,6 +85,10 @@ export interface GearData {
   weight?: number;
   cost?: string;
   notes?: string;
+  /** Ammo batches land in inventory with this quantity (rounds per purchase). */
+  qty?: number;
+  /** Ammunition type this item feeds / this weapon chambers (see AMMUNITION). */
+  caliber?: string;
   /** SWADE: equipped-gear bonus to a named trait ("Thievery", "Athletics", "Strength"). */
   traitBonus?: { trait: string; amount: number };
   /** SWN cyberware: system strain the implant costs. */
@@ -288,6 +292,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       // (2/4/6 tiles counting the target), 'cone template' the Cone. A weapon
       // whose props promise a Vigor-or-Stunned rider gets it mechanically too.
       const rofMatch = propText.match(/\bRoF (\d)/i);
+      const caliberMatch = propText.match(/caliber: ([a-z-]+)/i);
       const blastMatch = propText.match(/\b(small|medium|large) blast/i);
       const blastHexes = blastMatch ? ({ small: 1, medium: 3, large: 5 } as Record<string, number>)[blastMatch[1].toLowerCase()] : 0;
       const coneTemplate = /cone template/i.test(propText);
@@ -300,6 +305,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           ap, parryBonus, wielded: false,
           ...(mag ? { ammo: Number(mag[1]), maxAmmo: Number(mag[1]) } : {}),
           ...(rofMatch ? { rof: Number(rofMatch[1]) } : {}),
+          ...(caliberMatch ? { caliber: caliberMatch[1].toLowerCase() } : {}),
           ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
           ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),
           ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
@@ -547,9 +553,10 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       return {
         listId: 'inventory',
         row: {
-          name: entry.name, qty: 1, weight: entry.gear?.weight ?? 0, ...usable,
+          name: entry.name, qty: entry.gear?.qty ?? 1, weight: entry.gear?.weight ?? 0, ...usable,
           equipped: false,
           bonusSkill: tb?.trait ?? '', bonusAmt: tb?.amount ?? 0,
+          ...(entry.gear?.caliber ? { caliber: entry.gear.caliber } : {}),
           notes: entry.subtitle,
         },
         label: `${entry.name} added to inventory`,

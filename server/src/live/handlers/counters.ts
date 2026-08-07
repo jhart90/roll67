@@ -45,7 +45,7 @@ export function registerCounterHandlers(io: Server, socket: Socket): void {
     const clean: Partial<Counter> = {};
     if (typeof patch.name === 'string') clean.name = patch.name.trim().slice(0, 60) || 'Counter';
     if (typeof patch.color === 'string' && /^#[0-9a-f]{6}$/i.test(patch.color)) clean.color = patch.color;
-    if (typeof patch.max === 'number' && Number.isFinite(patch.max)) clean.max = Math.max(1, Math.min(50, Math.round(patch.max)));
+    if (typeof patch.max === 'number' && Number.isFinite(patch.max)) clean.max = Math.max(1, Math.min(100, Math.round(patch.max)));
     if (typeof patch.value === 'number' && Number.isFinite(patch.value)) clean.value = Math.round(patch.value);
     if (typeof patch.visible === 'boolean') clean.visible = patch.visible;
     if (patch.position === 'top' || patch.position === 'bottom') clean.position = patch.position;

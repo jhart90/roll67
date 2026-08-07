@@ -31,7 +31,7 @@ export function CountersOverlay() {
       } : undefined}
     >
       <span className="counter-name">{c.name}</span>
-      <div className="counter-track">
+      <div className="counter-track" style={{ gap: c.max > 40 ? 1 : 3 }}>
         {Array.from({ length: c.max }, (_, i) => (
           <div
             key={i}
@@ -111,7 +111,7 @@ function CounterEditor({ counter, onClose }: { counter: Counter; onClose: () => 
         </label>
         <div className="row">
           <label>Segments
-            <input type="number" min={1} max={50} value={max} onChange={(e) => setMax(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} />
+            <input type="number" min={1} max={100} value={max} onChange={(e) => setMax(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
           </label>
           <label>Filled
             <input type="number" min={0} max={max} value={value} onChange={(e) => setValue(Math.max(0, Math.min(max, Number(e.target.value) || 0)))} />

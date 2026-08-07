@@ -2137,7 +2137,12 @@ th > .term { border-bottom-style: dotted; }
 .mod-why { cursor: help; text-decoration: underline dotted; text-underline-offset: 2px; }
 
 /* DM counters: giant segmented banner bars over the map pane. */
-.counters-edge { position: absolute; left: 50%; transform: translateX(-50%); width: 75%; z-index: 40; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.counters-edge {
+  /* Bounded to the map pane: clear of the 53px tool rail and 300px dock. */
+  position: absolute; left: 61px; right: 308px; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
+}
+.counter-bar { width: 75%; min-width: 320px; max-width: 100%; }
 .counters-top { top: 10px; }
 .counters-bottom { bottom: 14px; }
 .counter-bar {

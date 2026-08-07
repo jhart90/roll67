@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CLASS_LIST_5E, npcsForSystem, SWN_CLASS_LIST, type CustomNpcView, type NpcEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
+import { npcAttackSummary, npcStatCols, type NpcStatCol } from './npcStatCols';
 import { useNpcPicker } from './useNpcPicker';
 
 export function NpcLibrary({ onClose }: { onClose: () => void }) {
@@ -43,6 +44,9 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
     setAdded((prev) => ({ ...prev, [`class:${classId}`]: true }));
   }
 
+  const statCols = npcStatCols(system);
+  // Name + Challenge + stat columns + the add-button column.
+  const colSpan = statCols.length + 3;
   let lastCategory = '';
 
   return (
@@ -75,7 +79,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
             <option value="category">Sort: category</option>
             <option value="name">Sort: name</option>
             <option value="challenge">Sort: challenge</option>
-            <option value="hp">Sort: HP</option>
+            <option value="hp">{system === 'swade' ? 'Sort: Toughness' : 'Sort: HP'}</option>
           </select>
         </div>
 
@@ -88,7 +92,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
                   <tbody>
                     <tr>
                       <td className="npc-name">Blank character sheet</td>
-                      <td className="dim" colSpan={3}>Start from a fresh, empty sheet</td>
+                      <td className="dim" colSpan={colSpan - 2}>Start from a fresh, empty sheet</td>
                       <td><button className="link" disabled={!!added.__blank} onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
                     </tr>
                   </tbody>
@@ -103,7 +107,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
                     {filteredClassRows.map((c) => (
                       <tr key={c.id}>
                         <td className="npc-name">{c.name}</td>
-                        <td className="dim" colSpan={3}>A blank sheet with class pre-filled</td>
+                        <td className="dim" colSpan={colSpan - 2}>A blank sheet with class pre-filled</td>
                         <td>
                           <button className="link" disabled={!!added[`class:${c.id}`]} onClick={() => createClass(c.name, c.id)}>
                             {added[`class:${c.id}`] ? 'created ✓' : '+ create'}
@@ -122,8 +126,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
               <tr>
                 <th>Name</th>
                 <th>Challenge</th>
-                <th>AC</th>
-                <th>HP</th>
+                {statCols.map((c) => <th key={c.label} title={c.title}>{c.label}</th>)}
                 <th />
               </tr>
             </thead>
@@ -133,11 +136,11 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
                   ? (lastCategory = n.category)
                   : null;
                 return (
-                  <NpcRows key={n.id} entry={n} header={header} added={!!added[n.id]} onAdd={add} />
+                  <NpcRows key={n.id} entry={n} header={header} added={!!added[n.id]} onAdd={add} statCols={statCols} colSpan={colSpan} />
                 );
               })}
               {entries.length === 0 && (
-                <tr><td colSpan={5} className="dim">Nothing matches that search.</td></tr>
+                <tr><td colSpan={colSpan} className="dim">Nothing matches that search.</td></tr>
               )}
             </tbody>
           </table>
@@ -145,13 +148,12 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
           {filteredCustom.length > 0 && (
             <table>
               <tbody>
-                <tr className="npc-category-row"><td colSpan={5}>Player Added</td></tr>
+                <tr className="npc-category-row"><td colSpan={colSpan}>Player Added</td></tr>
                 {filteredCustom.map((c) => (
                   <tr key={c.id}>
                     <td className="npc-name">{c.name}</td>
                     <td>{c.challengeLabel || '—'}</td>
-                    <td>{c.ac}</td>
-                    <td>{c.hp}</td>
+                    {statCols.map((col) => <td key={col.label}>{col.cell(c)}</td>)}
                     <td>
                       <button className="link" disabled={!!added[c.id]} onClick={() => addCustom(c)}>
                         {added[c.id] ? 'added ✓' : '+ add'}
@@ -175,19 +177,21 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
   );
 }
 
-function NpcRows({ entry, header, added, onAdd }: {
+function NpcRows({ entry, header, added, onAdd, statCols, colSpan }: {
   entry: NpcEntry; header: string | null; added: boolean; onAdd: (e: NpcEntry) => void;
+  statCols: NpcStatCol[]; colSpan: number;
 }) {
+  const attacks = entry.system === 'swade' ? npcAttackSummary(entry.sheet) : '';
+  const hint = [String(entry.sheet.notes ?? ''), attacks].filter(Boolean).join('\n');
   return (
     <>
       {header && (
-        <tr className="npc-category-row"><td colSpan={5}>{header}</td></tr>
+        <tr className="npc-category-row"><td colSpan={colSpan}>{header}</td></tr>
       )}
       <tr>
-        <td className="npc-name" title={String(entry.sheet.notes ?? '')}>{entry.name}</td>
+        <td className="npc-name" title={hint}>{entry.name}</td>
         <td>{entry.challengeLabel}</td>
-        <td>{entry.ac}</td>
-        <td>{entry.hp}</td>
+        {statCols.map((c) => <td key={c.label}>{c.cell(entry)}</td>)}
         <td>
           <button className="link" disabled={added} onClick={() => onAdd(entry)}>
             {added ? 'added ✓' : '+ add'}

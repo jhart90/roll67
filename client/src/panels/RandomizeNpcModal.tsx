@@ -1,5 +1,6 @@
 import { npcFlavorHint, type CustomNpcView, type NpcEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { npcStatCols, type NpcStatCol } from './npcStatCols';
 import { useNpcPicker } from './useNpcPicker';
 
 /** Pick a compendium NPC to model a randomized NPC after: stats jitter a
@@ -19,6 +20,9 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
+  const statCols = npcStatCols(system);
+  // Name + Challenge + stat columns + the pick-button column.
+  const colSpan = statCols.length + 3;
   let lastCategory = '';
 
   return (
@@ -43,7 +47,7 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
             <option value="category">Sort: category</option>
             <option value="name">Sort: name</option>
             <option value="challenge">Sort: challenge</option>
-            <option value="hp">Sort: HP</option>
+            <option value="hp">{system === 'swade' ? 'Sort: Toughness' : 'Sort: HP'}</option>
           </select>
         </div>
 
@@ -53,8 +57,7 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
               <tr>
                 <th>Name</th>
                 <th>Challenge</th>
-                <th>AC</th>
-                <th>HP</th>
+                {statCols.map((c) => <th key={c.label} title={c.title}>{c.label}</th>)}
                 <th />
               </tr>
             </thead>
@@ -63,24 +66,23 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
                 const header = sort === 'category' && n.category !== lastCategory
                   ? (lastCategory = n.category)
                   : null;
-                return <ModelRow key={n.id} entry={n} header={header} onPick={pick} />;
+                return <ModelRow key={n.id} entry={n} header={header} onPick={pick} statCols={statCols} colSpan={colSpan} />;
               })}
               {filteredCustom.length > 0 && (
                 <>
-                  <tr className="npc-category-row"><td colSpan={5}>Player Added</td></tr>
+                  <tr className="npc-category-row"><td colSpan={colSpan}>Player Added</td></tr>
                   {filteredCustom.map((c) => (
                     <tr key={c.id}>
                       <td className="npc-name">{c.name}</td>
                       <td>{c.challengeLabel || '—'}</td>
-                      <td>{c.ac}</td>
-                      <td>{c.hp}</td>
+                      {statCols.map((col) => <td key={col.label}>{col.cell(c)}</td>)}
                       <td><button className="link" onClick={() => pick(c)}>🎲 use as model</button></td>
                     </tr>
                   ))}
                 </>
               )}
               {entries.length === 0 && filteredCustom.length === 0 && (
-                <tr><td colSpan={5} className="dim">Nothing matches that search.</td></tr>
+                <tr><td colSpan={colSpan} className="dim">Nothing matches that search.</td></tr>
               )}
             </tbody>
           </table>
@@ -89,19 +91,19 @@ export function RandomizeNpcModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ModelRow({ entry, header, onPick }: {
+function ModelRow({ entry, header, onPick, statCols, colSpan }: {
   entry: NpcEntry; header: string | null; onPick: (e: NpcEntry) => void;
+  statCols: NpcStatCol[]; colSpan: number;
 }) {
   return (
     <>
       {header && (
-        <tr className="npc-category-row"><td colSpan={5}>{header}</td></tr>
+        <tr className="npc-category-row"><td colSpan={colSpan}>{header}</td></tr>
       )}
       <tr>
         <td className="npc-name" title={npcFlavorHint(entry)}>{entry.name}</td>
         <td>{entry.challengeLabel}</td>
-        <td>{entry.ac}</td>
-        <td>{entry.hp}</td>
+        {statCols.map((c) => <td key={c.label}>{c.cell(entry)}</td>)}
         <td><button className="link" onClick={() => onPick(entry)}>🎲 use as model</button></td>
       </tr>
     </>

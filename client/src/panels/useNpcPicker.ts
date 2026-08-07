@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { npcCategories, npcsForSystem, type GameSystem } from 'shared';
+import { npcDurability } from './npcStatCols';
 
 export type NpcSortKey = 'category' | 'name' | 'challenge' | 'hp';
 
@@ -28,7 +29,8 @@ export function useNpcPicker(system: GameSystem) {
         sorted.sort((a, b) => a.challenge - b.challenge || a.name.localeCompare(b.name));
         break;
       case 'hp':
-        sorted.sort((a, b) => a.hp - b.hp || a.name.localeCompare(b.name));
+        // "Toughest first" reads as Toughness in SWADE (there are no HP).
+        sorted.sort((a, b) => npcDurability(system, a) - npcDurability(system, b) || a.name.localeCompare(b.name));
         break;
       default:
         // category order as authored (logical grouping), by challenge within

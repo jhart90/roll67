@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type StunPromptPayload, type IncapPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -238,6 +238,10 @@ interface GameState {
   runPrompt: RunPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
+  /** SWADE: your Stunned character may roll Vigor to come to. */
+  stunPrompt: StunPromptPayload | null;
+  /** SWADE: your Wild Card went down — Soak, or face the Incapacitation roll. */
+  incapPrompt: IncapPromptPayload | null;
   /** SWADE round 2+ auto-deal awaiting its sequenced flip reveal. */
   roundCardsDeal: (RoundCardsPayload & { seq: number }) | null;
   /** DM counters on the current map (players receive only visible ones). */
@@ -411,6 +415,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   bennyState: {},
   bleedPrompt: null,
   shakenPrompt: null,
+  stunPrompt: null,
+  incapPrompt: null,
   runPrompt: null,
   rollStatsData: {},
   ironDice: null,
@@ -1020,6 +1026,19 @@ export function wireSocket(): void {
     useGameStore.setState({ shakenPrompt: p });
   });
 
+  socket.on(S2C.STUN_PROMPT, (p: StunPromptPayload) => {
+    useGameStore.setState({ stunPrompt: p });
+  });
+
+  socket.on(S2C.INCAP_PROMPT, (p: IncapPromptPayload) => {
+    // The incapacitation window replaces a bare Soak offer for the same
+    // character — its Soak button carries that choice.
+    useGameStore.setState((s) => ({
+      incapPrompt: p,
+      soakOffer: s.soakOffer?.characterId === p.characterId ? null : s.soakOffer,
+    }));
+  });
+
   socket.on(S2C.RUN_PROMPT, (p: RunPromptPayload) => {
     useGameStore.setState({ runPrompt: p });
   });
@@ -1445,6 +1464,21 @@ export const intents = {
   shakenRoll: (characterId: string) => {
     socket.emit(C2S.SHAKEN_ROLL, { characterId });
     useGameStore.setState({ shakenPrompt: null });
+  },
+  /** Make the Stunned-recovery Vigor roll the prompt asked for. */
+  stunRoll: (characterId: string) => {
+    socket.emit(C2S.STUN_ROLL, { characterId });
+    useGameStore.setState({ stunPrompt: null });
+  },
+  /** Proceed to the Incapacitation Vigor roll (closes the window). */
+  incapRoll: (characterId: string) => {
+    socket.emit(C2S.INCAP_ROLL, { characterId });
+    useGameStore.setState({ incapPrompt: null });
+  },
+  /** DM only: skip the Incapacitation roll — the Wild Card dies outright. */
+  incapDeath: (characterId: string) => {
+    socket.emit(C2S.INCAP_DEATH, { characterId });
+    useGameStore.setState({ incapPrompt: null });
   },
   /** Accept the run: roll the running die to extend this turn's Pace. */
   runRoll: (tokenId: string) => {

@@ -127,6 +127,12 @@ export const C2S = {
   BLEED_ROLL: 'bleedRoll',
   /** SWADE: a Shaken combatant makes their start-of-turn Spirit roll. */
   SHAKEN_ROLL: 'shakenRoll',
+  /** SWADE: a Stunned combatant makes their start-of-turn Vigor roll. */
+  STUN_ROLL: 'stunRoll',
+  /** SWADE: a downed Wild Card proceeds to the Incapacitation Vigor roll. */
+  INCAP_ROLL: 'incapRoll',
+  /** SWADE: DM skips the Incapacitation roll for their own Wild Card — dead. */
+  INCAP_DEATH: 'incapDeath',
   /** SWADE: roll the running die to move past Pace this turn. */
   RUN_ROLL: 'runRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
@@ -710,6 +716,10 @@ export const S2C = {
   BLEED_PROMPT: 'bleedPrompt',
   /** SWADE: your Shaken character may roll Spirit to recover. */
   SHAKEN_PROMPT: 'shakenPrompt',
+  /** SWADE: your Stunned character may roll Vigor to come to. */
+  STUN_PROMPT: 'stunPrompt',
+  /** SWADE: your Wild Card went down — Soak, or face the Incapacitation roll. */
+  INCAP_PROMPT: 'incapPrompt',
   /** SWADE: that move needs the running die — confirm or decline. */
   RUN_PROMPT: 'runPrompt',
   /** Lifetime roll statistics for the requested scope. */
@@ -929,6 +939,16 @@ export interface BleedRollPayload { characterId: string }
 export interface BleedPromptPayload { characterId: string; name: string }
 export interface ShakenRollPayload { characterId: string }
 export interface ShakenPromptPayload { characterId: string; name: string }
+export interface StunRollPayload { characterId: string }
+export interface StunPromptPayload { characterId: string; name: string }
+export interface IncapRollPayload { characterId: string }
+export interface IncapDeathPayload { characterId: string }
+export interface IncapPromptPayload {
+  characterId: string;
+  name: string;
+  /** A Benny-funded Soak is still on the table (bennies in hand + fresh wounds). */
+  canSoak: boolean;
+}
 export interface RunRollPayload { tokenId: string }
 export interface RunPromptPayload { tokenId: string; name: string; pace: number; moved: number }
 export interface IronDicePayload {

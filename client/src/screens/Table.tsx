@@ -25,6 +25,8 @@ import { SoakPrompt } from '../table/SoakPrompt';
 import { BennyMenu } from '../table/BennyMenu';
 import { BleedPrompt } from '../table/BleedPrompt';
 import { ShakenPrompt } from '../table/ShakenPrompt';
+import { StunPrompt } from '../table/StunPrompt';
+import { IncapPrompt } from '../table/IncapPrompt';
 import { RoundCardsOverlay } from '../table/RoundCardsOverlay';
 import { CountersOverlay } from '../table/CountersOverlay';
 import { RunPrompt } from '../table/RunPrompt';
@@ -425,6 +427,8 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <SoakPrompt />
         <BleedPrompt />
         <ShakenPrompt />
+        <StunPrompt />
+        <IncapPrompt />
         <RunPrompt />
         <BennyMenu />
         <PresenceBar />

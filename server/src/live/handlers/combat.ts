@@ -4,7 +4,7 @@ import {
   AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -14,7 +14,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { hasRunThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -164,8 +164,8 @@ function resolveBleedingOut(io: Server, campaignId: string, ch: Character): bool
 
 /**
  * Start of a SWADE combatant's turn: Bleeding Out (Vigor or die), Stunned
- * (free Vigor to come to), then Shaken (Spirit to shake it off) — automatic,
- * so the damage ladder actually turns over without bookkeeping.
+ * (free Vigor to come to), then Shaken (Spirit to shake it off). Each one
+ * prompts whoever runs the character — the roll is theirs to click.
  */
 function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): void {
   let ch = chIn;
@@ -176,15 +176,6 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
     postStatusLine(io, campaignId, `${ch.name} is no longer Defending.`);
     reread();
   }
-  const recoveryRoll = (attr: 'vigor' | 'spirit') =>
-    roll(traitExpr(ch.sheet, dieSides(String(ch.sheet[attr] ?? 'd4'))));
-  const post = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
-    const msg = chat.add(campaignId, {
-      userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
-      text, roll: { ...breakdown, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
-    });
-    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
-  };
 
   // Bleeding Out: die on a failure, hang on with a success, stabilize on a
   // raise. A player-owned character gets the prompt and rolls it themself;
@@ -199,22 +190,12 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
   // Down is down: no Stunned/Shaken recovery while Incapacitated.
   if (conditionsOf(ch.sheet).includes('incapacitated')) return;
 
-  // Stunned: success leaves them Vulnerable and Distracted until the end of
-  // their next turn; a raise clears those too. Prone stays until they stand.
+  // Stunned: whoever runs this character rolls the free Vigor themself —
+  // same prompt pattern as Shaken and Bleeding Out, so every recovery roll
+  // is the player's own click.
   if (conditionsOf(ch.sheet).includes('stunned')) {
-    const b = recoveryRoll('vigor');
-    if (b.total >= 4) {
-      const raise = b.total >= 8;
-      let conds = conditionsOf(ch.sheet).filter((c) => c !== 'stunned');
-      conds = raise
-        ? conds.filter((c) => c !== 'vulnerable' && c !== 'distracted')
-        : [...new Set([...conds, 'vulnerable', 'distracted'])];
-      persistSheet(io, campaignId, ch, { conditions: conds });
-      post(`${ch.name} is no longer Stunned${raise ? '' : ' (but Vulnerable and Distracted)'} — Vigor roll`, b, true);
-    } else {
-      post(`${ch.name} is still Stunned — Vigor roll`, b, false);
-    }
-    reread();
+    const room = ch.ownerUserId ? userRoom(ch.ownerUserId) : dmRoom(campaignId);
+    io.to(room).emit(S2C.STUN_PROMPT, { characterId: ch.id, name: ch.name });
   }
 
   // Shaken: whoever runs this character rolls Spirit themself — the prompt
@@ -223,6 +204,32 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
     const room = ch.ownerUserId ? userRoom(ch.ownerUserId) : dmRoom(campaignId);
     io.to(room).emit(S2C.SHAKEN_PROMPT, { characterId: ch.id, name: ch.name });
   }
+}
+
+/**
+ * The Stunned recovery: Vigor vs 4 — success comes to (but Vulnerable and
+ * Distracted until the end of their next turn); a raise clears those too.
+ * Prone stays until they spend the Pace to stand.
+ */
+export function resolveStunRecovery(io: Server, campaignId: string, ch: Character): void {
+  const b = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4'))));
+  const ok = b.total >= 4;
+  if (ok) {
+    const raise = b.total >= 8;
+    let conds = conditionsOf(ch.sheet).filter((c) => c !== 'stunned');
+    conds = raise
+      ? conds.filter((c) => c !== 'vulnerable' && c !== 'distracted')
+      : [...new Set([...conds, 'vulnerable', 'distracted'])];
+    persistSheet(io, campaignId, ch, { conditions: conds });
+  }
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
+    text: ok
+      ? `${ch.name} is no longer Stunned${b.total >= 8 ? '' : ' (but Vulnerable and Distracted)'} — Vigor roll`
+      : `${ch.name} is still Stunned — Vigor roll`,
+    roll: { ...b, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
 /** The Shaken recovery: Spirit vs 4 — success stands them back up. */
@@ -2019,6 +2026,40 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (!conditionsOf(ch.sheet).includes('bleeding')) return;
     resolveBleedingOut(io, d.campaignId, ch);
   }, 'BLEED_ROLL'));
+
+  // A Stunned combatant answers the prompt: make the free Vigor roll now.
+  socket.on(C2S.STUN_ROLL, safe(socket, ({ characterId }: StunRollPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) return;
+    if (!conditionsOf(ch.sheet).includes('stunned')) return;
+    resolveStunRecovery(io, d.campaignId, ch);
+  }, 'STUN_ROLL'));
+
+  // A downed Wild Card faces the music: the Incapacitation Vigor roll.
+  socket.on(C2S.INCAP_ROLL, safe(socket, ({ characterId }: IncapRollPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) return;
+    // Soaked back up (or healed) since the window opened? Nothing owed.
+    if (!conditionsOf(ch.sheet).includes('incapacitated')) return;
+    resolveIncapacitation(io, d.campaignId, ch);
+  }, 'INCAP_ROLL'));
+
+  // DM skips the Incapacitation roll for one of their own Wild Cards and
+  // takes it straight out of the fight.
+  socket.on(C2S.INCAP_DEATH, safe(socket, ({ characterId }: IncapDeathPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can call a death outright.'); return; }
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    if (!conditionsOf(ch.sheet).includes('incapacitated')) return;
+    const conds = [...new Set([...conditionsOf(ch.sheet).filter((c) => c !== 'bleeding'), 'dead'])];
+    persistSheet(io, d.campaignId, ch, { conditions: conds, hp: 0 });
+    postStatusLine(io, d.campaignId, `💀 ${ch.name} has died.`);
+  }, 'INCAP_DEATH'));
 
   // DM hands a character a Benny — always a public moment, so it's announced.
   socket.on(C2S.BENNY_AWARD, safe(socket, ({ characterId }: BennyAwardPayload) => {

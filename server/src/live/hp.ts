@@ -309,7 +309,8 @@ export function dropCarriedLoot(io: Server, campaignId: string, characterId: str
  * handler; stale offers (the player ignored it) simply expire.
  */
 export const pendingSoaks = new Map<string, { wounds: number; at: number }>();
-const SOAK_OFFER_TTL_MS = 60_000;
+// Long enough for a player staring at the incapacitation window to decide.
+const SOAK_OFFER_TTL_MS = 5 * 60_000;
 
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
@@ -332,28 +333,26 @@ function applySwadeDamage(
   if (out.incapacitated) {
     applyConditionTo(io, campaignId, cur, 'incapacitated', sourceLabel ?? 'damage');
     cur = characters.byId(cur.id) ?? cur;
-    // A Wild Card cut down past their last wound makes the Incapacitation
-    // Vigor roll (with an Injury Table result) — delayed a few seconds so a
-    // Soak that stands them back up cancels it.
-    if (wildCard) {
-      const chId = cur.id;
-      setTimeout(() => {
-        const fresh = characters.byId(chId);
-        if (fresh && conditionsOf(fresh.sheet).includes('incapacitated')) {
-          resolveIncapacitation(io, campaignId, fresh);
-        }
-      }, 4000);
-    }
     // An Extra that drops is out of the fight: empty its bar so the token
     // reads as down. A Wild Card keeps its pool — Soak may yet stand it up.
     if (!wildCard) cur = persistSheet(io, campaignId, cur, { hp: 0 });
     postStatusLine(io, campaignId, `${cur.name} is Incapacitated!`);
   }
 
-  // Offer the Soak: a Wild Card with a Benny and an owner to ask.
+  // Record the Soak while the wounds are fresh (any Wild Card with a Benny —
+  // the DM soaks for their own Wild Cards through the incapacitation window).
   const bennies = num(cur.sheet, 'bennies', 0);
-  if (wildCard && out.woundsDealt > 0 && bennies > 0 && cur.ownerUserId) {
-    pendingSoaks.set(cur.id, { wounds: out.woundsDealt, at: Date.now() });
+  const soakable = wildCard && out.woundsDealt > 0 && bennies > 0;
+  if (soakable) pendingSoaks.set(cur.id, { wounds: out.woundsDealt, at: Date.now() });
+
+  if (out.incapacitated && wildCard) {
+    // A downed Wild Card's fate is a choice, not a timer: Soak the wounds
+    // away (if they can) or face the Incapacitation Vigor roll. The window
+    // goes to the owning player, or to the DM for their own Wild Cards.
+    const room = cur.ownerUserId ? userRoom(cur.ownerUserId) : dmRoom(campaignId);
+    io.to(room).emit(S2C.INCAP_PROMPT, { characterId: cur.id, name: cur.name, canSoak: soakable });
+    postStatusLine(io, campaignId, `⚕️ ${cur.name} is down — waiting on their Incapacitation roll…`);
+  } else if (soakable && cur.ownerUserId) {
     io.to(userRoom(cur.ownerUserId)).emit(S2C.SOAK_OFFER, {
       characterId: cur.id, name: cur.name, wounds: out.woundsDealt, bennies,
     });
@@ -406,7 +405,7 @@ export function takeBennyRoll(characterId: string, kind: 'trait' | 'damage'): Be
  * and takes an Injury Table result — permanent on a failure (and they start
  * Bleeding Out), until healed on a success, 24 hours on a raise.
  */
-function resolveIncapacitation(io: Server, campaignId: string, ch: Character): void {
+export function resolveIncapacitation(io: Server, campaignId: string, ch: Character): void {
   const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')));
   const br = roll(expr);
   // Critical Failure — every arm's first die shows a 1 — means the character

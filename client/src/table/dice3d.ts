@@ -485,7 +485,7 @@ export function buildSims(
     // Without a palette, every other system keeps the by-size colours and the
     // player's own single-colour override.
     const rgb = hexToRgb(palette
-      ? (die.raise ? RAISE_GREEN : die.wild ? palette.wild : palette.trait)
+      ? (die.raise ? palette.raise : die.wild ? palette.wild : palette.trait)
       : (customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3'));
     // Pips have to stay legible against whatever colour the player picked.
     const contrasting = luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb';

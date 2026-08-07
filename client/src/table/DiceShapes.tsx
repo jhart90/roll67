@@ -109,6 +109,24 @@ function outline(sides: number, fillOverride?: string): React.ReactNode {
   }
 }
 
+/** Same ink-picking rule the 3D dice use: dark ink on light bodies, light on dark. */
+function contrastInk(hex: string): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return '#10131a';
+  const [r, g, b] = [h.slice(0, 2), h.slice(2, 4), h.slice(4, 6)].map((c) => parseInt(c, 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45 ? '#10131a' : '#f4f6fb';
+}
+
+// Classic d6 pip layout, in offsets from the front-face centre.
+const PIPS: Record<number, [number, number][]> = {
+  1: [[0, 0]],
+  2: [[-1, 1], [1, -1]],
+  3: [[-1, 1], [0, 0], [1, -1]],
+  4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
+  5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+  6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+};
+
 export function DieShape({
   sides, size = 48, value, dim = false, fill, textFill,
 }: {
@@ -119,11 +137,14 @@ export function DieShape({
   dim?: boolean;
   /** Override the body colour (e.g. previewing a player's dice palette). */
   fill?: string;
-  /** Override the pip/number colour; defaults to the usual dark ink. */
+  /** Override the pip/number colour; defaults to ink that contrasts the body. */
   textFill?: string;
 }) {
   // d4 numbers sit lower (triangle); coin/kite slightly high-center.
   const valueY = sides === 4 ? 72 : 58;
+  const ink = textFill ?? (fill ? contrastInk(fill) : '#10131a');
+  // A d6 face shows real pips, like the physical die that was thrown.
+  const pips = sides === 6 && typeof value === 'number' ? PIPS[value] : undefined;
   return (
     <svg
       width={size}
@@ -133,14 +154,17 @@ export function DieShape({
     >
       {outline(sides, fill)}
       {facets(sides)}
-      {value !== undefined && (
+      {pips && pips.map(([px, py], i) => (
+        <circle key={i} cx={44 + px * 18} cy={52 + py * 18} r={8} fill={ink} />
+      ))}
+      {!pips && value !== undefined && (
         <text
           x={50}
           y={valueY}
           textAnchor="middle"
           fontSize={sides >= 100 ? 30 : 38}
           fontWeight={800}
-          fill={textFill ?? '#10131a'}
+          fill={ink}
           style={{ userSelect: 'none' }}
         >
           {value}

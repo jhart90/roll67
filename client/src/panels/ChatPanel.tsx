@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Character, ChatMessage, MemberInfo, TokenView } from 'shared';
+import type { Character, ChatMessage, DieRoll, MemberInfo, TokenView } from 'shared';
 import { contentForSystem } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
-import { DieShape } from '../table/DiceShapes';
+import { DIE_COLORS, DieShape } from '../table/DiceShapes';
+import { DICE_ROLE_DEFAULTS } from '../table/dice3d';
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -154,24 +155,47 @@ function ExprWithWhy({ r, text }: { r: NonNullable<ChatMessage['roll']>; text?: 
   );
 }
 
-function DiceEquation({ r, why }: { r: NonNullable<ChatMessage['roll']>; why?: string }) {
+function DiceEquation({ r, why, fromUserId }: {
+  r: NonNullable<ChatMessage['roll']>; why?: string; fromUserId?: string | null;
+}) {
   const counted = r.dice.filter((d) => d.kept);
+  const system = useGameStore((s) => s.campaign?.system);
+  const member = useGameStore((s) => (fromUserId ? s.members.find((m) => m.userId === fromUserId) : undefined));
   if (counted.length === 0) return null;
   const shown = counted.slice(0, MAX_SHOWN_DICE);
   const hidden = counted.length - shown.length;
   const mod = r.total - counted.reduce((s, d) => s + d.value, 0);
   // The equation's flat modifier is the SUM of everything: itemize it.
-  const system = useGameStore((s) => s.campaign?.system);
   const lines = whyLines(r, why);
   const modTitle = lines.length
     ? `This modifier combines:\n• ${lines.join('\n• ')}`
     : fallbackWhy(system);
+  // Paint each die the same colour it wore on the table: SWADE tells trait /
+  // Wild Die / raise apart by hue from the roller's palette; other systems
+  // use the roller's single custom colour or the by-size default.
+  const dieFill = (d: DieRoll): string => (system === 'swade'
+    ? (d.raise ? member?.diceRaiseColor ?? DICE_ROLE_DEFAULTS.raise
+      : d.wild ? member?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild
+        : member?.diceTraitColor ?? DICE_ROLE_DEFAULTS.trait)
+    : member?.diceColor ?? DIE_COLORS[d.sides] ?? '#9aa1b3');
+  const dieTitle = (d: DieRoll): string => [
+    `d${d.sides}: ${d.value}`,
+    ...(d.raise ? ['Raise bonus die — earned by beating the target number by 4+'] : []),
+    ...(d.wild ? ['Wild Die — rolled alongside the trait die; the better arm counts'] : []),
+    ...(d.ace ? ['Aced! Rolled its maximum and exploded into the next die'] : []),
+  ].join('\n');
   return (
     <div className="roll-dice">
       {shown.map((d, i) => (
-        <span className="roll-die" key={i}>
+        <span className="roll-die" key={i} title={dieTitle(d)}>
           {i > 0 && <span className="roll-op">+</span>}
-          <DieShape sides={d.sides} size={30} value={d.value} />
+          <DieShape
+            sides={d.sides}
+            size={30}
+            value={d.value}
+            fill={dieFill(d)}
+            textFill={system !== 'swade' ? member?.diceTextColor ?? undefined : undefined}
+          />
         </span>
       ))}
       {hidden > 0 && <span className="roll-op">+ {hidden} more</span>}
@@ -204,7 +228,7 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
         <ExprWithWhy r={r} text={msg.text} />
         <span className="roll-total">{r.total}</span>
       </div>
-      <DiceEquation r={r} why={msg.text} />
+      <DiceEquation r={r} why={msg.text} fromUserId={msg.fromUserId} />
       <div className="roll-detail">
         {r.detail}
         {r.iron && (

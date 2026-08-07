@@ -724,6 +724,8 @@ export const S2C = {
   PRIVATE_NOTES: 'privateNotes',
   /** Counters for one map (players receive only the visible ones). */
   COUNTERS: 'counters',
+  /** Every counter in the campaign (for the world tree), role-filtered. */
+  COUNTERS_ALL: 'countersAll',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',

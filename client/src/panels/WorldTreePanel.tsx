@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Character, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
+import type { Character, Counter, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
@@ -23,7 +23,7 @@ interface TreeNode {
   mapObjectKind?: 'item' | 'chest' | 'shop';
 }
 
-const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦' } as Record<string, string>;
+const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦', counter: '▮' } as Record<string, string>;
 
 // Players have no dmGeometry; the selector must return this SAME array every
 // time, not a fresh `?? []` — a fresh array per call is the Zustand
@@ -34,6 +34,7 @@ const NO_LIGHTS: Light[] = [];
 function buildNodes(
   locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
   folders: WorldFolder[], mapLights: Light[], mapId: string | null, allTokens: Record<string, Token>, mapObjects: MapObject[],
+  allCounters: Counter[],
 ): TreeNode[] {
   const out: TreeNode[] = [];
   for (const m of maps) out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: 'map' });
@@ -46,6 +47,13 @@ function buildNodes(
     const isChest = f.displayKind === 'chest';
     const sub = isChest && f.items.length ? `${f.items.length} items` : '';
     out.push({ kind: isChest ? 'folder' : 'folder', id: f.id, name: f.name || (isChest ? 'Chest' : 'Folder'), parentId: f.parentId ?? null, sub, displayKind: f.displayKind } as TreeNode);
+  }
+  // Counters nest under the map they belong to, like lights and loot.
+  for (const c of allCounters) {
+    out.push({
+      kind: 'counter', id: c.id, name: c.name, parentId: c.mapId,
+      sub: c.value + '/' + c.max + (c.visible ? '' : ' · hidden'),
+    });
   }
   // Map lights appear under their map
   if (mapId) {
@@ -93,6 +101,7 @@ export function WorldTreePanel() {
   const dmLights = useGameStore((s) => s.dmGeometry?.lights ?? NO_LIGHTS);
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
   const mapObjectsById = useGameStore((s) => s.mapObjects);
+  const allCounters = useGameStore((s) => s.allCounters);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
@@ -107,8 +116,8 @@ export function WorldTreePanel() {
     [isDm, mapObjectsById],
   );
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList),
-    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList],
+    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters),
+    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList, allCounters],
   );
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const childrenOf = useMemo(() => {
@@ -129,6 +138,13 @@ export function WorldTreePanel() {
 
   // The "open editor" action (right-click / double-click).
   function open(node: TreeNode) {
+    if (node.kind === 'counter') {
+      // Jump to the counter's map — its banner bar (with the full
+      // right-click menu: show/hide, edit, delete) lives there.
+      const c = allCounters.find((x) => x.id === node.id);
+      if (c) intents.viewMap(c.mapId);
+      return;
+    }
     if (node.kind === 'character') { useGameStore.getState().openSheet(node.id); return; }
     if (node.kind === 'map') {
       if (isDm) openWindow('mapEditor', node.id, {}, node.name || 'Edit map');
@@ -231,6 +247,15 @@ export function WorldTreePanel() {
         intents.moveLightToMap(drag.id, dragNode.lightMapId, target.id);
         return;
       }
+      return;
+    }
+
+    // Counters live ON a map: dropping one on (or inside) another map moves
+    // it there — the banner bar simply appears over the new map's pane.
+    if (drag.kind === 'counter') {
+      let t = targetId ? byId.get(targetId) ?? null : null;
+      while (t && t.kind !== 'map') t = t.parentId ? byId.get(t.parentId) ?? null : null;
+      if (t?.kind === 'map') intents.counterUpdate(drag.id, { mapId: t.id });
       return;
     }
 
@@ -379,26 +404,6 @@ export function WorldTreePanel() {
           </button>
         </p>
       )}
-      {(() => {
-        const cs = useGameStore.getState().counters;
-        if (cs.length === 0) return null;
-        return (
-          <div className="wt-counters">
-            <h5 style={{ margin: '6px 0 2px' }}>Counters (this map)</h5>
-            {cs.map((c) => (
-              <div key={c.id} className="dir-item" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ color: c.color }}>▮</span> {c.name} <span className="dim">{c.value}/{c.max}{!c.visible ? ' · hidden' : ''}</span>
-                {isDm && (
-                  <span style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                    <button className="link" title={c.visible ? 'Hide from players' : 'Show to players'} onClick={() => intents.counterUpdate(c.id, { visible: !c.visible })}>{c.visible ? '🙈' : '👁'}</button>
-                    <button className="link" title="Delete" onClick={() => { if (confirm('Delete counter "' + c.name + '"?')) intents.counterDelete(c.id); }}>🗑</button>
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        );
-      })()}
       {isDm && <p className="dim wt-hint">Drag an item onto another to nest it; drag to empty space to move it to the top level.</p>}
 
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}

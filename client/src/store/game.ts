@@ -242,6 +242,8 @@ interface GameState {
   roundCardsDeal: (RoundCardsPayload & { seq: number }) | null;
   /** DM counters on the current map (players receive only visible ones). */
   counters: Counter[];
+  /** Every counter in the campaign (for the world tree), role-filtered. */
+  allCounters: Counter[];
   /** My own private notes per character (each user only ever gets their own). */
   privateNotesData: Record<string, string>;
   /** DM-only: secret notes per character (DM clients only ever receive these). */
@@ -416,6 +418,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   dmNotesData: {},
   privateNotesData: {},
   counters: [],
+  allCounters: [],
   roundCardsDeal: null,
   targeting: null,
   aoeTargeting: null,
@@ -702,12 +705,17 @@ export function wireSocket(): void {
     });
   });
 
+  socket.on(S2C.COUNTERS_ALL, (p: { counters: Counter[] }) => {
+    useGameStore.setState({ allCounters: p.counters });
+  });
+
   socket.on(S2C.COUNTERS, (p: CountersPayload) => {
     if (useGameStore.getState().map?.id === p.mapId) useGameStore.setState({ counters: p.counters });
   });
 
   socket.on(S2C.MAP_STATE, (p: MapStatePayload) => {
     socket.emit(C2S.COUNTERS_GET, { mapId: p.map.id });
+    socket.emit(C2S.COUNTERS_GET, { mapId: '*' });
     const s = useGameStore.getState();
     // A map switch invalidates anything anchored to the OLD map's tokens: an
     // in-progress target pick (its source token id no longer resolves, which

@@ -13,14 +13,24 @@ function requireCampaign(socket: Socket) {
 function broadcastCounters(io: Server, campaignId: string, mapId: string): void {
   const all = counters.forMap(mapId);
   const visible = all.filter((c) => c.visible);
+  const every = counters.forCampaign(campaignId);
+  const everyVisible = every.filter((c) => c.visible);
   for (const socket of campaignSockets(io, campaignId)) {
-    socket.emit(S2C.COUNTERS, { mapId, counters: sdata(socket).role === 'dm' ? all : visible });
+    const dm = sdata(socket).role === 'dm';
+    socket.emit(S2C.COUNTERS, { mapId, counters: dm ? all : visible });
+    // The world tree lists counters under every map, so it needs them all.
+    socket.emit(S2C.COUNTERS_ALL, { counters: dm ? every : everyVisible });
   }
 }
 
 export function registerCounterHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.COUNTERS_GET, safe(socket, ({ mapId }: { mapId: string }) => {
     const d = requireCampaign(socket);
+    if (mapId === '*') {
+      const every = counters.forCampaign(d.campaignId);
+      socket.emit(S2C.COUNTERS_ALL, { counters: d.role === 'dm' ? every : every.filter((c) => c.visible) });
+      return;
+    }
     const map = maps.byId(mapId);
     if (!map || map.campaignId !== d.campaignId) return;
     const all = counters.forMap(mapId);

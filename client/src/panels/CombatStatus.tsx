@@ -1,5 +1,5 @@
 import type { Character, SheetData } from 'shared';
-import { bool, combatResources, conditionsFor, conditionsOf, resetsCleared } from 'shared';
+import { bool, combatResources, conditionDesc, conditionsFor, conditionsOf, resetsCleared } from 'shared';
 import { intents } from '../store/game';
 import { Term } from '../util/Term';
 
@@ -73,7 +73,7 @@ export function CombatStatus({ character, editable }: { character: Character; ed
 
       <div className="cs-conditions">
         {list.map((c) => (
-          <Term key={c.id} desc={c.desc}>
+          <Term key={c.id} desc={conditionDesc(c, character.system)}>
             <button
               className={`cs-cond ${active.includes(c.id) ? 'on' : ''}`}
               disabled={!editable}

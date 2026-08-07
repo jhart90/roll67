@@ -81,24 +81,32 @@ export interface ConditionDef {
   /** This creature can take no actions/reactions. */
   incapacitated?: boolean;
   desc: string;
+  /** SWADE-specific wording, shown instead of `desc` in SWADE campaigns —
+   *  the shared conditions carry 5e-flavoured rules text otherwise. */
+  swadeDesc?: string;
+}
+
+/** The tooltip text for a condition, in the given system's own rules language. */
+export function conditionDesc(c: ConditionDef, system: GameSystem): string {
+  return system === 'swade' && c.swadeDesc ? c.swadeDesc : c.desc;
 }
 
 export const CONDITIONS: ConditionDef[] = [
-  { id: 'blinded', label: 'Blinded', icon: '🕶️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, selfAttackDis: true, desc: "Can't see; attacks against have advantage, its attacks have disadvantage." },
+  { id: 'blinded', label: 'Blinded', icon: '🕶️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, selfAttackDis: true, desc: "Can't see; attacks against have advantage, its attacks have disadvantage.", swadeDesc: 'Can’t see: −2 on sight-dependent Trait rolls (−6 if fully blind) and Vulnerable until vision clears.' },
   { id: 'charmed', label: 'Charmed', icon: '💗', systems: ['dnd5e'], desc: "Can't attack the charmer; the charmer has advantage on social checks." },
   { id: 'deafened', label: 'Deafened', icon: '🔇', systems: ['dnd5e', 'swn'], desc: "Can't hear; fails hearing-based checks." },
-  { id: 'frightened', label: 'Frightened', icon: '😱', systems: ['dnd5e', 'swn', 'swade'], selfAttackDis: true, desc: 'Disadvantage on attacks/checks while the source is in sight; can’t move closer.' },
+  { id: 'frightened', label: 'Frightened', icon: '😱', systems: ['dnd5e', 'swn', 'swade'], selfAttackDis: true, desc: 'Disadvantage on attacks/checks while the source is in sight; can’t move closer.', swadeDesc: 'Panicked by Fear: −2 on Trait rolls while the source is in sight, and won’t willingly move closer to it.' },
   { id: 'grappled', label: 'Grappled', icon: '✊', systems: ['dnd5e', 'swn'], desc: 'Speed 0; ends if the grappler is incapacitated.' },
-  { id: 'incapacitated', label: 'Incapacitated', icon: '💫', systems: ['dnd5e', 'swn'], incapacitated: true, desc: "Can't take actions or reactions." },
-  { id: 'invisible', label: 'Invisible', icon: '👻', systems: ['dnd5e', 'swade'], grantsAttackDis: true, selfAttackAdv: true, desc: 'Attacks against have disadvantage (SWADE: −2); its attacks have advantage (SWADE: +2).' },
+  { id: 'incapacitated', label: 'Incapacitated', icon: '💫', systems: ['dnd5e', 'swn', 'swade'], incapacitated: true, desc: "Can't take actions or reactions.", swadeDesc: 'Down and out of the fight: took more Wounds than they can carry. Helpless — no actions or movement. A Wild Card rolls Vigor against the Injury Table and may be Bleeding Out; healing a Wound clears this.' },
+  { id: 'invisible', label: 'Invisible', icon: '👻', systems: ['dnd5e', 'swade'], grantsAttackDis: true, selfAttackAdv: true, desc: 'Attacks against have disadvantage; its attacks have advantage.', swadeDesc: 'Unseen: attacks against it suffer −2 (−6 if totally unseen); its own actions against others gain +2.' },
   { id: 'paralyzed', label: 'Paralyzed', icon: '🧊', systems: ['dnd5e'], grantsAttackAdv: true, incapacitated: true, desc: "Incapacitated, can't move/speak; melee hits crit; auto-fails STR/DEX saves." },
   { id: 'petrified', label: 'Petrified', icon: '🗿', systems: ['dnd5e'], grantsAttackAdv: true, incapacitated: true, desc: 'Turned to stone; resistant to all damage; incapacitated.' },
   { id: 'poisoned', label: 'Poisoned', icon: '🤢', systems: ['dnd5e', 'swn'], selfAttackDis: true, desc: 'Disadvantage on attack rolls and ability checks.' },
   { id: 'defending', label: 'Defending', icon: '🛡️', systems: ['swade'], desc: 'Devoting the whole turn to defense: +4 Parry until the start of their next turn; may not run.' },
-  { id: 'prone', label: 'Prone', icon: '⬇️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: 'melee', grantsAttackDis: 'ranged', selfAttackDis: true, desc: 'Melee attackers have advantage, ranged have disadvantage; its attacks have disadvantage.' },
+  { id: 'prone', label: 'Prone', icon: '⬇️', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: 'melee', grantsAttackDis: 'ranged', selfAttackDis: true, desc: 'Melee attackers have advantage, ranged have disadvantage; its attacks have disadvantage.', swadeDesc: 'On the ground: −2 Parry and −2 to its own Fighting rolls; ranged attacks against it suffer −2. Standing back up costs 2 hexes of Pace.' },
   { id: 'restrained', label: 'Restrained', icon: '🕸️', systems: ['dnd5e', 'swn'], grantsAttackAdv: true, selfAttackDis: true, desc: 'Speed 0; attacks against have advantage; its attacks have disadvantage; disadvantage on DEX saves.' },
-  { id: 'stunned', label: 'Stunned', icon: '⭐', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, blocksMove: true, desc: '5e/SWN: incapacitated, attacks against have advantage. SWADE: Distracted, falls Prone, can’t move or act, subject to The Drop; free Vigor roll at turn start to recover (Vulnerable + Distracted; raise clears all).' },
-  { id: 'unconscious', label: 'Unconscious', icon: '💤', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated and prone; melee hits crit; auto-fails STR/DEX saves.' },
+  { id: 'stunned', label: 'Stunned', icon: '⭐', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, blocksMove: true, desc: 'Incapacitated; attacks against have advantage; auto-fails STR/DEX saves.', swadeDesc: 'Falls Prone, Distracted, can’t move or act, and attackers may have The Drop. Free Vigor roll at the start of each turn to recover — leaving them Vulnerable and Distracted (a raise clears everything).' },
+  { id: 'unconscious', label: 'Unconscious', icon: '💤', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated and prone; melee hits crit; auto-fails STR/DEX saves.', swadeDesc: 'Out cold and helpless: attackers have The Drop (+4 to attack and damage), and a Fighting attack on a helpless foe hits with a raise on a success.' },
   { id: 'dead', label: 'Dead', icon: '💀', systems: ['dnd5e', 'swn', 'swade'], incapacitated: true, desc: 'Out of the fight.' },
   // SWADE-only states.
   { id: 'shaken', label: 'Shaken', icon: '😵', systems: ['swade'], incapacitated: true, desc: 'May only take free actions. At the start of the character’s turn, a free Spirit roll removes Shaken.' },

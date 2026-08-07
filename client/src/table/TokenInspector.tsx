@@ -164,6 +164,38 @@ export function TokenInspector() {
         </label>
       </div>
 
+      {character && character.system === 'swade' ? (
+        // SWADE has no hit points — the sheet tracks Wounds (Wild Cards carry
+        // 3, Extras 1). Write straight to the sheet; the server mirrors the
+        // remaining wound slots onto the token bar.
+        <>
+          <h4>Wounds (from character sheet)</h4>
+          <div className="inspector-grid">
+            <label>
+              Wounds
+              <input
+                type="number"
+                min={0}
+                max={character.sheet.wildCard !== false ? 3 : 1}
+                value={num(character.sheet, 'wounds', 0)}
+                onChange={(e) => {
+                  const max = character.sheet.wildCard !== false ? 3 : 1;
+                  const wounds = Math.max(0, Math.min(max, Number(e.target.value) || 0));
+                  intents.updateCharacter(character.id, { wounds });
+                }}
+              />
+            </label>
+            <label>
+              Max wounds
+              <input type="number" value={character.sheet.wildCard !== false ? 3 : 1} disabled />
+            </label>
+            <span className="dim" style={{ fontSize: 11, gridColumn: '1 / -1' }}>
+              Wild Cards take 3 Wounds, Extras 1. Editing {character.name}&rsquo;s sheet.
+            </span>
+          </div>
+        </>
+      ) : (
+        <>
       <h4>Health {character ? '(from character sheet)' : ''}</h4>
       <div className="inspector-grid">
         <label>
@@ -203,6 +235,8 @@ export function TokenInspector() {
           </span>
         )}
       </div>
+        </>
+      )}
 
       <h4>Vision {sheetVision ? '(from character sheet)' : '(override)'}</h4>
       {sheetVision ? (

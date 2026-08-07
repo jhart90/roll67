@@ -20,6 +20,8 @@ interface AttackMeta {
   aoeSize?: number;
   /** SWADE blast template in tiles-beyond-target (Small 1, Medium 3, Large 5). */
   aoeHexes?: number;
+  /** Armor Piercing — ignores this much of the target's Armor. */
+  ap?: number;
 }
 type Attack = [string, 'Fighting' | 'Shooting' | 'Athletics', string, string, number, AttackMeta?]; // name, skill, damage, dtype, range ft
 type Armor = [string, number, number];                  // name, armor, parryBonus
@@ -33,6 +35,9 @@ interface Row {
   skills: Skill[];
   attacks: Attack[];
   armor?: Armor[];
+  /** Racial traits granting a flat Toughness bonus (Size, mainly), as
+   *  [name, bonus] — feeds the same derived-stat path Edges use. */
+  traits?: [string, number][];
   hp: number;
   pace?: number;
   /** Comma list of damage types the engine halves (sheet `resist` field). */
@@ -163,9 +168,12 @@ const ROWS: Row[] = [
   { name: 'Iguanodon', category: 'Dinosaurs', tier: 2, wild: false, attrs: ['d6', 'd4', 'd6', 'd12', 'd10'], skills: [['Fighting', 'd8'], ['Notice', 'd6']], attacks: [['Thumb Spike', 'Fighting', '1d12!+1d6!', 'piercing', 5]], hp: 16, pace: 8, note: 'Size 3; placid until cornered, then drives that thumb spike like a stiletto.' },
   { name: 'Ankylosaurus', category: 'Dinosaurs', tier: 2, wild: false, attrs: ['d4', 'd4', 'd8', 'd12', 'd12'], skills: [['Fighting', 'd8'], ['Notice', 'd6']], attacks: [['Tail Club', 'Fighting', '1d12!+1d8!', 'bludgeoning', 10, { save: 'vigor', onSave: 'negate', condition: 'stunned' }]], armor: [['Bony Plates', 5, 0]], hp: 16, pace: 4, note: 'Size 3; a walking fortress. Slow, heavily armored, and the tail hits like a wrecking ball.' },
   { name: 'Stegosaurus', category: 'Dinosaurs', tier: 3, wild: false, attrs: ['d6', 'd4', 'd8', 'd12', 'd10'], skills: [['Fighting', 'd8'], ['Notice', 'd6']], attacks: [['Thagomizer', 'Fighting', '1d12!+1d8!', 'piercing', 10]], armor: [['Bony Plates', 3, 0]], hp: 18, pace: 6, note: 'Size 4; the spiked tail has Reach 2 and swats anything that flanks it.' },
-  { name: 'Triceratops', category: 'Dinosaurs', tier: 3, wild: true, attrs: ['d6', 'd4', 'd8', 'd12', 'd12'], skills: [['Fighting', 'd10'], ['Notice', 'd8'], ['Intimidation', 'd10']], attacks: [['Horns', 'Fighting', '1d12!+1d8!', 'piercing', 5], ['Trample', 'Fighting', '1d12!+1d6!', 'bludgeoning', 5, { save: 'strength', onSave: 'negate', condition: 'prone' }]], armor: [['Hide & Frill', 4, 0]], hp: 22, pace: 8, note: 'Wild Card. Size 4; +4 damage on a charge. A fair capstone for a Novice party that has learned to work together.' },
+  { name: 'Triceratops', category: 'Dinosaurs', tier: 3, wild: false, attrs: ['d4', 'd4', 'd8', 'd12', 'd12'], skills: [['Athletics', 'd8'], ['Fighting', 'd6'], ['Notice', 'd6']], attacks: [['Gore', 'Fighting', '1d12!+3+1d8!', 'piercing', 5, { ap: 2 }], ['Stomp', 'Fighting', '1d12!+3+1d6!', 'bludgeoning', 5]], armor: [['Hide & Bony Frill', 4, 0]], traits: [['Size +5', 2]], hp: 22, pace: 7, note: 'Size +5; Reach 1 on the horns. Fearless once committed; Hardy — a second Shaken result never wounds it. Stampeding Charge: +4 damage after moving 6″ straight into a Gore, and a wounded target rolls Strength or is knocked prone and shoved 2″ away. Strength d12+3 (baked into damage).' },
   { name: 'Brachiosaurus', category: 'Dinosaurs', tier: 3, wild: false, attrs: ['d4', 'd4', 'd8', 'd12', 'd12'], skills: [['Fighting', 'd6'], ['Notice', 'd8']], attacks: [['Stomp', 'Fighting', '1d12!+1d10!', 'bludgeoning', 5], ['Tail Sweep', 'Fighting', '1d12!+1d6!', 'bludgeoning', 10, { aoeShape: 'sphere', aoeHexes: 3 }]], armor: [['Thick Hide', 3, 0]], hp: 34, pace: 8, note: 'Size 12; placid and nearly unkillable. A terrain feature that can step on you, not an enemy.' },
   { name: 'Tyrannosaurus Rex', category: 'Dinosaurs', tier: 5, wild: true, attrs: ['d8', 'd4', 'd10', 'd12', 'd12'], skills: [['Fighting', 'd10'], ['Notice', 'd10'], ['Intimidation', 'd12'], ['Athletics', 'd8']], attacks: [['Bite', 'Fighting', '1d12!+1d10!', 'piercing', 10, { save: 'strength', onSave: 'negate', condition: 'grappled' }], ['Tail Sweep', 'Fighting', '1d12!+1d6!', 'bludgeoning', 10], ['Terrifying Roar', 'Athletics', '0', '', 0, { save: 'spirit', onSave: 'negate', condition: 'frightened', aoeShape: 'cone', aoeSize: 54 }]], armor: [['Thick Hide', 4, 0]], hp: 32, pace: 12, note: 'Wild Card. Size 7; far beyond a Novice party. The bite holds prey fast — escape needs an opposed Strength roll.' },
+  { name: 'Alamosaurus', category: 'Dinosaurs', tier: 5, wild: false, attrs: ['d4', 'd4', 'd6', 'd12', 'd12'], skills: [['Athletics', 'd6'], ['Fighting', 'd6'], ['Notice', 'd6']], attacks: [['Stomp', 'Fighting', '1d12!+6+1d8!', 'bludgeoning', 5], ['Tail Smash', 'Fighting', '1d12!+6+1d6!', 'bludgeoning', 15], ['Tail Sweep', 'Fighting', '1d12!+6+1d6!', 'bludgeoning', 15, { aoeShape: 'sphere', aoeHexes: 5 }], ['Trample', 'Fighting', '1d12!+6+1d8!', 'bludgeoning', 5, { save: 'agility', onSave: 'negate', condition: 'prone' }]], armor: [['Thick Hide', 4, 0]], traits: [['Size +8 (Huge)', 6]], hp: 44, pace: 8, note: 'Huge herbivore: Size +8, attackers gain +4 to hit. Massive — immune to most Tests from creatures smaller than Large. Slow Reactions: one Action Card, never Quick or Level Headed. Reach 3 on the tail. Normally peaceful; attacks only if startled, its calves are threatened, or loud weapons and timeline anomalies spook a stampede. Strength d12+6, Vigor d12+2 (baked into damage and Toughness).' },
+  { name: 'Spinosaurus', category: 'Dinosaurs', tier: 4, wild: false, attrs: ['d6', 'd6', 'd6', 'd12', 'd10'], skills: [['Athletics', 'd8'], ['Fighting', 'd8'], ['Notice', 'd8'], ['Stealth', 'd6']], attacks: [['Bite', 'Fighting', '1d12!+2+1d8!', 'piercing', 5, { ap: 1, save: 'strength', onSave: 'negate', condition: 'grappled' }], ['Claws', 'Fighting', '1d12!+2+1d6!', 'slashing', 10], ['Tail Sweep', 'Fighting', '1d12!+2+1d4!', 'bludgeoning', 15, { aoeShape: 'sphere', aoeHexes: 3 }]], armor: [['Thick Scales', 2, 0]], traits: [['Size +5', 4]], hp: 26, pace: 8, note: 'Large semi-aquatic predator: Size +5, Reach 2. Aquatic Hunter — swims at Pace 10, +2 Athletics in water, ignores shallow-water difficult ground. Fear (−1) roar; Low-Light Vision. A wounding Bite grapples unless the target wins a Strength roll. Strength d12+2 (baked into damage).' },
+  { name: 'Triceratops Cub', category: 'Dinosaurs', tier: 0, wild: false, attrs: ['d6', 'd4', 'd6', 'd6', 'd6'], skills: [['Athletics', 'd6'], ['Fighting', 'd4'], ['Notice', 'd6']], attacks: [['Tiny Gore', 'Fighting', '1d6!+1d4!', 'piercing', 5], ['Headbutt', 'Fighting', '1d6!', 'bludgeoning', 5]], armor: [['Developing Frill', 1, 0]], hp: 6, pace: 7, note: 'Size +1; young herbivore, cannot charge. Skittish: when Shaken it runs its full Pace from the danger. A narrative creature more than a combat threat — the real danger is what happens if its mother hears it.' },
 
   // ---------- Robo-Dinosaurs ----------
   // A step up from the organic line: more Armor, ranged options, and Construct
@@ -229,8 +237,10 @@ function sheetFor(r: Row): SheetData {
       ...(meta?.save ? { save: meta.save, onSave: meta.onSave ?? 'negate', saveDc: 4 } : {}),
       ...(meta?.condition ? { condition: meta.condition } : {}),
       ...(meta?.aoeShape && meta.aoeSize ? { aoeShape: meta.aoeShape, aoeSize: meta.aoeSize } : {}),
+      ...(meta?.ap ? { ap: meta.ap } : {}),
     })),
     armor: (r.armor ?? []).map(([name, armor, parryBonus]) => ({ name, armor, parryBonus, equipped: true, notes: '' })),
+    ...(r.traits ? { racialTraits: r.traits.map(([name, toughnessBonus]) => ({ name, toughnessBonus, notes: '' })) } : {}),
     ...(r.resist ? { resist: r.resist } : {}),
     ...(r.immune ? { immune: r.immune } : {}),
     notes: r.note ?? '',

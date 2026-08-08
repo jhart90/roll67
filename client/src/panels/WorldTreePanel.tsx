@@ -105,6 +105,7 @@ export function WorldTreePanel() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
+  const [folderEdit, setFolderEdit] = useState<string | null>(null);
   // The dragged item lives in a module-level ref (not state) so `drop` reads
   // it synchronously and so a drop on the map canvas — a different panel
   // entirely — can read it too.
@@ -157,9 +158,7 @@ export function WorldTreePanel() {
       return;
     }
     if (node.kind === 'folder') {
-      if (!isDm) return;
-      const name = prompt('Folder name', node.name);
-      if (name && name.trim()) intents.updateWorldFolder(node.id, { name: name.trim() });
+      if (isDm) setFolderEdit(node.id);
       return;
     }
     if (node.kind === 'light') {
@@ -286,12 +285,10 @@ export function WorldTreePanel() {
       return;
     }
 
-    // Dragging a folder onto a map reparents it + places character tokens.
-    if (drag.kind === 'folder' && targetId && byId.get(targetId)?.kind === 'map') {
-      placeFolderOnMap(drag.id, targetId);
-      return;
-    }
-    // Dragging a folder onto any other node just reparents the folder.
+    // Dragging a folder anywhere in the TREE only re-parents it — deploying
+    // its characters (and linking a chest object) stays an explicit gesture:
+    // drop the folder on the map CANVAS, or use its "Place all on current
+    // map" action. Nesting for organization must never mint chest objects.
     intents.setParent(drag.kind, drag.id, targetId);
     // Dragging a character onto a map relocates its token there server-side;
     // switch the DM's view to that map so the new token is immediately
@@ -355,18 +352,8 @@ export function WorldTreePanel() {
           <span className="wt-icon">{(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦' : ICON[node.kind]}</span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
-          {isDm && node.kind === 'folder' && (
-            <button
-              className="link danger"
-              title="Delete folder"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm(`Delete folder "${node.name}"? Its contents move up a level.`)) intents.deleteWorldFolder(node.id);
-              }}
-            >
-              ✕
-            </button>
-          )}
+          {/* Folders manage themselves from the details window (double/right-
+              click) — no inline delete button cluttering every row. */}
           {isDm && node.kind === 'light' && !node.lightTokenId && node.lightMapId && (
             <button
               className="link danger"
@@ -447,6 +434,7 @@ export function WorldTreePanel() {
       {isDm && <p className="dim wt-hint">Drag an item onto another to nest it, onto a row’s top edge to re-order, or to empty space for the top level.</p>}
 
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}
+      {folderEdit && <FolderDetailsModal folderId={folderEdit} onClose={() => setFolderEdit(null)} />}
 
       {ctxMenu && (
         <div className="wt-ctx-backdrop" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}>
@@ -467,15 +455,60 @@ export function WorldTreePanel() {
               );
             })()}
             <hr />
-            <button onClick={() => {
-              const f = byId.get(ctxMenu.folderId);
-              const name = prompt('Folder name', f?.name ?? '');
-              if (name && name.trim()) intents.updateWorldFolder(ctxMenu.folderId, { name: name.trim() });
-              setCtxMenu(null);
-            }}>Rename</button>
+            <button onClick={() => { setFolderEdit(ctxMenu.folderId); setCtxMenu(null); }}>Folder details…</button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** DM window for one folder: rename, convert folder↔chest, delete — all
+ *  in-platform (no browser prompt/confirm dialogs). */
+function FolderDetailsModal({ folderId, onClose }: { folderId: string; onClose: () => void }) {
+  const folder = useGameStore((s) => s.worldFolderList.find((f) => f.id === folderId));
+  const [name, setName] = useState(folder?.name ?? '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  if (!folder) return null;
+  const isChest = folder.displayKind === 'chest';
+  const save = () => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== folder.name) intents.updateWorldFolder(folder.id, { name: trimmed });
+    onClose();
+  };
+  return (
+    <div className="sheet-backdrop" style={{ zIndex: 80 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="panel levelup" style={{ maxWidth: 380 }}>
+        <div className="dock-header">
+          <h3>{isChest ? '📦 Chest' : '📁 Folder'} details</h3>
+          <button className="link" onClick={onClose}>close</button>
+        </div>
+        <label>Name
+          <input
+            value={name}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+          />
+        </label>
+        <div className="row" style={{ marginTop: 8, gap: 6, alignItems: 'center' }}>
+          <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
+          <button onClick={() => intents.updateWorldFolder(folder.id, { displayKind: isChest ? 'folder' : 'chest' })}>
+            {isChest ? 'Convert to Folder' : 'Convert to Chest'}
+          </button>
+          <span className="spacer" />
+          {confirmDelete ? (
+            <button className="btn btn-sm btn-danger" onClick={() => { intents.deleteWorldFolder(folder.id); onClose(); }}>
+              Really delete?
+            </button>
+          ) : (
+            <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(true)}>Delete…</button>
+          )}
+        </div>
+        <p className="dim" style={{ fontSize: 11, marginTop: 8 }}>
+          Deleting moves the {isChest ? 'chest' : 'folder'}&rsquo;s contents up one level — nothing inside is lost.
+        </p>
+      </div>
     </div>
   );
 }

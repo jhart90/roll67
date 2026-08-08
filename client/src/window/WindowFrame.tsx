@@ -17,16 +17,49 @@ export function WindowFrame({ win, children }: { win: WindowInstance; children: 
       useWindowManager.getState().popIn(win.id);
       return;
     }
-    w.document.title = win.title;
-    document.querySelectorAll('link[rel="stylesheet"], style').forEach((node) => {
-      w.document.head.appendChild(node.cloneNode(true));
+    // Normalize the about:blank document (Safari in particular can hand back
+    // a quirks-mode shell whose layout is off until a real doctype is written).
+    const doc = w.document;
+    doc.open();
+    doc.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body></body></html>');
+    doc.close();
+    doc.title = win.title;
+    // Any relative URL inside the popup (images, fonts pulled by CSS) must
+    // resolve against the app origin, not about:blank.
+    const base = doc.createElement('base');
+    base.href = document.baseURI;
+    doc.head.appendChild(base);
+    // Stylesheets: rebuild rather than cloneNode. A cloned production
+    // <link href="/assets/….css"> keeps its RELATIVE href, which cannot
+    // resolve from about:blank — Safari renders the popup completely
+    // unstyled. The DOM's resolved `.href` property is absolute, so use it.
+    document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]').forEach((node) => {
+      const l = doc.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = node.href;
+      doc.head.appendChild(l);
     });
-    w.document.body.style.margin = '0';
+    document.querySelectorAll('style').forEach((node) => {
+      const s = doc.createElement('style');
+      s.textContent = node.textContent;
+      doc.head.appendChild(s);
+    });
+    // Theme classes + a solid background so nothing flashes white while the
+    // stylesheet streams in.
+    doc.documentElement.className = document.documentElement.className;
+    doc.body.className = document.body.className;
+    doc.body.style.margin = '0';
+    const cs = getComputedStyle(document.body);
+    doc.body.style.background = cs.backgroundColor;
+    doc.body.style.color = cs.color;
     setPopup(w);
     const onUnload = () => useWindowManager.getState().popIn(win.id);
+    // Safari fires pagehide more reliably than beforeunload for closed popups.
     w.addEventListener('beforeunload', onUnload);
+    w.addEventListener('pagehide', onUnload);
     return () => {
       w.removeEventListener('beforeunload', onUnload);
+      w.removeEventListener('pagehide', onUnload);
       setPopup(null);
       w.close();
     };

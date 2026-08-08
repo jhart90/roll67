@@ -24,6 +24,15 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     overlayMounted(animId);
+    // The table sound of the throw: one of three rattles for a normal roll,
+    // the big-handful clatter when more than 4 dice hit the felt at once.
+    // Autoplay may be blocked before the user's first interaction — ignore.
+    const clip = dice.length > 4
+      ? '/sounds/dice_many.mp3'
+      : `/sounds/dice_${1 + Math.floor(Math.random() * 3)}.mp3`;
+    const audio = new Audio(clip);
+    audio.volume = 0.6;
+    audio.play().catch(() => undefined);
     const sims = buildSims(dice, w, h, color, textColor, palette);
     const settleAt = simsSettleTime(sims);
     const t0 = performance.now();

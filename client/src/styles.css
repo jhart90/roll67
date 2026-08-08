@@ -2047,6 +2047,9 @@ th > .term { border-bottom-style: dotted; }
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
 
+/* The Shaken window's outcome list — tight, indented, reads as a ladder. */
+.shaken-outcomes { margin: 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+
 /* The incapacitation window: graver border, and a benny-gold Soak button. */
 .incap-prompt { border-color: #b03030; }
 .benny-soak-btn {

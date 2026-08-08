@@ -157,22 +157,26 @@ export function edgeEligibility(sheet: SheetData, entry: ContentEntry): EdgeElig
       if (charRank < rankIdx) return { entry, eligible: false, reason: `Requires ${RANKS_SWADE[rankIdx]} Rank.` };
       continue;
     }
-    // "Fighting d8+", "Agility d8+", "Spirit d6+"
+    // "Fighting d8+", "Agility d8+", "Spirit d6+", "Athletics or Shooting d8+"
     const m = /^(.+?)\s+(d\d+)\+?$/i.exec(part);
     if (!m) continue; // unparseable prose — never blocks
-    const traitName = m[1].trim();
     const needIdx = dieStepIndex(m[2]);
-    const attr = ATTRIBUTES_SWADE.find((a) => a.label.toLowerCase() === traitName.toLowerCase());
-    const haveDie = attr ? attributeDie(sheet, attr.id) : skillDieOf(sheet, traitName);
-    // A requirement naming something the character simply lacks blocks it,
-    // except for the vague "chosen skill" style wording.
-    if (!haveDie) {
-      if (/chosen|any/i.test(traitName)) continue;
-      return { entry, eligible: false, reason: `Requires ${traitName} ${m[2]}+.` };
-    }
-    if (dieStepIndex(haveDie) < needIdx) {
-      return { entry, eligible: false, reason: `Requires ${traitName} ${m[2]}+ (you have ${haveDie}).` };
-    }
+    // "Athletics or Shooting d8+": any one alternative meeting the bar passes.
+    const alternatives = m[1].trim().split(/\s+or\s+/i);
+    const dieFor = (traitName: string) => {
+      const attr = ATTRIBUTES_SWADE.find((a) => a.label.toLowerCase() === traitName.toLowerCase());
+      return attr ? attributeDie(sheet, attr.id) : skillDieOf(sheet, traitName);
+    };
+    // Vague wording ("chosen skill", "any Trait", "arcane skill") never blocks.
+    if (alternatives.some((t) => /chosen|any|arcane skill|in trait/i.test(t))) continue;
+    const dice = alternatives.map(dieFor);
+    if (dice.some((d) => d && dieStepIndex(d) >= needIdx)) continue;
+    const label = `${alternatives.join(' or ')} ${m[2]}+`;
+    const have = dice.find(Boolean);
+    return {
+      entry, eligible: false,
+      reason: have ? `Requires ${label} (you have ${have}).` : `Requires ${label}.`,
+    };
   }
   return { entry, eligible: true };
 }

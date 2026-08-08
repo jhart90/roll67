@@ -1,12 +1,12 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, DiceParseError, castableLevels, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor, traitModWhy,
+  C2S, S2C, DiceParseError, SKILLS_SWADE, castableLevels, dieSides, fmtMod, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor, traitExpr, traitModWhy,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
   type ModerateMessagePayload, type ReorderMacrosPayload, type RollStatRow, type RollStatsGetPayload,
   type RollStatsUserBlock, type SaveMacroPayload,
   type SheetData, type SheetRollPayload, type UndoEntry,
 } from 'shared';
-import { campaigns, characters, chat, macros, redactChat, rollStats } from '../../db/repos.js';
+import { campaigns, characters, chat, macros, redactChat, rollStats, tokens } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { applyUndo } from '../undo.js';
 // NOTE: hp.ts also imports applyAdv from this file -- a deliberate, safe
@@ -254,6 +254,110 @@ function runSheetRoll(
   deliver(io, campaignId, msg);
 }
 
+// Common shorthand for trait names, expanded before prefix matching.
+const TRAIT_ALIASES: Record<string, string> = {
+  str: 'strength', agi: 'agility', ag: 'agility', vig: 'vigor', vi: 'vigor',
+  spi: 'spirit', sp: 'spirit', sma: 'smarts', sm: 'smarts',
+  dex: 'dexterity', con: 'constitution', int: 'intelligence', wis: 'wisdom', cha: 'charisma',
+  ck: 'common knowledge', know: 'common knowledge', kn: 'common knowledge',
+};
+
+/**
+ * "/r spirit+2", "/r str-2", "/r hack" — a trait roll straight off the
+ * sender's character sheet, resolved by (abbreviated) attribute or skill
+ * name with an optional flat modifier. Returns true when the text was
+ * handled as a trait roll (including handled-with-an-error); false hands
+ * the text back to the plain dice parser.
+ */
+function tryTraitRoll(
+  io: Server, socket: Socket, campaignId: string, userId: string, username: string,
+  raw: string, gm: boolean,
+): boolean {
+  // A trait query is words (letters only) with an optional trailing ±N —
+  // anything with digits or dice syntax in the name is not ours.
+  const m = /^([a-z][a-z '’-]*(?:\s+[a-z][a-z '’-]*)*)\s*(?:([+-])\s*(\d+))?$/i.exec(raw.trim());
+  if (!m) return false;
+  const mod = m[3] ? (m[2] === '-' ? -1 : 1) * Number(m[3]) : 0;
+  const query = (() => {
+    const q = m[1].replace(/\s+/g, ' ').trim().toLowerCase();
+    return TRAIT_ALIASES[q] ?? q;
+  })();
+
+  // The roll comes off a sheet: the sender's character — when they own
+  // several, prefer the one standing on the campaign's active map.
+  const mine = characters.forCampaign(campaignId).filter((c) => c.ownerUserId === userId);
+  let character = mine[0];
+  if (mine.length > 1) {
+    const activeMapId = campaigns.byId(campaignId)?.activeMapId;
+    if (activeMapId) {
+      const onMap = tokens.forMap(activeMapId);
+      character = mine.find((c) => onMap.some((t) => t.characterId === c.id)) ?? mine[0];
+    }
+  }
+  if (!character) {
+    emitError(socket, 'No character of yours here to roll for — /r <trait name>[±N] rolls off your sheet.');
+    return true;
+  }
+
+  const list = systemFor(character.system).rollables(character.sheet);
+  const baseOf = (label: string) => label.split(' (')[0].trim().toLowerCase();
+  let matches = list.filter((r) => baseOf(r.label) === query);
+  if (matches.length === 0) matches = list.filter((r) => baseOf(r.label).startsWith(query));
+  if (matches.length > 1) {
+    // "str" in 5e prefixes both the check and the save; a lone attribute
+    // match ("per" → the Persuasion SKILL vs Performance) stays ambiguous.
+    const attrs = matches.filter((r) => r.group === 'Attributes');
+    if (attrs.length === 1) matches = attrs;
+  }
+  if (matches.length > 1) {
+    emitError(socket, `Which one? ${matches.slice(0, 5).map((r) => r.label.split(' (')[0].trim()).join(', ')} — spell out more of the name.`);
+    return true;
+  }
+
+  let label: string; let expr: string;
+  if (matches.length === 1) {
+    label = matches[0].label;
+    expr = matches[0].expr;
+  } else if (character.system === 'swade') {
+    // A real SWADE skill the character never trained: the unskilled d4−2.
+    const named = SKILLS_SWADE.filter((s) => s.toLowerCase().startsWith(query));
+    if (named.length > 1) {
+      emitError(socket, `Which one? ${named.join(', ')} — spell out more of the name.`);
+      return true;
+    }
+    if (named.length === 0) {
+      emitError(socket, `No attribute or skill called “${m[1].trim()}” on ${character.name}’s sheet.`);
+      return true;
+    }
+    label = `${named[0]} (unskilled d4−2)`;
+    expr = traitExpr(character.sheet, dieSides(''));
+  } else {
+    emitError(socket, `No attribute or skill called “${m[1].trim()}” on ${character.name}’s sheet.`);
+    return true;
+  }
+
+  if (mod) expr += fmtMod(mod);
+  const breakdown = roll(expr);
+  const manualWhy = mod ? [`${fmtMod(mod)} Manual modifier — typed into the roll command`] : [];
+  if (character.system === 'swade') breakdown.modWhy = [...traitModWhy(character.sheet), ...manualWhy];
+  else if (mod) breakdown.modWhy = manualWhy;
+  const text = `${label}${mod ? ` ${fmtMod(mod)}` : ''}`;
+  if (character.system === 'swade') {
+    recordBennyRoll(io, campaignId, character, 'trait', expr, breakdown.total, text);
+  }
+  const dmNames = gm
+    ? campaigns.members(campaignId).filter((x) => x.role === 'dm').map((x) => x.username)
+    : null;
+  const msg = chat.add(campaignId, {
+    userId, fromName: username, fromCharacter: character.name, characterId: character.id,
+    kind: gm ? 'whisper' : 'roll',
+    text: gm ? `(GM roll) ${text}` : text,
+    roll: breakdown, recipients: dmNames,
+  });
+  deliver(io, campaignId, msg);
+  return true;
+}
+
 function handleChatText(
   io: Server,
   socket: Socket,
@@ -291,9 +395,10 @@ function handleChatText(
     return;
   }
 
-  // /r or /roll — public roll.
+  // /r or /roll — public roll: a dice expression, or a sheet trait by name.
   const rollMatch = text.match(/^\/r(?:oll)?\s+(.+)$/i);
   if (rollMatch) {
+    if (tryTraitRoll(io, socket, campaignId, userId, username, rollMatch[1], false)) return;
     try {
       // "/r 1d20+3 # Stealth check" — anything after the first # labels the
       // roll, so a bare expression isn't the only thing the table sees.
@@ -313,6 +418,7 @@ function handleChatText(
   // /gr — roll seen only by the roller and the DM.
   const gmRollMatch = text.match(/^\/gr\s+(.+)$/i);
   if (gmRollMatch) {
+    if (tryTraitRoll(io, socket, campaignId, userId, username, gmRollMatch[1], true)) return;
     try {
       const { expr, label } = splitRollLabel(gmRollMatch[1]);
       const breakdown = roll(expr);
@@ -368,7 +474,7 @@ function handleChatText(
   }
 
   if (text.startsWith('/')) {
-    emitError(socket, 'Commands: /r <dice> [# label], /gr <dice> [# label], /w <player, character, or dm> <message>, #macro');
+    emitError(socket, 'Commands: /r <dice or trait name±N> [# label], /gr <dice or trait> [# label], /w <player, character, or dm> <message>, #macro — e.g. /r spirit+2, /r hack-1');
     return;
   }
 

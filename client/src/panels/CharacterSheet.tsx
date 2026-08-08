@@ -133,6 +133,14 @@ const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoe
  *  second line of the per-weapon card (identity/attack stats stay on the first). */
 const SECONDARY_WEAPON_COLS = new Set(['parryBonus', 'wielded', 'ammo', 'maxAmmo', 'caliber', 'rof', 'notes']);
 
+/** Does this attack carry a rider effect (forced save, inflicted condition,
+ *  or AoE template)? Lights up the ⚡ button so configured attacks stand out. */
+function attackHasRider(row: SheetData): boolean {
+  return Boolean(str(row, 'save', '') || str(row, 'condition', '') || str(row, 'aoeShape', ''));
+}
+
+const RIDER_BTN_TITLE = 'Save / condition / AoE — rider effects this attack forces on its target (e.g. Vigor roll or be Stunned, a cone template)';
+
 function ListEditor({
   section, system, sheet, readOnly, onPatch,
 }: {
@@ -234,11 +242,11 @@ function ListEditor({
               <span className="spacer" />
               <button
                 className="link"
-                title="Attack details"
-                style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i ? 1 : 0.5 }}
+                title={RIDER_BTN_TITLE}
+                style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i || attackHasRider(row) ? 1 : 0.4 }}
                 onClick={() => setDetailIdx(detailIdx === i ? null : i)}
               >
-                ✏️
+                ⚡
               </button>
               {!readOnly && (
                 <button className="link danger" onClick={() => {
@@ -290,11 +298,11 @@ function ListEditor({
                 <td>
                   <button
                     className="link"
-                    title="Attack details"
-                    style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i ? 1 : 0.5 }}
+                    title={RIDER_BTN_TITLE}
+                    style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i || attackHasRider(row) ? 1 : 0.4 }}
                     onClick={() => setDetailIdx(detailIdx === i ? null : i)}
                   >
-                    ✏️
+                    ⚡
                   </button>
                 </td>
               )}
@@ -343,12 +351,17 @@ function AttackDetailPopover({
     <div className="attack-detail-popover">
       <div className="dock-header" style={{ marginBottom: 8 }}>
         <h4 style={{ margin: 0, textTransform: 'none', color: 'var(--text)' }}>
-          {String(detailRow.name || 'Attack')} — Details
+          ⚡ {String(detailRow.name || 'Attack')} — Save / Condition / AoE
         </h4>
         <button className="link" onClick={onClose}>close</button>
       </div>
+      <p className="dim" style={{ fontSize: 11, margin: '0 0 8px' }}>
+        Rider effects the engine automates on a hit: a forced trait roll (with what a success
+        spares), a condition inflicted on failure, and/or an area template instead of a single
+        target. Leave blank for a plain weapon.
+      </p>
       <div className="attack-detail-grid">
-        {section.columns.map((col) => (
+        {section.columns.filter((col) => ATTACK_DETAIL_COLS.has(col.id)).map((col) => (
           <label key={col.id} className={`${ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}${col.width === 'full' ? ' detail-full' : ''}`}>
             <SheetTerm system={system} label={col.label} />
             {col.width === 'full' ? (

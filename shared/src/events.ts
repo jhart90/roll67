@@ -158,6 +158,8 @@ export const C2S = {
   PING: 'ping',
   MEASURE: 'measure',
   // handouts
+  /** DM: persist a manual ordering of world-tree siblings. */
+  WORLD_REORDER: 'worldReorder',
   CREATE_HANDOUT: 'createHandout',
   UPDATE_HANDOUT: 'updateHandout',
   DELETE_HANDOUT: 'deleteHandout',
@@ -696,6 +698,8 @@ export const S2C = {
   TARGET_PREVIEW_SHOWN: 'targetPreviewShown',
   OPEN_HANDOUT: 'openHandout',
   HANDOUTS: 'handouts',
+  /** Manual world-tree sibling ordering: "kind:id" → rank. */
+  WORLD_SORT: 'worldSort',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
   CHAT_UPDATED: 'chatUpdated',
@@ -939,6 +943,9 @@ export interface BleedRollPayload { characterId: string }
 export interface BleedPromptPayload { characterId: string; name: string }
 export interface ShakenRollPayload { characterId: string }
 export interface ShakenPromptPayload { characterId: string; name: string }
+/** The full ordered "kind:id" key list of one parent's world-tree children. */
+export interface WorldReorderPayload { keys: string[] }
+export interface WorldSortPayload { orders: Record<string, number> }
 export interface StunRollPayload { characterId: string }
 export interface StunPromptPayload { characterId: string; name: string }
 export interface IncapRollPayload { characterId: string }

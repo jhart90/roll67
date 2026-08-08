@@ -6,9 +6,9 @@ import {
   type DeleteWorldFolderPayload, type DropFolderOnCharacterPayload, type DropFolderOnMapPayload, type DropShopOnMapPayload, type GameSystem,
   type PresentShopPayload,
   type SheetData, type Shop, type ShopItem, type UpdateCustomItemPayload, type UpdateLocationPayload, type UpdateShopPayload,
-  type UpdateWorldFolderPayload,
+  type UpdateWorldFolderPayload, type WorldReorderPayload,
 } from 'shared';
-import { campaigns, characters, chat, customItems, locations, mapObjects, maps, shops, tokens, worldFolders } from '../../db/repos.js';
+import { campaigns, characters, chat, customItems, locations, mapObjects, maps, shops, tokens, worldFolders, worldSort } from '../../db/repos.js';
 import { db } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { broadcastDirectory } from '../directory.js';
@@ -263,6 +263,20 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     worldFolders.delete(folderId);
     broadcastWorldFolders(io, d.campaignId);
   }, 'DELETE_WORLD_FOLDER'));
+
+  // DM re-ordered one parent's children by hand: rank the given keys 0..n−1.
+  // Ordering isn't secret — everyone gets it so player trees keep the same
+  // relative order for whatever subset they can see.
+  socket.on(C2S.WORLD_REORDER, safe(socket, ({ keys }: WorldReorderPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const clean = (Array.isArray(keys) ? keys : [])
+      .filter((k): k is string => typeof k === 'string' && k.length > 0 && k.length <= 200)
+      .slice(0, 1000);
+    if (clean.length === 0) return;
+    worldSort.set(d.campaignId, clean);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.WORLD_SORT, { orders: worldSort.forCampaign(d.campaignId) });
+  }, 'WORLD_REORDER'));
 
   socket.on(C2S.DROP_FOLDER_ON_MAP, safe(socket, ({ folderId, mapId, q, r }: DropFolderOnMapPayload) => {
     const d = requireCampaign(socket);

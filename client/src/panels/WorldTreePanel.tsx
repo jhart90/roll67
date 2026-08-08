@@ -109,7 +109,10 @@ export function WorldTreePanel() {
   // it synchronously and so a drop on the map canvas — a different panel
   // entirely — can read it too.
   const dragRef = worldDrag;
-  const [dropTarget, setDropTarget] = useState<string | 'root' | null>(null);
+  // 'into' nests under the hovered row (bottom half); 'above' inserts the
+  // dragged item just before it among its siblings (top half).
+  const [dropTarget, setDropTarget] = useState<{ id: string; mode: 'into' | 'above' } | 'root' | null>(null);
+  const worldSort = useGameStore((s) => s.worldSort);
 
   const mapObjectList = useMemo(
     () => (isDm ? Object.values(mapObjectsById) : []),
@@ -128,9 +131,11 @@ export function WorldTreePanel() {
       if (!m.has(key)) m.set(key, []);
       m.get(key)!.push(n);
     }
-    for (const list of m.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+    // Hand-ranked items first (in their dragged order), then the rest A→Z.
+    const rank = (n: TreeNode) => worldSort[`${n.kind}:${n.id}`] ?? Number.MAX_SAFE_INTEGER;
+    for (const list of m.values()) list.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
     return m;
-  }, [nodes, byId]);
+  }, [nodes, byId, worldSort]);
 
   function toggle(id: string) {
     setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -212,13 +217,35 @@ export function WorldTreePanel() {
     }
   }
 
-  function drop(targetId: string | null) {
+  function drop(targetId: string | null, mode: 'into' | 'above' = 'into') {
     const drag = dragRef.current;
     dragRef.current = null;
     setDropTarget(null);
     if (!drag) return;
     // Can't parent an item under itself or its own descendant.
     if (targetId && (targetId === drag.id || isAncestor(drag.id, targetId))) return;
+
+    // Dropped on a row's top half: insert just above it among its siblings
+    // (re-parenting first if it came from elsewhere). Lights keep their
+    // special link/unlink semantics; everything else reorders.
+    if (mode === 'above' && targetId && drag.kind !== 'light') {
+      const anchor = byId.get(targetId);
+      const dragNode = byId.get(drag.id);
+      if (!anchor || !dragNode) return;
+      const parentKey = anchor.parentId && byId.has(anchor.parentId) ? anchor.parentId : null;
+      if (parentKey && isAncestor(drag.id, parentKey)) return;
+      const dragParent = dragNode.parentId && byId.has(dragNode.parentId) ? dragNode.parentId : null;
+      if (dragParent !== parentKey) {
+        // Counters only live on maps — an above-drop can't re-home them.
+        if (drag.kind === 'counter') return;
+        intents.setParent(drag.kind, drag.id, parentKey);
+      }
+      const sibs = (childrenOf.get(parentKey) ?? []).filter((n) => n.id !== drag.id);
+      const idx = Math.max(0, sibs.findIndex((n) => n.id === targetId));
+      const ordered = [...sibs.slice(0, idx), dragNode, ...sibs.slice(idx)];
+      intents.worldReorder(ordered.map((n) => `${n.kind}:${n.id}`));
+      return;
+    }
 
     // --- Light drag operations ---
     if (drag.kind === 'light') {
@@ -280,11 +307,12 @@ export function WorldTreePanel() {
   function renderNode(node: TreeNode, depth: number): ReactNode {
     const kids = childrenOf.get(node.id) ?? [];
     const isOpen = expanded.has(node.id);
-    const isDropOn = dropTarget === node.id;
+    const isDropOn = typeof dropTarget === 'object' && dropTarget?.id === node.id && dropTarget.mode === 'into';
+    const isDropAbove = typeof dropTarget === 'object' && dropTarget?.id === node.id && dropTarget.mode === 'above';
     return (
       <div key={`${node.kind}:${node.id}`}>
         <div
-          className={`wt-row ${isDropOn ? 'drop-on' : ''}`}
+          className={`wt-row ${isDropOn ? 'drop-on' : ''} ${isDropAbove ? 'drop-above' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
           {...(node.kind === 'map' ? { 'data-map-id': node.id } : {})}
           draggable={isDm && node.kind !== 'mapobject'}
@@ -294,8 +322,20 @@ export function WorldTreePanel() {
             e.dataTransfer.setData('text/plain', node.id);
             dragRef.current = { kind: node.kind as WorldDragKind, id: node.id };
           } : undefined}
-          onDragOver={isDm ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dropTarget !== node.id) setDropTarget(node.id); } : undefined}
-          onDrop={isDm ? (e) => { e.preventDefault(); e.stopPropagation(); drop(node.id); } : undefined}
+          onDragOver={isDm ? (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const mode = e.clientY < rect.top + rect.height / 2 ? 'above' as const : 'into' as const;
+            if (typeof dropTarget !== 'object' || dropTarget?.id !== node.id || dropTarget.mode !== mode) {
+              setDropTarget({ id: node.id, mode });
+            }
+          } : undefined}
+          onDrop={isDm ? (e) => {
+            e.preventDefault(); e.stopPropagation();
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            drop(node.id, e.clientY < rect.top + rect.height / 2 ? 'above' : 'into');
+          } : undefined}
           onDragEnd={isDm ? () => { dragRef.current = null; setDropTarget(null); } : undefined}
           onClick={() => activate(node, kids.length > 0)}
           onDoubleClick={() => open(node)}
@@ -304,7 +344,7 @@ export function WorldTreePanel() {
             if (isDm && node.kind === 'folder') { setCtxMenu({ x: e.clientX, y: e.clientY, folderId: node.id }); return; }
             open(node);
           }}
-          title={node.kind === 'map' ? 'Click to open in the viewer · double/right-click to edit · drag to re-parent' : 'Click to expand · double/right-click to open · drag to re-parent'}
+          title={node.kind === 'map' ? 'Click to open in the viewer · double/right-click to edit · drag to re-parent or re-order' : 'Click to expand · double/right-click to open · drag onto a row to nest, onto its top edge to re-order'}
         >
           <span
             className="wt-caret"
@@ -404,7 +444,7 @@ export function WorldTreePanel() {
           </button>
         </p>
       )}
-      {isDm && <p className="dim wt-hint">Drag an item onto another to nest it; drag to empty space to move it to the top level.</p>}
+      {isDm && <p className="dim wt-hint">Drag an item onto another to nest it, onto a row’s top edge to re-order, or to empty space for the top level.</p>}
 
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}
 

@@ -1197,6 +1197,21 @@ export const counters = {
   },
 };
 
+/** Manual world-tree sibling ordering: "kind:id" → rank, campaign-scoped. */
+export const worldSort = {
+  forCampaign(campaignId: string): Record<string, number> {
+    const rows = stmt('SELECT key, sort_order FROM world_sort WHERE campaign_id = ?').all(campaignId) as Array<{ key: string; sort_order: number }>;
+    return Object.fromEntries(rows.map((r) => [r.key, r.sort_order]));
+  },
+  /** Assign ranks 0..n−1 to the given keys (one parent's ordered children). */
+  set(campaignId: string, keys: string[]): void {
+    const upsert = stmt('INSERT INTO world_sort (campaign_id, key, sort_order) VALUES (?, ?, ?) ON CONFLICT(campaign_id, key) DO UPDATE SET sort_order = excluded.sort_order');
+    db.transaction(() => {
+      keys.forEach((key, i) => upsert.run(campaignId, key, i));
+    })();
+  },
+};
+
 function toCounter(row: Record<string, unknown>): Counter {
   return {
     id: String(row.id), campaignId: String(row.campaign_id), mapId: String(row.map_id),

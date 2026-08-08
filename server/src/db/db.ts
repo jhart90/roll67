@@ -252,6 +252,17 @@ db.exec(`
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_counters_map ON counters(map_id)');
 
+// Manual world-tree ordering: rank per "kind:id" key, campaign-scoped.
+// Items without a rank sort after ranked ones, alphabetically.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS world_sort (
+    campaign_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    sort_order REAL NOT NULL,
+    PRIMARY KEY (campaign_id, key)
+  )
+`);
+
 // Per-player private notes on characters they do not control (public sheet).
 // Keyed by viewer + character: each player sees only their own scribbles.
 db.exec(`

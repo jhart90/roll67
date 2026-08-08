@@ -568,6 +568,8 @@ button.link:hover { text-decoration: underline; }
 }
 .wt-row:hover { background: rgba(255, 255, 255, 0.05); }
 .wt-row.drop-on { background: rgba(108, 155, 210, 0.25); outline: 1px solid var(--accent); }
+/* Insert-above indicator: a bright line along the row's top edge. */
+.wt-row.drop-above { box-shadow: inset 0 2px 0 0 var(--accent); }
 .wt-caret { width: 12px; text-align: center; color: var(--text-dim); font-size: 10px; }
 .wt-icon { font-size: 13px; }
 .wt-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

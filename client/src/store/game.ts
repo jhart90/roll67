@@ -164,6 +164,8 @@ interface GameState {
   shopList: Shop[];
   locationList: LocationNode[];
   worldFolderList: WorldFolder[];
+  /** Manual world-tree sibling ordering: "kind:id" → rank (unranked sort last). */
+  worldSort: Record<string, number>;
   customNpcs: CustomNpcView[];
   customItems: CustomItem[];
   /** Shop the DM is presenting to this viewer (players pop a storefront). */
@@ -369,6 +371,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   shopList: [],
   locationList: [],
   worldFolderList: [],
+  worldSort: {},
   customNpcs: [],
   customItems: [],
   presentedShopId: null,
@@ -1100,6 +1103,10 @@ export function wireSocket(): void {
     useGameStore.setState({ worldFolderList: folders });
   });
 
+  socket.on(S2C.WORLD_SORT, ({ orders }: { orders: Record<string, number> }) => {
+    useGameStore.setState({ worldSort: orders });
+  });
+
   socket.on(S2C.CUSTOM_NPCS, ({ npcs }: { npcs: CustomNpcView[] }) => {
     useGameStore.setState({ customNpcs: npcs });
   });
@@ -1440,6 +1447,8 @@ export const intents = {
   getRollStats: (characterId?: string) => socket.emit(C2S.ROLL_STATS_GET, { characterId: characterId ?? null }),
   /** Fetch the public-facing sheet of a character you don't control. */
   getPublicSheet: (characterId: string) => socket.emit(C2S.PUBLIC_SHEET_GET, { characterId }),
+  /** DM: persist a manual ordering of one parent's world-tree children. */
+  worldReorder: (keys: string[]) => socket.emit(C2S.WORLD_REORDER, { keys }),
   /** DM-only: force-reveal / force-hide / reset a world-tab entry. */
   worldOverride: (kind: 'map' | 'token' | 'character', key: string, mode: 'reveal' | 'hide' | 'clear') =>
     socket.emit(C2S.WORLD_OVERRIDE, { kind, key, mode }),

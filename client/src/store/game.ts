@@ -1140,7 +1140,8 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.OPEN_HANDOUT, ({ handoutId, title }: { handoutId: string; title: string }) => {
-    openWindow('handout', handoutId, {}, title);
+    // DM pushed this to the table: front and center of the map pane.
+    openWindow('handout', handoutId, {}, title, { centered: true });
   });
 
   socket.on(S2C.DIRECTORY, (payload: DirectoryPayload) => {

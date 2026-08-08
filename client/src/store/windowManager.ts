@@ -27,12 +27,15 @@ export interface WindowInstance {
   y: number;
   z: number;
   poppedOut: boolean;
+  /** Centered in the map pane (DM-pushed handouts) until the user drags it —
+   *  x/y are ignored while set. */
+  centered?: boolean;
 }
 
 interface WindowManagerState {
   windows: WindowInstance[];
   topZ: number;
-  openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string): void;
+  openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string, opts?: { centered?: boolean }): void;
   closeWindow(id: string): void;
   focusWindow(id: string): void;
   moveWindow(id: string, x: number, y: number): void;
@@ -47,14 +50,14 @@ export const useWindowManager = create<WindowManagerState>((set, get) => ({
   windows: [],
   topZ: 50,
 
-  openWindow(kind, key, props, title) {
+  openWindow(kind, key, props, title, opts) {
     const id = `${kind}:${key}`;
     const existing = get().windows.find((w) => w.id === id);
     const z = get().topZ + 1;
     if (existing) {
       set((s) => ({
         topZ: z,
-        windows: s.windows.map((w) => (w.id === id ? { ...w, props, title, z } : w)),
+        windows: s.windows.map((w) => (w.id === id ? { ...w, props, title, z, ...(opts?.centered ? { centered: true } : {}) } : w)),
       }));
       return;
     }
@@ -66,6 +69,7 @@ export const useWindowManager = create<WindowManagerState>((set, get) => ({
         x: 72 + slot * CASCADE_STEP,
         y: 48 + slot * CASCADE_STEP,
         poppedOut: false,
+        ...(opts?.centered ? { centered: true } : {}),
       }],
     }));
   },
@@ -80,7 +84,8 @@ export const useWindowManager = create<WindowManagerState>((set, get) => ({
   },
 
   moveWindow(id, x, y) {
-    set((s) => ({ windows: s.windows.map((w) => (w.id === id ? { ...w, x, y } : w)) }));
+    // Dragging pins the window: centered mode ends where the user puts it.
+    set((s) => ({ windows: s.windows.map((w) => (w.id === id ? { ...w, x, y, centered: false } : w)) }));
   },
 
   popOut(id) {
@@ -92,8 +97,8 @@ export const useWindowManager = create<WindowManagerState>((set, get) => ({
   },
 }));
 
-export function openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string): void {
-  useWindowManager.getState().openWindow(kind, key, props, title);
+export function openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string, opts?: { centered?: boolean }): void {
+  useWindowManager.getState().openWindow(kind, key, props, title, opts);
 }
 
 export function closeWindow(id: string): void {

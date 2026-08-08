@@ -37,7 +37,15 @@ export function WindowFrame({ win, children }: { win: WindowInstance; children: 
   function startDrag(e: ReactPointerEvent) {
     if ((e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
-    dragRef.current = { startX: e.clientX, startY: e.clientY, originX: win.x, originY: win.y };
+    // A centered window has no meaningful stored x/y — pick the drag up from
+    // where the frame actually sits (the first move pins it there).
+    const rect = win.centered
+      ? (e.currentTarget as HTMLElement).closest('.win-frame')?.getBoundingClientRect()
+      : null;
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      originX: rect ? rect.left : win.x, originY: rect ? rect.top : win.y,
+    };
     const onMove = (ev: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
@@ -82,10 +90,17 @@ export function WindowFrame({ win, children }: { win: WindowInstance; children: 
     );
   }
 
+  // Centered mode (DM-pushed handouts): the midpoint of the map pane — the
+  // viewport minus the left toolbar (61px) and the right UI panel (308px) —
+  // until the user drags the window somewhere on purpose.
+  const style = win.centered
+    ? { left: 'calc(61px + (100vw - 61px - 308px) / 2)', top: '50vh', transform: 'translate(-50%, -50%)', zIndex: win.z }
+    : { left: win.x, top: win.y, zIndex: win.z };
+
   return (
     <div
       className="win-frame"
-      style={{ left: win.x, top: win.y, zIndex: win.z }}
+      style={style}
       onPointerDownCapture={() => useWindowManager.getState().focusWindow(win.id)}
     >
       {bar}

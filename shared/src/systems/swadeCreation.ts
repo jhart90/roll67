@@ -369,22 +369,18 @@ export interface HindranceOption {
   desc: string;
 }
 
-export const CURATED_HINDRANCES_SWADE: HindranceOption[] = [
-  { id: 'bad-eyes', name: 'Bad Eyes', severity: 'Minor', desc: '−2 Notice involving sight without corrective lenses.' },
-  { id: 'clueless', name: 'Clueless', severity: 'Minor', desc: '−2 to untrained Common Knowledge rolls.' },
-  { id: 'curious', name: 'Curious', severity: 'Minor', desc: 'Compelled to investigate the unknown.' },
-  { id: 'loyal', name: 'Loyal', severity: 'Minor', desc: 'Will not abandon friends or allies.' },
-  { id: 'cautious', name: 'Cautious', severity: 'Minor', desc: 'Reluctant to act without a plan.' },
-  { id: 'ugly', name: 'Ugly', severity: 'Minor', desc: '−2 Persuasion; +2 Intimidation.' },
-  { id: 'illiterate', name: 'Illiterate', severity: 'Minor', desc: 'Cannot read or write.' },
-  { id: 'quirk', name: 'Quirk', severity: 'Minor', desc: 'A distinctive personality trait or mannerism.' },
-  { id: 'bad-luck', name: 'Bad Luck', severity: 'Major', desc: 'One less Benny at the start of every session.' },
-  { id: 'greedy', name: 'Greedy', severity: 'Major', desc: 'Never satisfied with a fair share.' },
-  { id: 'vengeful', name: 'Vengeful', severity: 'Major', desc: 'Never forgets a wrong; seeks payback.' },
-  { id: 'wanted', name: 'Wanted', severity: 'Major', desc: 'Sought by the law or a powerful enemy.' },
-  { id: 'death-wish', name: 'Death Wish', severity: 'Major', desc: 'Driven by a single overriding goal.' },
-  { id: 'heroic', name: 'Heroic', severity: 'Major', desc: 'Compelled to help those in need, regardless of risk.' },
-];
+/** The wizard offers the full compendium hindrance catalog — one source of
+ *  truth for names, severities, effect text, and (via traitModsFor at
+ *  assembly) the live modifier columns. Ids stay the kebab-case names the
+ *  assembler special-cases ('bad-luck'). */
+export const CURATED_HINDRANCES_SWADE: HindranceOption[] = CONTENT_SWADE
+  .filter((e) => e.kind === 'hindrance')
+  .map((e) => ({
+    id: e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    name: e.name,
+    severity: (e.trait?.severity === 'Major' ? 'Major' : 'Minor'),
+    desc: e.subtitle ?? '',
+  }));
 
 /** Standard build cap: up to two Minor Hindrances and one Major. Each Minor
  *  is worth 1 point, each Major 2 — max 4 points earned to spend below. */

@@ -8,7 +8,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
-import { persistSheet, postStatusLine } from '../hp.js';
+import { breakAim, persistSheet, postStatusLine } from '../hp.js';
 
 /** SWADE combat movement spent this turn, per campaign → token. */
 interface TurnMoveRec { moved: number; runBonus: number | null }
@@ -22,6 +22,11 @@ export function resetSwadeTurnMoves(campaignId: string): void {
 /** Did this token spend its running die this turn? (−2 to other actions.) */
 export function hasRunThisTurn(campaignId: string, tokenId: string): boolean {
   return swadeTurnMoves.get(campaignId)?.get(tokenId)?.runBonus != null;
+}
+
+/** Has this token spent any Pace this turn? (Aiming demands standing still.) */
+export function movedThisTurn(campaignId: string, tokenId: string): boolean {
+  return (swadeTurnMoves.get(campaignId)?.get(tokenId)?.moved ?? 0) > 0;
 }
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -228,6 +233,11 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         persistSheet(io, d.campaignId, character, { conditions: conditionsOf(character.sheet).filter((c) => c !== 'prone') });
         postStatusLine(io, d.campaignId, combat ? `${character.name} stands up (2″ of Pace).` : `${character.name} stands up.`);
       }
+    }
+    // Moving under your own power breaks a held Aim — regardless of who
+    // dragged the token (a DM repositioning the aimer counts as them moving).
+    if (character?.system === 'swade' && conditionsOf(character.sheet).includes('aiming')) {
+      breakAim(io, d.campaignId, characters.byId(character.id) ?? character, 'moves — the aim is lost.');
     }
     const fromHex = { q: token.q, r: token.r };
     tokens.move(tokenId, dest.q, dest.r);

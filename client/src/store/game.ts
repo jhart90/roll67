@@ -1475,6 +1475,8 @@ export const intents = {
     socket.emit(C2S.SHAKEN_ROLL, { characterId });
     useGameStore.setState({ shakenPrompt: null });
   },
+  /** SWADE: spend the whole turn Aiming — pays out on next turn's first shot. */
+  combatAim: (characterId: string, tokenId: string) => socket.emit(C2S.COMBAT_AIM, { characterId, tokenId }),
   /** Make the Stunned-recovery Vigor roll the prompt asked for. */
   stunRoll: (characterId: string) => {
     socket.emit(C2S.STUN_ROLL, { characterId });

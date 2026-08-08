@@ -129,6 +129,8 @@ export const C2S = {
   SHAKEN_ROLL: 'shakenRoll',
   /** SWADE: a Stunned combatant makes their start-of-turn Vigor roll. */
   STUN_ROLL: 'stunRoll',
+  /** SWADE: spend the whole turn Aiming — the bonus rides next turn's first shot. */
+  COMBAT_AIM: 'combatAim',
   /** SWADE: a downed Wild Card proceeds to the Incapacitation Vigor roll. */
   INCAP_ROLL: 'incapRoll',
   /** SWADE: DM skips the Incapacitation roll for their own Wild Card — dead. */
@@ -947,6 +949,7 @@ export interface ShakenPromptPayload { characterId: string; name: string }
 export interface WorldReorderPayload { keys: string[] }
 export interface WorldSortPayload { orders: Record<string, number> }
 export interface StunRollPayload { characterId: string }
+export interface CombatAimPayload { characterId: string; tokenId: string }
 export interface StunPromptPayload { characterId: string; name: string }
 export interface IncapRollPayload { characterId: string }
 export interface IncapDeathPayload { characterId: string }

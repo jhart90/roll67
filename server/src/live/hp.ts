@@ -312,6 +312,35 @@ export const pendingSoaks = new Map<string, { wounds: number; at: number }>();
 // Long enough for a player staring at the incapacitation window to decide.
 const SOAK_OFFER_TTL_MS = 5 * 60_000;
 
+// ---------- SWADE Aim ----------
+
+/**
+ * A character mid-Aim: 'fresh' the turn they took the action (firing now
+ * wastes it), 'ready' from the start of their next turn (the first ranged
+ * attack collects the bonus; anything else loses it). Absent-but-condition-set
+ * (e.g. a DM toggled the chip, or a restart) is treated as 'ready'.
+ */
+const aimStates = new Map<string, Map<string, 'fresh' | 'ready'>>();
+
+export function setAimState(campaignId: string, characterId: string, state: 'fresh' | 'ready'): void {
+  const per = aimStates.get(campaignId) ?? new Map<string, 'fresh' | 'ready'>();
+  aimStates.set(campaignId, per);
+  per.set(characterId, state);
+}
+
+export function aimStateFor(campaignId: string, characterId: string): 'fresh' | 'ready' {
+  return aimStates.get(campaignId)?.get(characterId) ?? 'ready';
+}
+
+/** Drop the aim: clear the condition + state, and say why (null = consumed
+ *  silently — the attack's own +Aim tag tells the story). */
+export function breakAim(io: Server, campaignId: string, ch: Character, reason: string | null): void {
+  aimStates.get(campaignId)?.delete(ch.id);
+  if (!conditionsOf(ch.sheet).includes('aiming')) return;
+  persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'aiming') });
+  if (reason) postStatusLine(io, campaignId, `🎯 ${ch.name} ${reason}`);
+}
+
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,

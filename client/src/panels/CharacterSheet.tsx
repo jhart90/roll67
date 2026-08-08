@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
-  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, conditionsOf, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -494,12 +494,12 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             key={String(mode)}
             className={adv === mode ? 'active' : ''}
             title={character.system === 'swade' && mode === 'adv'
-              ? 'Melee: Wild Attack (+2 to hit and damage, but you become Vulnerable). Ranged: Aim (+2).'
+              ? 'Melee only: Wild Attack (+2 to hit and damage, but you become Vulnerable). For ranged bonuses, use the 🎯 Aim action.'
               : undefined}
             onClick={() => setAdv(mode)}
           >
             {character.system === 'swade'
-              ? mode === null ? 'normal' : mode === 'adv' ? 'wild attack / aim' : 'penalty −2'
+              ? mode === null ? 'normal' : mode === 'adv' ? 'wild attack' : 'penalty −2'
               : mode === null ? 'normal' : mode === 'adv' ? 'advantage' : 'disadvantage'}
           </button>
         ))}
@@ -557,6 +557,24 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             </div>
             );
           })}
+          {character.system === 'swade' && actions.some((a) => a.ranged) && (() => {
+            const aiming = conditionsOf(character.sheet).includes('aiming');
+            return (
+              <div className="roll-row">
+                <button
+                  className="roll-btn action-btn"
+                  disabled={!canRoll || !myToken || aiming}
+                  title={aiming
+                    ? 'Already aiming — the bonus rides your FIRST action next turn if it’s a ranged attack.'
+                    : 'Spend the WHOLE turn drawing a bead: no moving, nothing else. Your FIRST action next turn — if it’s a ranged attack — ignores up to 4 points of range/cover penalties (+2 if none). Moving or doing anything else first loses it.'}
+                  onClick={() => { if (myToken) intents.combatAim(character.id, myToken.id); }}
+                >
+                  <span>🎯 Aim{aiming ? 'ing…' : ''}</span>
+                  <span className="action-meta">whole turn · next shot</span>
+                </button>
+              </div>
+            );
+          })()}
           {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
         </div>
       )}

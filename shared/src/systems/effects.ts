@@ -109,6 +109,7 @@ export const CONDITIONS: ConditionDef[] = [
   { id: 'unconscious', label: 'Unconscious', icon: '💤', systems: ['dnd5e', 'swn', 'swade'], grantsAttackAdv: true, incapacitated: true, desc: 'Incapacitated and prone; melee hits crit; auto-fails STR/DEX saves.', swadeDesc: 'Out cold and helpless: attackers have The Drop (+4 to attack and damage), and a Fighting attack on a helpless foe hits with a raise on a success.' },
   { id: 'dead', label: 'Dead', icon: '💀', systems: ['dnd5e', 'swn', 'swade'], incapacitated: true, desc: 'Out of the fight.' },
   // SWADE-only states.
+  { id: 'aiming', label: 'Aiming', icon: '🎯', systems: ['swade'], desc: 'Spent the whole turn drawing a bead. The FIRST action next turn — if it’s a ranged attack — ignores up to 4 points of range and cover penalties (+2 if there are none). Moving or doing anything else first loses it.' },
   { id: 'shaken', label: 'Shaken', icon: '😵', systems: ['swade'], incapacitated: true, desc: 'May only take free actions. At the start of the character’s turn, a free Spirit roll removes Shaken.' },
   { id: 'distracted', label: 'Distracted', icon: '😖', systems: ['swade'], selfAttackDis: true, desc: '−2 to all Trait rolls. Goes away at the end of the character’s next turn if not caused by another condition.' },
   { id: 'vulnerable', label: 'Vulnerable', icon: '🎯', systems: ['swade'], grantsAttackAdv: true, desc: 'Actions against the character are made at +2 (does not stack with The Drop). Goes away at the end of the character’s next turn if not caused by another condition.' },

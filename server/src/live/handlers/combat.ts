@@ -4,7 +4,7 @@ import {
   AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -14,10 +14,10 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { applyConditionTo, applyHpDelta, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, applyHpDelta, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
-import { hasRunThisTurn, resetSwadeTurnMoves } from './tokens.js';
+import { hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -125,7 +125,15 @@ function combatantChar(state: InitiativeState, idx: number): Character | undefin
  * a condition that inflicts them (Stunned, Bound, Entangled) is still active.
  */
 function expireTurnConditions(io: Server, campaignId: string, ch: Character): void {
-  const conds = conditionsOf(ch.sheet);
+  let conds = conditionsOf(ch.sheet);
+  // An aim held all the way through the follow-up turn is lost — the bonus
+  // had to ride the FIRST action ('fresh' means the aim was taken THIS turn
+  // and survives into the next one).
+  if (conds.includes('aiming') && aimStateFor(campaignId, ch.id) !== 'fresh') {
+    breakAim(io, campaignId, ch, 'lowers the weapon — the aim expires unused.');
+    ch = characters.byId(ch.id) ?? ch;
+    conds = conditionsOf(ch.sheet);
+  }
   const drop: string[] = [];
   if (conds.includes('vulnerable') && !conds.includes('stunned')) drop.push('vulnerable');
   if (conds.includes('distracted') && !['bound', 'entangled', 'stunned'].some((c) => conds.includes(c))) drop.push('distracted');
@@ -189,6 +197,9 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
   }
   // Down is down: no Stunned/Shaken recovery while Incapacitated.
   if (conditionsOf(ch.sheet).includes('incapacitated')) return;
+
+  // An aim taken last turn ripens: the FIRST action this turn may collect it.
+  if (conditionsOf(ch.sheet).includes('aiming')) setAimState(campaignId, ch.id, 'ready');
 
   // Stunned: whoever runs this character rolls the free Vigor themself —
   // same prompt pattern as Shaken and Bleeding Out, so every recovery roll
@@ -790,6 +801,23 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let dmgBonus = 0;
     let wildAttack = false;
 
+    // SWADE Aim: a full previous turn spent drawing a bead pays out on the
+    // FIRST action of this turn — a ranged attack collects the bonus; doing
+    // anything else (or firing in the same turn the aim was taken) loses it.
+    let aimBonusActive = false;
+    if (actor.system === 'swade' && attackerConditions.includes('aiming')) {
+      const st = aimStateFor(d.campaignId, actor.id);
+      if (st === 'fresh') {
+        breakAim(io, d.campaignId, actor, 'fires early — the aim is wasted.');
+      } else if (action.ranged) {
+        aimBonusActive = true;
+        breakAim(io, d.campaignId, actor, null); // consumed — the +Aim tag tells the story
+      } else {
+        breakAim(io, d.campaignId, actor, 'acts — the aim is lost (the first action wasn’t a ranged shot).');
+      }
+      actor = characters.byId(actor.id) ?? actor;
+    }
+
     // SWADE combat maneuvers replace the whole attack/damage pipeline.
     if (action.maneuver && actor.system === 'swade') {
       resolveSwadeManeuver(io, d, socket, action.maneuver, actor, targetChar, src, tgt, map);
@@ -919,8 +947,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           const illum = lit === 'bright' ? 0 : lit === 'dim' ? -2 : base;
           if (illum) { mod += illum; tags.push(`${illum} ${illum === -2 ? 'Dim light' : illum === -4 ? 'Darkness' : 'Pitch darkness'}`); }
         }
-        // Aim: negate up to 4 points of range/cover penalties, else +2 flat.
-        if (p.adv === 'adv' && action.ranged) {
+        // Aim (earned by spending last turn on the 🎯 Aim action): negate up
+        // to 4 points of range/cover penalties, else +2 flat.
+        if (aimBonusActive) {
           const offset = Math.min(4, -(rangeBandMod + coverPenalty));
           if (offset > 0) { mod += offset; tags.push(`+${offset} Aim`); }
           else { mod += 2; tags.push('+2 Aim'); }
@@ -2031,6 +2060,38 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (!conditionsOf(ch.sheet).includes('bleeding')) return;
     resolveBleedingOut(io, d.campaignId, ch);
   }, 'BLEED_ROLL'));
+
+  // SWADE Aim: the whole turn spent drawing a bead — stationary, nothing
+  // else done first. Pays out on the FIRST action of the next turn.
+  socket.on(C2S.COMBAT_AIM, safe(socket, ({ characterId, tokenId }: CombatAimPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) return;
+    const tok = tokens.byId(tokenId);
+    if (!tok || tok.characterId !== ch.id) return;
+    if (conditionsOf(ch.sheet).includes('aiming')) { emitError(socket, `${ch.name} is already aiming.`); return; }
+    if (conditionCombat(conditionsOf(ch.sheet)).incapacitated || conditionsOf(ch.sheet).includes('shaken')) {
+      emitError(socket, `${ch.name} is in no state to aim.`);
+      return;
+    }
+    const combat = initiative.get(d.campaignId).active;
+    if (combat) {
+      if (movedThisTurn(d.campaignId, tok.id)) {
+        emitError(socket, 'Aiming means standing perfectly still — this token has already moved this turn.');
+        return;
+      }
+      if ((swadeActionCounts.get(d.campaignId)?.get(ch.id) ?? 0) > 0) {
+        emitError(socket, 'Aiming takes the whole turn — it must be the only thing done.');
+        return;
+      }
+    }
+    persistSheet(io, d.campaignId, ch, { conditions: [...conditionsOf(ch.sheet), 'aiming'] });
+    setAimState(d.campaignId, ch.id, combat ? 'fresh' : 'ready');
+    postStatusLine(io, d.campaignId, combat
+      ? `🎯 ${ch.name} takes aim — the rest of the turn is spent drawing a bead.`
+      : `🎯 ${ch.name} takes aim.`);
+  }, 'COMBAT_AIM'));
 
   // A Stunned combatant answers the prompt: make the free Vigor roll now.
   socket.on(C2S.STUN_ROLL, safe(socket, ({ characterId }: StunRollPayload) => {

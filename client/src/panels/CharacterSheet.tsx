@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
   AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
@@ -129,6 +129,10 @@ function FieldInput({
 
 const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoeSize', 'aoeWidth', 'condition', 'conditionSave', 'conditionDc']);
 
+/** SWADE weapons carry too many fields for one table row — these move to a
+ *  second line of the per-weapon card (identity/attack stats stay on the first). */
+const SECONDARY_WEAPON_COLS = new Set(['parryBonus', 'wielded', 'ammo', 'maxAmmo', 'caliber', 'rof', 'notes']);
+
 function ListEditor({
   section, system, sheet, readOnly, onPatch,
 }: {
@@ -211,6 +215,60 @@ function ListEditor({
   }
 
   const detailRow = detailIdx !== null && detailIdx < rows.length ? rows[detailIdx] : null;
+  // SWADE weapons: 13 fields is unreadable as one table row — render each
+  // weapon as a two-line card instead (attack stats up top, logistics below).
+  const twoRow = hasDetail && system === 'swade';
+
+  if (twoRow) {
+    return (
+      <div className="sheet-list">
+        {rows.map((row, i) => (
+          <div key={i} className="weapon-card">
+            <div className="weapon-card-row">
+              {mainCols.filter((c) => !SECONDARY_WEAPON_COLS.has(c.id)).map((col) => (
+                <label key={col.id} className={`wc-field ${col.id === 'name' ? 'wc-grow' : ''}`}>
+                  <span className="wc-label"><SheetTerm system={system} label={col.label} /></span>
+                  {renderCell(col, row, i)}
+                </label>
+              ))}
+              <span className="spacer" />
+              <button
+                className="link"
+                title="Attack details"
+                style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i ? 1 : 0.5 }}
+                onClick={() => setDetailIdx(detailIdx === i ? null : i)}
+              >
+                ✏️
+              </button>
+              {!readOnly && (
+                <button className="link danger" onClick={() => {
+                  if (detailIdx === i) setDetailIdx(null);
+                  else if (detailIdx !== null && detailIdx > i) setDetailIdx(detailIdx - 1);
+                  setRows(rows.filter((_, j) => j !== i));
+                }}>×</button>
+              )}
+            </div>
+            <div className="weapon-card-row">
+              {mainCols.filter((c) => SECONDARY_WEAPON_COLS.has(c.id)).map((col) => (
+                <label key={col.id} className={`wc-field ${col.id === 'notes' ? 'wc-grow' : ''} ${col.type === 'checkbox' ? 'wc-check' : ''}`}>
+                  <span className="wc-label"><SheetTerm system={system} label={col.label} /></span>
+                  {renderCell(col, row, i)}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+        {!readOnly && <button className="link" onClick={addRow}>+ add {section.title.toLowerCase()}</button>}
+        {detailRow && detailIdx !== null && (
+          <AttackDetailPopover
+            section={section} system={system} readOnly={readOnly}
+            rows={rows} detailRow={detailRow} detailIdx={detailIdx}
+            renderCell={renderCell} setRows={setRows} onClose={() => setDetailIdx(null)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="sheet-list">
@@ -256,36 +314,60 @@ function ListEditor({
       {!readOnly && <button className="link" onClick={addRow}>+ add {section.title.toLowerCase()}</button>}
 
       {hasDetail && detailRow && detailIdx !== null && (
-        <div className="attack-detail-popover">
-          <div className="dock-header" style={{ marginBottom: 8 }}>
-            <h4 style={{ margin: 0, textTransform: 'none', color: 'var(--text)' }}>
-              {String(detailRow.name || 'Attack')} — Details
-            </h4>
-            <button className="link" onClick={() => setDetailIdx(null)}>close</button>
-          </div>
-          <div className="attack-detail-grid">
-            {section.columns.map((col) => (
-              <label key={col.id} className={`${ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}${col.width === 'full' ? ' detail-full' : ''}`}>
-                <SheetTerm system={system} label={col.label} />
-                {col.width === 'full' ? (
-                  <textarea
-                    defaultValue={detailRow[col.id] === undefined ? '' : String(detailRow[col.id])}
-                    readOnly={readOnly}
-                    rows={2}
-                    style={{ resize: 'vertical', width: '100%' }}
-                    onBlur={(e) => {
-                      const val = e.target.value;
-                      if (val === detailRow[col.id]) return;
-                      const next = rows.map((r, j) => (j === detailIdx ? { ...r, [col.id]: val } : r));
-                      setRows(next);
-                    }}
-                  />
-                ) : renderCell(col, detailRow, detailIdx)}
-              </label>
-            ))}
-          </div>
-        </div>
+        <AttackDetailPopover
+          section={section} system={system} readOnly={readOnly}
+          rows={rows} detailRow={detailRow} detailIdx={detailIdx}
+          renderCell={renderCell} setRows={setRows} onClose={() => setDetailIdx(null)}
+        />
       )}
+    </div>
+  );
+}
+
+/** The full-field editor for one attack row, shared by the table and the
+ *  two-line SWADE weapon-card layouts. */
+function AttackDetailPopover({
+  section, system, readOnly, rows, detailRow, detailIdx, renderCell, setRows, onClose,
+}: {
+  section: ListSection;
+  system: GameSystem;
+  readOnly: boolean;
+  rows: SheetData[];
+  detailRow: SheetData;
+  detailIdx: number;
+  renderCell: (col: FieldDef, row: SheetData, i: number) => ReactNode;
+  setRows: (next: SheetData[]) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="attack-detail-popover">
+      <div className="dock-header" style={{ marginBottom: 8 }}>
+        <h4 style={{ margin: 0, textTransform: 'none', color: 'var(--text)' }}>
+          {String(detailRow.name || 'Attack')} — Details
+        </h4>
+        <button className="link" onClick={onClose}>close</button>
+      </div>
+      <div className="attack-detail-grid">
+        {section.columns.map((col) => (
+          <label key={col.id} className={`${ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}${col.width === 'full' ? ' detail-full' : ''}`}>
+            <SheetTerm system={system} label={col.label} />
+            {col.width === 'full' ? (
+              <textarea
+                defaultValue={detailRow[col.id] === undefined ? '' : String(detailRow[col.id])}
+                readOnly={readOnly}
+                rows={2}
+                style={{ resize: 'vertical', width: '100%' }}
+                onBlur={(e) => {
+                  const val = e.target.value;
+                  if (val === detailRow[col.id]) return;
+                  const next = rows.map((r, j) => (j === detailIdx ? { ...r, [col.id]: val } : r));
+                  setRows(next);
+                }}
+              />
+            ) : renderCell(col, detailRow, detailIdx)}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

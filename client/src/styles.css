@@ -577,6 +577,24 @@ button.link:hover { text-decoration: underline; }
   border-top: 3px dotted var(--accent); pointer-events: none;
 }
 
+/* Two-line SWADE weapon cards: attack stats up top, logistics below. */
+.weapon-card {
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px 8px; margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.weapon-card-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.wc-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wc-field .wc-label {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--dim, #8a93a6); white-space: nowrap;
+}
+.wc-field input[type="text"], .wc-field input[type="number"], .wc-field select { width: 74px; font-size: 12px; }
+.wc-field.wc-grow { flex: 1 1 140px; }
+.wc-field.wc-grow input { width: 100%; }
+.wc-field.wc-check { align-items: center; }
+.wc-field.wc-check input { margin: 5px 0; }
+
 /* Rate-of-fire picker: option buttons stacked in a small modal. */
 .rof-modal { max-width: 340px; display: flex; flex-direction: column; gap: 6px; }
 .rof-modal .roll-btn { width: 100%; }
@@ -1521,7 +1539,15 @@ button.link:hover { text-decoration: underline; }
 .action-btn.heal { border-left-color: var(--ok); }
 .action-btn.damage { border-left-color: var(--danger); }
 .action-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--panel); }
-.action-meta { color: var(--accent-2); font-family: monospace; font-size: 11px; flex: 0 0 auto; }
+/* The meta never overruns the narrow pane: it may shrink, wrap onto its own
+   line, and break inside long tokens instead of spilling past the border. */
+.action-btn { flex-wrap: wrap; }
+.action-btn > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.action-meta {
+  color: var(--accent-2); font-family: monospace; font-size: 11px;
+  flex: 0 1 auto; min-width: 0; margin-left: auto; text-align: right;
+  white-space: normal; overflow-wrap: anywhere;
+}
 .action-hint { display: block; font-size: 11px; margin-top: 4px; }
 
 /* spell slots */

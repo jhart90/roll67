@@ -26,6 +26,7 @@ const SWADE_SKILLS: Record<string, string> = {
   Boating: 'Piloting watercraft, from rowboats to sailing ships.',
   'Common Knowledge': 'General knowledge of your world: customs, notable people, geography. A core skill everyone starts with at d4.',
   Driving: 'Operating ground vehicles — cars, trucks, hovercraft.',
+  Electronics: 'Operating and manipulating electronic devices and systems — sensors, comms, security panels.',
   Faith: 'The arcane skill for Miracles — casting powers granted by a higher power.',
   Fighting: 'All melee and unarmed combat. Half your Fighting die (+2) sets your Parry — the number enemies must hit in melee.',
   Focus: 'The arcane skill for Gifted characters — activating innate supernatural talents.',

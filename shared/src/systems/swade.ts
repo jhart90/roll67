@@ -32,7 +32,7 @@ export function dieSides(die: string): number {
 
 export const SKILLS_SWADE = [
   'Academics', 'Athletics', 'Battle', 'Boating', 'Common Knowledge', 'Driving',
-  'Faith', 'Fighting', 'Focus', 'Gambling', 'Hacking', 'Healing', 'Intimidation',
+  'Electronics', 'Faith', 'Fighting', 'Focus', 'Gambling', 'Hacking', 'Healing', 'Intimidation',
   'Language', 'Notice', 'Occult', 'Performance', 'Persuasion', 'Piloting',
   'Psionics', 'Repair', 'Research', 'Riding', 'Science', 'Shooting',
   'Spellcasting', 'Stealth', 'Survival', 'Taunt', 'Thievery', 'Weird Science',
@@ -57,7 +57,7 @@ export const FREE_SKILLS_SWADE = ['Athletics', 'Common Knowledge', 'Notice', 'Pe
  *  2 points/step (Adventure Edition character creation rules). */
 export const SKILL_ATTR_SWADE: Record<string, string> = {
   Academics: 'smarts', Athletics: 'agility', Battle: 'smarts', Boating: 'agility',
-  'Common Knowledge': 'smarts', Driving: 'agility', Faith: 'spirit', Fighting: 'agility',
+  'Common Knowledge': 'smarts', Driving: 'agility', Electronics: 'smarts', Faith: 'spirit', Fighting: 'agility',
   Focus: 'spirit', Gambling: 'smarts', Hacking: 'smarts', Healing: 'smarts',
   Intimidation: 'spirit', Language: 'smarts', Notice: 'smarts', Occult: 'smarts',
   Performance: 'spirit', Persuasion: 'spirit', Piloting: 'agility', Psionics: 'smarts',

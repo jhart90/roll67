@@ -24,24 +24,31 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
   const filteredClassRows = classRows.filter((c) => !q || c.name.toLowerCase().includes(q));
   const filteredCustom = customNpcs.filter((c) => !q || c.name.toLowerCase().includes(q));
 
+  // A brief "added ✓" flash, then the button re-arms — the DM may want five
+  // Training Dummies in a row, so the confirmation never locks the button.
+  function flash(key: string) {
+    setAdded((prev) => ({ ...prev, [key]: true }));
+    setTimeout(() => setAdded((prev) => ({ ...prev, [key]: false })), 1100);
+  }
+
   function add(entry: NpcEntry) {
     intents.createNpc(entry.id);
-    setAdded((prev) => ({ ...prev, [entry.id]: true }));
+    flash(entry.id);
   }
 
   function addCustom(entry: CustomNpcView) {
     intents.createNpc(entry.id);
-    setAdded((prev) => ({ ...prev, [entry.id]: true }));
+    flash(entry.id);
   }
 
   function createBlank() {
     intents.createCharacter('New Character', system);
-    setAdded((prev) => ({ ...prev, __blank: true }));
+    flash('__blank');
   }
 
   function createClass(className: string, classId: string) {
     intents.createCharacter(`New ${className}`, system, undefined, className);
-    setAdded((prev) => ({ ...prev, [`class:${classId}`]: true }));
+    flash(`class:${classId}`);
   }
 
   const statCols = npcStatCols(system);
@@ -93,7 +100,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
                     <tr>
                       <td className="npc-name">Blank character sheet</td>
                       <td className="dim" colSpan={colSpan - 2}>Start from a fresh, empty sheet</td>
-                      <td><button className="link" disabled={!!added.__blank} onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
+                      <td><button className="link" onClick={createBlank}>{added.__blank ? 'created ✓' : '+ create'}</button></td>
                     </tr>
                   </tbody>
                 </table>
@@ -109,7 +116,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
                         <td className="npc-name">{c.name}</td>
                         <td className="dim" colSpan={colSpan - 2}>A blank sheet with class pre-filled</td>
                         <td>
-                          <button className="link" disabled={!!added[`class:${c.id}`]} onClick={() => createClass(c.name, c.id)}>
+                          <button className="link" onClick={() => createClass(c.name, c.id)}>
                             {added[`class:${c.id}`] ? 'created ✓' : '+ create'}
                           </button>
                         </td>
@@ -155,7 +162,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
                     <td>{c.challengeLabel || '—'}</td>
                     {statCols.map((col) => <td key={col.label}>{col.cell(c)}</td>)}
                     <td>
-                      <button className="link" disabled={!!added[c.id]} onClick={() => addCustom(c)}>
+                      <button className="link" onClick={() => addCustom(c)}>
                         {added[c.id] ? 'added ✓' : '+ add'}
                       </button>
                       <button
@@ -193,7 +200,7 @@ function NpcRows({ entry, header, added, onAdd, statCols, colSpan }: {
         <td>{entry.challengeLabel}</td>
         {statCols.map((c) => <td key={c.label}>{c.cell(entry)}</td>)}
         <td>
-          <button className="link" disabled={added} onClick={() => onAdd(entry)}>
+          <button className="link" onClick={() => onAdd(entry)}>
             {added ? 'added ✓' : '+ add'}
           </button>
         </td>

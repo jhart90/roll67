@@ -303,7 +303,13 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const artAssetId = typeof character.sheet.tokenImageAssetId === 'string' ? character.sheet.tokenImageAssetId : null;
     const token = tokens.forCharacter(characterId)[0];
     const color = token?.color ?? null;
-    customNpcs.create(d.userId, campaign.system, character.name, ac, hp.maxHp, '', character.sheet, color, artAssetId);
+    // Remember the token's look too: shape and size ride the saved sheet
+    // (the spawn path reads sheet.tokenShape/tokenSize when placing tokens),
+    // so a 1.5-hex hexagon Training Dummy comes back exactly that.
+    const sheetCopy = structuredClone(character.sheet) as SheetData;
+    if (token?.shape) sheetCopy.tokenShape = token.shape;
+    if (token?.size) sheetCopy.tokenSize = token.size;
+    customNpcs.create(d.userId, campaign.system, character.name, ac, hp.maxHp, '', sheetCopy, color, artAssetId);
     emitCustomNpcs(socket, d.userId, campaign.system);
   }, 'SAVE_TO_COMPENDIUM'));
 

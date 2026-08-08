@@ -1011,18 +1011,23 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const nat1 = d20s.some((x) => x.value === 1);
       // Prefer the derived AC (folds in toggles like Dual Wielder's +1) over
       // the raw sheet field, which stays the DM/player's manually-typed base.
-      // SWADE powers (Bolt) beat a fixed TN of 4 instead of the target's
-      // Parry; any SWADE to-hit that beats its number by 4+ is a raise
-      // (+1d6! bonus damage below) — weapon attacks vs Parry included.
+      // SWADE: melee attacks (and powers with a fixed TN) work as before —
+      // but by the book a RANGED attack beats a flat TN 4 (range/cover/etc.
+      // already applied as penalties above), NOT the target's Parry. The one
+      // exception is a point-blank shot at a foe within melee reach, which
+      // faces Parry like a melee swing. A raise is still beating the number
+      // by 4+.
+      const swadeRangedTn = actor.system === 'swade' && action.ranged && action.fixedTn == null && dist > 1;
       const ac = action.fixedTn
-        ?? (targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0);
+        ?? (swadeRangedTn ? 4
+          : targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0);
       hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
       raise = hit && actor.system === 'swade' && ac > 0 && attackBreakdown.total >= ac + 4;
       // Say WHY it landed or didn't. A bare HIT/MISS makes the engine look
       // arbitrary — especially in SWADE, where a weapon beats Parry but a
       // power beats a flat TN, and the two numbers look nothing alike.
       const targetSystem = targetChar?.system ?? actor.system;
-      const acName = action.fixedTn ? 'TN' : targetSystem === 'swade' ? 'Parry' : 'AC';
+      const acName = action.fixedTn ? 'TN' : swadeRangedTn ? 'TN' : targetSystem === 'swade' ? 'Parry' : 'AC';
       const why = nat1 ? 'natural 1 always misses'
         : crit ? `natural ${critAt}+ always hits`
           : ac > 0 ? `vs ${acName} ${ac}`

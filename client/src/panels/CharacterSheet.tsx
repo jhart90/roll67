@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Character, GameSystem, SheetData } from 'shared';
+import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
   AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
@@ -340,8 +340,8 @@ function Section({
 
 function RollsColumn({ character, canRoll }: { character: Character; canRoll: boolean }) {
   const [adv, setAdv] = useState<AdvMode>(null);
-  /** Chosen rounds-per-attack per burst-capable action (defaults to full RoF). */
-  const [rofChoice, setRofChoice] = useState<Record<string, number>>({});
+  /** Burst-capable action awaiting its rate-of-fire choice (modal). */
+  const [rofPrompt, setRofPrompt] = useState<{ action: CombatAction; ammoLeft: number } | null>(null);
   const schema = systemFor(character.system);
   const rollables = useMemo(() => schema.rollables(character.sheet), [schema, character.sheet]);
   const actions = useMemo(() => combatActions(character), [character]);
@@ -414,57 +414,39 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
         <div className="roll-group">
           <h5>Actions</h5>
           {actions.map((a) => {
-            // SWADE burst weapons: the shooter picks rounds-per-attack here.
-            // Each RoF setting costs its table ammo; settings the magazine
-            // can't feed are greyed, and the trigger greys when even RoF 1
-            // (or the suppress burst) can't be paid.
+            // SWADE burst weapons: clicking the trigger opens a rate-of-fire
+            // picker (a modal — the pane is too narrow for inline controls)
+            // before targeting begins. The trigger greys only when even a
+            // single shot (or the suppressive burst) can't be paid.
             const ammoLeft = a.source === 'attack'
               ? num(rows(character.sheet, 'attacks')[a.index] ?? {}, 'ammo', -1)
               : -1;
             const maxRof = a.rof ?? 1;
-            const chosen = Math.min(rofChoice[a.id] ?? maxRof, maxRof);
-            const needed = a.suppressive ? 3 * AMMO_BY_ROF[Math.min(6, maxRof)] : AMMO_BY_ROF[Math.min(6, chosen)];
-            const dry = ammoLeft >= 0 && ammoLeft < (a.suppressive ? needed : 1);
-            const cantAfford = ammoLeft >= 0 && ammoLeft < needed;
+            const minNeeded = a.suppressive ? 3 * AMMO_BY_ROF[Math.min(6, maxRof)] : 1;
+            const dry = ammoLeft >= 0 && ammoLeft < minNeeded;
             return (
             <div key={a.id} className="roll-row">
               <button
                 className={`roll-btn action-btn ${a.effect}`}
-                disabled={!canRoll || !myToken || dry || cantAfford}
+                disabled={!canRoll || !myToken || dry}
                 title={!myToken ? "Place this character's token on the map first"
-                  : cantAfford ? `Needs ${needed} rounds — only ${ammoLeft} left. Reload!`
-                    : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`)}
+                  : dry ? `Needs ${minNeeded} round${minNeeded === 1 ? '' : 's'} — only ${ammoLeft} left. Reload!`
+                    : maxRof >= 2 && !a.suppressive ? 'Choose a rate of fire, then pick a target'
+                      : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`)}
                 onClick={() => {
                   if (!myToken) return;
+                  if (maxRof >= 2 && !a.suppressive) { setRofPrompt({ action: a, ammoLeft }); return; }
                   if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null);
-                  else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null, maxRof >= 2 ? chosen : undefined);
+                  else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null, undefined);
                 }}
               >
                 <span>{a.effect === 'heal' ? '🧪' : a.aoe ? '💥' : '⚔️'} {a.label}</span>
                 <span className="action-meta">
                   {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
-                  {maxRof >= 2 && !a.suppressive ? ` · ${needed} rounds` : ''}
-                  {a.suppressive ? ` · ${needed} rounds` : ''}
+                  {maxRof >= 2 && !a.suppressive ? ` · RoF ${maxRof}` : ''}
+                  {a.suppressive ? ` · ${minNeeded} rounds` : ''}
                 </span>
               </button>
-              {maxRof >= 2 && !a.suppressive && (
-                <select
-                  className="rof-select"
-                  value={chosen}
-                  title="Rounds per attack: RoF 1 fires single shots; higher settings burn the ammo table (−2 Recoil, extra hit on a raise)"
-                  onChange={(e) => setRofChoice((m) => ({ ...m, [a.id]: Number(e.target.value) }))}
-                >
-                  {Array.from({ length: maxRof }, (_, i) => i + 1).map((r) => {
-                    const cost = AMMO_BY_ROF[Math.min(6, r)];
-                    const short = ammoLeft >= 0 && ammoLeft < cost;
-                    return (
-                      <option key={r} value={r} disabled={short}>
-                        RoF {r} ({cost}{short ? ' — no ammo' : ''})
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
               {canRoll && (
                 <button
                   className="roll-pin"
@@ -538,6 +520,40 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
           })}
         </div>
       ))}
+
+      {rofPrompt && myToken && (
+        <div className="sheet-backdrop" style={{ zIndex: 80 }} onPointerDown={(e) => { if (e.target === e.currentTarget) setRofPrompt(null); }}>
+          <div className="panel levelup rof-modal">
+            <div className="dock-header"><h3>🔫 {rofPrompt.action.label} — rate of fire</h3></div>
+            <p className="dim" style={{ fontSize: 12, margin: '4px 0 8px' }}>
+              How many Shooting dice this attack throws. RoF 2+ takes <b>−2 Recoil</b> and burns the
+              ammo table below; a raise lands an extra hit.
+              {rofPrompt.ammoLeft >= 0 ? ` (${rofPrompt.ammoLeft} rounds loaded.)` : ''}
+            </p>
+            {Array.from({ length: rofPrompt.action.rof ?? 1 }, (_, i) => i + 1).map((r) => {
+              const cost = AMMO_BY_ROF[Math.min(6, r)];
+              const short = rofPrompt.ammoLeft >= 0 && rofPrompt.ammoLeft < cost;
+              return (
+                <button
+                  key={r}
+                  className="roll-btn"
+                  disabled={short}
+                  title={short ? `Needs ${cost} rounds — only ${rofPrompt.ammoLeft} left.` : undefined}
+                  onClick={() => {
+                    const a = rofPrompt.action;
+                    setRofPrompt(null);
+                    useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null, r);
+                  }}
+                >
+                  <span>RoF {r}{r >= 2 ? ' · −2 Recoil' : ''}</span>
+                  <span className="roll-btn-expr">{cost} round{cost === 1 ? '' : 's'}{short ? ' — not enough' : ''}</span>
+                </button>
+              );
+            })}
+            <button onClick={() => setRofPrompt(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

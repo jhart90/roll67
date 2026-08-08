@@ -6,7 +6,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   computeLightPolygonsWithColor, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, litHexes,
   type LightPolygonResult,
-  packHex, pixelToHex, sightSegments, systemFor,
+  MAX_VISION_RADIUS, packHex, pixelToHex, sightSegments, systemFor,
   S2C, type Door, type FovInput, type Hex, type Light, type MapObject, type MapStatePayload, type Point, type Segment, type Token,
   nameplateFor, type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
@@ -127,11 +127,17 @@ function viewerMaxReach(stats: VisionStats): number {
 /** Conservative check: could this user's view possibly change because of a
  *  change confined to `hint`? False only when EVERY one of the user's own
  *  viewer tokens is farther than its reach (plus the hint's extra radius,
- *  e.g. a moving light's glow) from EVERY hinted hex. */
-function mightAffectUser(userId: string, mapTokens: Token[], hint: SyncVisionHint): boolean {
+ *  e.g. a moving light's glow) from EVERY hinted hex.
+ *
+ *  Under global daylight the FOV engine lifts every viewer's personal range
+ *  to MAX_VISION_RADIUS (see fov.ts effectiveStats) — the reach here must
+ *  match, or a token dragged between two spots outside a player's RAW
+ *  vision stat (but plainly visible across a lit room) would skip their
+ *  update and leave a stale token on their screen. */
+function mightAffectUser(userId: string, mapTokens: Token[], hint: SyncVisionHint, lighting: string): boolean {
   const extra = hint.extraRadius ?? 0;
   for (const v of viewerTokensFor(userId, mapTokens)) {
-    const reach = viewerMaxReach(tokenVision(v)) + extra;
+    const reach = (lighting === 'light' ? MAX_VISION_RADIUS + 1 : viewerMaxReach(tokenVision(v))) + extra;
     for (const h of hint.hexes) {
       if (hexDistance({ q: v.q, r: v.r }, h) <= reach) return true;
     }
@@ -484,7 +490,7 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
     // Members can be on different maps; only update viewers of THIS map.
     const effectiveUser = d.role === 'dm' ? d.viewingAs : d.userId;
     if (effectiveUser && campaigns.viewMapIdFor(campaignId, effectiveUser) !== mapId) continue;
-    if (hint && effectiveUser && !mightAffectUser(effectiveUser, allTokens, hint)) continue;
+    if (hint && effectiveUser && !mightAffectUser(effectiveUser, allTokens, hint, map.grid.lighting)) continue;
     if (d.role === 'dm') {
       // God mode: DM already receives raw token/map events; only a view-as
       // preview needs a vision update.

@@ -111,6 +111,12 @@ export interface CombatAction {
   /** SWADE: the to-hit roll beats this fixed target number (4) instead of
    *  the target's AC/Parry; beating it by 4+ is a raise (+1d6! damage). */
   fixedTn?: number;
+  /** SWADE: this action's roll mends Wounds rather than dealing an amount —
+   *  one on a success, two on a raise, none on a failure. There is no HP
+   *  pool to top up, so the roll's margin IS the healing. */
+  healsWounds?: boolean;
+  /** Name of the trait this action rolls, for the chat card ("Healing"). */
+  traitName?: string;
   /** SWADE: the weapon's Rate of Fire (parsed from its notes). RoF 2+ fires
    *  a burst: −2 Recoil, extra hits on a raise, table-based ammo use. */
   rof?: number;

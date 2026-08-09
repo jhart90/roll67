@@ -1,7 +1,7 @@
 import type { AoeShape, Character, SheetData } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
-import { swade, swadeArcaneExpr } from './swade.js';
+import { gearTraitBonus, skillDie, swade, swadeArcaneExpr, traitExpr } from './swade.js';
 import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
 const SYSTEMS = { dnd5e, swn, swade };
@@ -178,7 +178,11 @@ export function combatActions(character: Character): CombatAction[] {
       const isAoe = !!aoeShape && (aoeSize > 0 || aoeHexes > 0);
       // A direct damaging power with no save and no area rolls the arcane
       // skill to hit vs the fixed TN 4 (a raise adds +1d6! server-side).
-      const attackExpr = effect === 'damage' && !save && !isAoe && arcane ? arcane : null;
+      // A HEALING power rolls that same arcane skill vs TN 4 and mends a
+      // Wound, two on a raise — the book's rule, not a damage roll in
+      // reverse.
+      const healRoll = effect === 'heal' && !isAoe && arcane;
+      const attackExpr = healRoll ? arcane : (effect === 'damage' && !save && !isAoe && arcane ? arcane : null);
       out.push({
         id: `power:${i}`,
         label: name,
@@ -193,6 +197,7 @@ export function combatActions(character: Character): CombatAction[] {
         index: i,
         ppCost: Math.max(0, num(pw, 'cost', 1)),
         ...(attackExpr ? { fixedTn: 4 } : {}),
+        ...(healRoll ? { healsWounds: true as const } : {}),
         ...(save && effect === 'damage' ? { saveId: save, onSave } : {}),
         ...(isAoe ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeHexes > 0 ? { sizeHexes: aoeHexes } : {}) } } : {}),
         ...(condition ? { appliesCondition: condition } : {}),
@@ -262,7 +267,10 @@ export function combatActions(character: Character): CombatAction[] {
     const effect = str(it, 'effect', '').toLowerCase();
     if (effect !== 'heal' && effect !== 'damage') return;
     const amount = str(it, 'amount', '').trim();
-    if (!amount || !usableAmount(amount)) return;
+    // A SWADE heal is decided by the Healing roll, not by an amount, so a
+    // kit with no healing dice listed is still a usable action.
+    const swadeHeal = character.system === 'swade' && effect === 'heal';
+    if (!swadeHeal && (!amount || !usableAmount(amount))) return;
     const qty = num(it, 'qty', 1);
     if (qty <= 0) return;
     const name = str(it, 'name', '').trim() || `Item ${i + 1}`;
@@ -271,14 +279,21 @@ export function combatActions(character: Character): CombatAction[] {
       id: `item:${i}`,
       label: qty > 1 ? `${name} (×${qty})` : name,
       effect,
-      attackExpr: null,
-      amountExpr: amount,
+      // Treating a wound is a Healing roll vs TN 4: a success mends one
+      // Wound, a raise two. The kit itself just adds its bonus to that roll
+      // (the equipped-gear modifier columns), so it has no dice of its own.
+      attackExpr: swadeHeal ? traitExpr(sheet, skillDie(sheet, 'Healing'), gearTraitBonus(sheet, 'Healing')) : null,
+      amountExpr: amount && usableAmount(amount) ? amount : '0',
       rangeFt,
       damageType: str(it, 'dtype', ''),
       ranged: rangeFt > 5,
-      consumesItem: true,
+      // A kit is a tool, not a dose: anything that grants a standing bonus to
+      // a trait (a Medkit's +2 Healing) is equipment you keep using, while a
+      // potion or an antitoxin is spent on use.
+      consumesItem: !(swadeHeal && str(it, 'bonusSkill', '').trim() !== ''),
       source: 'item',
       index: i,
+      ...(swadeHeal ? { fixedTn: 4, healsWounds: true as const, traitName: 'Healing' } : {}),
     });
   });
 

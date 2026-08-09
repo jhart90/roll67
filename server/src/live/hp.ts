@@ -489,8 +489,21 @@ export function takeSoakOffer(characterId: string): { wounds: number } | null {
 function applySwadeHeal(
   io: Server, campaignId: string, character: Character, amount: number,
 ): { character: Character; note: string } {
+  const { woundsHealed } = swadeHealOutcome(amount, num(character.sheet, 'wounds', 0));
+  return applySwadeWoundHeal(io, campaignId, character, woundsHealed);
+}
+
+/**
+ * Mend a specific number of Wounds — what a successful SWADE Healing roll
+ * produces (one, or two on a raise). Also steadies the Shaken and stands a
+ * Wild Card back up if the mending pulls them off the incapacitation line.
+ */
+export function applySwadeWoundHeal(
+  io: Server, campaignId: string, character: Character, woundsHealed: number,
+): { character: Character; note: string } {
   const wounds = num(character.sheet, 'wounds', 0);
-  const { woundsHealed, woundsAfter } = swadeHealOutcome(amount, wounds);
+  woundsHealed = Math.max(0, Math.min(wounds, Math.floor(woundsHealed)));
+  const woundsAfter = wounds - woundsHealed;
   const wasShaken = conditionsOf(character.sheet).includes('shaken');
   let cur = character;
   const patch: SheetData = {};

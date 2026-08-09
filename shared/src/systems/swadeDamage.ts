@@ -64,9 +64,20 @@ export function soakSuccesses(vigorTotal: number): number {
 }
 
 /**
- * Healing a wound-model target: our heal actions roll an amount, so every
- * full 4 points restores a wound (at least one for any positive heal), and
- * any healing steadies a Shaken target.
+ * The book's Healing roll: a success mends one Wound, a raise mends two, a
+ * failure mends none. This is the whole of SWADE healing — there is no pool
+ * of hit points to top up, so the roll's margin IS the amount healed.
+ */
+export function swadeWoundsHealed(hit: boolean, raise: boolean): number {
+  if (!hit) return 0;
+  return raise ? 2 : 1;
+}
+
+/**
+ * Healing a wound-model target by a POINT amount (5e/SWN-style heals reaching
+ * a SWADE sheet, and legacy content that lists healing dice): every full 4
+ * points restores a wound, at least one for any positive heal. SWADE's own
+ * Healing rolls use swadeWoundsHealed instead.
  */
 export function swadeHealOutcome(amount: number, currentWounds: number): { woundsHealed: number; woundsAfter: number } {
   if (amount <= 0 || currentWounds <= 0) return { woundsHealed: 0, woundsAfter: currentWounds };

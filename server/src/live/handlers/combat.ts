@@ -10,11 +10,12 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
+  swadeWoundsHealed,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, applyHpDelta, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -1061,7 +1062,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         : crit ? `natural ${critAt}+ always hits`
           : ac > 0 ? `vs ${acName} ${ac}`
             : 'no target number to beat';
-      attackOutcome = `${hit ? 'HIT' : 'MISS'}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''} — ${why}${raise ? `, beat it by ${attackBreakdown.total - ac}` : ''}`;
+      const landed = action.healsWounds
+        ? (hit ? (raise ? 'SUCCESS with a RAISE — mends 2 Wounds' : 'SUCCESS — mends 1 Wound') : 'FAILED — no Wounds mended')
+        : `${hit ? 'HIT' : 'MISS'}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''}`;
+      attackOutcome = `${landed} — ${why}${raise ? `, beat it by ${attackBreakdown.total - ac}` : ''}`;
       hitLabel = ` — attack ${attackBreakdown.total}${advTag} · ${attackOutcome}`;
     }
 
@@ -1203,6 +1207,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           }
         }
       }
+      // SWADE healing isn't an amount at all: the Healing roll's own margin
+      // is the result — a success mends one Wound, a raise two, a failure
+      // none. `magnitude` here is that wound count, not points.
+      const woundsMended = action.healsWounds ? swadeWoundsHealed(hit, raise) : 0;
+      if (action.healsWounds) magnitude = woundsMended;
       const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
       const delta = action.effect === 'heal' ? applied : -applied;
       const impactKind: ImpactKind = action.effect === 'heal' ? 'heal' : action.aoe ? 'aoe' : action.ranged ? 'ranged' : 'melee';
@@ -1213,7 +1222,24 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // settled, so the token never reacts before the player sees why.
       let hpNote = '';
       let applyToTarget: (() => void) | null = null;
-      if (applied !== 0) {
+      if (action.healsWounds && targetChar) {
+        // Wound mending has its own application path — applyHpDelta's point
+        // arithmetic (4 points to a Wound) would misread a wound count.
+        const before = num(targetChar.sheet, 'wounds', 0);
+        const after = Math.max(0, before - woundsMended);
+        hpNote = woundsMended === 0
+          ? ' — no Wounds mended'
+          : ` — mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'} (${tgt.name} ${after} of 3)`;
+        if (woundsMended > 0) {
+          undo.push({ t: 'hp', characterId: targetChar.id, delta: woundsMended });
+          const targetId = targetChar.id;
+          applyToTarget = () => {
+            const fresh = characters.byId(targetId);
+            if (fresh) applySwadeWoundHeal(io, d.campaignId, fresh, woundsMended);
+            floatHp(io, d.campaignId, src.mapId, tgt.id, woundsMended, 'heal');
+          };
+        }
+      } else if (applied !== 0) {
         if (targetChar) {
           if (targetChar.system === 'swade' && delta < 0) {
             // The wound ladder, not the HP pool: preview the same outcome
@@ -1264,7 +1290,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       consumeAmmoAndItem();
 
       const verb = action.effect === 'heal' ? 'uses' : 'attacks';
-      const outcome = action.effect === 'heal'
+      const outcome = action.healsWounds
+        ? (woundsMended === 0
+          ? 'no Wounds mended'
+          : `mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'}${raise ? ' (raise!)' : ''}`)
+        : action.effect === 'heal'
         ? `heals ${applied}`
         // Name the bonus die's source, so an extra die in the breakdown reads
         // as a reward rather than a bug.
@@ -1359,7 +1389,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // Headline states who did what to whom; the action rides in its own
       // field so chat can underline it and hang a tooltip off it, and the
       // outcome in another so it can sit under the dice rather than above.
-      const attackText = `${actor.name} attacks ${tgt.name} with`;
+      const attackText = action.healsWounds
+        ? `${actor.name} treats ${tgt.name} with`
+        : `${actor.name} attacks ${tgt.name} with`;
       const attackMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: attackText,
         actionName: action.label, outcomeNote: attackOutcome,

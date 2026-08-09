@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
+import { swadeWoundsHealed } from '../src/systems/swadeDamage.js';
 import { blocksMovement, combatResources, conditionsFor } from '../src/systems/effects.js';
 import { generateNpc } from '../src/data/npcGen.js';
 import { NPCS_SWADE } from '../src/data/npcsSwade.js';
@@ -300,14 +301,43 @@ describe('SWADE library & compendium', () => {
     expect(stun.amountExpr).toBe('0'); // condition-only, no damage roll
   });
 
-  it('Healing auto-applies as a heal action costing 3 PP', () => {
+  it('the Healing power rolls its arcane skill vs TN 4 to mend Wounds, for 3 PP', () => {
     const heal = contentForSystem('swade').find((c) => c.name === 'Healing')!;
     const sheet = { ...swade.defaultSheet(), arcaneSkill: 'Faith', skills: [{ name: 'Faith', die: 'd8' }] };
     const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Priest', system: 'swade', sheet: { ...sheet, powers: [applyEntry(heal, sheet)!.row] } } as unknown as Character;
     const action = combatActions(character).find((a) => a.id === 'power:0')!;
     expect(action.effect).toBe('heal');
-    expect(action.attackExpr).toBeNull();
+    // The book resolves healing with a roll, not a flat amount: Faith vs TN 4,
+    // a success mends a Wound and a raise two.
+    expect(action.attackExpr).toContain('1d8!');
+    expect(action.fixedTn).toBe(4);
+    expect(action.healsWounds).toBe(true);
     expect(action.ppCost).toBe(3);
+  });
+
+  it('treating a wound with a kit rolls Healing vs TN 4, kit bonus included', () => {
+    const sheet = {
+      ...swade.defaultSheet(),
+      skills: [{ name: 'Healing', die: 'd8' }],
+      inventory: [
+        { name: 'Medkit', qty: 1, effect: 'heal', amount: '', range: 5, equipped: true, bonusSkill: 'Healing', bonusAmt: 2 },
+      ],
+    };
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Medic', system: 'swade', sheet } as unknown as Character;
+    const action = combatActions(character).find((a) => a.id === 'item:0')!;
+    // Usable even with no healing dice listed — the roll is the whole rule.
+    expect(action.effect).toBe('heal');
+    expect(action.healsWounds).toBe(true);
+    expect(action.fixedTn).toBe(4);
+    expect(action.attackExpr).toContain('1d8!');
+    // The equipped kit's own +2 rides the roll it is meant to help.
+    expect(action.attackExpr).toContain('+2');
+  });
+
+  it('a Healing roll mends one Wound, two on a raise, none on a failure', () => {
+    expect(swadeWoundsHealed(false, false)).toBe(0);
+    expect(swadeWoundsHealed(true, false)).toBe(1);
+    expect(swadeWoundsHealed(true, true)).toBe(2);
   });
 
   it('weapon props become live columns: AP, Parry mods, magazine → ammo', () => {

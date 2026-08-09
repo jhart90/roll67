@@ -571,6 +571,18 @@ export function mapObjectsVisibleTo(
   return objs.filter((o) => inSight!.has(packHex({ q: o.q, r: o.r })));
 }
 
+/**
+ * Has this player ever had this hex in sight on this map? Reads the live
+ * vision cache when there is one, otherwise the fog persisted from earlier
+ * sessions — so knowledge survives a reconnect.
+ */
+export function hasSeenHex(userId: string, mapId: string, hex: Hex): boolean {
+  const key = packHex(hex);
+  const cache = visionCache.get(cacheKey(userId, mapId));
+  if (cache) return cache.visible.has(key) || cache.explored.has(key);
+  return fog.get(userId, mapId).includes(key);
+}
+
 /** Player sockets that can currently see a hex (loot/chest reveal events). */
 export function socketsSeeingHex(io: Server, campaignId: string, mapId: string, q: number, r: number): Socket[] {
   const out: Socket[] = [];

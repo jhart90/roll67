@@ -55,7 +55,7 @@ export function hasRunThisTurn(campaignId: string, tokenId: string): boolean {
 export function movedThisTurn(campaignId: string, tokenId: string): boolean {
   return (swadeTurnMoves.get(campaignId)?.get(tokenId)?.moved ?? 0) > 0;
 }
-import { socketsSeeingToken, syncMapVision } from '../visionService.js';
+import { hasSeenHex, socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
 
@@ -233,15 +233,26 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     // Players can't cross walls or closed doors: the token stops on the last
     // free hex in that direction (held up against the blocker). The DM moves
     // freely. Movement is straight-line collision, not auto-pathing.
+    //
+    // Exception — travelling between rooms out of combat: with no initiative
+    // running there is no tactical position to protect, and making the party
+    // trace a path around every wall to reach a room they have already
+    // explored is busywork. So a player may drag straight onto any hex they
+    // personally remember, walls included. Ground they have never seen still
+    // has to be walked to, so this can never scout the unknown.
     let dest = { q, r };
     if (d.role !== 'dm') {
-      const stop = reachableAlong(
-        { q: token.q, r: token.r },
-        { q, r },
-        { grid: map.grid, walls: map.walls, doors: map.doors },
-      );
-      if (stop.q === token.q && stop.r === token.r) return; // held up — no move
-      dest = stop;
+      const outOfCombat = !initiative.get(d.campaignId).active;
+      const knownGround = outOfCombat && hasSeenHex(d.userId, token.mapId, { q, r });
+      if (!knownGround) {
+        const stop = reachableAlong(
+          { q: token.q, r: token.r },
+          { q, r },
+          { grid: map.grid, walls: map.walls, doors: map.doors },
+        );
+        if (stop.q === token.q && stop.r === token.r) return; // held up — no move
+        dest = stop;
+      }
     }
     // SWADE combat movement: Pace is a real per-turn budget (1 hex = 1").
     // Standing from Prone costs 2" first; pushing past Pace automatically

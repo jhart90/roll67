@@ -544,12 +544,28 @@ async function main() {
   const dmMap2 = await waitFor(dmSock, 'mapState');
   const door = dmMap2.dmGeometry.doors.at(-1);
 
-  // Movement blocking: the player is held up before the wall/closed door —
-  // the token stops on the near side (q<10) instead of passing through.
+  // Movement vs the wall/closed door, both halves of the rule. IN COMBAT a
+  // player is always held up on the near side. OUT of combat they may travel
+  // straight onto ground they personally remember, walls included — and this
+  // stretch was explored earlier in the script (in daylight, before the door
+  // existed), so it is remembered ground.
+  const homeHex = { q: 6, r: 5 };
+  dmSock.emit('initSetActive', { active: true });
+  await new Promise((r) => setTimeout(r, 400));
   const heldMove = waitFor(playerSock, 'tokenMoved', 2500, (p) => p.tokenId === pcToken.id).catch(() => null);
-  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 10, r: 5 });
+  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 13, r: 5 });
   const held = await heldMove;
-  ok(!held || held.q < 10, `player is stopped before the wall (did not pass through; landed at q${held ? held.q : '=held in place'})`);
+  ok(!held || held.q < 10, `in combat the player is stopped before the wall (landed at q${held ? held.q : '=held in place'})`);
+
+  dmSock.emit('initSetActive', { active: false });
+  await new Promise((r) => setTimeout(r, 400));
+  const travelMove = waitFor(playerSock, 'tokenMoved', 2500, (p) => p.tokenId === pcToken.id).catch(() => null);
+  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 13, r: 5 });
+  const travelled = await travelMove;
+  ok(travelled?.q === 13, `out of combat the player travels across the wall onto remembered ground (landed at q${travelled ? travelled.q : '=held'})`);
+  // Put them back where the rest of the script expects them.
+  dmSock.emit('moveToken', { tokenId: pcToken.id, ...homeHex });
+  await new Promise((r) => setTimeout(r, 400));
 
   // DM opens the door -> monster appears to the player.
   const revealed = waitFor(playerSock, 'visionUpdate', 5000, (p) => p.tokens.some((t) => t.id === beast.id));

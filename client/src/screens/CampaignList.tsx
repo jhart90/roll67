@@ -8,6 +8,13 @@ const SYSTEM_LABELS: Record<GameSystem, string> = {
   swade: 'Savage Worlds (SWADE)',
 };
 
+/** Spine color per system, like game boxes shelved by publisher. */
+const SYSTEM_SPINE: Record<GameSystem, string> = {
+  dnd5e: '#b03030',
+  swn: '#2456c9',
+  swade: '#2a8a4a',
+};
+
 export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void }) {
   const { user, campaignList, createCampaign, joinCampaign, logout } = useAuthStore();
   const [showCreate, setShowCreate] = useState(false);
@@ -40,30 +47,45 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
   }
 
   return (
-    <div className="center-screen">
-      <div className="panel campaign-panel">
-        <div className="panel-header">
-          <h1 className="wordmark small">Roll67</h1>
-          <div className="user-chip">
+    <div className="center-screen retro-lobby">
+      <div className="store-sign">
+        <span className="store-sign-name">ROLL67</span>
+        <span className="store-sign-sub">GAMES &amp; TABLETOP · HEX-GRID VIRTUAL TABLETOP</span>
+      </div>
+      <div className="checker-strip" aria-hidden />
+
+      <div className="member-card shelf-card">
+        <div className="member-card-head">
+          <span className="member-card-title">YOUR SHELF</span>
+          <span className="name-tag" title="Your membership">
+            <span className="name-tag-hello">MEMBER</span>
             {user?.username}
             <button className="link" onClick={logout}>log out</button>
-          </div>
+          </span>
         </div>
 
-        <h2>Your campaigns</h2>
-        {campaignList.length === 0 && <p className="dim">No campaigns yet — create one or join with an invite code.</p>}
-        <ul className="campaign-list">
+        {campaignList.length === 0 && (
+          <p className="member-card-blurb">
+            Empty shelf! Start a campaign below, or punch in a friend&rsquo;s invite code.
+          </p>
+        )}
+        <ul className="shelf-list">
           {campaignList.map((c) => (
             <li key={c.id}>
-              <button className="campaign-row" onClick={() => onOpen(c.id)}>
-                <span className="campaign-name">{c.name}</span>
-                <span className="campaign-meta">
-                  {SYSTEM_LABELS[c.system]} · {c.role === 'dm' ? 'DM' : 'Player'}
+              <button
+                className="shelf-box"
+                style={{ borderLeftColor: SYSTEM_SPINE[c.system] }}
+                onClick={() => onOpen(c.id)}
+                title="Open this campaign"
+              >
+                <span className="shelf-box-name">{c.name}</span>
+                <span className="shelf-box-meta">
+                  {SYSTEM_LABELS[c.system]} · {c.role === 'dm' ? "you're the DM" : 'Player'}
                 </span>
               </button>
               {c.inviteCode && (
-                <span className="invite-code" title="Share this code with your players">
-                  invite: <code>{c.inviteCode}</code>
+                <span className="price-sticker" title="Share this code with your players">
+                  invite <code>{c.inviteCode}</code>
                 </span>
               )}
             </li>
@@ -71,7 +93,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
         </ul>
 
         {showCreate ? (
-          <form onSubmit={handleCreate} className="stack">
+          <form onSubmit={handleCreate} className="stack new-campaign-form">
             <label>
               Campaign name
               <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
@@ -85,25 +107,30 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
               </select>
             </label>
             <div className="row">
-              <button type="submit" className="primary">Create</button>
+              <button type="submit" className="retro-cta" style={{ width: 'auto' }}>OPEN FOR BUSINESS</button>
               <button type="button" onClick={() => setShowCreate(false)}>Cancel</button>
             </div>
           </form>
         ) : (
-          <button className="primary" onClick={() => setShowCreate(true)}>New campaign (you DM)</button>
+          <button className="retro-cta" onClick={() => setShowCreate(true)}>
+            🎲 START A NEW CAMPAIGN <span className="retro-cta-sub">(you&rsquo;re the DM)</span>
+          </button>
         )}
 
-        <form onSubmit={handleJoin} className="row join-row">
+        <form onSubmit={handleJoin} className="rental-slot">
+          <span className="rental-slot-label">GOT AN INVITE CODE?</span>
           <input
-            placeholder="Invite code"
+            placeholder="XXXXXX"
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
             maxLength={6}
           />
-          <button type="submit" disabled={inviteCode.length < 6}>Join</button>
+          <button type="submit" disabled={inviteCode.length < 6}>JOIN</button>
         </form>
         {error && <p className="error">{error}</p>}
       </div>
+
+      <p className="store-footer">BE KIND · ROLL TWENTIES · EST. 1967</p>
     </div>
   );
 }

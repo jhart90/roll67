@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { GameSystem, Shop, ShopItem } from 'shared';
 import { currenciesFor, shopItemFromEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -6,14 +6,27 @@ import { Compendium } from './Compendium';
 
 const EMPTY_DRAFT = { name: '', price: '', qty: '', notes: '' };
 
+/** A stock item plus a stable editor-local key. Rows used to be keyed by
+ *  array index, so deleting one shifted every later row onto a component
+ *  instance still holding a DIFFERENT item's edit draft — the pencil then
+ *  opened the neighbor's values and saving overwrote the row with them. */
+type KeyedItem = ShopItem & { _k: string };
+const withKeys = (items: ShopItem[]): KeyedItem[] => items.map((it) => ({ ...it, _k: crypto.randomUUID() }));
+const stripKey = ({ _k, ...item }: KeyedItem): ShopItem => item;
+
+const draftOf = (item: ShopItem) => ({
+  name: item.name, price: String(item.price), qty: item.qty < 0 ? '' : String(item.qty), notes: item.notes,
+});
+
 /** One row of the shop's stock: read-only with edit/delete, or inline-editing. */
 function StockRow({ item, editing, onEdit, onSave, onDelete, onCancel }: {
   item: ShopItem; editing: boolean;
   onEdit: () => void; onSave: (it: ShopItem) => void; onDelete: () => void; onCancel: () => void;
 }) {
-  const [draft, setDraft] = useState({
-    name: item.name, price: String(item.price), qty: item.qty < 0 ? '' : String(item.qty), notes: item.notes,
-  });
+  const [draft, setDraft] = useState(() => draftOf(item));
+  // Re-seed from the CURRENT item every time editing begins — never trust a
+  // draft captured at mount to still match what this row displays.
+  useEffect(() => { if (editing) setDraft(draftOf(item)); }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (editing) {
     return (
@@ -54,14 +67,15 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
   const [description, setDescription] = useState(shop.description);
   const [currency, setCurrency] = useState(currencies.some((c) => c.id === shop.currency) ? shop.currency : currencies[currencies.length - 1].id);
   const [playersCanBuy, setPlayers] = useState(shop.playersCanBuy);
-  const [items, setItems] = useState<ShopItem[]>(shop.items);
-  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [items, setItems] = useState<KeyedItem[]>(() => withKeys(shop.items));
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [showCompendium, setShowCompendium] = useState(false);
 
   function addDraft() {
     if (!draft.name.trim()) return;
     setItems([...items, {
+      _k: crypto.randomUUID(),
       name: draft.name.trim(), price: Number(draft.price) || 0,
       qty: draft.qty === '' ? -1 : Math.floor(Number(draft.qty)), notes: draft.notes.trim(),
     }]);
@@ -70,7 +84,7 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
 
   function save() {
     intents.updateShop(shop.id, {
-      name: name.trim() || 'Shop', description, currency, playersCanBuy, items,
+      name: name.trim() || 'Shop', description, currency, playersCanBuy, items: items.map(stripKey),
     });
     onClose();
   }
@@ -100,15 +114,15 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
 
         <div className="stock-cols dim"><span className="stk-name">Item</span><span className="stk-price">Price</span><span className="stk-qty">Qty</span><span className="stk-notes">Description</span><span style={{ width: 56 }} /></div>
         <div className="stock-list">
-          {items.map((it, i) => (
+          {items.map((it) => (
             <StockRow
-              key={i}
+              key={it._k}
               item={it}
-              editing={editingIdx === i}
-              onEdit={() => setEditingIdx(i)}
-              onCancel={() => setEditingIdx(null)}
-              onDelete={() => { setItems(items.filter((_, j) => j !== i)); setEditingIdx(null); }}
-              onSave={(next) => { setItems(items.map((x, j) => (j === i ? next : x))); setEditingIdx(null); }}
+              editing={editingKey === it._k}
+              onEdit={() => setEditingKey(it._k)}
+              onCancel={() => setEditingKey(null)}
+              onDelete={() => { setItems(items.filter((x) => x._k !== it._k)); setEditingKey(null); }}
+              onSave={(next) => { setItems(items.map((x) => (x._k === it._k ? { ...next, _k: it._k } : x))); setEditingKey(null); }}
             />
           ))}
           {items.length === 0 && <p className="dim" style={{ margin: '4px 0' }}>No stock yet — add items below or from the compendium.</p>}
@@ -135,7 +149,7 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
           <Compendium
             system={system}
             onClose={() => setShowCompendium(false)}
-            onPick={(entry) => setItems((prev) => [...prev, shopItemFromEntry(entry) as ShopItem])}
+            onPick={(entry) => setItems((prev) => [...prev, { ...(shopItemFromEntry(entry) as ShopItem), _k: crypto.randomUUID() }])}
           />
         )}
       </div>

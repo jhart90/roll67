@@ -14,8 +14,12 @@ export function App() {
 
   if (checking) {
     return (
-      <div className="center-screen">
-        <p className="dim">loading…</p>
+      <div className="center-screen retro-lobby">
+        <div className="store-sign">
+          <span className="store-sign-name">ROLL67</span>
+          <span className="store-sign-sub">PLEASE STAND BY…</span>
+        </div>
+        <div className="checker-strip" aria-hidden />
       </div>
     );
   }

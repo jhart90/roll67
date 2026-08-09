@@ -97,6 +97,52 @@ ensureColumn('users', 'player_color', 'player_color TEXT');
 // device instead of living only in one browser's localStorage.
 ensureColumn('users', 'music_volume', 'music_volume REAL');
 ensureColumn('users', 'sfx_volume', 'sfx_volume REAL');
+// Per-player world knowledge: what a player has seen belongs to THAT player,
+// not the party — a brand-new member starts with a blank map, not everything
+// the veterans already scouted. Rebuilds world_discovery with a user_id
+// column; each CURRENT player member inherits the party's accumulated
+// knowledge so nothing vanishes for them, while future members start fresh.
+// (No other table references world_discovery, so the rebuild is FK-safe.)
+function migratePerPlayerDiscovery(): void {
+  const cols = db.prepare(`PRAGMA table_info(world_discovery)`).all() as Array<{ name: string }>;
+  if (cols.length === 0 || cols.some((c) => c.name === 'user_id')) return;
+  db.exec(`
+    CREATE TABLE world_discovery_v2 (
+      campaign_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'character')),
+      key TEXT NOT NULL,
+      PRIMARY KEY (campaign_id, user_id, kind, key)
+    )
+  `);
+  db.exec(`
+    INSERT OR IGNORE INTO world_discovery_v2 (campaign_id, user_id, kind, key)
+    SELECT d.campaign_id, m.user_id, d.kind, d.key
+    FROM world_discovery d
+    JOIN campaign_members m ON m.campaign_id = d.campaign_id AND m.role = 'player'
+  `);
+  db.exec('DROP TABLE world_discovery');
+  db.exec('ALTER TABLE world_discovery_v2 RENAME TO world_discovery');
+}
+migratePerPlayerDiscovery();
+
+// One-time data migrations that must run exactly once regardless of schema
+// shape, tracked by name.
+db.exec('CREATE TABLE IF NOT EXISTS meta_migrations (name TEXT PRIMARY KEY, ran_at INTEGER NOT NULL)');
+function runOnce(name: string, fn: () => void): void {
+  const done = db.prepare('SELECT 1 FROM meta_migrations WHERE name = ?').get(name);
+  if (done) return;
+  fn();
+  db.prepare('INSERT INTO meta_migrations (name, ran_at) VALUES (?, ?)').run(name, Date.now());
+}
+// Shops and rollable tables created under the old players-visible-by-default
+// rules go hidden; the DM opens each deliberately (the checkbox still works
+// exactly as before).
+runOnce('hide-legacy-shops-tables', () => {
+  db.exec('UPDATE shops SET players_can_buy = 0');
+  db.exec('UPDATE rollable_tables SET players_can_roll = 0');
+});
+
 // Chest-folder unification: folders can be placed on maps as chests
 ensureColumn('world_folders', 'items_json', "items_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('world_folders', 'display_kind', "display_kind TEXT NOT NULL DEFAULT 'folder'");
@@ -223,9 +269,10 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_roll_stats_character ON roll_stats(campa
 db.exec(`
   CREATE TABLE IF NOT EXISTS world_discovery (
     campaign_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
     kind TEXT NOT NULL CHECK (kind IN ('map', 'token', 'character')),
     key TEXT NOT NULL,
-    PRIMARY KEY (campaign_id, kind, key)
+    PRIMARY KEY (campaign_id, user_id, kind, key)
   )
 `);
 db.exec(`

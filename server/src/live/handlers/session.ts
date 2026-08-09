@@ -131,7 +131,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       });
     }
     socket.emit(S2C.CAMPAIGN_STATE, buildCampaignState(campaignId, d.userId, d.username, role === 'dm'));
-    socket.emit(S2C.DIRECTORY, buildDirectory(campaignId, role === 'dm'));
+    socket.emit(S2C.DIRECTORY, buildDirectory(campaignId, role === 'dm', d.userId));
     {
       const all = rollableTables.forCampaign(campaignId);
       socket.emit(S2C.TABLES, { tables: role === 'dm' ? all : all.filter((t) => t.playersCanRoll) });
@@ -160,7 +160,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.REQUEST_DIRECTORY, safe(socket, () => {
     const d = sdata(socket);
     if (!d.campaignId || !d.role) return;
-    socket.emit(S2C.DIRECTORY, buildDirectory(d.campaignId, d.role === 'dm'));
+    socket.emit(S2C.DIRECTORY, buildDirectory(d.campaignId, d.role === 'dm', d.userId));
   }, 'REQUEST_DIRECTORY'));
 
   // Set your own 3D-dice color (a global user preference, shown to everyone).

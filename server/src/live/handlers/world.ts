@@ -92,7 +92,7 @@ export function foldersVisibleTo(campaignId: string, userId: string): ReturnType
   const byId = new Map(all.map((f) => [f.id, f]));
   // Seed with the parent of every non-folder thing this player can see. Each
   // collection is filtered exactly as its own broadcast filters it.
-  const disc = worldVis.discovered(campaignId);
+  const disc = worldVis.discovered(campaignId, userId);
   const ov = worldVis.overrides(campaignId);
   // Same rule the world directory uses: discovered unless force-hidden,
   // hidden unless force-revealed.

@@ -1134,40 +1134,53 @@ function toChatMsg(r: ChatRow): ChatMessage {
 
 export type WorldVisKind = 'map' | 'token' | 'character';
 
-/** In-memory dedupe so the per-vision-sync discovery writes stay cheap. */
+/** In-memory dedupe so the per-vision-sync discovery writes stay cheap.
+ *  Keyed `${campaignId}:${userId}`; the empty-user key caches the union of
+ *  every player's knowledge (the DM's world-tab badges). */
 const discoveryCache = new Map<string, Set<string>>();
 
 /**
- * World-tab knowledge: party-shared discovery (what any player's token has
- * had in sight) plus the DM's manual reveal/hide overrides.
+ * World-tab knowledge, PER PLAYER: what this player's own tokens have had in
+ * sight. A new member starts blank — they inherit nothing from the party.
+ * The DM's manual reveal/hide overrides stay campaign-wide.
  */
 export const worldVis = {
-  /** Record newly-seen things; returns how many were actually new. */
-  discover(campaignId: string, entries: Array<{ kind: WorldVisKind; key: string }>): number {
-    let cache = discoveryCache.get(campaignId);
+  /** Record newly-seen things for one player; returns how many were new. */
+  discover(campaignId: string, userId: string, entries: Array<{ kind: WorldVisKind; key: string }>): number {
+    const cacheKey = `${campaignId}:${userId}`;
+    let cache = discoveryCache.get(cacheKey);
     if (!cache) {
       cache = new Set(
-        (stmt('SELECT kind, key FROM world_discovery WHERE campaign_id = ?').all(campaignId) as Array<{ kind: string; key: string }>)
+        (stmt('SELECT kind, key FROM world_discovery WHERE campaign_id = ? AND user_id = ?')
+          .all(campaignId, userId) as Array<{ kind: string; key: string }>)
           .map((r) => `${r.kind}:${r.key}`),
       );
-      discoveryCache.set(campaignId, cache);
+      discoveryCache.set(cacheKey, cache);
     }
-    const ins = stmt('INSERT OR IGNORE INTO world_discovery (campaign_id, kind, key) VALUES (?, ?, ?)');
+    const ins = stmt('INSERT OR IGNORE INTO world_discovery (campaign_id, user_id, kind, key) VALUES (?, ?, ?, ?)');
     let added = 0;
     for (const e of entries) {
       const k = `${e.kind}:${e.key}`;
       if (cache.has(k)) continue;
       cache.add(k);
-      ins.run(campaignId, e.kind, e.key);
+      ins.run(campaignId, userId, e.kind, e.key);
       added++;
     }
+    // The union view (DM badges) is stale the moment any player learns more.
+    if (added > 0) discoveryCache.delete(`${campaignId}:`);
     return added;
   },
-  discovered(campaignId: string): Set<string> {
-    let cache = discoveryCache.get(campaignId);
+  /** One player's knowledge; omit userId for the union across all players
+   *  (what the DM's world-tab badges report as "seen by someone"). */
+  discovered(campaignId: string, userId?: string): Set<string> {
+    const cacheKey = `${campaignId}:${userId ?? ''}`;
+    let cache = discoveryCache.get(cacheKey);
     if (!cache) {
-      this.discover(campaignId, []); // primes the cache
-      cache = discoveryCache.get(campaignId)!;
+      const rows = userId
+        ? stmt('SELECT kind, key FROM world_discovery WHERE campaign_id = ? AND user_id = ?').all(campaignId, userId)
+        : stmt('SELECT DISTINCT kind, key FROM world_discovery WHERE campaign_id = ?').all(campaignId);
+      cache = new Set((rows as Array<{ kind: string; key: string }>).map((r) => `${r.kind}:${r.key}`));
+      discoveryCache.set(cacheKey, cache);
     }
     return cache;
   },

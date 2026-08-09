@@ -427,15 +427,8 @@ export function buildMapState(
   const targetUser = viewer.viewingAs ?? viewer.userId;
   const view = computeUserMapView(targetUser, map, allTokens);
   // World-tab knowledge: whatever a real player's vision serves them counts
-  // as discovered by the party (never the DM's own view or their preview).
-  if (!viewer.isDm) {
-    const entries: Array<{ kind: 'map' | 'token' | 'character'; key: string }> = [{ kind: 'map', key: map.id }];
-    for (const t of view.tokens) {
-      entries.push({ kind: 'token', key: t.id });
-      if (t.characterId) entries.push({ kind: 'character', key: t.characterId });
-    }
-    if (worldVis.discover(map.campaignId, entries) > 0) scheduleDirectoryRefresh(map.campaignId);
-  }
+  // as discovered by THAT player (never the DM's own view or their preview).
+  if (!viewer.isDm) recordDiscovery(map.campaignId, viewer.userId, map.id, view.tokens);
   return {
     map: mapView,
     // The DM previewing a player still keeps geometry for their editor overlays.
@@ -471,6 +464,16 @@ export function buildMapState(
 export function syncMapVision(io: Server, campaignId: string, mapId: string, hint?: SyncVisionHint): void {
   dirIo = io;
   withCharCache(() => syncMapVisionInner(io, campaignId, mapId, hint));
+}
+
+/** Per-player discovery write + world-tab refresh when anything was new. */
+function recordDiscovery(campaignId: string, userId: string, mapId: string, seenTokens: TokenView[]): void {
+  const entries: Array<{ kind: 'map' | 'token' | 'character'; key: string }> = [{ kind: 'map', key: mapId }];
+  for (const t of seenTokens) {
+    entries.push({ kind: 'token', key: t.id });
+    if (t.characterId) entries.push({ kind: 'character', key: t.characterId });
+  }
+  if (worldVis.discover(campaignId, userId, entries) > 0) scheduleDirectoryRefresh(campaignId);
 }
 
 function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?: SyncVisionHint): void {
@@ -525,6 +528,9 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
     sentToUser.add(d.userId);
     shared ??= buildMapVisionShared(map, allTokens);
     const view = computeUserMapView(d.userId, map, allTokens, shared);
+    // Walking into sight of something discovers it live, not only on the
+    // next full map-state send.
+    recordDiscovery(campaignId, d.userId, mapId, view.tokens);
     const payload: VisionUpdatePayload = {
       mapId,
       mapObjects: mapObjectsVisibleTo(d.userId, false, mapId, mapObjectList),

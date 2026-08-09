@@ -18,13 +18,15 @@ function namesFrom(sheet: Record<string, unknown>, listId: string): string[] {
  * on a map, and the party's collective weapons/spells/items (never NPC kit or
  * GM-layer secrets).
  */
-export function buildDirectory(campaignId: string, isDm: boolean): DirectoryPayload {
+export function buildDirectory(campaignId: string, isDm: boolean, userId?: string): DirectoryPayload {
   const campaignMaps = maps.forCampaign(campaignId);
   const allCharacters = characters.forCampaign(campaignId);
 
   // Players only see what the party has actually discovered (a controlled
   // token had it in sight) — unless the DM force-revealed or force-hid it.
-  const disc = worldVis.discovered(campaignId);
+  // The DM's badges show the union of every player's knowledge; a player's
+  // own view shows only what THEY have seen.
+  const disc = worldVis.discovered(campaignId, isDm ? undefined : userId);
   const ov = worldVis.overrides(campaignId);
   const visOf = (kind: WorldVisKind, key: string, base: boolean): WorldVisState =>
     ov.get(`${kind}:${key}`) ?? (base ? 'seen' : 'unseen');
@@ -75,9 +77,15 @@ export function buildDirectory(campaignId: string, isDm: boolean): DirectoryPayl
 
 /** Send each connected member their (role-filtered) directory. */
 export function broadcastDirectory(io: Server, campaignId: string): void {
+  // Per-player knowledge means per-player payloads; memoize per user so a
+  // player with several tabs open costs one build.
   const dmView = buildDirectory(campaignId, true);
-  const playerView = buildDirectory(campaignId, false);
+  const perUser = new Map<string, DirectoryPayload>();
   for (const socket of campaignSockets(io, campaignId)) {
-    socket.emit(S2C.DIRECTORY, sdata(socket).role === 'dm' ? dmView : playerView);
+    const d = sdata(socket);
+    if (d.role === 'dm') { socket.emit(S2C.DIRECTORY, dmView); continue; }
+    let view = perUser.get(d.userId);
+    if (!view) { view = buildDirectory(campaignId, false, d.userId); perUser.set(d.userId, view); }
+    socket.emit(S2C.DIRECTORY, view);
   }
 }

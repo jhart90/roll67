@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import { C2S, S2C, type Counter, type CounterUpdatePayload } from 'shared';
-import { counters, maps } from '../../db/repos.js';
+import { counters, maps, worldVis } from '../../db/repos.js';
 import { campaignSockets, emitError, safe, sdata } from '../hub.js';
 
 function requireCampaign(socket: Socket) {
@@ -9,17 +9,29 @@ function requireCampaign(socket: Socket) {
   return d as typeof d & { campaignId: string; role: 'dm' | 'player' };
 }
 
-/** Push one map's counters to everyone: DM gets all, players only visible. */
+/** A counter reaches a player only if the DM revealed it AND the player has
+ *  personally been on (or been shown) its map — 'visible' means visible at
+ *  the table, not announced campaign-wide to people who were never there. */
+function countersFor(campaignId: string, userId: string, list: Counter[]): Counter[] {
+  const disc = worldVis.discovered(campaignId, userId);
+  const ov = worldVis.overrides(campaignId);
+  const knowsMap = (mapId: string) => {
+    const o = ov.get(`map:${mapId}`);
+    return o ? o === 'reveal' : disc.has(`map:${mapId}`);
+  };
+  return list.filter((c) => c.visible && knowsMap(c.mapId));
+}
+
+/** Push one map's counters to everyone: DM gets all, players their own view. */
 function broadcastCounters(io: Server, campaignId: string, mapId: string): void {
   const all = counters.forMap(mapId);
-  const visible = all.filter((c) => c.visible);
   const every = counters.forCampaign(campaignId);
-  const everyVisible = every.filter((c) => c.visible);
   for (const socket of campaignSockets(io, campaignId)) {
-    const dm = sdata(socket).role === 'dm';
-    socket.emit(S2C.COUNTERS, { mapId, counters: dm ? all : visible });
+    const d = sdata(socket);
+    const dm = d.role === 'dm';
+    socket.emit(S2C.COUNTERS, { mapId, counters: dm ? all : countersFor(campaignId, d.userId, all) });
     // The world tree lists counters under every map, so it needs them all.
-    socket.emit(S2C.COUNTERS_ALL, { counters: dm ? every : everyVisible });
+    socket.emit(S2C.COUNTERS_ALL, { counters: dm ? every : countersFor(campaignId, d.userId, every) });
   }
 }
 
@@ -28,13 +40,13 @@ export function registerCounterHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (mapId === '*') {
       const every = counters.forCampaign(d.campaignId);
-      socket.emit(S2C.COUNTERS_ALL, { counters: d.role === 'dm' ? every : every.filter((c) => c.visible) });
+      socket.emit(S2C.COUNTERS_ALL, { counters: d.role === 'dm' ? every : countersFor(d.campaignId, d.userId, every) });
       return;
     }
     const map = maps.byId(mapId);
     if (!map || map.campaignId !== d.campaignId) return;
     const all = counters.forMap(mapId);
-    socket.emit(S2C.COUNTERS, { mapId, counters: d.role === 'dm' ? all : all.filter((c) => c.visible) });
+    socket.emit(S2C.COUNTERS, { mapId, counters: d.role === 'dm' ? all : countersFor(d.campaignId, d.userId, all) });
   }, 'COUNTERS_GET'));
 
   socket.on(C2S.COUNTER_CREATE, safe(socket, ({ mapId }: { mapId: string }) => {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  ANCESTRIES_SWADE, ATTRIBUTES_SWADE, ATTRIBUTE_POINTS, CURATED_EDGES_SWADE, CURATED_HINDRANCES_SWADE,
+  ANCESTRIES_SWADE, ATTRIBUTES_SWADE, ATTRIBUTE_POINTS, CURATED_EDGES_BY_ID, CURATED_EDGES_SWADE, CURATED_HINDRANCES_SWADE, edgeOptions,
   CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_POINT_FLOOR, CUSTOM_RACE_TRAITS, CUSTOM_RACE_TRAITS_BY_ID,
   FREE_SKILLS_SWADE, MAX_MAJOR_HINDRANCES, MAX_MINOR_HINDRANCES, RACE_ENVIRONMENTS,
   RESISTIBLE_DAMAGE_TYPES, SKILL_ATTR_SWADE, SKILLS_SWADE, SKILL_POINTS, TRAIT_DICE,
@@ -86,6 +86,26 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   const skillSpent = totalSkillPointsSpent(skillDice, finalAttrs);
 
   const [edgeIds, setEdgeIds] = useState<string[]>([]);
+  // Humans' ancestry perk: one free Edge pick (by the book — any Novice edge
+  // they qualify for), on top of any slots bought with Hindrance points.
+  const freeEdgeSlots = !isCustom && ancestryName === 'Human' ? 1 : 0;
+  const edgeSlots = hindEdgeUnits + freeEdgeSlots;
+
+  // Eligibility judged against the character as built so far: attributes,
+  // skills (free d4s included), rank Novice, and the edges already picked.
+  const eligSheet = useMemo(() => ({
+    advances: 0,
+    ...finalAttrs,
+    skills: [
+      ...FREE_SKILLS_SWADE.filter((s) => !skillDice[s]).map((n) => ({ name: n, die: 'd4' })),
+      ...Object.entries(skillDice).map(([n, die]) => ({ name: n, die })),
+    ],
+    edges: edgeIds.map((id) => ({ name: CURATED_EDGES_BY_ID.get(id)?.name ?? id })),
+  }), [finalAttrs, skillDice, edgeIds]);
+  const edgeEligByName = useMemo(
+    () => new Map(edgeOptions(eligSheet).map((e) => [e.entry.name, e])),
+    [eligSheet],
+  );
 
   /** How many times a trait is currently taken. */
   function takesOf(traitId: string): number {
@@ -164,7 +184,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   function toggleEdge(id: string) {
     setEdgeIds((ids) => {
       if (ids.includes(id)) return ids.filter((x) => x !== id);
-      if (ids.length >= hindEdgeUnits) return ids;
+      if (ids.length >= edgeSlots) return ids;
       return [...ids, id];
     });
   }
@@ -173,7 +193,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   const hindOk = hindRemaining >= 0;
   const attrOk = attrSpent <= attrPool;
   const skillOk = skillSpent <= skillPool;
-  const edgeOk = edgeIds.length <= hindEdgeUnits;
+  const edgeOk = edgeIds.length <= edgeSlots;
 
   const canAdvance =
     (step === 'concept' && name.trim().length > 0)
@@ -365,7 +385,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
               </>
             )}
             {!isCustom && ancestryName === 'Human' && (
-              <p className="dim" style={{ fontSize: 12 }}>Humans get the free Adaptable Edge (once per session, re-roll a Trait roll).</p>
+              <p className="dim" style={{ fontSize: 12 }}>Humans get one free Edge of their choice — pick it in the Edges step.</p>
             )}
           </>
         )}
@@ -476,21 +496,40 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
         {step === 'edges' && (
           <>
             <p className="dim" style={{ fontSize: 12 }}>
-              {hindEdgeUnits > 0
-                ? `You earned ${hindEdgeUnits} Edge slot${hindEdgeUnits === 1 ? '' : 's'} from Hindrance points.`
-                : 'No Edge slots earned — go back to Hindrances to buy one, or skip this step.'}
+              {edgeSlots > 0
+                ? `${edgeIds.length}/${edgeSlots} Edge slot${edgeSlots === 1 ? '' : 's'} used${freeEdgeSlots ? ' (1 free from Human ancestry)' : ''}${hindEdgeUnits ? ` (${hindEdgeUnits} from Hindrance points)` : ''}. Greyed edges have requirements this character doesn’t meet yet.`
+                : 'No Edge slots — go back to Hindrances to buy one, or skip this step.'}
             </p>
             <div className="swc-hindrance-cols" style={{ gridTemplateColumns: '1fr' }}>
-              {CURATED_EDGES_SWADE.map((e) => (
-                <label key={e.id} className={`lu-skill ${edgeIds.includes(e.id) ? 'on' : ''}`}>
-                  <input
-                    type="checkbox" checked={edgeIds.includes(e.id)}
-                    disabled={!edgeIds.includes(e.id) && edgeIds.length >= hindEdgeUnits}
-                    onChange={() => toggleEdge(e.id)}
-                  />
-                  <span><T desc={e.desc}><strong>{e.name}</strong></T> — {e.desc}</span>
-                </label>
-              ))}
+              {(() => {
+                let lastCat = '';
+                return CURATED_EDGES_SWADE.map((e) => {
+                  const elig = edgeEligByName.get(e.name);
+                  const picked = edgeIds.includes(e.id);
+                  const blocked = !picked && !(elig?.eligible ?? true);
+                  const header = e.category !== lastCat ? (lastCat = e.category) : null;
+                  return (
+                    <span key={e.id}>
+                      {header && <div className="npc-quickadd-hint" style={{ marginTop: 6 }}>{header} Edges</div>}
+                      <label
+                        className={`lu-skill ${picked ? 'on' : ''}`}
+                        style={blocked ? { opacity: 0.45 } : undefined}
+                        title={blocked ? elig?.reason ?? 'Requirements not met.' : e.requires ? `Requires: ${e.requires}` : undefined}
+                      >
+                        <input
+                          type="checkbox" checked={picked}
+                          disabled={blocked || (!picked && edgeIds.length >= edgeSlots)}
+                          onChange={() => toggleEdge(e.id)}
+                        />
+                        <span>
+                          <T desc={e.desc}><strong>{e.name}</strong></T> — {e.desc}
+                          {e.requires && <span className="dim"> · {e.requires}</span>}
+                        </span>
+                      </label>
+                    </span>
+                  );
+                });
+              })()}
             </div>
           </>
         )}

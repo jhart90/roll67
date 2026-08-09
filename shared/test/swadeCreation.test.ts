@@ -256,11 +256,12 @@ describe('buildSwadeCharacterSheet — assembly', () => {
     expect(sheet.dollars).toBe(500 + 500); // base $500 + 1 funds purchase ($500)
   });
 
-  it('Humans get the free Adaptable edge automatically; custom ancestries do not', () => {
+  it('no edge arrives unpicked — the Human free edge is a wizard-side SLOT, not an auto-add', () => {
     const human = buildSwadeCharacterSheet(baseInput());
-    expect((human.edges as Array<{ name: string }>).some((e) => e.name === 'Adaptable')).toBe(true);
-    const custom = buildSwadeCharacterSheet(baseInput({ ancestryName: 'Skyfolk', ancestryIsCustom: true }));
-    expect((custom.edges as Array<{ name: string }>).some((e) => e.name === 'Adaptable')).toBe(false);
+    expect(human.edges as Array<{ name: string }>).toEqual([]);
+    // The pick flows through edgeIds like any other edge.
+    const withPick = buildSwadeCharacterSheet(baseInput({ edgeIds: ['alertness'] }));
+    expect((withPick.edges as Array<{ name: string }>).some((e) => e.name === 'Alertness')).toBe(true);
   });
 
   it('purchased Edges apply their real mechanical effects: Brawny Toughness, Fleet-Footed pace, Luck bennies, Rich funds', () => {

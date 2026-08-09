@@ -401,23 +401,20 @@ export interface EdgeOption {
   cost: number;
 }
 
-export const CURATED_EDGES_SWADE: EdgeOption[] = [
-  { id: 'alertness', name: 'Alertness', desc: '+2 to Notice rolls.', cost: 2 },
-  { id: 'brawny', name: 'Brawny', desc: '+1 Toughness; can carry more before being encumbered.', cost: 2 },
-  { id: 'fleet-footed', name: 'Fleet-Footed', desc: '+2 Pace; d10 running die.', cost: 2 },
-  { id: 'luck', name: 'Luck', desc: 'Draw an extra Benny each session.', cost: 2 },
-  { id: 'rich', name: 'Rich', desc: '+$1,000 starting funds.', cost: 2 },
-  { id: 'linguist', name: 'Linguist', desc: 'Fluent in an extra language per point of Smarts.', cost: 2 },
-  { id: 'strong-willed', name: 'Strong Willed', desc: '+2 to resist Intimidation and Taunt.', cost: 2 },
-  { id: 'woodsman', name: 'Woodsman', desc: '+2 Survival and Stealth in the wilderness.', cost: 2 },
-];
+/** The wizard offers the full compendium edge catalog (one source of truth
+ *  with the advancement wizard); eligibility is judged per-character at pick
+ *  time. Each edge costs 2 earned Hindrance points at creation. */
+export const CURATED_EDGES_SWADE: (EdgeOption & { requires: string; category: string })[] = CONTENT_SWADE
+  .filter((e) => e.kind === 'edge')
+  .map((e) => ({
+    id: e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    name: e.name,
+    desc: e.subtitle ?? '',
+    cost: 2,
+    requires: e.trait?.requires ?? '',
+    category: (e.category ?? '').replace(/^Edge:\s*/, ''),
+  }));
 export const CURATED_EDGES_BY_ID = new Map(CURATED_EDGES_SWADE.map((e) => [e.id, e]));
-
-/** Humans get this signature Edge for free — never counted against earned
- *  hindrance points. */
-export const HUMAN_FREE_EDGE: EdgeOption = {
-  id: 'adaptable', name: 'Adaptable', desc: 'Once per session, may re-roll a single Trait roll.', cost: 0,
-};
 
 // ---------- Final assembly ----------
 
@@ -670,10 +667,9 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   // them live: swadeParry/swadeToughness/swadePace and gearTraitBonus read
   // those columns directly. Only the effects with no column to live in
   // (Bennies, starting funds, the running die) are applied to fields here.
+  // Humans' free edge is a free PICK (the wizard grants the slot), not a
+  // fixed auto-edge — the chosen edges all arrive through edgeIds.
   const edges: SheetData[] = [];
-  if (input.ancestryName === 'Human' && !input.ancestryIsCustom) {
-    edges.push({ name: HUMAN_FREE_EDGE.name, notes: HUMAN_FREE_EDGE.desc, ...traitModsFor(HUMAN_FREE_EDGE.name) });
-  }
   let bonusFunds = input.hindranceFundsSpent * 500;
   for (const id of input.edgeIds) {
     const edge = CURATED_EDGES_BY_ID.get(id);
@@ -681,7 +677,9 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
     edges.push({ name: edge.name, notes: edge.desc, ...traitModsFor(edge.name) });
     if (id === 'fleet-footed') sheet.runningDie = 'd10';
     if (id === 'luck') sheet.bennies = num(sheet, 'bennies', 3) + 1;
+    if (id === 'great-luck') sheet.bennies = num(sheet, 'bennies', 3) + 2;
     if (id === 'rich') bonusFunds += 1000;
+    if (id === 'filthy-rich') bonusFunds += 2000;
   }
   sheet.edges = edges;
   sheet.dollars = 500 + bonusFunds;

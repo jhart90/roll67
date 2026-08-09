@@ -93,6 +93,10 @@ ensureColumn('users', 'dice_trait_color', 'dice_trait_color TEXT');
 ensureColumn('users', 'dice_wild_color', 'dice_wild_color TEXT');
 ensureColumn('users', 'dice_raise_color', 'dice_raise_color TEXT');
 ensureColumn('users', 'player_color', 'player_color TEXT');
+// Per-account audio mix (0..1), so a player's levels follow them to any
+// device instead of living only in one browser's localStorage.
+ensureColumn('users', 'music_volume', 'music_volume REAL');
+ensureColumn('users', 'sfx_volume', 'sfx_volume REAL');
 // Chest-folder unification: folders can be placed on maps as chests
 ensureColumn('world_folders', 'items_json', "items_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('world_folders', 'display_kind', "display_kind TEXT NOT NULL DEFAULT 'folder'");

@@ -92,6 +92,8 @@ export const C2S = {
   SET_DICE_ROLE_COLOR: 'setDiceRoleColor',
   SET_PLAYER_COLOR: 'setPlayerColor',
   SET_USERNAME: 'setUsername',
+  /** Save this account's audio mix (music + effects), so it follows the player. */
+  SET_VOLUMES: 'setVolumes',
   // rollable tables
   CREATE_TABLE: 'createTable',
   UPDATE_TABLE: 'updateTable',
@@ -764,7 +766,11 @@ export interface YouArePayload {
   userId: string;
   username: string;
   role: 'dm' | 'player';
+  /** This account's saved audio mix (0..1); null = never set, use full volume. */
+  musicVolume?: number | null;
+  sfxVolume?: number | null;
 }
+export interface SetVolumesPayload { music: number; sfx: number }
 
 export interface CampaignStatePayload {
   campaign: CampaignInfo;

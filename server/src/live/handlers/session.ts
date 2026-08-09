@@ -3,7 +3,7 @@ import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
-  type SetPlayerColorPayload, type SetUsernamePayload, type SwitchActiveMapPayload, type ViewMapPayload,
+  type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import { validUsername } from '../../auth.js';
@@ -123,7 +123,13 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     socket.join(campaignRoom(campaignId));
     if (role === 'dm') socket.join(dmRoom(campaignId));
 
-    socket.emit(S2C.YOU_ARE, { userId: d.userId, username: d.username, role });
+    {
+      const vol = users.volumes(d.userId);
+      socket.emit(S2C.YOU_ARE, {
+        userId: d.userId, username: d.username, role,
+        musicVolume: vol.music, sfxVolume: vol.sfx,
+      });
+    }
     socket.emit(S2C.CAMPAIGN_STATE, buildCampaignState(campaignId, d.userId, d.username, role === 'dm'));
     socket.emit(S2C.DIRECTORY, buildDirectory(campaignId, role === 'dm'));
     {
@@ -219,6 +225,13 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     io.to(userRoom(d.userId)).emit(S2C.YOU_ARE, { userId: d.userId, username: trimmed, role: d.role ?? 'player' });
     broadcastPresence(io, d.campaignId);
   }, 'SET_USERNAME'));
+
+  // A player's own audio mix, saved to their account so it follows them to
+  // any device / future session rather than living in one browser only.
+  socket.on(C2S.SET_VOLUMES, safe(socket, ({ music, sfx }: SetVolumesPayload) => {
+    const d = sdata(socket);
+    users.setVolumes(d.userId, Number(music), Number(sfx));
+  }, 'SET_VOLUMES'));
 
   socket.on(C2S.LEAVE_CAMPAIGN, safe(socket, () => {
     const d = sdata(socket);

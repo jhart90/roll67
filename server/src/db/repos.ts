@@ -79,6 +79,16 @@ export const users = {
   setPlayerColor(userId: string, color: string | null): void {
     stmt('UPDATE users SET player_color = ? WHERE id = ?').run(color, userId);
   },
+  /** This account's saved audio mix; null means "never set" (use full volume). */
+  volumes(userId: string): { music: number | null; sfx: number | null } {
+    const r = stmt('SELECT music_volume as music, sfx_volume as sfx FROM users WHERE id = ?')
+      .get(userId) as { music: number | null; sfx: number | null } | undefined;
+    return { music: r?.music ?? null, sfx: r?.sfx ?? null };
+  },
+  setVolumes(userId: string, music: number, sfx: number): void {
+    const clamp = (v: number) => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 1));
+    stmt('UPDATE users SET music_volume = ?, sfx_volume = ? WHERE id = ?').run(clamp(music), clamp(sfx), userId);
+  },
   rename(userId: string, username: string): void {
     stmt('UPDATE users SET username = ? WHERE id = ?').run(username, userId);
   },

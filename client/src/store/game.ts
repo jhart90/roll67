@@ -554,11 +554,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     const vol = Math.max(0, Math.min(1, v));
     localStorage.setItem('roll67.musicVolume', String(vol));
     set({ localMusicVolume: vol });
+    saveVolumesSoon();
   },
   setLocalSfxVolume(v) {
     const vol = Math.max(0, Math.min(1, v));
     localStorage.setItem('roll67.sfxVolume', String(vol));
     set({ localSfxVolume: vol });
+    saveVolumesSoon();
   },
   drawColor: '#e8d27b',
   selectedTextId: null,
@@ -681,6 +683,18 @@ function mapObjectsById(list: MapObject[]): Record<string, MapObject> {
  * record (nested bar/vision/light compared by value) and reuses the old
  * object when nothing differs.
  */
+/** Persist the audio mix to the account — debounced, since dragging a slider
+ *  fires continuously and only the value it lands on matters. */
+let volumeSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function saveVolumesSoon(): void {
+  if (volumeSaveTimer) clearTimeout(volumeSaveTimer);
+  volumeSaveTimer = setTimeout(() => {
+    volumeSaveTimer = null;
+    const s = useGameStore.getState();
+    if (s.you) socket.emit(C2S.SET_VOLUMES, { music: s.localMusicVolume, sfx: s.localSfxVolume });
+  }, 400);
+}
+
 /** A persisted per-device volume (0..1); malformed/missing → full volume. */
 function readLocalVolume(key: string): number {
   const v = Number(localStorage.getItem(key));
@@ -722,6 +736,16 @@ export function wireSocket(): void {
 
   socket.on(S2C.YOU_ARE, (payload: YouArePayload) => {
     useGameStore.setState({ you: payload });
+    // The account's saved audio mix wins over this browser's cache, so a
+    // player's levels follow them to a new device. Never set = full volume.
+    if (typeof payload.musicVolume === 'number') {
+      localStorage.setItem('roll67.musicVolume', String(payload.musicVolume));
+      useGameStore.setState({ localMusicVolume: payload.musicVolume });
+    }
+    if (typeof payload.sfxVolume === 'number') {
+      localStorage.setItem('roll67.sfxVolume', String(payload.sfxVolume));
+      useGameStore.setState({ localSfxVolume: payload.sfxVolume });
+    }
   });
 
   socket.on(S2C.CAMPAIGN_STATE, (p: CampaignStatePayload) => {

@@ -797,20 +797,22 @@ async function main() {
 
   // ---------- lighting ----------
   console.log('lighting:');
-  // Switch to dark lighting -> player vision limited to darkvision (0) + lights.
+  // PITCH darkness -> player vision limited to darkvision (0) + lights.
+  // ('dark' is the middle rung of the four-level ladder: it still grants 10
+  // hexes of ambient sight, which would leave the monster plainly visible.)
   const darkUpdate = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
-  dmSock.emit('setGridConfig', { mapId, grid: { lighting: 'dark' } });
+  dmSock.emit('setGridConfig', { mapId, grid: { lighting: 'pitch' } });
   const darkPayload = await darkUpdate;
-  ok(true, 'darkness hides the monster (no lights, no darkvision)');
+  ok(true, 'pitch darkness hides the monster (no lights, no darkvision)');
   ok(
     Array.isArray(darkPayload.visiblePolygons) && darkPayload.visiblePolygons.length > 0,
-    'the smooth reach polygon still arrives under dark lighting (no longer null)',
+    'the smooth reach polygon still arrives under pitch darkness (no longer null)',
   );
   ok(
     !!darkPayload.visibleLitMask
       && darkPayload.visibleLitMask.circles.length === 1
       && darkPayload.visibleLitMask.lightPolygons.length === 0,
-    'lit-mask under dark lighting has just the always-visible self-circle (no darkvision, no lights yet)',
+    'lit-mask under pitch darkness has just the always-visible self-circle (no darkvision, no lights yet)',
   );
 
   // Torch on the monster's hex lights it up.

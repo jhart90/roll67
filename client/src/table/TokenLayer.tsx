@@ -210,12 +210,12 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
         const th = hexToPixel({ q: t.q, r: t.r }, map.grid);
         intents.dragToken(id, th.x + dx, th.y + dy, true);
         const hex = pixelToHex({ x: th.x + dx, y: th.y + dy }, map.grid);
-        if (hex.q !== t.q || hex.r !== t.r) intents.moveToken(id, hex.q, hex.r);
+        if (hex.q !== t.q || hex.r !== t.r) intents.moveToken(id, hex.q, hex.r, true);
       }
     } else {
       intents.dragToken(token.id, dragPos.x, dragPos.y, true);
       const hex = pixelToHex(dragPos, map.grid);
-      if (hex.q !== token.q || hex.r !== token.r) intents.moveToken(token.id, hex.q, hex.r);
+      if (hex.q !== token.q || hex.r !== token.r) intents.moveToken(token.id, hex.q, hex.r, true);
     }
   }
 

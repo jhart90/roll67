@@ -288,7 +288,16 @@ export interface UpdateTokenPayload {
     artAssetId?: string | null;
   };
 }
-export interface MoveTokenPayload { tokenId: string; q: number; r: number }
+export interface MoveTokenPayload {
+  tokenId: string;
+  q: number;
+  r: number;
+  /** True only for a deliberate drag-and-drop. Walking (WASD/arrows) is a
+   *  step through the world and always collides with walls; a drag is the
+   *  player saying "put me over there", which out of combat may cross walls
+   *  onto ground they have already explored. */
+  drag?: boolean;
+}
 export interface DragTokenPayload { tokenId: string; x: number; y: number; done?: boolean }
 
 export interface CreateCharacterPayload {

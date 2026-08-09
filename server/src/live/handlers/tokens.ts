@@ -202,7 +202,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     broadcastDirectory(io, d.campaignId);
   }, 'UPDATE_TOKEN'));
 
-  socket.on(C2S.MOVE_TOKEN, safe(socket, ({ tokenId, q: rawQ, r: rawR }: MoveTokenPayload) => {
+  socket.on(C2S.MOVE_TOKEN, safe(socket, ({ tokenId, q: rawQ, r: rawR, drag }: MoveTokenPayload) => {
     const d = requireCampaign(socket);
     // Hex coordinates are integers by definition; a fractional/garbage value
     // (inBounds already rejects NaN) would otherwise persist verbatim.
@@ -234,16 +234,20 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     // free hex in that direction (held up against the blocker). The DM moves
     // freely. Movement is straight-line collision, not auto-pathing.
     //
-    // Exception — travelling between rooms out of combat: with no initiative
+    // Exception — DRAGGING between rooms out of combat: with no initiative
     // running there is no tactical position to protect, and making the party
     // trace a path around every wall to reach a room they have already
     // explored is busywork. So a player may drag straight onto any hex they
     // personally remember, walls included. Ground they have never seen still
     // has to be walked to, so this can never scout the unknown.
+    //
+    // WALKING is different: a WASD/arrow step is the character physically
+    // moving through the world, so it always collides with walls, explored
+    // ground or not.
     let dest = { q, r };
     if (d.role !== 'dm') {
       const outOfCombat = !initiative.get(d.campaignId).active;
-      const knownGround = outOfCombat && hasSeenHex(d.userId, token.mapId, { q, r });
+      const knownGround = drag === true && outOfCombat && hasSeenHex(d.userId, token.mapId, { q, r });
       if (!knownGround) {
         const stop = reachableAlong(
           { q: token.q, r: token.r },

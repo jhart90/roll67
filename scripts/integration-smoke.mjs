@@ -559,10 +559,19 @@ async function main() {
 
   dmSock.emit('initSetActive', { active: false });
   await new Promise((r) => setTimeout(r, 400));
+  // `drag: true` marks a drag-and-drop; a bare move is a WASD step, which
+  // always collides with walls.
   const travelMove = waitFor(playerSock, 'tokenMoved', 2500, (p) => p.tokenId === pcToken.id).catch(() => null);
-  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 13, r: 5 });
+  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 13, r: 5, drag: true });
   const travelled = await travelMove;
-  ok(travelled?.q === 13, `out of combat the player travels across the wall onto remembered ground (landed at q${travelled ? travelled.q : '=held'})`);
+  ok(travelled?.q === 13, `out of combat a DRAG crosses the wall onto remembered ground (landed at q${travelled ? travelled.q : '=held'})`);
+
+  const stepMove = waitFor(playerSock, 'tokenMoved', 2000, (p) => p.tokenId === pcToken.id).catch(() => null);
+  playerSock.emit('moveToken', { tokenId: pcToken.id, q: 6, r: 5 }); // back through the wall on foot
+  const stepped = await stepMove;
+  // The wall sits between q9 and q10, so a step from the east is held at q10
+  // — the near side. What matters is that it never reaches q6 beyond it.
+  ok(!stepped || stepped.q >= 10, `WASD walking never crosses the wall, remembered or not (landed at q${stepped ? stepped.q : '=held in place'})`);
   // Put them back where the rest of the script expects them.
   dmSock.emit('moveToken', { tokenId: pcToken.id, ...homeHex });
   await new Promise((r) => setTimeout(r, 400));

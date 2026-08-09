@@ -1358,7 +1358,10 @@ export const intents = {
   }) => socket.emit(C2S.CREATE_TOKEN, payload),
   deleteToken: (tokenId: string) => socket.emit(C2S.DELETE_TOKEN, { tokenId }),
   updateToken: (tokenId: string, patch: Record<string, unknown>) => socket.emit(C2S.UPDATE_TOKEN, { tokenId, patch }),
-  moveToken: (tokenId: string, q: number, r: number) => socket.emit(C2S.MOVE_TOKEN, { tokenId, q, r }),
+  /** `drag` marks a deliberate drag-and-drop; keyboard steps leave it off so
+   *  they always collide with walls. */
+  moveToken: (tokenId: string, q: number, r: number, drag = false) =>
+    socket.emit(C2S.MOVE_TOKEN, { tokenId, q, r, drag }),
   dragToken: (tokenId: string, x: number, y: number, done = false) =>
     socket.emit(C2S.DRAG_TOKEN, { tokenId, x, y, done }),
 

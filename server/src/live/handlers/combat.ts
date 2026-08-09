@@ -10,7 +10,7 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
-  swadeWoundsHealed,
+  swadeWoundsHealed, swadeRangeBand,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -746,15 +746,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // SWADE range bands: the listed range is Short; Medium (−2) reaches 2×
     // and Long (−4) reaches 4×. Other systems keep the hard single limit.
     const swadeBands = actor.system === 'swade' && action.ranged && rangeHexes > 1;
-    // Extreme range (4× Long, −8) is only reachable while Aiming.
-    const bandCap = p.adv === 'adv' ? 16 : 4;
-    const maxRange = swadeBands ? rangeHexes * bandCap + (tgt.size >= 3 ? 1 : 0) : effectiveRange;
-    if (dist > maxRange) {
-      emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${swadeBands ? action.rangeFt * bandCap : action.rangeFt} ft${swadeBands && bandCap === 4 ? ' — Extreme range needs Aim' : ''}).`);
+    // One shared band model (swadeRange.ts) so the shooter's on-screen ruler
+    // and this penalty can never disagree. A big target is a hex easier to
+    // reach, so measure against a slightly shortened distance.
+    const bandOpts = { aiming: p.adv === 'adv', thrown: action.thrown === true };
+    const effDist = Math.max(0, dist - (tgt.size >= 3 ? 1 : 0));
+    const reading = swadeBands ? swadeRangeBand(effDist, rangeHexes, bandOpts) : null;
+    if (swadeBands && reading && !reading.reachable) {
+      emitError(socket, `${tgt.name} is out of range — ${dist} tiles (${dist * feetPerHex} ft). ${reading.reason ?? ''}`.trim());
       return;
     }
-    const rangeBandMod = !swadeBands || dist <= rangeHexes ? 0
-      : dist <= rangeHexes * 2 ? -2 : dist <= rangeHexes * 4 ? -4 : -8;
+    if (!swadeBands && dist > effectiveRange) {
+      emitError(socket, `${tgt.name} is out of range (${dist * feetPerHex} ft > ${action.rangeFt} ft).`);
+      return;
+    }
+    const rangeBandMod = reading?.penalty ?? 0;
     // Line of sight: a wall or closed door blocks targeting entirely, the
     // same raycast FOV already uses — never trust the client's own guess.
     const srcPx = hexToPixel({ q: src.q, r: src.r }, map.grid);
@@ -921,7 +927,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (p.adv === 'adv' && !action.ranged) {
           mod += 2; dmgBonus += 2; wildAttack = true; tags.push('+2 Wild Attack');
         } else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
-        if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${dist <= rangeHexes * 2 ? 'Medium' : dist <= rangeHexes * 4 ? 'Long' : 'Extreme'} range`); }
+        if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${reading?.label ?? 'range'}`); }
         if (coverPenalty) { mod += coverPenalty; tags.push(`${coverPenalty} Cover (armor +${-coverPenalty})`); }
         // Illumination: Dim −2, Dark −4 — unless the target stands in light
         // (a map light's or a carried torch's bright radius washes it out;

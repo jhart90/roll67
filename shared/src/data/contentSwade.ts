@@ -38,7 +38,7 @@ const WEAPONS: W[] = [
   ['Submachine Gun', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 60/120/240', 'mag 30', 'AP 1', 'RoF 3', 'caliber: bullets-medium']],
   ['Sniper Rifle', 'Ranged', '2d10!', 'kinetic', 'ranged', ['range 300/600/1200', 'mag 10', 'AP 4', 'snapfire', 'caliber: bullets-large']],
   ['Flintlock Pistol', 'Ranged', '2d6!+1', 'kinetic', 'ranged', ['range 30/60/120', '2 actions to reload', 'caliber: shot']],
-  ['Frag Grenade', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast']],
+  ['Frag Grenade', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast']],
   // --- more melee ---
   ['Brass Knuckles', 'Melee', '1d4!', 'bludgeoning', 'str', []],
   ['Hand Axe', 'Melee', '1d6!', 'slashing', 'str', ['can be thrown']],
@@ -76,9 +76,9 @@ const WEAPONS: W[] = [
   ['Laser Rifle', 'Ranged', '2d8!', 'energy', 'ranged', ['range 60/120/240', 'mag 30', 'AP 4', 'caliber: battery-rifle']],
   ['Plasma Rifle', 'Ranged', '3d8!', 'energy', 'ranged', ['range 60/120/240', 'mag 20', 'AP 6', 'caliber: battery-rifle']],
   ['Gauss Rifle', 'Ranged', '2d10!', 'kinetic', 'ranged', ['range 60/120/240', 'mag 40', 'AP 6', 'RoF 3', 'caliber: bullets-large']],
-  ['Smoke Grenade', 'Ranged', '0', '', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'blocks line of sight']],
-  ['Stun Grenade', 'Ranged', '0', 'energy', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'Vigor roll or Stunned']],
-  ['Molotov Cocktail', 'Ranged', '2d10!', 'fire', 'ranged', ['range 18/36/72', 'thrown', 'small blast', 'may set fires']],
+  ['Smoke Grenade', 'Ranged', '0', '', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'blocks line of sight']],
+  ['Stun Grenade', 'Ranged', '0', 'energy', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'Vigor roll or Stunned']],
+  ['Molotov Cocktail', 'Ranged', '2d10!', 'fire', 'ranged', ['range 25/50/100', 'thrown', 'small blast', 'may set fires']],
   // --- era parity variants ---
   // The same killing power expressed by different centuries: a master archer's
   // war bow, a gunslinger's revolver and a laser sidearm all sit on one
@@ -99,8 +99,8 @@ const WEAPONS: W[] = [
   ['Photon Lance', 'Ranged', '2d10!', 'energy', 'ranged', ['range 60/120/240', 'AP 4', 'snapfire', 'mag 10', 'era: future — marksman parity']],
   ['Grapeshot Hand-Mortar', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', '2 actions to reload', 'damage 3d6/2d6/1d6 by range band', 'era: black powder — scattergun parity with Pump Shotgun', 'caliber: shot']],
   ['Scatter Blaster', 'Ranged', '3d6!', 'energy', 'ranged', ['range 60/120/240', 'mag 8', 'damage 3d6/2d6/1d6 by range band', 'era: future — scattergun parity', 'caliber: battery-rifle']],
-  ['Thunderclap Powder Bomb', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'era: medieval China — grenade parity with Frag Grenade']],
-  ['Micro-Frag Sphere', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', 'thrown', 'medium blast', 'era: future — grenade parity']],
+  ['Thunderclap Powder Bomb', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'era: medieval China — grenade parity with Frag Grenade']],
+  ['Micro-Frag Sphere', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'era: future — grenade parity']],
   // Automatic-fire parity tier (matches the Assault Rifle's 2d8!/AP 2/RoF 3).
   // No ancient/medieval members: sustained automatic fire simply doesn't
   // exist before self-contained cartridges.

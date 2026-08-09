@@ -64,6 +64,7 @@ export function combatActions(character: Character): CombatAction[] {
       // SWADE Rate of Fire, from an explicit column or a "RoF N" note.
       ...(swadeRof(atk) >= 2 ? { rof: swadeRof(atk) } : {}),
       ...(num(atk, 'ap', 0) > 0 ? { ap: num(atk, 'ap', 0) } : {}),
+      ...(atk.thrown === true ? { thrown: true } : {}),
       ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
         ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),
       ...(save ? { saveId: save, onSave: str(atk, 'onSave', 'half') === 'negate' ? 'negate' as const : 'half' as const, fixedDc: num(atk, 'saveDc', 13) } : {}),

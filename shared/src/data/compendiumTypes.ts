@@ -300,10 +300,12 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       const blastHexes = blastMatch ? ({ small: 1, medium: 3, large: 5 } as Record<string, number>)[blastMatch[1].toLowerCase()] : 0;
       const coneTemplate = /cone template/i.test(propText);
       const stunRider = /vigor roll or stunned/i.test(propText);
+      const thrown = propText.toLowerCase().includes('thrown');
       return {
         listId: 'attacks',
         row: {
-          name: entry.name, skill: melee ? 'Fighting' : 'Shooting', damage,
+          // A thrown weapon is lobbed with Athletics, and has no Extreme band.
+          name: entry.name, skill: melee ? 'Fighting' : (thrown ? 'Athletics' : 'Shooting'), damage,
           dtype: w.damageType, range: melee ? 5 : weaponRangeFtSwn(w.props),
           ap, parryBonus, wielded: false,
           ...(mag ? { ammo: Number(mag[1]), maxAmmo: Number(mag[1]) } : {}),
@@ -312,6 +314,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
           ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),
           ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
+          ...(thrown ? { thrown: true } : {}),
           notes: propText,
         },
         label: `${entry.name} added to weapons`,

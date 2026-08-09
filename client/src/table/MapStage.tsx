@@ -4,6 +4,7 @@ import { intents, useGameStore } from '../store/game';
 import { worldDrag } from '../store/worldDrag';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
 import { AoeTemplateLayer } from './AoeTemplateLayer';
+import { RangeRulerLayer } from './RangeRulerLayer';
 import { BackgroundCanvas } from './BackgroundCanvas';
 import { CombatTextLayer } from './CombatTextLayer';
 import { DrawingLayer } from './DrawingLayer';
@@ -376,6 +377,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <GeometryLayer />
           <PingMeasureLayer />
           <AoeTemplateLayer />
+          <RangeRulerLayer />
           <TargetPreviewLayer />
           <CombatTextLayer />
           <TerrainPainter />

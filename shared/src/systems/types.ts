@@ -104,6 +104,9 @@ export interface CombatAction {
   ppCost?: number;
   /** SWADE: armor piercing — reduces the target's ranged-armor soak. */
   ap?: number;
+  /** SWADE: lobbed rather than fired (a grenade). Thrown weapons have no
+   *  Extreme band — past Long they are simply out of range. */
+  thrown?: boolean;
   /** SWN: shock — this much damage lands even on a MISS against targets
    *  whose AC is at or below shockAc (the "shock N/AC M" weapon tag). */
   shockDamage?: number;

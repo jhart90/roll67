@@ -655,6 +655,20 @@ export const DEFAULT_GRID: GridConfig = {
   feetPerHex: 5,
 };
 
+/**
+ * Scenes are backdrops for a conversation or a cutscene, not tactical
+ * battlemaps: nobody counts hexes across one. So they start with a coarse
+ * grid and the lines switched off — the hex math still runs underneath
+ * (snapping, distance, vision), it just isn't drawn.
+ */
+export const DEFAULT_SCENE_GRID: GridConfig = {
+  ...DEFAULT_GRID,
+  hexSize: 30,
+  cols: 50,
+  rows: 50,
+  gridEnabled: false,
+};
+
 /** Backfills grids persisted before `gridEnabled`/`lighting` existed (which
  *  only ever had the old boolean `globalIllumination`). */
 function normalizeGrid(raw: GridConfig & { globalIllumination?: boolean }): GridConfig {
@@ -695,7 +709,7 @@ export const maps = {
     const maxOrder = (stmt('SELECT MAX(sort_order) as m FROM maps WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
     stmt(
       'INSERT INTO maps (id, campaign_id, name, bg_asset_id, grid_json, sort_order, is_scene) VALUES (?, ?, ?, NULL, ?, ?, ?)',
-    ).run(id, campaignId, name, JSON.stringify(DEFAULT_GRID), maxOrder + 1, isScene ? 1 : 0);
+    ).run(id, campaignId, name, JSON.stringify(isScene ? DEFAULT_SCENE_GRID : DEFAULT_GRID), maxOrder + 1, isScene ? 1 : 0);
     return maps.byId(id)!;
   },
   byId(id: string): (MapDef & { campaignId: string; bgAssetId: string | null }) | undefined {

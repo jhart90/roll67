@@ -123,7 +123,31 @@ export function WorldTreePanel() {
     () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters),
     [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList, allCounters],
   );
-  const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  // Players only see a folder once something they can see lives under it —
+  // an empty folder (or a chain of them) is DM scaffolding, not discovered
+  // world. Every other collection reaching this client is already server-
+  // filtered to what this player may see, so "has any visible non-folder
+  // descendant" is exactly the right test. Chest-folders with loot count.
+  const visibleNodes = useMemo(() => {
+    if (isDm) return nodes;
+    const kids = new Map<string, TreeNode[]>();
+    for (const n of nodes) {
+      if (!n.parentId) continue;
+      if (!kids.has(n.parentId)) kids.set(n.parentId, []);
+      kids.get(n.parentId)!.push(n);
+    }
+    const memo = new Map<string, boolean>();
+    const hasContent = (id: string): boolean => {
+      if (memo.has(id)) return memo.get(id)!;
+      memo.set(id, false); // cycle guard
+      const lootInside = (folders.find((f) => f.id === id)?.items.length ?? 0) > 0;
+      const res = lootInside || (kids.get(id) ?? []).some((c) => c.kind !== 'folder' || hasContent(c.id));
+      memo.set(id, res);
+      return res;
+    };
+    return nodes.filter((n) => n.kind !== 'folder' || hasContent(n.id));
+  }, [nodes, isDm, folders]);
+  const byId = useMemo(() => new Map(visibleNodes.map((n) => [n.id, n])), [visibleNodes]);
   const childrenOf = useMemo(() => {
     const m = new Map<string | null, TreeNode[]>();
     for (const n of nodes) {

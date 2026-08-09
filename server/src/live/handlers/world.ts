@@ -336,13 +336,17 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const map = maps.byId(mapId);
     if (!map || map.campaignId !== d.campaignId) return;
 
-    // 1. Reparent the folder under the map + mark as chest.
-    worldFolders.update(folderId, { parentId: mapId, displayKind: 'chest' });
+    // 1. Reparent the folder under the map. Only LOOT becomes a chest on the
+    // ground — a folder that is already a chest, or one carrying items. A
+    // folder of characters is a marching order, not treasure, so deploying it
+    // must not mint a chest object nobody asked for.
+    const isLoot = f.displayKind === 'chest' || f.items.length > 0;
+    worldFolders.update(folderId, { parentId: mapId, ...(isLoot ? { displayKind: 'chest' as const } : {}) });
 
     // 1b. Create a chest MapObject linked to this folder (if one doesn't already exist).
     const existingObjs = mapObjects.forMap(mapId);
     const alreadyLinked = existingObjs.find((o) => o.worldFolderId === folderId);
-    if (!alreadyLinked) {
+    if (isLoot && !alreadyLinked) {
       const spawn = map.spawn ?? centerHex(map.grid);
       const occupied = new Set(existingObjs.map((o) => packHex({ q: o.q, r: o.r })));
       const hex = (q != null && r != null) ? { q, r } : firstFreeHex(spawn, occupied, map.grid);

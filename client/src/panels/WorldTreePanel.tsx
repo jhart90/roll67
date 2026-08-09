@@ -309,10 +309,15 @@ export function WorldTreePanel() {
       return;
     }
 
-    // Dragging a folder anywhere in the TREE only re-parents it — deploying
-    // its characters (and linking a chest object) stays an explicit gesture:
-    // drop the folder on the map CANVAS, or use its "Place all on current
-    // map" action. Nesting for organization must never mint chest objects.
+    // Dropping a folder ONTO A MAP deploys it: every character inside is
+    // relocated to that map, spread around its spawn point, and anyone
+    // controlling one of them is pulled to that map too. (Only loot folders
+    // become a chest on the ground — organizing never mints chest objects.)
+    // Nesting a folder anywhere else is pure organization.
+    if (drag.kind === 'folder' && targetId && byId.get(targetId)?.kind === 'map') {
+      placeFolderOnMap(drag.id, targetId);
+      return;
+    }
     intents.setParent(drag.kind, drag.id, targetId);
     // Dragging a character onto a map relocates its token there server-side;
     // switch the DM's view to that map so the new token is immediately

@@ -143,9 +143,12 @@ function fmt(n: number): string {
   return n >= 0 ? `+${n}` : String(n);
 }
 
-/** Pull a healing dice expression out of item text ("Regain 2d4+2 hit points"). */
+/** Pull a healing dice expression out of item text — 5e's "Regain 2d4+2 hit
+ *  points" or SWADE's "2d6 healing" (which the server converts to Wounds,
+ *  one per full 4 points, steadying the Shaken). */
 function healAmountFrom(text: string): string | null {
-  const m = text.match(/regain\s+(\d*d\d+(?:\s*\+\s*\d+)?)\s+hit\s+points/i);
+  const m = text.match(/regain\s+(\d*d\d+(?:\s*\+\s*\d+)?)\s+hit\s+points/i)
+    ?? text.match(/(\d*d\d+(?:\s*\+\s*\d+)?)\s+healing/i);
   return m ? m[1].replace(/\s+/g, '') : null;
 }
 

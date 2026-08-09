@@ -2,20 +2,21 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
-  type BootPlayerPayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
+  type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import { validUsername } from '../../auth.js';
 import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings,
-  handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders, worldSort,
+  handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders, worldSort, worldVis,
 } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
 import { buildMapState, dropVisionCache, mapObjectsVisibleTo } from '../visionService.js';
 import { emitCustomNpcs } from './characters.js';
 import { initiativeViewFor } from './combat.js';
-import { buildDirectory } from '../directory.js';
+import { broadcastCounters } from './counters.js';
+import { buildDirectory, broadcastDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
 import { foldersVisibleTo, shopsForUser, sendShopPresentationTo } from './world.js';
 
@@ -292,6 +293,30 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
   }, 'BOOT_PLAYER'));
 
   // DM pops the character-creator wizard open on one player's screen.
+  // A player's world memory belongs to their ACCOUNT, so a fresh character
+  // doesn't forget what they already scouted — and campaigns that predate
+  // per-player tracking seeded everyone with the party's shared history.
+  // This hands the DM the eraser.
+  socket.on(C2S.FORGET_KNOWLEDGE, safe(socket, ({ userId }: ForgetKnowledgePayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId || d.role !== 'dm') { emitError(socket, 'Only the DM can reset world knowledge.'); return; }
+    const campaignId = d.campaignId;
+    const removed = worldVis.forget(campaignId, userId);
+    // Everything keyed off discovery has to be recomputed and re-sent.
+    for (const s of campaignSockets(io, campaignId)) {
+      const sd = sdata(s);
+      if (sd.role === 'dm' || (userId && sd.userId !== userId)) continue;
+      sendMapState(s);
+    }
+    broadcastDirectory(io, campaignId);
+    // Counters are gated on knowing their map, so they have to be re-judged.
+    for (const m of maps.forCampaign(campaignId)) broadcastCounters(io, campaignId, m.id);
+    const who = userId
+      ? campaigns.members(campaignId).find((m) => m.userId === userId)?.username ?? 'that player'
+      : 'every player';
+    emitError(socket, `Reset world knowledge for ${who} — ${removed} remembered thing${removed === 1 ? '' : 's'} forgotten.`);
+  }, 'FORGET_KNOWLEDGE'));
+
   socket.on(C2S.SEND_CREATOR, safe(socket, ({ userId }: SendCreatorPayload) => {
     const d = sdata(socket);
     if (!d.campaignId || d.role !== 'dm') return;

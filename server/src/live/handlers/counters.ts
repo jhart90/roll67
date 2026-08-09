@@ -23,7 +23,7 @@ function countersFor(campaignId: string, userId: string, list: Counter[]): Count
 }
 
 /** Push one map's counters to everyone: DM gets all, players their own view. */
-function broadcastCounters(io: Server, campaignId: string, mapId: string): void {
+export function broadcastCounters(io: Server, campaignId: string, mapId: string): void {
   const all = counters.forMap(mapId);
   const every = counters.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {

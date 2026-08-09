@@ -1544,6 +1544,8 @@ export const intents = {
     useGameStore.setState({ shakenPrompt: null });
   },
   /** DM: remove a player from the campaign (characters revert to DM control). */
+  /** DM: wipe one player's discovered-world memory (omit for everyone). */
+  forgetKnowledge: (userId?: string) => socket.emit(C2S.FORGET_KNOWLEDGE, { userId }),
   bootPlayer: (userId: string) => socket.emit(C2S.BOOT_PLAYER, { userId }),
   /** DM: open the character-creator wizard on a player's screen. */
   sendCreator: (userId: string) => socket.emit(C2S.SEND_CREATOR, { userId }),

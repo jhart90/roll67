@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   ANCESTRIES_SWADE, ATTRIBUTES_SWADE, ATTRIBUTE_POINTS, CURATED_EDGES_BY_ID, CURATED_EDGES_SWADE, CURATED_HINDRANCES_SWADE, edgeOptions,
   CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_POINT_FLOOR, CUSTOM_RACE_TRAITS, CUSTOM_RACE_TRAITS_BY_ID,
-  FREE_SKILLS_SWADE, MAX_MAJOR_HINDRANCES, MAX_MINOR_HINDRANCES, RACE_ENVIRONMENTS,
+  FREE_SKILLS_SWADE, MAX_HINDRANCE_POINTS, canTakeHindrance, RACE_ENVIRONMENTS,
   RESISTIBLE_DAMAGE_TYPES, SKILL_ATTR_SWADE, SKILLS_SWADE, SKILL_POINTS, TRAIT_DICE,
   attributePointsSpent, buildSwadeCharacterSheet, dieStepIndex, finalAttributeDice, hindrancePoints,
   maxTakesOf, pickTier, raceTraitPointTotal, skillPointCost, stepDie, swadeParry, swadeToughness,
@@ -58,8 +58,6 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   const raceTotal = useMemo(() => raceTraitPointTotal(customPicks), [customPicks]);
 
   const [hindranceIds, setHindranceIds] = useState<string[]>([]);
-  const minorCount = hindranceIds.filter((id) => CURATED_HINDRANCES_SWADE.find((h) => h.id === id)?.severity === 'Minor').length;
-  const majorCount = hindranceIds.filter((id) => CURATED_HINDRANCES_SWADE.find((h) => h.id === id)?.severity === 'Major').length;
   const earnedHindrancePts = useMemo(
     () => hindrancePoints(CURATED_HINDRANCES_SWADE.filter((h) => hindranceIds.includes(h.id))),
     [hindranceIds],
@@ -140,10 +138,9 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
     const h = CURATED_HINDRANCES_SWADE.find((x) => x.id === id)!;
     setHindranceIds((ids) => {
       if (ids.includes(id)) return ids.filter((x) => x !== id);
-      const minors = ids.filter((x) => CURATED_HINDRANCES_SWADE.find((y) => y.id === x)?.severity === 'Minor').length;
-      const majors = ids.filter((x) => CURATED_HINDRANCES_SWADE.find((y) => y.id === x)?.severity === 'Major').length;
-      if (h.severity === 'Minor' && minors >= MAX_MINOR_HINDRANCES) return ids;
-      if (h.severity === 'Major' && majors >= MAX_MAJOR_HINDRANCES) return ids;
+      // One 4-point budget, any shape: four Minors, two Majors, or a mix.
+      const chosen = CURATED_HINDRANCES_SWADE.filter((x) => ids.includes(x.id));
+      if (!canTakeHindrance(chosen, h.severity)) return ids;
       return [...ids, id];
     });
   }
@@ -393,11 +390,13 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
         {step === 'hindrances' && (
           <>
             <p className="dim" style={{ fontSize: 12 }}>
-              Take up to {MAX_MINOR_HINDRANCES} Minor and {MAX_MAJOR_HINDRANCES} Major <T>Hindrance</T>. Each Minor is worth 1 point, each Major 2 — spend them below.
+              Take up to {MAX_HINDRANCE_POINTS} points of <T>Hindrance</T>, in any combination — each Minor
+              is worth 1 point and each Major 2, so four Minors, two Majors, or any mix all fit. Spend the
+              points you earn below. <b>{earnedHindrancePts}/{MAX_HINDRANCE_POINTS} taken.</b>
             </p>
             <div className="swc-hindrance-cols">
               <div>
-                <h5>Minor ({minorCount}/{MAX_MINOR_HINDRANCES})</h5>
+                <h5>Minor <span className="dim">(1 point each)</span></h5>
                 {CURATED_HINDRANCES_SWADE.filter((h) => h.severity === 'Minor').map((h) => (
                   <label key={h.id} className={`lu-skill ${hindranceIds.includes(h.id) ? 'on' : ''}`}>
                     <input type="checkbox" checked={hindranceIds.includes(h.id)} onChange={() => toggleHindrance(h.id)} />
@@ -406,7 +405,7 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
               <div>
-                <h5>Major ({majorCount}/{MAX_MAJOR_HINDRANCES})</h5>
+                <h5>Major <span className="dim">(2 points each)</span></h5>
                 {CURATED_HINDRANCES_SWADE.filter((h) => h.severity === 'Major').map((h) => (
                   <label key={h.id} className={`lu-skill ${hindranceIds.includes(h.id) ? 'on' : ''}`}>
                     <input type="checkbox" checked={hindranceIds.includes(h.id)} onChange={() => toggleHindrance(h.id)} />

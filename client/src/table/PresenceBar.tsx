@@ -147,6 +147,16 @@ export function PresenceBar() {
                 >
                   🧙 Send character creator
                 </button>
+                <button
+                  className="link"
+                  title={`Wipe what ${m.username} has discovered — their world tab goes blank and they rediscover by looking. World memory belongs to the ACCOUNT, so rolling a new character does not reset it.`}
+                  onClick={() => {
+                    intents.forgetKnowledge(m.userId);
+                    setMenuFor(null);
+                  }}
+                >
+                  🧠 Reset world knowledge
+                </button>
                 {bootArmed === m.userId ? (
                   <button
                     className="link danger"

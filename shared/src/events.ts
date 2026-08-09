@@ -21,6 +21,8 @@ export const C2S = {
   BOOT_PLAYER: 'bootPlayer',
   /** DM: pop the character-creator wizard open on a player's screen. */
   SEND_CREATOR: 'sendCreator',
+  /** DM: wipe a player's discovered-world memory so they start blank again. */
+  FORGET_KNOWLEDGE: 'forgetKnowledge',
   SWITCH_ACTIVE_MAP: 'switchActiveMap',
   VIEW_MAP: 'viewMap',
   ASSIGN_PLAYER_MAP: 'assignPlayerMap',
@@ -949,6 +951,8 @@ export interface DirectoryPayload {
   spells: string[];
   items: string[];
 }
+/** userId omitted = reset every player in the campaign. */
+export interface ForgetKnowledgePayload { userId?: string }
 export interface WorldOverridePayload {
   kind: 'map' | 'token' | 'character';
   key: string;

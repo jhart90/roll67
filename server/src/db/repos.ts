@@ -1159,6 +1159,25 @@ const discoveryCache = new Map<string, Set<string>>();
  * The DM's manual reveal/hide overrides stay campaign-wide.
  */
 export const worldVis = {
+  /**
+   * Wipe one player's world knowledge (or the whole campaign's when no user
+   * is named): they go back to a blank map and rediscover by looking. Needed
+   * because knowledge belongs to the ACCOUNT, not the character — rolling a
+   * new character doesn't forget what that player already scouted, and a
+   * campaign that predates per-player tracking seeded everyone with the
+   * party's shared history.
+   */
+  forget(campaignId: string, userId?: string): number {
+    const res = userId
+      ? stmt('DELETE FROM world_discovery WHERE campaign_id = ? AND user_id = ?').run(campaignId, userId)
+      : stmt('DELETE FROM world_discovery WHERE campaign_id = ?').run(campaignId);
+    // Drop this campaign's cached sets, including the DM's union key.
+    for (const k of [...discoveryCache.keys()]) {
+      if (k.startsWith(`${campaignId}:`)) discoveryCache.delete(k);
+    }
+    return res.changes;
+  },
+
   /** Record newly-seen things for one player; returns how many were new. */
   discover(campaignId: string, userId: string, entries: Array<{ kind: WorldVisKind; key: string }>): number {
     const cacheKey = `${campaignId}:${userId}`;

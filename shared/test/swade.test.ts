@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
 import { swadeWoundsHealed } from '../src/systems/swadeDamage.js';
+import { canTakeHindrance, hindrancePoints } from '../src/systems/swadeCreation.js';
 import { blocksMovement, combatResources, conditionsFor } from '../src/systems/effects.js';
 import { generateNpc } from '../src/data/npcGen.js';
 import { NPCS_SWADE } from '../src/data/npcsSwade.js';
@@ -629,5 +630,29 @@ describe('Ammunition & caliber', () => {
       if (c === 'slugs' || c === 'battery-gatling') continue;
       expect(gunCalibers.has(c as string), `no weapon chambers ${c}`).toBe(true);
     }
+  });
+});
+
+describe('SWADE Hindrance budget', () => {
+  it('allows any combination worth 4 points', () => {
+    const minor = { severity: 'Minor' as const };
+    const major = { severity: 'Major' as const };
+    expect(hindrancePoints([minor, minor, minor, minor])).toBe(4);
+    expect(hindrancePoints([major, major])).toBe(4);
+    expect(hindrancePoints([major, minor, minor])).toBe(4);
+    // Four Minors and two Majors were both forbidden by the old
+    // two-Minor/one-Major shape rule despite costing the same 4 points.
+    expect(canTakeHindrance([minor, minor, minor], 'Minor')).toBe(true);
+    expect(canTakeHindrance([major], 'Major')).toBe(true);
+  });
+
+  it('refuses anything that would break the 4-point cap', () => {
+    const minor = { severity: 'Minor' as const };
+    const major = { severity: 'Major' as const };
+    expect(canTakeHindrance([minor, minor, minor, minor], 'Minor')).toBe(false);
+    expect(canTakeHindrance([major, major], 'Minor')).toBe(false);
+    // 3 points spent leaves room for a Minor but not a Major.
+    expect(canTakeHindrance([major, minor], 'Minor')).toBe(true);
+    expect(canTakeHindrance([major, minor], 'Major')).toBe(false);
   });
 });

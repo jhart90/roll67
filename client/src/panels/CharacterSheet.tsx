@@ -172,6 +172,13 @@ const TABLE_SECTIONS = new Set(['skills']);
  *  a weapon with no damage listed reads as broken, not as clean. */
 const ALWAYS_SHOW = new Set(['damage', 'die', 'severity']);
 
+/** The "is this in my hands / on my body" flag, by section. Surfaced as a
+ *  checkbox on the card itself rather than buried in the editor, because it
+ *  is the one field that changes constantly during play. */
+const EQUIP_COL: Record<string, string> = {
+  attacks: 'wielded', inventory: 'equipped', armor: 'equipped',
+};
+
 /** These ids pair up into one chip instead of appearing as two. */
 const PAIRED = new Set(['bonusAmt', 'maxAmmo', 'amount']);
 
@@ -202,6 +209,8 @@ function cardChips(section: ListSection, row: SheetData): { chips: string[]; not
       continue;
     }
     if (col.type === 'checkbox') {
+      // The equip flag has its own checkbox on the card.
+      if (col.id === EQUIP_COL[section.id]) continue;
       if (v === true) chips.push(col.label);
       continue;
     }
@@ -255,13 +264,15 @@ function riderSummary(row: SheetData): string {
 const RIDER_BTN_TITLE = 'Save / condition / AoE — rider effects this attack forces on its target (e.g. Vigor roll or be Stunned, a cone template)';
 
 function ListEditor({
-  section, system, sheet, readOnly, onPatch,
+  section, system, sheet, readOnly, onPatch, onEquipChange,
 }: {
   section: ListSection;
   system: GameSystem;
   sheet: SheetData;
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
+  /** Announce a kit change at the table (equipping is public information). */
+  onEquipChange?: (itemName: string, verbLabel: string, on: boolean) => void;
 }) {
   const rows = Array.isArray(sheet[section.id]) ? (sheet[section.id] as SheetData[]) : [];
   // Index of the card whose pencil is open (full editor), or null.
@@ -421,8 +432,11 @@ function ListEditor({
           }
           const { chips, notes } = cardChips(section, row);
           const rider = hasDetail ? riderSummary(row) : '';
+          const equipId = EQUIP_COL[section.id];
+          const equipCol = equipId ? mainCols.find((c) => c.id === equipId) : undefined;
+          const isEquipped = !!equipCol && row[equipCol.id] === true;
           return (
-            <div key={i} className="sheet-card">
+            <div key={i} className={`sheet-card${isEquipped ? ' sheet-card-equipped' : ''}`}>
               <div className="sheet-card-head">
                 <span className="sc-title">{String(row.name || nameFallback)}</span>
                 <span className="spacer" />
@@ -440,6 +454,21 @@ function ListEditor({
                 </div>
               )}
               {notes.map((n, j) => <div key={j} className="sc-notes">{n}</div>)}
+              {equipCol && (
+                <label className="sc-equip" title={`${equipCol.label} — announced in chat`}>
+                  <input
+                    type="checkbox"
+                    checked={isEquipped}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setRows(rows.map((r, j) => (j === i ? { ...r, [equipCol.id]: on } : r)));
+                      onEquipChange?.(String(row.name || nameFallback), equipCol.label, on);
+                    }}
+                  />
+                  <span>{equipCol.label}</span>
+                </label>
+              )}
             </div>
           );
         })}
@@ -469,7 +498,7 @@ function DerivedBlocks({
 }
 
 function Section({
-  section, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor,
+  section, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor, onEquipChange,
 }: {
   section: SectionDef;
   system: GameSystem;
@@ -479,6 +508,7 @@ function Section({
   onPatch: (patch: SheetData) => void;
   onEditImage?: (fieldId: string) => void;
   inheritedColor?: string;
+  onEquipChange?: (itemName: string, verbLabel: string, on: boolean) => void;
 }) {
   return (
     <section className="sheet-section">
@@ -491,7 +521,7 @@ function Section({
         </div>
       )}
       {section.kind === 'list' && (
-        <ListEditor section={section} system={system} sheet={sheet} readOnly={readOnly} onPatch={onPatch} />
+        <ListEditor section={section} system={system} sheet={sheet} readOnly={readOnly} onPatch={onPatch} onEquipChange={onEquipChange} />
       )}
       {section.kind === 'derived' && <DerivedBlocks section={section} system={system} derived={derived} />}
     </section>
@@ -811,6 +841,14 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
     if (character) intents.updateCharacter(character.id, p);
   }
 
+  /** Kit changes are table-visible: say so in chat, in the item's own words
+   *  ("Wielded" for a weapon, "Worn" for armour, "Equipped" for gear). */
+  function announceEquip(itemName: string, verbLabel: string, on: boolean) {
+    if (!character) return;
+    const verb = on ? verbLabel.toLowerCase() : `un${verbLabel.toLowerCase()}`;
+    intents.chat(`${character.name} ${verb} ${itemName}.`);
+  }
+
   function applyImage(fieldId: string, url: string, assetId: string) {
     if (!character) return;
     // Setting the token image also carries the assetId so the server can
@@ -897,6 +935,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
                 onPatch={patch}
                 onEditImage={setPickingField}
                 inheritedColor={inheritedColor}
+                onEquipChange={announceEquip}
               />
             ))}
 

@@ -382,13 +382,23 @@ export const CURATED_HINDRANCES_SWADE: HindranceOption[] = CONTENT_SWADE
     desc: e.subtitle ?? '',
   }));
 
-/** Standard build cap: up to two Minor Hindrances and one Major. Each Minor
- *  is worth 1 point, each Major 2 — max 4 points earned to spend below. */
-export const MAX_MINOR_HINDRANCES = 2;
-export const MAX_MAJOR_HINDRANCES = 1;
+/**
+ * Standard build cap: 4 Hindrance points, in ANY combination — a Minor is
+ * worth 1 and a Major 2, so four Minors, two Majors, or any mix all fit.
+ * (The old rule allowed only two Minors and one Major, which capped the same
+ * 4 points but arbitrarily forbade shapes worth exactly as much.)
+ */
+export const MAX_HINDRANCE_POINTS = 4;
 
 export function hindrancePoints(chosen: Array<{ severity: 'Minor' | 'Major' }>): number {
   return chosen.reduce((sum, h) => sum + (h.severity === 'Major' ? 2 : 1), 0);
+}
+
+/** Can this Hindrance still be afforded within the 4-point budget? */
+export function canTakeHindrance(
+  chosen: Array<{ severity: 'Minor' | 'Major' }>, severity: 'Minor' | 'Major',
+): boolean {
+  return hindrancePoints(chosen) + (severity === 'Major' ? 2 : 1) <= MAX_HINDRANCE_POINTS;
 }
 
 // ---------- Edges ----------

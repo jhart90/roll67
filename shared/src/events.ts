@@ -937,7 +937,15 @@ export interface SfxPlayPayload { url: string; label: string }
  *  discovered it, or has the DM force-revealed / force-hidden it? */
 export type WorldVisState = 'seen' | 'unseen' | 'reveal' | 'hide';
 export interface DirectoryPayload {
-  maps: Array<{ id: string; name: string; vis?: WorldVisState }>;
+  maps: Array<{
+    id: string; name: string; vis?: WorldVisState;
+    parentId?: string | null;
+    /** A staged backdrop rather than a battlemap — shown in full, no fog. */
+    isScene?: boolean;
+    /** Whether this viewer has any explored ground here, i.e. whether a
+     *  revealed-parts preview would show them anything. */
+    hasPreview?: boolean;
+  }>;
   characters: Array<{
     id: string; name: string; owner: string | null; system: GameSystem; vis?: WorldVisState;
     /** Where the DM filed this character in the world tree. */
@@ -946,7 +954,15 @@ export interface DirectoryPayload {
      *  without shipping the sheet. */
     ownerUserId?: string | null;
   }>;
-  tokens: Array<{ id: string; name: string; mapName: string; gm: boolean; vis?: WorldVisState }>;
+  tokens: Array<{
+    id: string; name: string; mapName: string; gm: boolean; vis?: WorldVisState;
+    /** The map this token stands on, so the tree can nest it there. */
+    mapId?: string;
+    characterId?: string | null;
+    /** True when a player runs this character — drives the silhouette colour
+     *  (light blue for the party, grey for whatever the DM is running). */
+    playerRun?: boolean;
+  }>;
   weapons: string[];
   spells: string[];
   items: string[];

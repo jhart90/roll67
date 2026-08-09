@@ -14,6 +14,7 @@ export type WindowKind =
   | 'rollStats'
   | 'ironDice'
   | 'publicSheet'
+  | 'mapDetails'
   | 'accountDetails';
 
 export interface WindowInstance {

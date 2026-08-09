@@ -8,6 +8,7 @@ import { PORT, UPLOADS_DIR, ensureDataDirs } from './config.js';
 import { socketAuth } from './auth.js';
 import { authRouter, campaignRouter } from './routes/authRoutes.js';
 import { uploadRouter } from './routes/uploadRoutes.js';
+import { mapPreviewRouter } from './routes/mapPreviewRoutes.js';
 import { attachMapPackIo, mapPackRouter } from './routes/mapPackRoutes.js';
 import { registerSessionHandlers } from './live/handlers/session.js';
 import { initIronDice } from './live/ironDice.js';
@@ -38,6 +39,7 @@ app.get('/healthz', (_req, res) => {
 app.use('/api', authRouter);
 app.use('/api/campaigns', campaignRouter);
 app.use('/api', uploadRouter);
+app.use('/api', mapPreviewRouter);
 app.use('/api', mapPackRouter);
 
 // Uploaded assets (map backgrounds, token art, handout images).

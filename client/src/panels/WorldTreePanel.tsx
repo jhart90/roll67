@@ -6,7 +6,7 @@ import { worldDrag, type WorldDragKind } from '../store/worldDrag';
 
 // 'mapobject' nodes (loot/chests placed on the current map) live only in
 // this tree — they are not draggable, so the kind is not part of WorldDragKind.
-type Kind = WorldDragKind | 'mapobject';
+type Kind = WorldDragKind | 'mapobject' | 'token';
 
 interface TreeNode {
   kind: Kind;
@@ -24,9 +24,17 @@ interface TreeNode {
   /** A character this viewer has discovered but does not own: clicking it
    *  opens the public-facing sheet, never the private one. */
   notMine?: boolean;
+  /** For token nodes: where it stands and who runs it. */
+  tokenMapId?: string;
+  tokenCharacterId?: string | null;
+  /** A player runs this one — light-blue silhouette rather than DM grey. */
+  playerRun?: boolean;
+  /** For map nodes: a scene, and whether a details preview exists. */
+  isScene?: boolean;
+  hasPreview?: boolean;
 }
 
-const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦', counter: '▮' } as Record<string, string>;
+const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦', counter: '▮', token: '⬢' } as Record<string, string>;
 
 // Players have no dmGeometry; the selector must return this SAME array every
 // time, not a fresh `?? []` — a fresh array per call is the Zustand
@@ -35,15 +43,41 @@ const NO_LIGHTS: Light[] = [];
 // Same rule as NO_LIGHTS: the selector must return a STABLE reference when
 // there's no directory yet, or Zustand's getSnapshot loops forever.
 const NO_DIR_CHARS: DirectoryPayload['characters'] = [];
+const NO_DIR_MAPS: DirectoryPayload['maps'] = [];
+const NO_DIR_TOKENS: DirectoryPayload['tokens'] = [];
 
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
   locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
   folders: WorldFolder[], mapLights: Light[], mapId: string | null, allTokens: Record<string, Token>, mapObjects: MapObject[],
   allCounters: Counter[], directoryChars: DirectoryPayload['characters'],
+  directoryMaps: DirectoryPayload['maps'], directoryTokens: DirectoryPayload['tokens'],
 ): TreeNode[] {
   const out: TreeNode[] = [];
-  for (const m of maps) out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: 'map' });
+  const mapIds = new Set<string>();
+  for (const m of maps) {
+    mapIds.add(m.id);
+    out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: m.isScene ? 'scene' : 'map', isScene: m.isScene, hasPreview: true });
+  }
+  // Players never receive the map LIST (DM scaffolding), so the maps and
+  // scenes they have actually been to come from the directory instead.
+  for (const m of directoryMaps) {
+    if (mapIds.has(m.id)) continue;
+    mapIds.add(m.id);
+    out.push({
+      kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null,
+      sub: m.isScene ? 'scene' : 'map', isScene: m.isScene, hasPreview: m.hasPreview,
+    });
+  }
+  // Tokens nest under the map they stand on, exactly as loot and lights do.
+  for (const t of directoryTokens) {
+    if (!t.mapId || !mapIds.has(t.mapId)) continue;
+    out.push({
+      kind: 'token', id: t.id, name: t.name || 'Token', parentId: t.mapId,
+      sub: t.gm ? 'GM layer' : '',
+      tokenMapId: t.mapId, tokenCharacterId: t.characterId ?? null, playerRun: t.playerRun === true,
+    });
+  }
   for (const l of locations) out.push({ kind: 'location', id: l.id, name: l.name || 'Location', parentId: l.parentId ?? null, sub: l.kind });
   const charIds = new Set<string>();
   for (const c of characters) {
@@ -128,6 +162,8 @@ export function WorldTreePanel() {
   const mapObjectsById = useGameStore((s) => s.mapObjects);
   const allCounters = useGameStore((s) => s.allCounters);
   const directoryChars = useGameStore((s) => s.directory?.characters ?? NO_DIR_CHARS);
+  const directoryMaps = useGameStore((s) => s.directory?.maps ?? NO_DIR_MAPS);
+  const directoryTokens = useGameStore((s) => s.directory?.tokens ?? NO_DIR_TOKENS);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
@@ -146,8 +182,8 @@ export function WorldTreePanel() {
     [isDm, mapObjectsById],
   );
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters, directoryChars),
-    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList, allCounters, directoryChars],
+    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters, directoryChars, directoryMaps, directoryTokens),
+    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList, allCounters, directoryChars, directoryMaps, directoryTokens],
   );
   // Players only see a folder once something they can see lives under it —
   // an empty folder (or a chain of them) is DM scaffolding, not discovered
@@ -209,8 +245,26 @@ export function WorldTreePanel() {
       return;
     }
     if (node.kind === 'map') {
+      // A player clicking a map is asking ABOUT it, not asking to be taken
+      // there — yanking their camera off whatever they were watching would be
+      // the opposite of helpful. They get a details window instead.
       if (isDm) openWindow('mapEditor', node.id, {}, node.name || 'Edit map');
-      else intents.viewMap(node.id);
+      else openWindow('mapDetails', node.id, {}, node.name || 'Map');
+      return;
+    }
+    if (node.kind === 'token') {
+      // Open whichever sheet this viewer is entitled to...
+      const chId = node.tokenCharacterId;
+      if (chId) {
+        const mine = characters.some((c) => c.id === chId);
+        if (mine) useGameStore.getState().openSheet(chId);
+        else openWindow('publicSheet', chId, {}, node.name);
+      }
+      // ...and, when the token is on the map already on screen, select it
+      // there too, so the world tab and the table stay in step.
+      if (node.tokenMapId && node.tokenMapId === currentMapId) {
+        useGameStore.getState().selectToken(node.id, false);
+      }
       return;
     }
     if (node.kind === 'folder') {
@@ -410,7 +464,12 @@ export function WorldTreePanel() {
           >
             {kids.length ? (isOpen ? '▾' : '▸') : ''}
           </span>
-          <span className="wt-icon">{(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦' : ICON[node.kind]}</span>
+          <span
+            className={`wt-icon${node.kind === 'token' ? (node.playerRun ? ' wt-tok-player' : ' wt-tok-dm') : ''}`}
+            title={node.kind === 'token' ? (node.playerRun ? 'Run by a player' : 'Run by the DM') : undefined}
+          >
+            {(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦' : ICON[node.kind]}
+          </span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
           {/* Folders manage themselves from the details window (double/right-

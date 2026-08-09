@@ -654,6 +654,30 @@ button.link:hover { text-decoration: underline; }
 }
 .sc-chip.sc-rider { color: var(--accent); border-color: var(--accent); }
 .sc-notes { font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+
+/* World-tab token silhouettes: the party reads light blue, the DM's cast grey. */
+.wt-icon.wt-tok-player { color: #7fc4ff; }
+.wt-icon.wt-tok-dm { color: #8a93a6; }
+
+/* Map / Scene details window. */
+.map-details { padding: 8px 10px; max-width: 600px; }
+.md-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.md-head strong { font-size: 14px; }
+.md-here {
+  margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 7px;
+}
+.map-details-art {
+  display: block; width: 100%; height: auto; max-height: 60vh; object-fit: contain;
+  border-radius: 6px; background: #11131a;
+}
+.md-empty { margin: 12px 0; font-size: 12px; }
+.md-note { margin: 6px 0 0; font-size: 11px; }
+.md-roster { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.md-roster h5 { margin: 0 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+.md-tok { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); }
+.md-tok.player { color: #7fc4ff; border-color: #7fc4ff55; }
+.md-tok.dm { color: #8a93a6; }
 /* Equip toggle sits bottom-right; an equipped card goes green so what's
    actually in your hands reads at a glance. */
 .sc-equip {

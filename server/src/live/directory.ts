@@ -1,6 +1,6 @@
 import type { Server } from 'socket.io';
 import { S2C, type DirectoryPayload, type WorldVisState } from 'shared';
-import { campaigns, characters, maps, tokens, worldVis, type WorldVisKind } from '../db/repos.js';
+import { campaigns, characters, fog, maps, tokens, worldVis, type WorldVisKind } from '../db/repos.js';
 import { campaignSockets, sdata } from './hub.js';
 
 function distinct(values: string[]): string[] {
@@ -39,8 +39,9 @@ export function buildDirectory(campaignId: string, isDm: boolean, userId?: strin
       const ownedByPlayer = !!t.characterId && allCharacters.find((c) => c.id === t.characterId)?.ownerUserId != null;
       const tokVis = visOf('token', t.id, ownedByPlayer || disc.has(`token:${t.id}`));
       if (t.characterId && t.layer !== 'gm' && shows(tokVis)) charHasVisibleToken.add(t.characterId);
-      if (isDm) tokenList.push({ id: t.id, name: t.name, mapName: meta.name, gm: t.layer === 'gm', vis: tokVis });
-      else if (t.layer !== 'gm' && shows(tokVis)) tokenList.push({ id: t.id, name: t.name, mapName: meta.name, gm: false });
+      const common = { mapId: meta.id, characterId: t.characterId, playerRun: ownedByPlayer };
+      if (isDm) tokenList.push({ id: t.id, name: t.name, mapName: meta.name, gm: t.layer === 'gm', vis: tokVis, ...common });
+      else if (t.layer !== 'gm' && shows(tokVis)) tokenList.push({ id: t.id, name: t.name, mapName: meta.name, gm: false, ...common });
     }
   }
 
@@ -62,7 +63,21 @@ export function buildDirectory(campaignId: string, isDm: boolean, userId?: strin
 
   const shownMaps = campaignMaps.filter((m) => isDm || shows(visOf('map', m.id, disc.has(`map:${m.id}`))));
   return {
-    maps: shownMaps.map((m) => ({ id: m.id, name: m.name, ...(isDm ? { vis: visOf('map', m.id, disc.has(`map:${m.id}`)) } : {}) })),
+    maps: shownMaps.map((m) => {
+      const full = maps.byId(m.id);
+      // A preview is worth offering when there is art AND (for a player on a
+      // battlemap) some explored ground of their own to show.
+      const hasArt = !!full?.bgAssetId;
+      const hasPreview = hasArt && (isDm || full?.isScene === true
+        || (!!userId && fog.get(userId, m.id).length > 0));
+      return {
+        id: m.id, name: m.name,
+        parentId: m.parentId ?? null,
+        isScene: m.isScene === true,
+        hasPreview,
+        ...(isDm ? { vis: visOf('map', m.id, disc.has(`map:${m.id}`)) } : {}),
+      };
+    }),
     characters: shownChars.map((c) => {
       const owner = c.ownerUserId ? campaigns.members(campaignId).find((m) => m.userId === c.ownerUserId)?.username ?? null : null;
       const base = c.ownerUserId !== null || disc.has(`character:${c.id}`) || charHasVisibleToken.has(c.id);

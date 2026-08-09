@@ -5,6 +5,7 @@
 // rough tier for sorting.
 
 import { swade, dieSides } from '../systems/swade.js';
+import { CONTENT_SWADE } from './contentSwade.js';
 import { slug, type NpcEntry } from './npcTypes.js';
 import type { SheetData } from '../types.js';
 
@@ -38,6 +39,14 @@ interface Row {
   /** Racial traits granting a flat Toughness bonus (Size, mainly), as
    *  [name, bonus] — feeds the same derived-stat path Edges use. */
   traits?: [string, number][];
+  /** Edge names; their live modifier columns are pulled from the compendium
+   *  so a named Edge actually moves the sheet (Mr. Fix It's +2 Repair, …). */
+  edges?: string[];
+  /** [name, severity] — Hindrances are roleplay guidance plus any modifier
+   *  columns the compendium entry carries. */
+  hindrances?: [string, 'Minor' | 'Major'][];
+  /** Non-weapon kit: [name, notes]. Rollable weapons belong in `attacks`. */
+  gear?: [string, string][];
   hp: number;
   pace?: number;
   /** Comma list of damage types the engine halves (sheet `resist` field). */
@@ -175,6 +184,38 @@ const ROWS: Row[] = [
   { name: 'Spinosaurus', category: 'Dinosaurs', tier: 4, wild: false, attrs: ['d6', 'd6', 'd6', 'd12', 'd10'], skills: [['Athletics', 'd8'], ['Fighting', 'd8'], ['Notice', 'd8'], ['Stealth', 'd6']], attacks: [['Bite', 'Fighting', '1d12!+2+1d8!', 'piercing', 5, { ap: 1, save: 'strength', onSave: 'negate', condition: 'grappled' }], ['Claws', 'Fighting', '1d12!+2+1d6!', 'slashing', 10], ['Tail Sweep', 'Fighting', '1d12!+2+1d4!', 'bludgeoning', 15, { aoeShape: 'sphere', aoeHexes: 3 }]], armor: [['Thick Scales', 2, 0]], traits: [['Size +5', 4]], hp: 26, pace: 8, note: 'Large semi-aquatic predator: Size +5, Reach 2. Aquatic Hunter — swims at Pace 10, +2 Athletics in water, ignores shallow-water difficult ground. Fear (−1) roar; Low-Light Vision. A wounding Bite grapples unless the target wins a Strength roll. Strength d12+2 (baked into damage).' },
   { name: 'Triceratops Cub', category: 'Dinosaurs', tier: 0, wild: false, attrs: ['d6', 'd4', 'd6', 'd6', 'd6'], skills: [['Athletics', 'd6'], ['Fighting', 'd4'], ['Notice', 'd6']], attacks: [['Tiny Gore', 'Fighting', '1d6!+1d4!', 'piercing', 5], ['Headbutt', 'Fighting', '1d6!', 'bludgeoning', 5]], armor: [['Developing Frill', 1, 0]], hp: 6, pace: 7, note: 'Size +1; young herbivore, cannot charge. Skittish: when Shaken it runs its full Pace from the danger. A narrative creature more than a combat threat — the real danger is what happens if its mother hears it.' },
 
+  // ---------- Chrono Rivals ----------
+  // Time-meddling rivals for the dinosaur scenario: a fixer who talks to the
+  // machines and a loudmouth who talks to everyone else.
+  { name: 'Dimon', category: 'Chrono Rivals', tier: 3, wild: true,
+    attrs: ['d6', 'd10', 'd8', 'd4', 'd6'],
+    skills: [['Academics', 'd10'], ['Electronics', 'd10'], ['Hacking', 'd10'], ['Fighting', 'd4'], ['Notice', 'd6'], ['Repair', 'd10'], ['Research', 'd8'], ['Shooting', 'd6'], ['Weird Science', 'd8']],
+    attacks: [['Compact Energy Pistol', 'Shooting', '2d4!+1', 'energy', 72]],
+    edges: ['Mr. Fix It', 'Scholar', 'Common Bond'],
+    hindrances: [['Cautious', 'Minor'], ['Habit', 'Minor'], ['Curious', 'Major']],
+    gear: [
+      ['Remote Control Device', 'Action: pick a Robo-Dinosaur within 18″ and roll Electronics — success Distracts it, a raise leaves it Shaken, a critical failure gives it +2 Fighting until your next turn.'],
+      ['Drone Repair Kit', 'Action on an adjacent robot or ally: a Healing roll made with Repair. Clears Shaken on robots and mends one Wound on robotic targets.'],
+    ],
+    hp: 25, pace: 6,
+    note: 'Wild Card. “Do you realize what these dinosaurs will be worth after six million years of compound appreciation?” The pack’s technician: talks to machines, not people. Fighting d4 is what puts his Parry at 4 — he has no interest in using it.' },
+  { name: 'Simon', category: 'Chrono Rivals', tier: 3, wild: true,
+    attrs: ['d8', 'd6', 'd6', 'd6', 'd6'],
+    skills: [['Athletics', 'd8'], ['Common Knowledge', 'd6'], ['Fighting', 'd6'], ['Notice', 'd8'], ['Persuasion', 'd8'], ['Shooting', 'd8'], ['Stealth', 'd6'], ['Taunt', 'd10']],
+    attacks: [
+      ['Pulse Carbine', 'Shooting', '2d6!', 'energy', 108],
+      ['Chrono Grenade', 'Athletics', '0', '', 60, { aoeShape: 'sphere', aoeHexes: 1, condition: 'distracted' }],
+    ],
+    armor: [['Light Future Jacket', 1, 0]],
+    edges: ['Quick', 'Level Headed', 'Charismatic'],
+    hindrances: [['Overconfident', 'Major'], ['Young', 'Minor'], ['Arrogant', 'Minor']],
+    gear: [
+      ['Chrono Grenade (2)', 'Two uses. Small Blast Template of temporal distortion: no damage, but everyone inside is Distracted AND Vulnerable until the end of their next turn.'],
+      ['Emergency Chrono Beacon', 'One use. If Simon is Incapacitated he may teleport away — only if you want him to escape.'],
+    ],
+    hp: 25, pace: 6,
+    note: 'Wild Card. “Bro, imagine having ACTUAL dinosaurs and still losing.” Trash Talk: as an action he may Taunt; on a raise the target is Distracted AND Shaken. The Chrono Grenade attack applies Distracted automatically — add Vulnerable by hand.' },
+
   // ---------- Robo-Dinosaurs ----------
   // A step up from the organic line: more Armor, ranged options, and Construct
   // immunities. Tuned for a party that has a few Advances under its belt.
@@ -241,11 +282,32 @@ function sheetFor(r: Row): SheetData {
     })),
     armor: (r.armor ?? []).map(([name, armor, parryBonus]) => ({ name, armor, parryBonus, equipped: true, notes: '' })),
     ...(r.traits ? { racialTraits: r.traits.map(([name, toughnessBonus]) => ({ name, toughnessBonus, notes: '' })) } : {}),
+    ...(r.edges ? { edges: r.edges.map((name) => ({ name, ...traitColumnsFor(name) })) } : {}),
+    ...(r.hindrances ? { hindrances: r.hindrances.map(([name, severity]) => ({ name, severity, ...traitColumnsFor(name) })) } : {}),
+    ...(r.gear ? { inventory: r.gear.map(([name, notes]) => ({ name, qty: 1, weight: 0, equipped: true, notes })) } : {}),
     ...(r.resist ? { resist: r.resist } : {}),
     ...(r.immune ? { immune: r.immune } : {}),
     notes: r.note ?? '',
   });
   return sheet;
+}
+
+/** An Edge/Hindrance's live modifier columns, looked up by name in the
+ *  compendium — one source of truth for what a named trait actually does.
+ *  Anything without a mechanical hook still gets the right column shape. */
+function traitColumnsFor(name: string): SheetData {
+  const entry = CONTENT_SWADE.find(
+    (e) => (e.kind === 'edge' || e.kind === 'hindrance') && e.name.toLowerCase() === name.toLowerCase(),
+  );
+  const t = entry?.trait;
+  return {
+    bonusSkill: t?.bonusSkill ?? '',
+    bonusAmt: t?.bonusAmt ?? 0,
+    parryBonus: t?.parryBonus ?? 0,
+    toughnessBonus: t?.toughnessBonus ?? 0,
+    paceBonus: t?.paceBonus ?? 0,
+    notes: entry?.subtitle ?? '',
+  };
 }
 
 function parryOf(r: Row): number {

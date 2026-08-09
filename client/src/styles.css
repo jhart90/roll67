@@ -660,7 +660,16 @@ button.link:hover { text-decoration: underline; }
 .wt-icon.wt-tok-dm { color: #8a93a6; }
 
 /* Map / Scene details window. */
-.map-details { padding: 8px 10px; max-width: 600px; }
+/* A docked window body supplies its own panel surface — the frame around it
+   is only a title bar, so without this the content floats over the map. */
+.map-details {
+  padding: 8px 10px;
+  min-width: 320px; max-width: 600px;
+  background: var(--panel);
+  border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+}
 .md-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
 .md-head strong { font-size: 14px; }
 .md-here {

@@ -41,7 +41,9 @@ export function MapDetailsWindow({ mapId }: { mapId: string }) {
     return () => { dead = true; if (url) URL.revokeObjectURL(url); };
   }, [mapId, wantArt]);
 
-  if (!entry) return <p className="dim" style={{ margin: 10 }}>You don’t know that place.</p>;
+  // Same surface as the loaded state — an early return that skips .map-details
+  // would render bare over the map.
+  if (!entry) return <div className="map-details"><p className="dim md-empty">You don’t know that place.</p></div>;
   const isScene = entry.isScene === true;
   const here = tokens.filter((t) => t.mapId === mapId);
 

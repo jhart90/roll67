@@ -66,13 +66,28 @@ export function buildDirectory(campaignId: string, isDm: boolean, userId?: strin
     characters: shownChars.map((c) => {
       const owner = c.ownerUserId ? campaigns.members(campaignId).find((m) => m.userId === c.ownerUserId)?.username ?? null : null;
       const base = c.ownerUserId !== null || disc.has(`character:${c.id}`) || charHasVisibleToken.has(c.id);
-      return { id: c.id, name: c.name, owner, system: c.system, ...(isDm ? { vis: visOf('character', c.id, base) } : {}) };
+      return {
+        id: c.id, name: c.name, owner, system: c.system,
+        parentId: c.parentId ?? null, ownerUserId: c.ownerUserId,
+        ...(isDm ? { vis: visOf('character', c.id, base) } : {}),
+      };
     }),
     tokens: tokenList,
     weapons: distinct(weapons),
     spells: distinct(spells),
     items: distinct(items),
   };
+}
+
+/**
+ * The world tab's FOLDERS have to refresh alongside the directory: seeing a
+ * new character can reveal the folder the DM filed them under, and that list
+ * is computed by the world handler. Importing it here would be a cycle
+ * (world -> directory -> world), so world.ts registers it on startup.
+ */
+let folderBroadcaster: ((io: Server, campaignId: string) => void) | null = null;
+export function setFolderBroadcaster(fn: (io: Server, campaignId: string) => void): void {
+  folderBroadcaster = fn;
 }
 
 /** Send each connected member their (role-filtered) directory. */
@@ -88,4 +103,6 @@ export function broadcastDirectory(io: Server, campaignId: string): void {
     if (!view) { view = buildDirectory(campaignId, false, d.userId); perUser.set(d.userId, view); }
     socket.emit(S2C.DIRECTORY, view);
   }
+  // Whatever the players now know may have opened a folder to them.
+  folderBroadcaster?.(io, campaignId);
 }

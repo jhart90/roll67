@@ -936,7 +936,14 @@ export interface SfxPlayPayload { url: string; label: string }
 export type WorldVisState = 'seen' | 'unseen' | 'reveal' | 'hide';
 export interface DirectoryPayload {
   maps: Array<{ id: string; name: string; vis?: WorldVisState }>;
-  characters: Array<{ id: string; name: string; owner: string | null; system: GameSystem; vis?: WorldVisState }>;
+  characters: Array<{
+    id: string; name: string; owner: string | null; system: GameSystem; vis?: WorldVisState;
+    /** Where the DM filed this character in the world tree. */
+    parentId?: string | null;
+    /** Null for a DM-run NPC. Lets a viewer tell "someone's PC" from "an NPC"
+     *  without shipping the sheet. */
+    ownerUserId?: string | null;
+  }>;
   tokens: Array<{ id: string; name: string; mapName: string; gm: boolean; vis?: WorldVisState }>;
   weapons: string[];
   spells: string[];

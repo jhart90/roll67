@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Character, Counter, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
+import type { Character, Counter, DirectoryPayload, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
@@ -21,6 +21,9 @@ interface TreeNode {
   lightTokenId?: string;
   /** For mapobject nodes: the placed object's own kind (item/chest). */
   mapObjectKind?: 'item' | 'chest' | 'shop';
+  /** A character this viewer has discovered but does not own: clicking it
+   *  opens the public-facing sheet, never the private one. */
+  notMine?: boolean;
 }
 
 const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦', counter: '▮' } as Record<string, string>;
@@ -29,17 +32,39 @@ const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: 
 // time, not a fresh `?? []` — a fresh array per call is the Zustand
 // getSnapshot infinite-loop crash (blank screen for every non-DM member).
 const NO_LIGHTS: Light[] = [];
+// Same rule as NO_LIGHTS: the selector must return a STABLE reference when
+// there's no directory yet, or Zustand's getSnapshot loops forever.
+const NO_DIR_CHARS: DirectoryPayload['characters'] = [];
 
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
   locations: LocationNode[], characters: Character[], shops: Shop[], tables: RollableTable[], handouts: Handout[], maps: MapMeta[],
   folders: WorldFolder[], mapLights: Light[], mapId: string | null, allTokens: Record<string, Token>, mapObjects: MapObject[],
-  allCounters: Counter[],
+  allCounters: Counter[], directoryChars: DirectoryPayload['characters'],
 ): TreeNode[] {
   const out: TreeNode[] = [];
   for (const m of maps) out.push({ kind: 'map', id: m.id, name: m.name || 'Map', parentId: m.parentId ?? null, sub: 'map' });
   for (const l of locations) out.push({ kind: 'location', id: l.id, name: l.name || 'Location', parentId: l.parentId ?? null, sub: l.kind });
-  for (const c of characters) out.push({ kind: 'character', id: c.id, name: c.name || 'Character', parentId: c.parentId ?? null, sub: c.ownerUserId ? '' : 'NPC' });
+  const charIds = new Set<string>();
+  for (const c of characters) {
+    charIds.add(c.id);
+    out.push({ kind: 'character', id: c.id, name: c.name || 'Character', parentId: c.parentId ?? null, sub: c.ownerUserId ? '' : 'NPC' });
+  }
+  // A player only ever receives the SHEETS they own, so everyone else's
+  // character would be missing from the tree even after their token has been
+  // stood in plain sight. The directory is the per-player record of what this
+  // viewer has actually discovered — fold those in as nodes (name and nesting
+  // only; the sheet stays server-side behind the public-sheet view).
+  for (const c of directoryChars) {
+    if (charIds.has(c.id)) continue;
+    charIds.add(c.id);
+    out.push({
+      kind: 'character', id: c.id, name: c.name || 'Character',
+      parentId: c.parentId ?? null,
+      sub: c.ownerUserId ? (c.owner ?? '') : 'NPC',
+      notMine: true,
+    });
+  }
   for (const s of shops) out.push({ kind: 'shop', id: s.id, name: s.name || 'Shop', parentId: s.parentId ?? null, sub: `${s.items.length} items` });
   for (const t of tables) out.push({ kind: 'table', id: t.id, name: t.name || 'Table', parentId: t.parentId ?? null, sub: `${t.items.length}` });
   for (const h of handouts) out.push({ kind: 'handout', id: h.id, name: h.title || 'Handout', parentId: h.parentId ?? null, sub: '' });
@@ -102,6 +127,7 @@ export function WorldTreePanel() {
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
   const mapObjectsById = useGameStore((s) => s.mapObjects);
   const allCounters = useGameStore((s) => s.allCounters);
+  const directoryChars = useGameStore((s) => s.directory?.characters ?? NO_DIR_CHARS);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
@@ -120,8 +146,8 @@ export function WorldTreePanel() {
     [isDm, mapObjectsById],
   );
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters),
-    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList, allCounters],
+    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters, directoryChars),
+    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList, allCounters, directoryChars],
   );
   // Players only see a folder once something they can see lives under it —
   // an empty folder (or a chain of them) is DM scaffolding, not discovered
@@ -175,7 +201,13 @@ export function WorldTreePanel() {
       if (c) intents.viewMap(c.mapId);
       return;
     }
-    if (node.kind === 'character') { useGameStore.getState().openSheet(node.id); return; }
+    if (node.kind === 'character') {
+      // Someone else's character: the public-facing view, the same one a
+      // right-click on their token gives. Never the private sheet.
+      if (node.notMine) openWindow('publicSheet', node.id, {}, node.name);
+      else useGameStore.getState().openSheet(node.id);
+      return;
+    }
     if (node.kind === 'map') {
       if (isDm) openWindow('mapEditor', node.id, {}, node.name || 'Edit map');
       else intents.viewMap(node.id);

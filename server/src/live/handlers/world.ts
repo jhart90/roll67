@@ -11,7 +11,7 @@ import {
 import { campaigns, characters, chat, customItems, handouts, locations, mapObjects, maps, rollableTables, shops, tokens, worldFolders, worldSort, worldVis } from '../../db/repos.js';
 import { db } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { broadcastDirectory } from '../directory.js';
+import { broadcastDirectory, setFolderBroadcaster } from '../directory.js';
 import { mapObjectsVisibleTo, socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
 import { centerHex, hashStr, tokenLookFor, TOKEN_COLORS } from './tokens.js';
@@ -137,6 +137,10 @@ export function broadcastWorldFolders(io: Server, campaignId: string): void {
     });
   }
 }
+
+// A fresh discovery refreshes the directory; folders must follow it, since
+// meeting a character can reveal the folder they are filed under.
+setFolderBroadcaster(broadcastWorldFolders);
 
 export function registerWorldHandlers(io: Server, socket: Socket): void {
   // ----- shops -----

@@ -1107,6 +1107,20 @@ export function wireSocket(): void {
     useGameStore.setState({ worldSort: orders });
   });
 
+  // The DM removed us from this campaign: back to the campaign list.
+  socket.on(S2C.BOOTED, ({ campaignId }: { campaignId: string }) => {
+    const s = useGameStore.getState();
+    if (s.campaign?.id !== campaignId) return;
+    s.leave();
+    useGameStore.setState({ errorToast: 'You were removed from the campaign by the DM.' });
+  });
+
+  // The DM pushed the character-creator wizard to this player's screen.
+  socket.on(S2C.OPEN_CREATOR, () => {
+    const s = useGameStore.getState();
+    if (s.you?.role === 'player' && s.campaign) s.setShowCharacterCreator(true);
+  });
+
   socket.on(S2C.CUSTOM_NPCS, ({ npcs }: { npcs: CustomNpcView[] }) => {
     useGameStore.setState({ customNpcs: npcs });
   });
@@ -1475,6 +1489,10 @@ export const intents = {
     socket.emit(C2S.SHAKEN_ROLL, { characterId });
     useGameStore.setState({ shakenPrompt: null });
   },
+  /** DM: remove a player from the campaign (characters revert to DM control). */
+  bootPlayer: (userId: string) => socket.emit(C2S.BOOT_PLAYER, { userId }),
+  /** DM: open the character-creator wizard on a player's screen. */
+  sendCreator: (userId: string) => socket.emit(C2S.SEND_CREATOR, { userId }),
   /** SWADE: spend the whole turn Aiming — pays out on next turn's first shot. */
   combatAim: (characterId: string, tokenId: string) => socket.emit(C2S.COMBAT_AIM, { characterId, tokenId }),
   /** Make the Stunned-recovery Vigor roll the prompt asked for. */

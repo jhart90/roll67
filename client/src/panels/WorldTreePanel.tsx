@@ -431,11 +431,7 @@ export function WorldTreePanel() {
           <button className="btn btn-sm" onClick={() => openWindow('randomizeNpc', 'main', {}, 'Randomize an NPC')}>🎲 Random NPC</button>
         </div>
       )}
-      {!isDm && campaign && (
-        <div className="wt-toolbar">
-          <button className="btn btn-sm" onClick={() => useGameStore.getState().setShowCharacterCreator(true)}>🧙 Create a Character</button>
-        </div>
-      )}
+      {/* Players get the character creator only when the DM sends it to them. */}
 
       <div
         className={`wt-tree ${dropTarget === 'root' ? 'drop-on' : ''}`}

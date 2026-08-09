@@ -17,6 +17,10 @@ export const C2S = {
   // session
   JOIN_CAMPAIGN: 'joinCampaign',
   LEAVE_CAMPAIGN: 'leaveCampaign',
+  /** DM: remove a player from the campaign (their characters revert to DM control). */
+  BOOT_PLAYER: 'bootPlayer',
+  /** DM: pop the character-creator wizard open on a player's screen. */
+  SEND_CREATOR: 'sendCreator',
   SWITCH_ACTIVE_MAP: 'switchActiveMap',
   VIEW_MAP: 'viewMap',
   ASSIGN_PLAYER_MAP: 'assignPlayerMap',
@@ -702,6 +706,10 @@ export const S2C = {
   HANDOUTS: 'handouts',
   /** Manual world-tree sibling ordering: "kind:id" → rank. */
   WORLD_SORT: 'worldSort',
+  /** You were removed from this campaign by the DM. */
+  BOOTED: 'booted',
+  /** The DM asked your client to open the character-creator wizard. */
+  OPEN_CREATOR: 'openCreator',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
   CHAT_UPDATED: 'chatUpdated',
@@ -950,6 +958,8 @@ export interface WorldReorderPayload { keys: string[] }
 export interface WorldSortPayload { orders: Record<string, number> }
 export interface StunRollPayload { characterId: string }
 export interface CombatAimPayload { characterId: string; tokenId: string }
+export interface BootPlayerPayload { userId: string }
+export interface SendCreatorPayload { userId: string }
 export interface StunPromptPayload { characterId: string; name: string }
 export interface IncapRollPayload { characterId: string }
 export interface IncapDeathPayload { characterId: string }

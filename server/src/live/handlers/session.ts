@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
-  type JoinCampaignPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
+  type BootPlayerPayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -11,7 +11,7 @@ import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings,
   handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders, worldSort,
 } from '../../db/repos.js';
-import { campaignRoom, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
+import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
 import { buildMapState, dropVisionCache } from '../visionService.js';
 import { emitCustomNpcs } from './characters.js';
 import { initiativeViewFor } from './combat.js';
@@ -226,6 +226,50 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     d.viewingAs = undefined;
     broadcastPresence(io, campaignId);
   }, 'LEAVE_CAMPAIGN'));
+
+  // DM removes a player: their characters revert to DM control, their live
+  // sockets are kicked out of the campaign rooms, and their membership row is
+  // deleted — rejoining takes the invite code again.
+  socket.on(C2S.BOOT_PLAYER, safe(socket, ({ userId }: BootPlayerPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId || d.role !== 'dm') { emitError(socket, 'Only the DM can remove players.'); return; }
+    const campaignId = d.campaignId;
+    if (userId === d.userId) return;
+    if (campaigns.memberRole(campaignId, userId) !== 'player') { emitError(socket, 'They are not a player in this campaign.'); return; }
+    const member = campaigns.members(campaignId).find((m) => m.userId === userId);
+    for (const c of characters.forCampaign(campaignId)) {
+      if (c.ownerUserId !== userId) continue;
+      characters.setOwner(c.id, null);
+      const updated = characters.byId(c.id)!;
+      io.to(dmRoom(campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
+    }
+    campaigns.removeMember(campaignId, userId);
+    for (const s of campaignSockets(io, campaignId)) {
+      const sd = sdata(s);
+      if (sd.userId !== userId) continue;
+      s.leave(campaignRoom(campaignId));
+      s.leave(dmRoom(campaignId));
+      sd.campaignId = undefined;
+      sd.role = undefined;
+      sd.viewingAs = undefined;
+    }
+    io.to(userRoom(userId)).emit(S2C.BOOTED, { campaignId });
+    const msg = chat.add(campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `${member?.username ?? 'A player'} was removed from the campaign — their characters are back under DM control.`,
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+    broadcastPresence(io, campaignId);
+  }, 'BOOT_PLAYER'));
+
+  // DM pops the character-creator wizard open on one player's screen.
+  socket.on(C2S.SEND_CREATOR, safe(socket, ({ userId }: SendCreatorPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId || d.role !== 'dm') return;
+    if (campaigns.memberRole(d.campaignId, userId) !== 'player') return;
+    io.to(userRoom(userId)).emit(S2C.OPEN_CREATOR, {});
+  }, 'SEND_CREATOR'));
 
   socket.on(C2S.SWITCH_ACTIVE_MAP, safe(socket, ({ mapId }: SwitchActiveMapPayload) => {
     const d = sdata(socket);

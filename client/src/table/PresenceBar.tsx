@@ -72,12 +72,14 @@ export function PresenceBar() {
   const campaign = useGameStore((s) => s.campaign);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [bootArmed, setBootArmed] = useState<string | null>(null);
 
   useEffect(() => {
     if (!menuFor && !profileOpen) return;
     const close = () => {
       setMenuFor(null);
       setProfileOpen(false);
+      setBootArmed(null);
     };
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
@@ -135,6 +137,36 @@ export function PresenceBar() {
             )}
             {!isYou && menuFor === m.userId && (
               <span className="presence-menu" onPointerDown={(e) => e.stopPropagation()}>
+                <button
+                  className="link"
+                  title="Open the guided character-creator wizard on this player's screen"
+                  onClick={() => {
+                    intents.sendCreator(m.userId);
+                    setMenuFor(null);
+                  }}
+                >
+                  🧙 Send character creator
+                </button>
+                {bootArmed === m.userId ? (
+                  <button
+                    className="link danger"
+                    onClick={() => {
+                      intents.bootPlayer(m.userId);
+                      setBootArmed(null);
+                      setMenuFor(null);
+                    }}
+                  >
+                    ⛔ Really remove {m.username}?
+                  </button>
+                ) : (
+                  <button
+                    className="link danger"
+                    title="Remove this player from the campaign: their characters revert to DM control and they must re-use the invite code to return"
+                    onClick={() => setBootArmed(m.userId)}
+                  >
+                    ⛔ Remove from campaign…
+                  </button>
+                )}
                 <span className="presence-menu-title">Move {m.username} to…</span>
                 <button
                   className="link"

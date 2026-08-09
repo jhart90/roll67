@@ -177,6 +177,9 @@ export const campaigns = {
     stmt('INSERT OR IGNORE INTO campaign_members (campaign_id, user_id, role) VALUES (?, ?, ?)')
       .run(campaignId, userId, role);
   },
+  removeMember(campaignId: string, userId: string): void {
+    stmt('DELETE FROM campaign_members WHERE campaign_id = ? AND user_id = ?').run(campaignId, userId);
+  },
   memberRole(campaignId: string, userId: string): Role | undefined {
     const row = stmt('SELECT role FROM campaign_members WHERE campaign_id = ? AND user_id = ?')
       .get(campaignId, userId) as { role: Role } | undefined;

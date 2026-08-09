@@ -99,7 +99,6 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const setDockTab = useGameStore((s) => s.setDockTab);
   const turnTint = useTurnTint();
   const showCharacterCreator = useGameStore((s) => s.showCharacterCreator);
-  const characterCreatorPrompted = useGameStore((s) => s.characterCreatorPrompted);
 
   useEffect(() => {
     wireSocket();
@@ -107,19 +106,9 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
     return () => useGameStore.getState().leave();
   }, [campaignId]);
 
-  // First-time-onboarding: a player who joins a campaign with no character
-  // of their own yet gets that system's guided creator automatically. Fires
-  // once per join (characterCreatorPrompted guards it) — dismissing without
-  // finishing just means it won't auto-reopen until their next fresh join,
-  // but the World tab's "Create Character" button always relaunches it.
-  useEffect(() => {
-    if (characterCreatorPrompted || !you || !campaign) return;
-    if (you.role !== 'player') return;
-    useGameStore.getState().setCharacterCreatorPrompted(true);
-    if (!characters.some((c) => c.ownerUserId === you.userId)) {
-      useGameStore.getState().setShowCharacterCreator(true);
-    }
-  }, [characterCreatorPrompted, you, campaign, characters]);
+  // The creator wizard opens for players only when the DM deploys it to them
+  // (right-click their presence pill → "Send character creator") — no
+  // auto-open on join, no player-side launch button.
 
   // Changing a style control restyles the selected label as you go; with
   // nothing selected it just arms the next label you place.

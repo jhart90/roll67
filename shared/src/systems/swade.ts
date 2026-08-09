@@ -192,6 +192,36 @@ export function swadeToughness(sheet: SheetData): number {
  * Notice), and Hindrances (Clueless's −2 Common Knowledge). Gear only counts
  * while equipped; Edges and Hindrances are always on.
  */
+/**
+ * Encumbrance. A character carries their Strength die's listed weight for
+ * free: d4 20 lbs, d6 40, d8 60, d10 80, d12 100, and +20 for every step past
+ * d12. Past that they are Encumbered; four times the listed weight is the
+ * absolute most they can lift or carry at all.
+ */
+export function swadeCarryCapacity(sheet: SheetData): number {
+  const raw = str(sheet, 'strength', 'd6');
+  const sides = dieSides(raw) || 6;
+  // "Each +1" on the table: a d12+2 carries 20 lbs more per step.
+  const plus = Number(/\+\s*(\d+)/.exec(raw)?.[1] ?? 0);
+  const base = Math.max(0, (sides / 2 - 1)) * 20; // d4→20, d6→40, d8→60, d10→80, d12→100
+  return base + plus * 20;
+}
+
+/** Everything on the sheet that has weight, times how many are carried. */
+export function swadeWeightCarried(sheet: SheetData): number {
+  const sum = (list: SheetData[]) => list.reduce((n, r) => {
+    const qty = Math.max(0, num(r, 'qty', 1) || 1);
+    return n + num(r, 'weight', 0) * qty;
+  }, 0);
+  const total = sum(rows(sheet, 'inventory')) + sum(rows(sheet, 'attacks')) + sum(rows(sheet, 'armor'));
+  return Math.round(total * 10) / 10;
+}
+
+/** Carrying more than the free allowance. */
+export function swadeEncumbered(sheet: SheetData): boolean {
+  return swadeWeightCarried(sheet) > swadeCarryCapacity(sheet);
+}
+
 export function gearTraitBonus(sheet: SheetData, traitName: string): number {
   const want = traitName.trim().toLowerCase();
   if (!want) return 0;
@@ -217,8 +247,9 @@ function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number;
 
 /** Pace after Edge/Hindrance modifiers (Fleet-Footed +2, Slow −2). */
 export function swadePace(sheet: SheetData): number {
-  // Wounded: −1 Pace per Wound level, but never below 1.
-  return Math.max(1, num(sheet, 'pace', 6) + traitLineBonuses(sheet).pace - num(sheet, 'wounds', 0));
+  // Wounded: −1 Pace per Wound level. Encumbered: −2 more. Never below 1.
+  const encumbered = swadeWeightCarried(sheet) > swadeCarryCapacity(sheet) ? 2 : 0;
+  return Math.max(1, num(sheet, 'pace', 6) + traitLineBonuses(sheet).pace - num(sheet, 'wounds', 0) - encumbered);
 }
 
 /** A bystander that matters for Gang Up: whose side, where, and can they fight? */
@@ -283,6 +314,9 @@ const coreTab: SheetTab = {
         { key: 'toughnessRanged', label: 'Toughness vs ranged' },
         { key: 'pace', label: 'Pace' },
         { key: 'traitPenalty', label: 'Wound/Fatigue penalty' },
+        { key: 'weightCarried', label: 'Weight carried' },
+        { key: 'weightCapacity', label: 'Weight capacity' },
+        { key: 'encumbrance', label: 'Load' },
       ],
     },
     { kind: 'fields', id: 'senses', title: 'Senses & Vision', fields: sensesFields },
@@ -361,6 +395,7 @@ const gearTab: SheetTab = {
         { id: 'maxAmmo', label: 'Mag', type: 'number', width: 'sixth', default: 0 },
         { id: 'caliber', label: 'Caliber', type: 'text', width: 'sixth' },
         { id: 'rof', label: 'RoF', type: 'number', width: 'sixth', default: 1 },
+        { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -372,6 +407,7 @@ const gearTab: SheetTab = {
         { id: 'parryBonus', label: 'Parry (+shield)', type: 'number', width: 'sixth', default: 0 },
         { id: 'rangedArmor', label: 'Armor vs ranged', type: 'number', width: 'sixth', default: 0 },
         { id: 'equipped', label: 'Worn', type: 'checkbox', width: 'sixth' },
+        { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
       ],
     },
@@ -496,6 +532,12 @@ export const swade: SystemSchema = {
     out.ac = swadeParry(sheet);
     const penalty = woundPenalty(sheet);
     out.traitPenalty = penalty !== 0 ? fmtMod(penalty) : '—';
+    const carried = swadeWeightCarried(sheet);
+    const capacity = swadeCarryCapacity(sheet);
+    out.weightCarried = `${carried} lb`;
+    out.weightCapacity = `${capacity} lb`;
+    out.encumbrance = carried > capacity * 4 ? 'Over max load'
+      : carried > capacity ? 'Encumbered' : 'Unencumbered';
     return out;
   },
 

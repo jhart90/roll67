@@ -1,5 +1,7 @@
 import type { AoeShape, GameSystem, SheetData } from '../types.js';
 
+import { weightFor } from './weights.js';
+
 export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power' | 'edge' | 'hindrance' | 'racialTrait';
 
 /** SWADE Edges and Hindrances: a character trait with live sheet modifiers. */
@@ -308,13 +310,17 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           name: entry.name, skill: melee ? 'Fighting' : (thrown ? 'Athletics' : 'Shooting'), damage,
           dtype: w.damageType, range: melee ? 5 : weaponRangeFtSwn(w.props),
           ap, parryBonus, wielded: false,
-          ...(mag ? { ammo: Number(mag[1]), maxAmmo: Number(mag[1]) } : {}),
+          // A grenade is one throw, not a magazine: it arrives with a single
+          // use so the Actions pane counts it down and greys out when spent.
+          ...(mag ? { ammo: Number(mag[1]), maxAmmo: Number(mag[1]) }
+            : thrown ? { ammo: 1, maxAmmo: 1 } : {}),
           ...(rofMatch ? { rof: Number(rofMatch[1]) } : {}),
           ...(caliberMatch ? { caliber: caliberMatch[1].toLowerCase() } : {}),
           ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
           ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),
           ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
           ...(thrown ? { thrown: true } : {}),
+          weight: weightFor(entry.name, 'weapon', entry.gear?.weight),
           notes: propText,
         },
         label: `${entry.name} added to weapons`,
@@ -443,7 +449,8 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           armor: shield ? 0 : entry.armor.baseAc,
           parryBonus: shield ? entry.armor.baseAc : 0,
           rangedArmor: entry.armor.rangedArmor ?? 0,
-          equipped: false, notes: entry.armor.notes ?? '',
+          equipped: false, weight: weightFor(entry.name, 'armor', entry.gear?.weight),
+          notes: entry.armor.notes ?? '',
         },
         label: `${entry.name} added to armor`,
       };
@@ -567,7 +574,8 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       return {
         listId: 'inventory',
         row: {
-          name: entry.name, qty: entry.gear?.qty ?? 1, weight: entry.gear?.weight ?? 0, ...usable,
+          name: entry.name, qty: entry.gear?.qty ?? 1,
+          weight: weightFor(entry.name, entry.kind, entry.gear?.weight), ...usable,
           equipped: false,
           bonusSkill: tb?.trait ?? '', bonusAmt: tb?.amount ?? 0,
           ...(entry.gear?.caliber ? { caliber: entry.gear.caliber } : {}),

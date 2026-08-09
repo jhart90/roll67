@@ -115,6 +115,7 @@ export const CONDITIONS: ConditionDef[] = [
   { id: 'vulnerable', label: 'Vulnerable', icon: '🎯', systems: ['swade'], grantsAttackAdv: true, desc: 'Actions against the character are made at +2 (does not stack with The Drop). Goes away at the end of the character’s next turn if not caused by another condition.' },
   { id: 'entangled', label: 'Entangled', icon: '🕸️', systems: ['swade'], selfAttackDis: true, blocksMove: true, desc: 'Distracted and can’t move until free.' },
   { id: 'bound', label: 'Bound', icon: '⛓️', systems: ['swade'], grantsAttackAdv: true, selfAttackDis: true, incapacitated: true, blocksMove: true, desc: 'Vulnerable, Distracted, and cannot move or take physical actions other than trying to break free.' },
+  { id: 'encumbered', label: 'Encumbered', icon: '🎒', systems: ['swade'], desc: 'Carrying more than your Strength allows: −2 to Pace (minimum 1), running, Agility and all linked skills, and to Vigor rolls made to resist Fatigue. Set automatically from the weight on your sheet.' },
   { id: 'bleeding', label: 'Bleeding Out', icon: '🩸', systems: ['swade'], incapacitated: true, blocksMove: true, desc: 'Dying: at the start of the character’s turn make a Vigor roll — die on a failure, hang on with a success, stop Bleeding Out on a raise.' },
 ];
 

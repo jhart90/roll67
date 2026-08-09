@@ -1556,13 +1556,24 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // be centered. Self-origin shapes (cone/line/cube) always anchor on the
     // caster — rangeFt is 0 for those, and `aimHex` is just a direction, so
     // it's never itself distance-limited (the shape's own sizeFt is).
-    if (action.rangeFt > 0) {
-      const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
-      const rangeHexes = Math.max(1, Math.ceil(action.rangeFt / feetPerHex));
-      if (hexDistance({ q: src.q, r: src.r }, p.aimHex) > rangeHexes) {
-        emitError(socket, 'That is out of range.');
-        return;
-      }
+    // A SWADE throw reaches its full band spread (Short / Medium / Long),
+    // exactly as the shooter's ruler promises — the old check stopped at the
+    // listed Short range, so a grenade could only go a third as far as it
+    // should. `throwRead` is reused below for the throwing roll's penalty.
+    const feetPerHexA = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
+    const aimDist = hexDistance({ q: src.q, r: src.r }, p.aimHex);
+    const shortHexesA = action.rangeFt > 0 ? Math.max(1, Math.ceil(action.rangeFt / feetPerHexA)) : 0;
+    const banded = actor.system === 'swade' && action.rangeFt > 0;
+    const throwRead = banded
+      ? swadeRangeBand(aimDist, shortHexesA, { aiming: p.adv === 'adv', thrown: action.thrown === true })
+      : null;
+    if (banded && throwRead && !throwRead.reachable) {
+      emitError(socket, `That is out of range — ${aimDist} tiles (${aimDist * feetPerHexA} ft). ${throwRead.reason ?? ''}`.trim());
+      return;
+    }
+    if (!banded && action.rangeFt > 0 && aimDist > shortHexesA) {
+      emitError(socket, 'That is out of range.');
+      return;
     }
     // Line of sight: a point-target shape (sphere/cylinder) can't be centered
     // somewhere the caster can't see, and no shape can reach a token hidden
@@ -1612,20 +1623,26 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // SWADE thrown/fired templates can go wide: Athletics (thrown) or
     // Shooting vs 4 — on a failure the template deviates 1d6″ (thrown) or
     // 2d6″ (fired) in a random direction before it lands.
-    if (actor.system === 'swade' && action.source === 'attack' && !action.suppressive && usableAmount(action.amountExpr)) {
+    // Fires for EVERY thrown/fired template, not just damaging ones: a Stun
+    // Grenade deals no damage, and its victims must not be made to roll Vigor
+    // for a grenade that was never landed in the first place.
+    if (actor.system === 'swade' && action.source === 'attack' && !action.suppressive) {
       const row = rows(actor.sheet, 'attacks')[action.index];
-      const thrown = /thrown/i.test(str(row ?? {}, 'notes', ''));
+      const thrown = action.thrown === true || /thrown/i.test(str(row ?? {}, 'notes', ''));
       const skillName = thrown ? 'Athletics' : 'Shooting';
-      const br = roll(traitExpr(actor.sheet, skillDie(actor.sheet, skillName)));
+      // The same range penalty the shooter's ruler showed while aiming.
+      const rangeMod = throwRead?.penalty ?? 0;
+      const br = roll(traitExpr(actor.sheet, skillDie(actor.sheet, skillName), rangeMod));
       const onTarget = br.total >= 4;
-      let text = `${actor.name} lets ${action.label} fly — ${skillName} roll: on target`;
+      const bandTag = rangeMod ? ` (${rangeMod} ${throwRead?.label ?? 'range'})` : '';
+      let text = `${actor.name} lets ${action.label} fly — ${skillName} roll${bandTag}: on target`;
       if (!onTarget) {
         const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
         const devDist = roll(thrown ? '1d6' : '2d6').total;
         const dir = DIRS[roll('1d6').total - 1];
         const moved = { q: p.aimHex.q + dir[0] * devDist, r: p.aimHex.r + dir[1] * devDist };
         if (inBounds(moved, map.grid)) p.aimHex = moved;
-        text = `${actor.name} lets ${action.label} fly — ${skillName} roll fails: the ${thrown ? 'throw' : 'shot'} goes wide, deviating ${devDist}″!`;
+        text = `${actor.name} lets ${action.label} fly — ${skillName} roll${bandTag} fails: the ${thrown ? 'throw' : 'shot'} goes wide, deviating ${devDist}″!`;
       }
       const devMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',

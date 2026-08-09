@@ -638,6 +638,12 @@ export interface MapObject {
   shopId: string | null;
   /** How many hexes away a player must be to interact (default 1). */
   interactRange: number;
+  /** A locked chest refuses to open for a player without the key. Same rule
+   *  as a locked door: possession of a matching inventory item is enough, the
+   *  key is not consumed, and the DM can always open it. */
+  locked?: boolean;
+  /** Inventory item name that unlocks it — "Key" is the generic. */
+  keyName?: string | null;
 }
 
 export interface PlaceMapObjectPayload {
@@ -650,6 +656,8 @@ export interface PlaceMapObjectPayload {
   worldFolderId?: string;
   shopId?: string;
   interactRange?: number;
+  locked?: boolean;
+  keyName?: string | null;
 }
 
 export interface UpdateMapObjectPayload {
@@ -662,6 +670,8 @@ export interface UpdateMapObjectPayload {
     r?: number;
     items?: LootItem[];
     interactRange?: number;
+    locked?: boolean;
+    keyName?: string | null;
   };
 }
 

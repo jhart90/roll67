@@ -98,7 +98,12 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
         />
       ) : (
         <>
-          {obj.kind === 'chest' ? (
+          {/* A chest holding exactly one thing IS that thing on the map — a
+              sword lying on the flagstones, not a crate you open to find a
+              sword. It still behaves as a chest, lock and all. */}
+          {obj.kind === 'chest' && obj.items.length === 1 ? (
+            <circle r={r * 0.5} fill="#d4af37" stroke="#8b7722" strokeWidth={1.5} />
+          ) : obj.kind === 'chest' ? (
             <rect x={-r * 0.7} y={-r * 0.5} width={r * 1.4} height={r} rx={3}
               fill="#8B6914" stroke="#5c4a0e" strokeWidth={1.5} />
           ) : obj.kind === 'shop' ? (
@@ -108,8 +113,12 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
             <circle r={r * 0.5} fill="#d4af37" stroke="#8b7722" strokeWidth={1.5} />
           )}
           <text textAnchor="middle" dy="0.35em" fontSize={r * 0.7} fill="white" style={{ pointerEvents: 'none' }}>
-            {obj.kind === 'chest' ? '📦' : obj.kind === 'shop' ? '🏪' : '✦'}
+            {obj.kind === 'chest' ? (obj.items.length === 1 ? '✦' : '📦') : obj.kind === 'shop' ? '🏪' : '✦'}
           </text>
+          {obj.locked && (
+            <text textAnchor="middle" dy="0.35em" x={r * 0.6} y={-r * 0.6}
+              fontSize={r * 0.5} style={{ pointerEvents: 'none' }}>🔒</text>
+          )}
         </>
       )}
       <text

@@ -1622,7 +1622,7 @@ export const intents = {
   // map loot objects
   placeMapObject: (mapId: string, kind: 'item' | 'chest', name: string, q: number, r: number, description?: string) =>
     socket.emit(C2S.PLACE_MAP_OBJECT, { mapId, kind, name, description, q, r }),
-  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: LootItem[]; interactRange?: number }) =>
+  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: LootItem[]; interactRange?: number; locked?: boolean; keyName?: string | null }) =>
     socket.emit(C2S.UPDATE_MAP_OBJECT, { objectId, patch }),
   deleteMapObject: (objectId: string) => socket.emit(C2S.DELETE_MAP_OBJECT, { objectId }),
   takeMapItem: (objectId: string) => socket.emit(C2S.TAKE_MAP_ITEM, { objectId }),

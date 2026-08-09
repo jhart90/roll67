@@ -646,6 +646,10 @@ export interface LootItem {
   description: string;
   /** Links to a compendium or custom item entry for full apply-on-take logic. */
   contentId?: string;
+  /** How many are in the pile. Absent or 1 = a single item; taking one
+   *  decrements rather than emptying the chest. Mirrors a shop's stock so the
+   *  DM stocks both the same way. */
+  qty?: number;
 }
 
 // ---------- World folders / chests ----------

@@ -120,6 +120,31 @@ export function MapObjectInspector() {
 
       {obj.kind === 'chest' && (
         <>
+          {/* Locks work exactly like a door's: holding the named item is
+              enough, it isn't consumed, and the DM always gets in. */}
+          <label className="mo-lock">
+            <input
+              type="checkbox"
+              checked={obj.locked === true}
+              onChange={(e) => intents.updateMapObject(obj.id, {
+                locked: e.target.checked,
+                ...(e.target.checked && !obj.keyName ? { keyName: 'Key' } : {}),
+              })}
+            />
+            <span>🔒 Locked</span>
+          </label>
+          {obj.locked && (
+            <label>
+              Key required
+              <input
+                key={`${obj.id}-key`}
+                defaultValue={obj.keyName ?? 'Key'}
+                placeholder="Key"
+                title="An inventory item with this name opens it. Leave as “Key” for a generic key, or name a specific one."
+                onBlur={(e) => intents.updateMapObject(obj.id, { keyName: e.target.value.trim() || 'Key' })}
+              />
+            </label>
+          )}
           <h4>Items in Chest</h4>
           {obj.items.length === 0 && <p className="dim" style={{ fontSize: 12 }}>No items yet.</p>}
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12 }}>

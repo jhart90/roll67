@@ -6,6 +6,7 @@ import {
   type TakeMapItemPayload, type UpdateMapObjectPayload,
 } from 'shared';
 import { campaigns, characters, chat, handouts, mapObjects, maps, tokens, worldFolders } from '../../db/repos.js';
+import { rows, str } from 'shared';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { centerHex, hashStr, tokenLookFor, TOKEN_COLORS } from './tokens.js';
@@ -34,6 +35,26 @@ function postTake(io: Server, campaignId: string, playerName: string, itemName: 
     roll: null, recipients: null,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+}
+
+/**
+ * Does any character this user owns carry an inventory item with this name?
+ * Same rule as a locked door: holding the key is enough, it is not consumed,
+ * and a "Key" by default means the generic one.
+ */
+function hasKeyItem(userId: string, campaignId: string, keyName: string): boolean {
+  const wanted = (keyName || 'Key').trim().toLowerCase();
+  return characters.forCampaign(campaignId).some((c) =>
+    c.ownerUserId === userId
+    && rows(c.sheet, 'inventory').some((i) => str(i, 'name', '').trim().toLowerCase() === wanted));
+}
+
+/** A locked chest refuses everyone but the DM and whoever holds its key. */
+function lockBlocks(role: string, userId: string, campaignId: string, obj: { locked?: boolean; keyName?: string | null }): string | null {
+  if (role === 'dm' || !obj.locked) return null;
+  const key = obj.keyName?.trim() || 'Key';
+  if (hasKeyItem(userId, campaignId, key)) return null;
+  return `It's locked. You need ${/^a |^an |^the /i.test(key) ? key : `a ${key}`} to open it.`;
 }
 
 export function registerMapObjectHandlers(io: Server, socket: Socket): void {
@@ -92,6 +113,10 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
       emitError(socket, 'You are not close enough to reach that chest.'); return;
     }
+    {
+      const blocked = lockBlocks(d.role, d.userId, d.campaignId, obj);
+      if (blocked) { emitError(socket, blocked); return; }
+    }
     const item = obj.items.find((i: { id: string }) => i.id === itemId);
     if (!item) throw new Error('Item not in chest.');
     const remaining = obj.items.filter((i: { id: string }) => i.id !== itemId);
@@ -109,6 +134,10 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
     if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
       emitError(socket, 'You are not close enough to reach that chest.'); return;
+    }
+    {
+      const blocked = lockBlocks(d.role, d.userId, d.campaignId, obj);
+      if (blocked) { emitError(socket, blocked); return; }
     }
     if (obj.items.length === 0) return;
     for (const item of obj.items) {
@@ -128,6 +157,8 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
       emitError(socket, 'You are not close enough to open that chest.'); return;
     }
+    const locked = lockBlocks(d.role, d.userId, d.campaignId, obj);
+    if (locked) { emitError(socket, locked); return; }
 
     const folderId = obj.worldFolderId;
     if (!folderId) return;

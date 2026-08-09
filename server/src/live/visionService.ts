@@ -371,6 +371,11 @@ export function buildMapState(
     id: map.id,
     name: map.name,
     sortOrder: map.sortOrder,
+    // Players never receive the map LIST (that's DM scaffolding), but they do
+    // need to know the thing they're looking at is a scene rather than a
+    // battlemap — the camera frames the two differently. Not a secret: it's
+    // the picture on their screen.
+    isScene: map.isScene === true,
     bgUrl: map.bgUrl,
     bgWidth: map.bgWidth,
     bgHeight: map.bgHeight,

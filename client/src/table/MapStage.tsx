@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { canMoveToken, hexToPixel, pixelToHex } from 'shared';
+import { canMoveToken, hexToPixel, pixelToHex, sceneFrameScale } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { worldDrag } from '../store/worldDrag';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
@@ -214,6 +214,24 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           return !!c && c.ownerUserId === s.you!.userId;
         })
       : undefined;
+
+    // A scene is a picture to look at, not ground to cross, so it is framed
+    // rather than zoomed into: the art fills the pane vertically, edge to
+    // edge, and fits horizontally too whenever its shape allows. A wide
+    // panorama therefore keeps its full height and runs off the sides rather
+    // than sitting in a letterbox. This wins over the tactical close-in view
+    // below — 12 hexes of a backdrop is a meaningless crop.
+    if (map.isScene) {
+      const { width, height } = mapPixelSize(map);
+      const want = sceneFrameScale(el.clientWidth, el.clientHeight, width, height);
+      const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, want));
+      useGameStore.getState().setCamera({
+        x: (el.clientWidth - width * scale) / 2,
+        y: (el.clientHeight - height * scale) / 2,
+        scale,
+      });
+      return;
+    }
 
     if (myToken) {
       const center = hexToPixel({ q: myToken.q, r: myToken.r }, map.grid);

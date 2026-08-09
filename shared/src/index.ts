@@ -6,6 +6,7 @@ export * from './hex/pixel.js';
 export * from './hex/line.js';
 export * from './hex/pack.js';
 export * from './hex/aoe.js';
+export * from './hex/framing.js';
 export * from './vision/raycast.js';
 export * from './vision/fov.js';
 export * from './vision/visibilityPolygon.js';

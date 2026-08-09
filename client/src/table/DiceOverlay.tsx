@@ -31,7 +31,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
       ? '/sounds/dice_many.mp3'
       : `/sounds/dice_${1 + Math.floor(Math.random() * 3)}.mp3`;
     const audio = new Audio(clip);
-    audio.volume = 0.6;
+    audio.volume = 0.6 * useGameStore.getState().localSfxVolume;
     audio.play().catch(() => undefined);
     const sims = buildSims(dice, w, h, color, textColor, palette);
     const settleAt = simsSettleTime(sims);

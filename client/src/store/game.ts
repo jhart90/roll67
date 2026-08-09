@@ -304,6 +304,12 @@ interface GameState {
   selectedDoorId: string | null;
   /** Local-only: mute audio on this device without affecting others. */
   clientMuted: boolean;
+  /** This device's own music volume (multiplies the DM's jukebox volume). */
+  localMusicVolume: number;
+  /** This device's own sound-effects volume (soundboard hits, dice rattles). */
+  localSfxVolume: number;
+  setLocalMusicVolume(v: number): void;
+  setLocalSfxVolume(v: number): void;
   setClientMuted(m: boolean): void;
   drawColor: string;
   drawLayer: DrawingLayerName;
@@ -542,6 +548,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   selectedDoorId: null,
   clientMuted: false,
   setClientMuted(clientMuted) { set({ clientMuted }); },
+  localMusicVolume: readLocalVolume('roll67.musicVolume'),
+  localSfxVolume: readLocalVolume('roll67.sfxVolume'),
+  setLocalMusicVolume(v) {
+    const vol = Math.max(0, Math.min(1, v));
+    localStorage.setItem('roll67.musicVolume', String(vol));
+    set({ localMusicVolume: vol });
+  },
+  setLocalSfxVolume(v) {
+    const vol = Math.max(0, Math.min(1, v));
+    localStorage.setItem('roll67.sfxVolume', String(vol));
+    set({ localSfxVolume: vol });
+  },
   drawColor: '#e8d27b',
   selectedTextId: null,
   textStyle: { size: 28, color: '#f4f6fb', font: 'sans-serif', bold: true, italic: false },
@@ -663,6 +681,12 @@ function mapObjectsById(list: MapObject[]): Record<string, MapObject> {
  * record (nested bar/vision/light compared by value) and reuses the old
  * object when nothing differs.
  */
+/** A persisted per-device volume (0..1); malformed/missing → full volume. */
+function readLocalVolume(key: string): number {
+  const v = Number(localStorage.getItem(key));
+  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1;
+}
+
 function tokensByIdReusing(prev: Record<string, TokenView>, list: TokenView[]): Record<string, TokenView> {
   const out: Record<string, TokenView> = {};
   for (const t of list) {
@@ -1080,7 +1104,7 @@ export function wireSocket(): void {
   socket.on(S2C.SFX_PLAY, ({ url }: SfxPlayPayload) => {
     if (useGameStore.getState().clientMuted) return;
     const el = new Audio(url);
-    el.volume = 1;
+    el.volume = useGameStore.getState().localSfxVolume;
     // Autoplay can be blocked until the user has interacted with the page;
     // a failed effect is not worth surfacing, the music player already
     // carries the "click to enable audio" affordance.

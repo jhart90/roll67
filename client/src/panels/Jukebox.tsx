@@ -12,6 +12,8 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
   const state = useGameStore((s) => s.audioState);
   const assets = useGameStore((s) => s.assetList);
   const clientMuted = useGameStore((s) => s.clientMuted);
+  const localMusicVolume = useGameStore((s) => s.localMusicVolume);
+  const localSfxVolume = useGameStore((s) => s.localSfxVolume);
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -65,6 +67,23 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
         <input type="checkbox" checked={clientMuted} onChange={(e) => useGameStore.getState().setClientMuted(e.target.checked)} />
         Mute on my device
       </label>
+
+      {/* Per-device mixers: everyone balances music vs effects for their own
+          ears without touching what the rest of the table hears. */}
+      <div className="local-vol-row" title="Your device only: scales the jukebox music (on top of the DM's campaign volume)">
+        <span className="dim">🎵 Music (my device)</span>
+        <input
+          type="range" min={0} max={1} step={0.05} value={localMusicVolume}
+          onChange={(e) => useGameStore.getState().setLocalMusicVolume(Number(e.target.value))}
+        />
+      </div>
+      <div className="local-vol-row" title="Your device only: soundboard effects and dice rattles">
+        <span className="dim">🎲 Effects (my device)</span>
+        <input
+          type="range" min={0} max={1} step={0.05} value={localSfxVolume}
+          onChange={(e) => useGameStore.getState().setLocalSfxVolume(Number(e.target.value))}
+        />
+      </div>
 
       {isDm && (
         <>

@@ -7,6 +7,7 @@ export function AudioPlayer() {
   const audioState = useGameStore((s) => s.audioState);
   const tracks = useGameStore((s) => s.audioTracks);
   const clientMuted = useGameStore((s) => s.clientMuted);
+  const localMusicVolume = useGameStore((s) => s.localMusicVolume);
   const ref = useRef<HTMLAudioElement>(null);
   const [needsUnlock, setNeedsUnlock] = useState(false);
 
@@ -38,10 +39,11 @@ export function AudioPlayer() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.volume = audioState.volume;
+    // The DM's campaign-wide volume scaled by this device's own music slider.
+    el.volume = audioState.volume * localMusicVolume;
     el.muted = clientMuted;
     el.loop = audioState.loop;
-  }, [audioState.volume, audioState.loop, clientMuted]);
+  }, [audioState.volume, audioState.loop, clientMuted, localMusicVolume]);
 
   return (
     <>

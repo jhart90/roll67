@@ -1274,13 +1274,10 @@ export function wireSocket(): void {
     useGameStore.setState({ targetPreviews });
   });
 
-  socket.on(S2C.MEMBER_PRESENCE, ({ userId, username, online, mapId, diceColor, diceTextColor, diceTraitColor, diceWildColor, diceRaiseColor, playerColor }: MemberPresencePayload) => {
-    const s = useGameStore.getState();
-    useGameStore.setState({
-      members: s.members.map((m) => (m.userId === userId
-        ? { ...m, username, online, mapId, diceColor, diceTextColor, diceTraitColor, diceWildColor, diceRaiseColor, playerColor }
-        : m)),
-    });
+  // The whole roster, authoritative — replace rather than merge, so someone
+  // who joined after us appears and someone removed from the campaign goes.
+  socket.on(S2C.MEMBER_PRESENCE, ({ members }: MemberPresencePayload) => {
+    useGameStore.setState({ members });
   });
 
   socket.on(S2C.ACTIVE_MAP, ({ mapId }: { mapId: string | null }) => {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
-  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, conditionsOf, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, conditionsOf, needsNpcBoost, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -28,7 +28,7 @@ const NOTES_TAB = '__notes';
 type AdvMode = null | 'adv' | 'dis';
 
 function FieldInput({
-  field, system, sheet, derived, readOnly, onPatch, onEditImage,
+  field, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor,
 }: {
   field: FieldDef;
   system: GameSystem;
@@ -37,6 +37,9 @@ function FieldInput({
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
   onEditImage?: (fieldId: string) => void;
+  /** What this character's colour actually is when the sheet hasn't set one:
+   *  their player's own colour. Showing the app default here would lie. */
+  inheritedColor?: string;
 }) {
   const value = sheet[field.id];
   const derivedBadge = derived[field.id] !== undefined ? String(derived[field.id]) : null;
@@ -59,7 +62,10 @@ function FieldInput({
   if (field.type === 'color') {
     // Blank means "no choice made" — show the swatch at the neutral default
     // rather than black, which reads as a deliberate pick.
-    const current = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : DEFAULT_TOKEN_COLOR;
+    const current = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
+      ? value
+      : (inheritedColor ?? DEFAULT_TOKEN_COLOR);
+    const inherited = !(typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value));
     return (
       <label className={`sheet-field w-${field.width ?? 'half'} color-field`}>
         <span><SheetTerm system={system} label={field.label} /></span>
@@ -70,7 +76,7 @@ function FieldInput({
             disabled={readOnly}
             onChange={(e) => onPatch({ [field.id]: e.target.value })}
           />
-          <span className="dim">{current}</span>
+          <span className="dim">{current}{inherited ? ' · from your player colour' : ''}</span>
         </span>
       </label>
     );
@@ -463,7 +469,7 @@ function DerivedBlocks({
 }
 
 function Section({
-  section, system, sheet, derived, readOnly, onPatch, onEditImage,
+  section, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor,
 }: {
   section: SectionDef;
   system: GameSystem;
@@ -472,6 +478,7 @@ function Section({
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
   onEditImage?: (fieldId: string) => void;
+  inheritedColor?: string;
 }) {
   return (
     <section className="sheet-section">
@@ -479,7 +486,7 @@ function Section({
       {section.kind === 'fields' && (
         <div className="sheet-grid">
           {section.fields.map((f) => (
-            <FieldInput key={f.id} field={f} system={system} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} onEditImage={onEditImage} />
+            <FieldInput key={f.id} field={f} system={system} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} onEditImage={onEditImage} inheritedColor={inheritedColor} />
           ))}
         </div>
       )}
@@ -784,6 +791,7 @@ function hashStr(s: string): number {
 
 export function CharacterSheetWindow({ characterId, onClose }: { characterId: string; onClose: () => void }) {
   const you = useGameStore((s) => s.you);
+  const members = useGameStore((s) => s.members);
   const character = useGameStore((s) => s.characters.find((c) => c.id === characterId));
   const [tabId, setTabId] = useState<string | null>(null);
   const [showCompendium, setShowCompendium] = useState(false);
@@ -794,6 +802,9 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
   const schema = systemFor(character.system);
   const derived = schema.derive(character.sheet);
   const editable = canEditCharacter(you.role, you.userId, character);
+  // A character with no colour of its own wears its player's colour.
+  const owner = members.find((m) => m.userId === character.ownerUserId);
+  const inheritedColor = owner ? playerColorFor(owner) : undefined;
   const activeTab = schema.tabs.find((t) => t.id === tabId) ?? schema.tabs[0];
 
   function patch(p: SheetData) {
@@ -885,6 +896,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
                 readOnly={!editable}
                 onPatch={patch}
                 onEditImage={setPickingField}
+                inheritedColor={inheritedColor}
               />
             ))}
 

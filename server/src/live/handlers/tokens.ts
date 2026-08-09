@@ -5,7 +5,7 @@ import {
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type MoveTokenPayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
-import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
+import { assets, campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { breakAim, persistSheet, postStatusLine } from '../hp.js';
@@ -58,6 +58,13 @@ export function movedThisTurn(campaignId: string, tokenId: string): boolean {
 import { hasSeenHex, socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
+
+/** Public URL of an uploaded asset, so the sheet's image field and the
+ *  token's art can never drift to different pictures. */
+function assetUrl(assetId: string): string | null {
+  const a = assets.byId(assetId);
+  return a ? `/uploads/${a.id}.${a.ext}` : null;
+}
 
 /** A colour deliberately chosen on the character sheet, if it's a valid one. */
 function sheetTokenColor(character?: { sheet: Record<string, unknown> }): string | undefined {
@@ -169,14 +176,37 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         }
       }
     }
-    // Art sync: changing a character-linked token's art also updates the sheet.
-    if (typeof tokenPatch.artAssetId === 'string' && token.characterId) {
+    // Art and colour are ONE setting per character, wherever they're edited.
+    // Changing either on a token writes it back to the sheet (both the asset
+    // id and the URL the sheet's image field renders) and repaints that
+    // character's tokens on every other map, so no two copies can disagree.
+    const artChanged = typeof tokenPatch.artAssetId === 'string';
+    const colorChanged = typeof tokenPatch.color === 'string';
+    if ((artChanged || colorChanged) && token.characterId) {
       const ch = characters.byId(token.characterId);
       if (ch) {
-        characters.update(ch.id, undefined, { ...ch.sheet, tokenImageAssetId: tokenPatch.artAssetId });
+        const sheetPatch: Record<string, unknown> = { ...ch.sheet };
+        if (artChanged) {
+          const assetId = tokenPatch.artAssetId as string;
+          sheetPatch.tokenImageAssetId = assetId;
+          const url = assetUrl(assetId);
+          if (url) sheetPatch.tokenImage = url;
+        }
+        if (colorChanged) sheetPatch.tokenColor = tokenPatch.color;
+        characters.update(ch.id, undefined, sheetPatch);
         const updatedCh = characters.byId(ch.id)!;
         io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
         if (updatedCh.ownerUserId) io.to(userRoom(updatedCh.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
+        // Every other token of this character follows suit.
+        for (const other of tokens.forCharacter(ch.id)) {
+          if (other.id === tokenId) continue;
+          const p: Record<string, unknown> = {};
+          if (artChanged) p.artAssetId = tokenPatch.artAssetId;
+          if (colorChanged) p.color = tokenPatch.color;
+          tokens.update(other.id, p);
+          io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(other.id)! });
+          if (other.mapId !== token.mapId) syncMapVision(io, d.campaignId, other.mapId);
+        }
       }
     }
     // Appearance sync: resizing/reshaping a character-linked token records the

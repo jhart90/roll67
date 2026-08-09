@@ -954,10 +954,14 @@ export interface WorldOverridePayload {
   key: string;
   mode: 'reveal' | 'hide' | 'clear';
 }
+/** The campaign's whole membership, authoritative: whoever is absent from
+ *  this list is no longer a member and their pill should go. */
 export interface MemberPresencePayload {
-  userId: string; username: string; online: boolean; mapId: string | null;
-  diceColor: string | null; diceTextColor: string | null; playerColor: string | null;
-  diceTraitColor: string | null; diceWildColor: string | null; diceRaiseColor: string | null;
+  members: Array<{
+    userId: string; username: string; role: 'dm' | 'player'; online: boolean; mapId: string | null;
+    diceColor: string | null; diceTextColor: string | null; playerColor: string | null;
+    diceTraitColor: string | null; diceWildColor: string | null; diceRaiseColor: string | null;
+  }>;
 }
 /** Set your own 3D-dice color ("#rrggbb", or null for the defaults). */
 export interface SetDiceColorPayload { color: string | null }

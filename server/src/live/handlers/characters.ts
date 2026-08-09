@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canEditCharacter, conditionsOf, num, roll, str, systemFor,
+  C2S, S2C, canEditCharacter, conditionsOf, num, playerColorFor, roll, str, systemFor,
   type CreateCharacterPayload, type CustomNpcView, type DeleteCharacterPayload,
   type DeleteCustomNpcPayload, type LevelUpRollPayload,
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
@@ -132,6 +132,12 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     // assembled sheet — merged over the defaults, not replacing them, so any
     // field the wizard didn't touch still gets the system's normal default.
     if (payload.sheetPatch) Object.assign(sheet, payload.sheetPatch);
+    // A character's colour starts as their player's own colour — the same one
+    // their pill and dice wear — unless the creator explicitly picked one.
+    if (typeof sheet.tokenColor !== 'string' && owner) {
+      const m = campaigns.members(d.campaignId).find((x) => x.userId === owner);
+      if (m) sheet.tokenColor = playerColorFor(m);
+    }
     const character = characters.create(d.campaignId, owner, name, payload.system, sheet);
     emitCharacter(io, d.campaignId, character);
     // Drop the new character's token onto its owner's current map (visible

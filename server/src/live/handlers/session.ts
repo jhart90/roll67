@@ -86,22 +86,32 @@ export function sendMapStateToUser(io: Server, campaignId: string, userId: strin
   }
 }
 
+/**
+ * Send the campaign's whole membership as ONE authoritative roster.
+ *
+ * This used to emit a separate upsert per member, which could only ever
+ * update someone the client already knew about: a member who joined after you
+ * loaded never appeared (your client had no row to update), and a member who
+ * was removed never disappeared (the loop iterates CURRENT members, so nothing
+ * was ever emitted about them again). A whole-roster replace can't drift in
+ * either direction.
+ */
 export function broadcastPresence(io: Server, campaignId: string): void {
   const online = onlineUsers(io, campaignId);
-  for (const m of campaigns.members(campaignId)) {
-    io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, {
-      userId: m.userId,
-      username: m.username,
-      online: online.has(m.userId),
-      mapId: campaigns.viewMapIdFor(campaignId, m.userId),
-      diceColor: m.diceColor,
-      diceTextColor: m.diceTextColor,
-      diceTraitColor: m.diceTraitColor,
-      diceWildColor: m.diceWildColor,
-      diceRaiseColor: m.diceRaiseColor,
-      playerColor: m.playerColor,
-    });
-  }
+  const members = campaigns.members(campaignId).map((m) => ({
+    userId: m.userId,
+    username: m.username,
+    role: m.role,
+    online: online.has(m.userId),
+    mapId: campaigns.viewMapIdFor(campaignId, m.userId),
+    diceColor: m.diceColor,
+    diceTextColor: m.diceTextColor,
+    diceTraitColor: m.diceTraitColor,
+    diceWildColor: m.diceWildColor,
+    diceRaiseColor: m.diceRaiseColor,
+    playerColor: m.playerColor,
+  }));
+  io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, { members });
 }
 
 export function registerSessionHandlers(io: Server, socket: Socket): void {

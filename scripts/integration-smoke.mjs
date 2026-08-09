@@ -894,10 +894,14 @@ async function main() {
   ok(pAnnex.map.id === annexId, 'assigned player lands on the annex map');
   ok(Array.isArray(pAnnex.visible) && pAnnex.visible.length === 0, 'no token on annex -> player sees nothing');
 
-  // Presence carries the map: DM hears the player is on the annex.
-  const presence = await waitFor(dmSock, 'memberPresence', 5000, (p) => p.userId === player.user.id && p.mapId === annexId)
-    .catch(() => null);
+  // Presence carries the map: DM hears the player is on the annex. Presence
+  // is one authoritative roster per broadcast (not a per-member upsert), so
+  // that a member who joins or leaves mid-session appears/disappears too.
+  const presence = await waitFor(dmSock, 'memberPresence', 5000,
+    (p) => p.members?.some((m) => m.userId === player.user.id && m.mapId === annexId)).catch(() => null);
   ok(presence !== null, 'presence reports which map each member is on');
+  ok(presence?.members?.some((m) => m.userId === dm.user.id),
+    'and the roster lists every member, not just the one that changed');
 
   // Back to the party map (clear override), DM back to party too.
   const playerBack = waitFor(playerSock, 'mapState', 5000, (p) => p.map.id === mapId);

@@ -1,4 +1,4 @@
-import type { Character, GameSystem, SheetData, TokenNameplate } from '../types.js';
+import type { Character, GameSystem, NameplateLine, SheetData, TokenNameplate } from '../types.js';
 import { num, str } from './types.js';
 import { rankForAdvances } from './swadeAdvancement.js';
 
@@ -24,30 +24,33 @@ export function nameplateFor(character: Character, tokenColor: string, tokenArtU
       || str(sheet, 'detailImage', '').trim()
       || null,
     color: tokenColor,
-    lines: linesFor(character.system, sheet).filter((l) => l.length > 0),
+    lines: linesFor(character.system, sheet).filter((l) => l.text.length > 0),
   };
 }
 
-function linesFor(system: GameSystem, sheet: SheetData): string[] {
+function linesFor(system: GameSystem, sheet: SheetData): NameplateLine[] {
   const join = (...parts: string[]) => parts.filter((p) => p).join(' ');
+  const rank = (text: string): NameplateLine => ({ text, kind: 'rank' });
+  const concept = (text: string): NameplateLine => ({ text, kind: 'concept' });
+  const origin = (text: string): NameplateLine => ({ text, kind: 'origin' });
   if (system === 'swade') {
     const advances = num(sheet, 'advances', 0);
     return [
-      join(rankForAdvances(advances), advances > 0 ? `(${advances} advances)` : ''),
-      str(sheet, 'concept', '').trim(),
-      str(sheet, 'ancestry', '').trim(),
+      rank(join(rankForAdvances(advances), advances > 0 ? `(${advances} advances)` : '')),
+      concept(str(sheet, 'concept', '').trim()),
+      origin(str(sheet, 'ancestry', '').trim()),
     ];
   }
   if (system === 'swn') {
     return [
-      join('Level', String(num(sheet, 'level', 1)), str(sheet, 'class', '').trim()),
-      str(sheet, 'homeworld', '').trim(),
-      str(sheet, 'background', '').trim(),
+      rank(join('Level', String(num(sheet, 'level', 1)), str(sheet, 'class', '').trim())),
+      origin(str(sheet, 'homeworld', '').trim()),
+      origin(str(sheet, 'background', '').trim()),
     ];
   }
   return [
-    join('Level', String(num(sheet, 'level', 1)), str(sheet, 'class', '').trim()),
-    str(sheet, 'race', '').trim(),
-    str(sheet, 'background', '').trim(),
+    rank(join('Level', String(num(sheet, 'level', 1)), str(sheet, 'class', '').trim())),
+    origin(str(sheet, 'race', '').trim()),
+    origin(str(sheet, 'background', '').trim()),
   ];
 }

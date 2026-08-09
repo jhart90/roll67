@@ -85,7 +85,7 @@ export function TokenNameplateCard() {
       <div className="nameplate-body">
         <strong className="nameplate-name">{plate.name}</strong>
         {plate.lines.map((line, i) => (
-          <span key={i} className="nameplate-line">{line}</span>
+          <span key={i} className={`nameplate-line np-${line.kind}`}>{line.text}</span>
         ))}
       </div>
     </div>

@@ -175,6 +175,16 @@ const ALWAYS_SHOW = new Set(['damage', 'die', 'severity']);
 /** The "is this in my hands / on my body" flag, by section. Surfaced as a
  *  checkbox on the card itself rather than buried in the editor, because it
  *  is the one field that changes constantly during play. */
+/**
+ * Cards that are always-on parts of the character read in their own colour,
+ * matching what "equipped" already means elsewhere: green for an advantage
+ * you have (an Edge, a wielded weapon), red for something working against you.
+ */
+const SECTION_THEME: Record<string, string> = {
+  edges: 'card-good',
+  racialTraits: 'card-bad',
+};
+
 const EQUIP_COL: Record<string, string> = {
   attacks: 'wielded', inventory: 'equipped', armor: 'equipped',
 };
@@ -185,6 +195,26 @@ const PAIRED = new Set(['bonusAmt', 'maxAmmo', 'amount']);
 /** Chip label: the column label minus any parenthetical hint —
  *  'Armor (+Toughness)' → 'Armor', but 'Armor vs ranged' stays whole. */
 const chipLabel = (label: string) => label.replace(/\s*\(.*?\)/g, '').trim();
+
+/**
+ * Every fact on a card gets a tone, so a glance separates a damage die from a
+ * range from a penalty. Tones are semantic, not decorative: the same kind of
+ * fact wears the same colour on every card in every system.
+ */
+type ChipTone =
+  | 'damage' | 'skill' | 'range' | 'ammo' | 'bonus' | 'penalty'
+  | 'severity' | 'qty' | 'weight' | 'use' | 'flag' | 'plain';
+interface Chip { text: string; tone: ChipTone }
+
+const NUMERIC_TONE: Record<string, ChipTone> = {
+  range: 'range', rof: 'ammo', ap: 'damage', qty: 'qty', weight: 'weight',
+  armor: 'bonus', rangedArmor: 'bonus', level: 'plain', cost: 'use',
+};
+const TEXT_TONE: Record<string, ChipTone> = {
+  damage: 'damage', die: 'damage', skill: 'skill', dtype: 'damage',
+  severity: 'severity', caliber: 'ammo', amount: 'use', discipline: 'skill',
+  arcaneSkill: 'skill', duration: 'plain',
+};
 
 /** Long free-text columns render as the card's footnote line, not a chip. */
 const NOTE_COLS = new Set(['notes', 'description', 'effect_text']);
@@ -198,9 +228,10 @@ const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
  * ticked, and anything still at its default stays silent — except the
  * ALWAYS_SHOW facts that define the row.
  */
-function cardChips(section: ListSection, row: SheetData): { chips: string[]; notes: string[] } {
-  const chips: string[] = [];
+function cardChips(section: ListSection, row: SheetData): { chips: Chip[]; notes: string[] } {
+  const chips: Chip[] = [];
   const notes: string[] = [];
+  const push = (text: string, tone: ChipTone) => chips.push({ text, tone });
   for (const col of section.columns) {
     if (col.id === 'name' || PAIRED.has(col.id) || (section.id === 'attacks' && ATTACK_DETAIL_COLS.has(col.id))) continue;
     const v = row[col.id];
@@ -211,24 +242,24 @@ function cardChips(section: ListSection, row: SheetData): { chips: string[]; not
     if (col.type === 'checkbox') {
       // The equip flag has its own checkbox on the card.
       if (col.id === EQUIP_COL[section.id]) continue;
-      if (v === true) chips.push(col.label);
+      if (v === true) push(col.label, 'flag');
       continue;
     }
     if (col.id === 'bonusSkill') {
       const amt = num(row, 'bonusAmt', 0);
       const skill = typeof v === 'string' ? v.trim() : '';
-      if (skill && amt !== 0) chips.push(`${signed(amt)} ${skill}`);
+      if (skill && amt !== 0) push(`${signed(amt)} ${skill}`, amt < 0 ? 'penalty' : 'bonus');
       continue;
     }
     if (col.id === 'ammo') {
       const mag = num(row, 'maxAmmo', 0);
-      if (mag > 0) chips.push(`Ammo ${num(row, 'ammo', 0)}/${mag}`);
+      if (mag > 0) push(`Ammo ${num(row, 'ammo', 0)}/${mag}`, 'ammo');
       continue;
     }
     if (col.id === 'effect') {
       // A usable item reads as its action: "heal 2d6".
       const use = typeof v === 'string' ? v.trim() : '';
-      if (use && use !== 'none') chips.push(`${use} ${str(row, 'amount', '')}`.trim());
+      if (use && use !== 'none') push(`${use} ${str(row, 'amount', '')}`.trim(), 'use');
       continue;
     }
     if (v === undefined || v === null || v === '' || v === 'none') continue;
@@ -237,14 +268,16 @@ function cardChips(section: ListSection, row: SheetData): { chips: string[]; not
       const n = Number(v);
       if (Number.isNaN(n)) continue;
       // Modifier columns read as "+1 Parry"; plain quantities as "Qty 3".
-      chips.push(/bonus|mod/i.test(col.id) ? `${signed(n)} ${chipLabel(col.label)}` : `${chipLabel(col.label)} ${n}`);
+      if (/bonus|mod/i.test(col.id)) push(`${signed(n)} ${chipLabel(col.label)}`, n < 0 ? 'penalty' : 'bonus');
+      else push(`${chipLabel(col.label)} ${n}`, NUMERIC_TONE[col.id] ?? 'qty');
       continue;
     }
     const s = String(v).trim();
     if (!s) continue;
     // Selects and short texts: severity/damage-type read alone; the rest get
     // their label so a bare value like "12ga" stays decipherable.
-    chips.push(col.id === 'severity' || col.id === 'dtype' || col.id === 'skill' || col.id === 'damage' || col.id === 'die' ? s : `${chipLabel(col.label)} ${s}`);
+    const bare = col.id === 'severity' || col.id === 'dtype' || col.id === 'skill' || col.id === 'damage' || col.id === 'die';
+    push(bare ? s : `${chipLabel(col.label)} ${s}`, TEXT_TONE[col.id] ?? 'plain');
   }
   return { chips, notes };
 }
@@ -436,7 +469,7 @@ function ListEditor({
           const equipCol = equipId ? mainCols.find((c) => c.id === equipId) : undefined;
           const isEquipped = !!equipCol && row[equipCol.id] === true;
           return (
-            <div key={i} className={`sheet-card${isEquipped ? ' sheet-card-equipped' : ''}`}>
+            <div key={i} className={`sheet-card${isEquipped ? ' card-good' : ''}${SECTION_THEME[section.id] ? ' ' + SECTION_THEME[section.id] : ''}`}>
               <div className="sheet-card-head">
                 <span className="sc-title">{String(row.name || nameFallback)}</span>
                 <span className="spacer" />
@@ -449,13 +482,14 @@ function ListEditor({
               </div>
               {(chips.length > 0 || rider) && (
                 <div className="sc-chips">
-                  {chips.map((c, j) => <span key={j} className="sc-chip">{c}</span>)}
+                  {chips.map((c, j) => <span key={j} className={`sc-chip tone-${c.tone}`}>{c.text}</span>)}
                   {rider && <span className="sc-chip sc-rider" title={RIDER_BTN_TITLE}>⚡ {rider}</span>}
                 </div>
               )}
               {notes.map((n, j) => <div key={j} className="sc-notes">{n}</div>)}
               {equipCol && (
-                <label className="sc-equip" title={`${equipCol.label} — announced in chat`}>
+                <label className={`sc-equip${isEquipped ? ' on' : ''}`} title={`${equipCol.label} — announced in chat`}>
+                  <span>{equipCol.label}</span>
                   <input
                     type="checkbox"
                     checked={isEquipped}
@@ -466,7 +500,7 @@ function ListEditor({
                       onEquipChange?.(String(row.name || nameFallback), equipCol.label, on);
                     }}
                   />
-                  <span>{equipCol.label}</span>
+                  <span className="sc-box" aria-hidden="true" />
                 </label>
               )}
             </div>

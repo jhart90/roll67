@@ -433,7 +433,13 @@ export function buildMapState(
   const view = computeUserMapView(targetUser, map, allTokens);
   // World-tab knowledge: whatever a real player's vision serves them counts
   // as discovered by THAT player (never the DM's own view or their preview).
-  if (!viewer.isDm) recordDiscovery(map.campaignId, viewer.userId, map.id, view.tokens);
+  if (!viewer.isDm) {
+    // A player has BEEN to a map when they have a piece standing on it. Their
+    // camera following the DM from map to map is not visiting — the DM
+    // flicking through maps while staging must not hand players the atlas.
+    const ownsTokenHere = viewerTokensFor(viewer.userId, allTokens).length > 0;
+    recordDiscovery(map.campaignId, viewer.userId, map.id, view.tokens, ownsTokenHere);
+  }
   return {
     map: mapView,
     // The DM previewing a player still keeps geometry for their editor overlays.
@@ -472,8 +478,13 @@ export function syncMapVision(io: Server, campaignId: string, mapId: string, hin
 }
 
 /** Per-player discovery write + world-tab refresh when anything was new. */
-function recordDiscovery(campaignId: string, userId: string, mapId: string, seenTokens: TokenView[]): void {
-  const entries: Array<{ kind: 'map' | 'token' | 'character'; key: string }> = [{ kind: 'map', key: mapId }];
+function recordDiscovery(
+  campaignId: string, userId: string, mapId: string, seenTokens: TokenView[], ownsTokenHere = true,
+): void {
+  const entries: Array<{ kind: 'map' | 'token' | 'character'; key: string }> = [];
+  // The PLACE is remembered only when they were actually there; whatever they
+  // could see from wherever they were is remembered either way.
+  if (ownsTokenHere) entries.push({ kind: 'map', key: mapId });
   for (const t of seenTokens) {
     entries.push({ kind: 'token', key: t.id });
     if (t.characterId) entries.push({ kind: 'character', key: t.characterId });
@@ -535,7 +546,7 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
     const view = computeUserMapView(d.userId, map, allTokens, shared);
     // Walking into sight of something discovers it live, not only on the
     // next full map-state send.
-    recordDiscovery(campaignId, d.userId, mapId, view.tokens);
+    recordDiscovery(campaignId, d.userId, mapId, view.tokens, viewerTokensFor(d.userId, allTokens).length > 0);
     const payload: VisionUpdatePayload = {
       mapId,
       mapObjects: mapObjectsVisibleTo(d.userId, false, mapId, mapObjectList),

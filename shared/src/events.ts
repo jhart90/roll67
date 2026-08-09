@@ -6,7 +6,7 @@ import type {
   CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
   MapDef, MapMeta, MapText, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
-  Counter, RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
+  Counter, NameplateLine, RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
 import type { PlayingCard } from './systems/cards.js';
@@ -1045,8 +1045,8 @@ export interface PublicSheetPayload {
   name: string;
   system: GameSystem;
   color: string;
-  /** The nameplate's descriptive lines (rank/level, concept/quip, ancestry…). */
-  lines: string[];
+  /** The nameplate's descriptive lines, each tagged rank / concept / origin. */
+  lines: NameplateLine[];
   portraitUrl: string | null;
   tokenImageUrl: string | null;
   /** The big Detail / portrait artwork, headlining the Profile tab. */

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { nameplateFor } from '../src/systems/nameplate.js';
-import type { Character } from '../src/types.js';
+import type { Character, NameplateLine } from '../src/types.js';
+
+const text = (lines: NameplateLine[]) => lines.map((l) => l.text);
 
 const ch = (system: Character['system'], sheet: Record<string, unknown>): Character => ({
   id: 'c1', campaignId: 'x', ownerUserId: 'u1', name: 'Vyrga', system, sheet,
@@ -10,24 +12,34 @@ describe('nameplateFor', () => {
   it('uses SWADE Concept, and its rank rather than a level', () => {
     const p = nameplateFor(ch('swade', { concept: 'Grave robber', ancestry: 'Half-Folk', advances: 3 }), '#6c9bd2', null);
     expect(p.name).toBe('Vyrga');
-    expect(p.lines).toContain('Grave robber');
-    expect(p.lines).toContain('Half-Folk');
-    expect(p.lines.some((l) => /Seasoned|Novice|Veteran/.test(l))).toBe(true);
+    expect(text(p.lines)).toContain('Grave robber');
+    expect(text(p.lines)).toContain('Half-Folk');
+    expect(p.lines.some((l) => l.kind === 'rank' && /Seasoned|Novice|Veteran/.test(l.text))).toBe(true);
   });
 
   it('describes 5e and SWN characters from their own sheet fields', () => {
     const p5 = nameplateFor(ch('dnd5e', { level: 4, class: 'Bard', race: 'Tiefling', background: 'Charlatan' }), '#000000', null);
-    expect(p5.lines).toContain('Level 4 Bard');
-    expect(p5.lines).toContain('Tiefling');
-    expect(p5.lines).toContain('Charlatan');
+    expect(text(p5.lines)).toContain('Level 4 Bard');
+    expect(text(p5.lines)).toContain('Tiefling');
+    expect(text(p5.lines)).toContain('Charlatan');
     const pSwn = nameplateFor(ch('swn', { level: 2, class: 'Psychic', homeworld: 'Ketter' }), '#000000', null);
-    expect(pSwn.lines).toContain('Level 2 Psychic');
-    expect(pSwn.lines).toContain('Ketter');
+    expect(text(pSwn.lines)).toContain('Level 2 Psychic');
+    expect(text(pSwn.lines)).toContain('Ketter');
+  });
+
+  it('tags each line with what it is, so the card can badge the rank', () => {
+    const p = nameplateFor(ch('swade', { concept: 'Gunslinger', ancestry: 'Half-Folk', advances: 3 }), '#000000', null);
+    expect(p.lines.find((l) => /Novice|Seasoned|Veteran|Heroic|Legendary/.test(l.text))?.kind).toBe('rank');
+    expect(p.lines.find((l) => l.text === 'Gunslinger')?.kind).toBe('concept');
+    expect(p.lines.find((l) => l.text === 'Half-Folk')?.kind).toBe('origin');
+    const p5 = nameplateFor(ch('dnd5e', { level: 4, class: 'Bard', race: 'Tiefling' }), '#000000', null);
+    expect(p5.lines.find((l) => l.text === 'Level 4 Bard')?.kind).toBe('rank');
+    expect(p5.lines.find((l) => l.text === 'Tiefling')?.kind).toBe('origin');
   });
 
   it('drops empty rows rather than rendering blanks', () => {
     const p = nameplateFor(ch('dnd5e', { level: 1 }), '#000000', null);
-    expect(p.lines.every((l) => l.trim().length > 0)).toBe(true);
+    expect(p.lines.every((l) => l.text.trim().length > 0)).toBe(true);
   });
 
   it('shows the TOKEN art — the nameplate labels the piece on the map', () => {
@@ -56,6 +68,6 @@ describe('nameplateFor', () => {
 
   it('no longer surfaces the retired quip field', () => {
     const p = nameplateFor(ch('dnd5e', { level: 1, quip: 'Owes money everywhere' }), '#000000', null);
-    expect(p.lines).not.toContain('Owes money everywhere');
+    expect(text(p.lines)).not.toContain('Owes money everywhere');
   });
 });

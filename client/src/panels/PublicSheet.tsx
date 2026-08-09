@@ -55,7 +55,7 @@ export function PublicSheetWindow({ characterId }: { characterId: string }) {
         {sheet.portraitUrl && <img className="public-sheet-portrait" src={sheet.portraitUrl} alt="" />}
         <div className="public-sheet-id">
           <strong>{sheet.name}</strong>
-          {sheet.lines.map((l, i) => <span key={i}>{l}</span>)}
+          {sheet.lines.map((l, i) => <span key={i} className={`np-${l.kind}`}>{l.text}</span>)}
         </div>
         {sheet.tokenImageUrl && sheet.tokenImageUrl !== sheet.portraitUrl && (
           <img className="public-sheet-token" src={sheet.tokenImageUrl} alt="" title="Token art" />

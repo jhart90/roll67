@@ -69,20 +69,40 @@ function buildNodes(
       sub: m.isScene ? 'scene' : 'map', isScene: m.isScene, hasPreview: m.hasPreview,
     });
   }
-  // Tokens nest under the map they stand on, exactly as loot and lights do.
+  // Where each character's token stands, so an unfiled character can nest
+  // under its map. A character already IS a node in this tree — giving its
+  // token a second node would list everyone twice, once in the DM's folder
+  // and once under the map.
+  const tokenHome = new Map<string, { mapId: string; playerRun: boolean }>();
   for (const t of directoryTokens) {
     if (!t.mapId || !mapIds.has(t.mapId)) continue;
+    if (t.characterId) {
+      if (!tokenHome.has(t.characterId)) tokenHome.set(t.characterId, { mapId: t.mapId, playerRun: t.playerRun === true });
+      continue;
+    }
+    // A token with no character behind it (scenery, a prop) has no other
+    // node, so it gets its own under the map.
     out.push({
       kind: 'token', id: t.id, name: t.name || 'Token', parentId: t.mapId,
       sub: t.gm ? 'GM layer' : '',
-      tokenMapId: t.mapId, tokenCharacterId: t.characterId ?? null, playerRun: t.playerRun === true,
+      tokenMapId: t.mapId, tokenCharacterId: null, playerRun: t.playerRun === true,
     });
   }
   for (const l of locations) out.push({ kind: 'location', id: l.id, name: l.name || 'Location', parentId: l.parentId ?? null, sub: l.kind });
   const charIds = new Set<string>();
+  // An unfiled character hangs under the map its token stands on, so the
+  // tree mirrors the table; one the DM filed in a folder stays filed.
+  const homeOf = (id: string, parentId: string | null | undefined) =>
+    (parentId ?? null) ?? tokenHome.get(id)?.mapId ?? null;
   for (const c of characters) {
     charIds.add(c.id);
-    out.push({ kind: 'character', id: c.id, name: c.name || 'Character', parentId: c.parentId ?? null, sub: c.ownerUserId ? '' : 'NPC' });
+    out.push({
+      kind: 'character', id: c.id, name: c.name || 'Character',
+      parentId: homeOf(c.id, c.parentId), sub: c.ownerUserId ? '' : 'NPC',
+      playerRun: c.ownerUserId != null,
+      tokenMapId: tokenHome.get(c.id)?.mapId,
+      tokenCharacterId: c.id,
+    });
   }
   // A player only ever receives the SHEETS they own, so everyone else's
   // character would be missing from the tree even after their token has been
@@ -94,9 +114,12 @@ function buildNodes(
     charIds.add(c.id);
     out.push({
       kind: 'character', id: c.id, name: c.name || 'Character',
-      parentId: c.parentId ?? null,
+      parentId: homeOf(c.id, c.parentId),
       sub: c.ownerUserId ? (c.owner ?? '') : 'NPC',
       notMine: true,
+      playerRun: c.ownerUserId != null,
+      tokenMapId: tokenHome.get(c.id)?.mapId,
+      tokenCharacterId: c.id,
     });
   }
   for (const s of shops) out.push({ kind: 'shop', id: s.id, name: s.name || 'Shop', parentId: s.parentId ?? null, sub: `${s.items.length} items` });
@@ -242,6 +265,12 @@ export function WorldTreePanel() {
       // right-click on their token gives. Never the private sheet.
       if (node.notMine) openWindow('publicSheet', node.id, {}, node.name);
       else useGameStore.getState().openSheet(node.id);
+      // If their piece is on the map already on screen, select it there too.
+      if (node.tokenMapId && node.tokenMapId === currentMapId) {
+        const tok = Object.values(useGameStore.getState().tokens)
+          .find((t) => t.characterId === node.id && t.mapId === currentMapId);
+        if (tok) useGameStore.getState().selectToken(tok.id, false);
+      }
       return;
     }
     if (node.kind === 'map') {
@@ -290,7 +319,15 @@ export function WorldTreePanel() {
 
   // The primary left-click action.
   function activate(node: TreeNode, hasKids: boolean) {
-    if (node.kind === 'map') { intents.viewMap(node.id); return; } // open in the viewer
+    // The DM jumps their view to the map they clicked. A player instead gets
+    // the details window — viewMap is DM-only server-side, so asking for it
+    // only ever earned them an error, and yanking their camera would be wrong
+    // even if it were allowed.
+    if (node.kind === 'map') {
+      if (isDm) intents.viewMap(node.id);
+      else openWindow('mapDetails', node.id, {}, node.name || 'Map');
+      return;
+    }
     if (hasKids) toggle(node.id);
     else open(node);
   }
@@ -465,8 +502,8 @@ export function WorldTreePanel() {
             {kids.length ? (isOpen ? '▾' : '▸') : ''}
           </span>
           <span
-            className={`wt-icon${node.kind === 'token' ? (node.playerRun ? ' wt-tok-player' : ' wt-tok-dm') : ''}`}
-            title={node.kind === 'token' ? (node.playerRun ? 'Run by a player' : 'Run by the DM') : undefined}
+            className={`wt-icon${node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? ' wt-tok-player' : ' wt-tok-dm') : ''}`}
+            title={node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? 'Run by a player' : 'Run by the DM') : undefined}
           >
             {(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦' : ICON[node.kind]}
           </span>

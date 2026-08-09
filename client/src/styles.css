@@ -678,24 +678,77 @@ button.link:hover { text-decoration: underline; }
 .md-tok { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); }
 .md-tok.player { color: #7fc4ff; border-color: #7fc4ff55; }
 .md-tok.dm { color: #8a93a6; }
-/* Equip toggle sits bottom-right; an equipped card goes green so what's
-   actually in your hands reads at a glance. */
+/* Equip toggle sits bottom-right, label first then a custom box — a native
+   checkbox is the one control that never matches a dark UI. */
 .sc-equip {
-  display: flex; align-items: center; gap: 5px; justify-content: flex-end;
+  display: flex; align-items: center; gap: 6px; justify-content: flex-end;
   margin-top: auto; padding-top: 4px;
-  font-size: 11px; color: var(--text-dim); cursor: pointer;
+  font-size: 11px; color: var(--text-dim); cursor: pointer; user-select: none;
 }
-.sc-equip input { margin: 0; cursor: pointer; }
-.sheet-card-equipped {
+.sc-equip input { position: absolute; opacity: 0; width: 0; height: 0; }
+.sc-equip .sc-box {
+  width: 14px; height: 14px; flex: none; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--panel);
+  display: inline-block; position: relative; transition: background 0.12s, border-color 0.12s;
+}
+.sc-equip:hover .sc-box { border-color: var(--accent); }
+.sc-equip.on .sc-box { background: #3fa86a; border-color: #4cc47e; }
+.sc-equip.on .sc-box::after {
+  content: ''; position: absolute; left: 4px; top: 1px;
+  width: 4px; height: 8px; border: solid #0d1a12;
+  border-width: 0 2px 2px 0; transform: rotate(42deg);
+}
+.sc-equip input:focus-visible + .sc-box { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sc-equip.on { color: #8fd8ab; }
+
+/* Card themes. Green = an advantage you have (equipped kit, an Edge);
+   red = something working against you. */
+.sheet-card.card-good {
   background: color-mix(in srgb, #3fa86a 16%, var(--panel-2));
   border-color: color-mix(in srgb, #3fa86a 55%, var(--border));
 }
-.sheet-card-equipped .sc-title { color: #b6e9c9; }
-.sheet-card-equipped .sc-equip { color: #8fd8ab; }
-.sheet-card-equipped .sc-chip {
-  background: color-mix(in srgb, #3fa86a 10%, var(--panel));
-  border-color: color-mix(in srgb, #3fa86a 35%, var(--border));
+.sheet-card.card-good .sc-title { color: #b6e9c9; }
+.sheet-card.card-bad {
+  background: color-mix(in srgb, #c2564f 15%, var(--panel-2));
+  border-color: color-mix(in srgb, #c2564f 50%, var(--border));
 }
+.sheet-card.card-bad .sc-title { color: #f0bdb8; }
+
+/* Chip tones: the same kind of fact wears the same colour everywhere. */
+.sc-chip.tone-damage   { color: #f0a5a0; border-color: #c2564f55; background: #c2564f14; }
+.sc-chip.tone-skill    { color: #a8c8f0; border-color: #5b86c255; background: #5b86c214; }
+.sc-chip.tone-range    { color: #9fd8d2; border-color: #479e9455; background: #479e9414; }
+.sc-chip.tone-ammo     { color: #e6c48a; border-color: #b8903f55; background: #b8903f14; }
+.sc-chip.tone-bonus    { color: #a6dcb4; border-color: #3fa86a55; background: #3fa86a14; }
+.sc-chip.tone-penalty  { color: #f2b0b0; border-color: #c2494955; background: #c2494914; }
+.sc-chip.tone-severity { color: #dcb0e8; border-color: #9b5fb055; background: #9b5fb014; }
+.sc-chip.tone-qty      { color: #c9cede; border-color: #6a7286aa; background: #6a728614; }
+.sc-chip.tone-weight   { color: #b6bccb; border-color: #5a6072aa; background: #5a607214; }
+.sc-chip.tone-use      { color: #b8e0a8; border-color: #6aa84f55; background: #6aa84f14; }
+.sc-chip.tone-flag     { color: #e8dca8; border-color: #a89a4f55; background: #a89a4f14; }
+
+/* Nameplate lines: the rank is a badge (it's a standing, not a sentence),
+   while where-you're-from sinks back toward the card. */
+.nameplate-line.np-rank {
+  align-self: flex-start;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 1px 8px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+.nameplate-line.np-origin { color: rgba(255, 255, 255, 0.62); }
+.public-sheet-id .np-rank {
+  align-self: flex-start;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 1px 8px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.public-sheet-id .np-origin { opacity: 0.7; }
+
+/* Call-for-save target list: select all / none beside the count. */
+.save-targets-head { display: flex; align-items: baseline; gap: 6px; width: 100%; }
+.save-targets-head .spacer { flex: 1; }
+.save-targets-head button { font-size: 11px; padding: 0 4px; }
 /* The open editor: spans the whole grid, shows every field. */
 .sheet-card-edit { grid-column: 1 / -1; background: var(--panel); }
 .sc-fields {

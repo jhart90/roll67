@@ -98,7 +98,24 @@ export function SavePrompt({ onClose }: { onClose: () => void }) {
         </label>
 
         <div className="lu-field">
-          <span>Targets ({picked.size}/{mapTokens.length})</span>
+          <span className="save-targets-head">
+            Targets ({picked.size}/{mapTokens.length})
+            <span className="spacer" />
+            <button
+              className="link"
+              disabled={picked.size === mapTokens.length}
+              onClick={() => setPicked(new Set(mapTokens.map((t) => t.id)))}
+            >
+              all
+            </button>
+            <button
+              className="link"
+              disabled={picked.size === 0}
+              onClick={() => setPicked(new Set())}
+            >
+              none
+            </button>
+          </span>
           <div className="save-targets">
             {mapTokens.map((t) => (
               <label key={t.id} className={`lu-skill ${picked.has(t.id) ? 'on' : ''}`}>

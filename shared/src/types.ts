@@ -283,11 +283,16 @@ export interface Token {
 /** The public face of a character, shown when someone selects a token they
  *  do not control. Computed server-side: players never receive other
  *  players' sheets, so it cannot be derived on the client. */
+/** What each descriptive line IS, so the nameplate can style it: a rank or
+ *  level badge, the character's concept, or where they come from. */
+export type NameplateLineKind = 'rank' | 'concept' | 'origin';
+export interface NameplateLine { text: string; kind: NameplateLineKind }
+
 export interface TokenNameplate {
   name: string;
   portraitUrl: string | null;
   color: string;
-  lines: string[];
+  lines: NameplateLine[];
 }
 
 export type TokenView = Token & { nameplate?: TokenNameplate | null };

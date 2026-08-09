@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
   AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, conditionsOf, needsNpcBoost, num, rows, spellSlots, str, swnReloadCheck, systemFor,
@@ -129,14 +129,98 @@ function FieldInput({
 
 const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoeSize', 'aoeWidth', 'condition', 'conditionSave', 'conditionDc']);
 
-/** SWADE weapons carry too many fields for one table row — these move to a
- *  second line of the per-weapon card (identity/attack stats stay on the first). */
-const SECONDARY_WEAPON_COLS = new Set(['parryBonus', 'wielded', 'ammo', 'maxAmmo', 'caliber', 'rof', 'notes']);
-
 /** Does this attack carry a rider effect (forced save, inflicted condition,
  *  or AoE template)? Lights up the ⚡ button so configured attacks stand out. */
 function attackHasRider(row: SheetData): boolean {
   return Boolean(str(row, 'save', '') || str(row, 'condition', '') || str(row, 'aoeShape', ''));
+}
+
+/** Sections that stay a compact table: skill lists are die ratings the table
+ *  flips through constantly mid-session — cards would slow that down. */
+const TABLE_SECTIONS = new Set(['skills']);
+
+/** Facts a card must never hide even when they match the column default —
+ *  a weapon with no damage listed reads as broken, not as clean. */
+const ALWAYS_SHOW = new Set(['damage', 'die', 'severity']);
+
+/** These ids pair up into one chip instead of appearing as two. */
+const PAIRED = new Set(['bonusAmt', 'maxAmmo', 'amount']);
+
+/** Chip label: the column label minus any parenthetical hint —
+ *  'Armor (+Toughness)' → 'Armor', but 'Armor vs ranged' stays whole. */
+const chipLabel = (label: string) => label.replace(/\s*\(.*?\)/g, '').trim();
+
+/** Long free-text columns render as the card's footnote line, not a chip. */
+const NOTE_COLS = new Set(['notes', 'description', 'effect_text']);
+
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+
+/**
+ * The card face: every meaningful fact as a compact chip, nothing for blank
+ * fields. Pairs collapse (trait bonus + amount → "+2 Notice"; ammo + mag →
+ * "Ammo 3/8"), signed modifiers keep their sign, checkboxes appear only when
+ * ticked, and anything still at its default stays silent — except the
+ * ALWAYS_SHOW facts that define the row.
+ */
+function cardChips(section: ListSection, row: SheetData): { chips: string[]; notes: string[] } {
+  const chips: string[] = [];
+  const notes: string[] = [];
+  for (const col of section.columns) {
+    if (col.id === 'name' || PAIRED.has(col.id) || (section.id === 'attacks' && ATTACK_DETAIL_COLS.has(col.id))) continue;
+    const v = row[col.id];
+    if (NOTE_COLS.has(col.id)) {
+      if (typeof v === 'string' && v.trim()) notes.push(v.trim());
+      continue;
+    }
+    if (col.type === 'checkbox') {
+      if (v === true) chips.push(col.label);
+      continue;
+    }
+    if (col.id === 'bonusSkill') {
+      const amt = num(row, 'bonusAmt', 0);
+      const skill = typeof v === 'string' ? v.trim() : '';
+      if (skill && amt !== 0) chips.push(`${signed(amt)} ${skill}`);
+      continue;
+    }
+    if (col.id === 'ammo') {
+      const mag = num(row, 'maxAmmo', 0);
+      if (mag > 0) chips.push(`Ammo ${num(row, 'ammo', 0)}/${mag}`);
+      continue;
+    }
+    if (col.id === 'effect') {
+      // A usable item reads as its action: "heal 2d6".
+      const use = typeof v === 'string' ? v.trim() : '';
+      if (use && use !== 'none') chips.push(`${use} ${str(row, 'amount', '')}`.trim());
+      continue;
+    }
+    if (v === undefined || v === null || v === '' || v === 'none') continue;
+    if (!ALWAYS_SHOW.has(col.id) && v === (col.default ?? (col.type === 'number' ? 0 : undefined))) continue;
+    if (col.type === 'number') {
+      const n = Number(v);
+      if (Number.isNaN(n)) continue;
+      // Modifier columns read as "+1 Parry"; plain quantities as "Qty 3".
+      chips.push(/bonus|mod/i.test(col.id) ? `${signed(n)} ${chipLabel(col.label)}` : `${chipLabel(col.label)} ${n}`);
+      continue;
+    }
+    const s = String(v).trim();
+    if (!s) continue;
+    // Selects and short texts: severity/damage-type read alone; the rest get
+    // their label so a bare value like "12ga" stays decipherable.
+    chips.push(col.id === 'severity' || col.id === 'dtype' || col.id === 'skill' || col.id === 'damage' || col.id === 'die' ? s : `${chipLabel(col.label)} ${s}`);
+  }
+  return { chips, notes };
+}
+
+/** One-line summary of an attack's rider for the card face. */
+function riderSummary(row: SheetData): string {
+  const parts: string[] = [];
+  const save = str(row, 'save', '');
+  const cond = str(row, 'condition', '');
+  const shape = str(row, 'aoeShape', '');
+  if (save) parts.push(`${save} save`);
+  if (cond) parts.push(cond);
+  if (shape) parts.push(`${shape} ${str(row, 'aoeSize', '')}`.trim());
+  return parts.join(' · ');
 }
 
 const RIDER_BTN_TITLE = 'Save / condition / AoE — rider effects this attack forces on its target (e.g. Vigor roll or be Stunned, a cone template)';
@@ -151,7 +235,8 @@ function ListEditor({
   onPatch: (patch: SheetData) => void;
 }) {
   const rows = Array.isArray(sheet[section.id]) ? (sheet[section.id] as SheetData[]) : [];
-  const [detailIdx, setDetailIdx] = useState<number | null>(null);
+  // Index of the card whose pencil is open (full editor), or null.
+  const [editIdx, setEditIdx] = useState<number | null>(null);
   const hasDetail = section.id === 'attacks';
 
   const mainCols = hasDetail ? section.columns.filter((c) => !ATTACK_DETAIL_COLS.has(c.id)) : section.columns;
@@ -165,6 +250,8 @@ function ListEditor({
     for (const col of section.columns) {
       row[col.id] = col.default ?? (col.type === 'number' ? 0 : col.type === 'checkbox' ? false : '');
     }
+    // Open the new card's editor straight away — it has nothing to show yet.
+    setEditIdx(rows.length);
     setRows([...rows, row]);
   }
 
@@ -213,7 +300,7 @@ function ListEditor({
             setRows(next);
           }}
         />
-        {col.suggestions && i === 0 && (
+        {col.suggestions && (i === 0 || editIdx === i) && (
           <datalist id={`dl-${section.id}-${col.id}`}>
             {col.suggestions.map((s) => <option key={s} value={s} />)}
           </datalist>
@@ -222,165 +309,113 @@ function ListEditor({
     );
   }
 
-  const detailRow = detailIdx !== null && detailIdx < rows.length ? rows[detailIdx] : null;
-  // SWADE weapons: 13 fields is unreadable as one table row — render each
-  // weapon as a two-line card instead (attack stats up top, logistics below).
-  const twoRow = hasDetail && system === 'swade';
-
-  if (twoRow) {
+  // Skill-style sections keep the quick-edit table.
+  if (TABLE_SECTIONS.has(section.id)) {
     return (
       <div className="sheet-list">
-        {rows.map((row, i) => (
-          <div key={i} className="weapon-card">
-            <div className="weapon-card-row">
-              {mainCols.filter((c) => !SECONDARY_WEAPON_COLS.has(c.id)).map((col) => (
-                <label key={col.id} className={`wc-field ${col.id === 'name' ? 'wc-grow' : ''}`}>
-                  <span className="wc-label"><SheetTerm system={system} label={col.label} /></span>
-                  {renderCell(col, row, i)}
-                </label>
-              ))}
-              <span className="spacer" />
-              <button
-                className="link"
-                title={RIDER_BTN_TITLE}
-                style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i || attackHasRider(row) ? 1 : 0.4 }}
-                onClick={() => setDetailIdx(detailIdx === i ? null : i)}
-              >
-                ⚡
-              </button>
-              {!readOnly && (
-                <button className="link danger" onClick={() => {
-                  if (detailIdx === i) setDetailIdx(null);
-                  else if (detailIdx !== null && detailIdx > i) setDetailIdx(detailIdx - 1);
-                  setRows(rows.filter((_, j) => j !== i));
-                }}>×</button>
-              )}
-            </div>
-            <div className="weapon-card-row">
-              {mainCols.filter((c) => SECONDARY_WEAPON_COLS.has(c.id)).map((col) => (
-                <label key={col.id} className={`wc-field ${col.id === 'notes' ? 'wc-grow' : ''} ${col.type === 'checkbox' ? 'wc-check' : ''}`}>
-                  <span className="wc-label"><SheetTerm system={system} label={col.label} /></span>
-                  {renderCell(col, row, i)}
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
+        <table>
+          <thead>
+            <tr>
+              {mainCols.map((c) => <th key={c.id}><SheetTerm system={system} label={c.label} /></th>)}
+              {!readOnly && <th />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i}>
+                {mainCols.map((col) => (
+                  <td key={col.id}>{renderCell(col, row, i)}</td>
+                ))}
+                {!readOnly && (
+                  <td>
+                    <button className="link danger" onClick={() => setRows(rows.filter((_, j) => j !== i))}>×</button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
         {!readOnly && <button className="link" onClick={addRow}>+ add {section.title.toLowerCase()}</button>}
-        {detailRow && detailIdx !== null && (
-          <AttackDetailPopover
-            section={section} system={system} readOnly={readOnly}
-            rows={rows} detailRow={detailRow} detailIdx={detailIdx}
-            renderCell={renderCell} setRows={setRows} onClose={() => setDetailIdx(null)}
-          />
-        )}
       </div>
     );
   }
 
+  // Everything else: a card per item. The face shows only filled-in facts;
+  // the pencil opens the full editor with every field.
+  function removeRow(i: number) {
+    if (editIdx === i) setEditIdx(null);
+    else if (editIdx !== null && editIdx > i) setEditIdx(editIdx - 1);
+    setRows(rows.filter((_, j) => j !== i));
+  }
+
+  const nameFallback = mainCols[0]?.label ?? 'Item';
+
   return (
     <div className="sheet-list">
-      <table>
-        <thead>
-          <tr>
-            {mainCols.map((c) => <th key={c.id}><SheetTerm system={system} label={c.label} /></th>)}
-            {hasDetail && <th />}
-            {!readOnly && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i}>
-              {mainCols.map((col) => (
-                <td key={col.id}>{renderCell(col, row, i)}</td>
-              ))}
-              {hasDetail && (
-                <td>
-                  <button
-                    className="link"
-                    title={RIDER_BTN_TITLE}
-                    style={{ fontSize: 14, padding: '0 4px', opacity: detailIdx === i || attackHasRider(row) ? 1 : 0.4 }}
-                    onClick={() => setDetailIdx(detailIdx === i ? null : i)}
-                  >
-                    ⚡
-                  </button>
-                </td>
+      <div className="card-grid">
+        {rows.map((row, i) => {
+          const editing = editIdx === i;
+          if (editing && !readOnly) {
+            return (
+              <div key={i} className="sheet-card sheet-card-edit">
+                <div className="sheet-card-head">
+                  <span className="sc-title">✎ {String(row.name || nameFallback)}</span>
+                  <span className="spacer" />
+                  <button className="link" onClick={() => setEditIdx(null)}>done</button>
+                </div>
+                <div className="sc-fields">
+                  {mainCols.map((col) => (
+                    <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
+                      <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
+                      {renderCell(col, row, i)}
+                    </label>
+                  ))}
+                </div>
+                {hasDetail && (
+                  <>
+                    <div className="sc-divider" title={RIDER_BTN_TITLE}>⚡ Rider effects (save / condition / AoE)</div>
+                    <div className="sc-fields">
+                      {section.columns.filter((col) => ATTACK_DETAIL_COLS.has(col.id)).map((col) => (
+                        <label key={col.id} className="sc-field">
+                          <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
+                          {renderCell(col, row, i)}
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div className="sheet-card-foot">
+                  <button className="link danger" onClick={() => removeRow(i)}>delete</button>
+                </div>
+              </div>
+            );
+          }
+          const { chips, notes } = cardChips(section, row);
+          const rider = hasDetail ? riderSummary(row) : '';
+          return (
+            <div key={i} className="sheet-card">
+              <div className="sheet-card-head">
+                <span className="sc-title">{String(row.name || nameFallback)}</span>
+                <span className="spacer" />
+                {hasDetail && attackHasRider(row) && (
+                  <span className="sc-chip sc-rider" title={RIDER_BTN_TITLE}>⚡</span>
+                )}
+                {!readOnly && (
+                  <button className="link sc-pencil" title="Edit all details" onClick={() => setEditIdx(i)}>✎</button>
+                )}
+              </div>
+              {(chips.length > 0 || rider) && (
+                <div className="sc-chips">
+                  {chips.map((c, j) => <span key={j} className="sc-chip">{c}</span>)}
+                  {rider && <span className="sc-chip sc-rider" title={RIDER_BTN_TITLE}>⚡ {rider}</span>}
+                </div>
               )}
-              {!readOnly && (
-                <td>
-                  <button className="link danger" onClick={() => {
-                    if (detailIdx === i) setDetailIdx(null);
-                    else if (detailIdx !== null && detailIdx > i) setDetailIdx(detailIdx - 1);
-                    setRows(rows.filter((_, j) => j !== i));
-                  }}>×</button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              {notes.map((n, j) => <div key={j} className="sc-notes">{n}</div>)}
+            </div>
+          );
+        })}
+      </div>
       {!readOnly && <button className="link" onClick={addRow}>+ add {section.title.toLowerCase()}</button>}
-
-      {hasDetail && detailRow && detailIdx !== null && (
-        <AttackDetailPopover
-          section={section} system={system} readOnly={readOnly}
-          rows={rows} detailRow={detailRow} detailIdx={detailIdx}
-          renderCell={renderCell} setRows={setRows} onClose={() => setDetailIdx(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-/** The full-field editor for one attack row, shared by the table and the
- *  two-line SWADE weapon-card layouts. */
-function AttackDetailPopover({
-  section, system, readOnly, rows, detailRow, detailIdx, renderCell, setRows, onClose,
-}: {
-  section: ListSection;
-  system: GameSystem;
-  readOnly: boolean;
-  rows: SheetData[];
-  detailRow: SheetData;
-  detailIdx: number;
-  renderCell: (col: FieldDef, row: SheetData, i: number) => ReactNode;
-  setRows: (next: SheetData[]) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="attack-detail-popover">
-      <div className="dock-header" style={{ marginBottom: 8 }}>
-        <h4 style={{ margin: 0, textTransform: 'none', color: 'var(--text)' }}>
-          ⚡ {String(detailRow.name || 'Attack')} — Save / Condition / AoE
-        </h4>
-        <button className="link" onClick={onClose}>close</button>
-      </div>
-      <p className="dim" style={{ fontSize: 11, margin: '0 0 8px' }}>
-        Rider effects the engine automates on a hit: a forced trait roll (with what a success
-        spares), a condition inflicted on failure, and/or an area template instead of a single
-        target. Leave blank for a plain weapon.
-      </p>
-      <div className="attack-detail-grid">
-        {section.columns.filter((col) => ATTACK_DETAIL_COLS.has(col.id)).map((col) => (
-          <label key={col.id} className={`${ATTACK_DETAIL_COLS.has(col.id) ? 'detail-field' : ''}${col.width === 'full' ? ' detail-full' : ''}`}>
-            <SheetTerm system={system} label={col.label} />
-            {col.width === 'full' ? (
-              <textarea
-                defaultValue={detailRow[col.id] === undefined ? '' : String(detailRow[col.id])}
-                readOnly={readOnly}
-                rows={2}
-                style={{ resize: 'vertical', width: '100%' }}
-                onBlur={(e) => {
-                  const val = e.target.value;
-                  if (val === detailRow[col.id]) return;
-                  const next = rows.map((r, j) => (j === detailIdx ? { ...r, [col.id]: val } : r));
-                  setRows(next);
-                }}
-              />
-            ) : renderCell(col, detailRow, detailIdx)}
-          </label>
-        ))}
-      </div>
     </div>
   );
 }

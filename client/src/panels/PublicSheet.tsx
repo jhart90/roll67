@@ -80,7 +80,16 @@ export function PublicSheetWindow({ characterId }: { characterId: string }) {
         <PrivateNotesTab characterId={characterId} name={sheet.name} />
       ) : tab === 'profile' ? (
         <div className="public-sheet-bio">
-          {sheet.bio.length === 0 && <p className="dim">Nothing written about {sheet.name} yet.</p>}
+          {/* The portrait leads: it's what the table actually wants to see.
+              It spans the sheet's full width and the sheet grows to show it,
+              up to the height of the map pane it lives in. */}
+          {sheet.detailImageUrl && (
+            <img className="public-sheet-art" src={sheet.detailImageUrl} alt={`${sheet.name} portrait`} />
+          )}
+          {sheet.bioText && <p className="public-sheet-blurb">{sheet.bioText}</p>}
+          {sheet.bio.length === 0 && !sheet.bioText && !sheet.detailImageUrl && (
+            <p className="dim">Nothing written about {sheet.name} yet.</p>
+          )}
           {sheet.bio.map((section) => (
             <div key={section.title}>
               <h4>{section.title}</h4>

@@ -236,11 +236,6 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     if (isDm) {
       useGameStore.getState().selectToken(token.id, e.shiftKey);
       useGameStore.getState().openInspector(token.id);
-    } else if (character && you && character.ownerUserId === you.userId) {
-      // Your own token: the inspector opens in its colour-only form, so
-      // recolouring your piece is the same right-click the DM uses.
-      useGameStore.getState().selectToken(token.id, e.shiftKey);
-      useGameStore.getState().openInspector(token.id);
     } else if (token.characterId) {
       const shops = useGameStore.getState().shopList;
       const linkedShop = shops.find((s) => s.linkedCharacterId === token.characterId);

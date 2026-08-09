@@ -18,6 +18,9 @@ import { SheetTerm } from '../util/Term';
 import { RollStatsTab } from './RollStats';
 import { NotesTab } from './NotesTab';
 
+/** The neutral token colour a sheet shows before anyone picks one. */
+const DEFAULT_TOKEN_COLOR = '#6c9bd2';
+
 /** Synthetic tab ids for views that aren't part of the system schema. */
 const STATS_TAB = '__stats';
 const NOTES_TAB = '__notes';
@@ -50,6 +53,26 @@ function FieldInput({
           )}
         </div>
       </div>
+    );
+  }
+
+  if (field.type === 'color') {
+    // Blank means "no choice made" — show the swatch at the neutral default
+    // rather than black, which reads as a deliberate pick.
+    const current = typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : DEFAULT_TOKEN_COLOR;
+    return (
+      <label className={`sheet-field w-${field.width ?? 'half'} color-field`}>
+        <span><SheetTerm system={system} label={field.label} /></span>
+        <span className="color-row">
+          <input
+            type="color"
+            value={current}
+            disabled={readOnly}
+            onChange={(e) => onPatch({ [field.id]: e.target.value })}
+          />
+          <span className="dim">{current}</span>
+        </span>
+      </label>
     );
   }
 

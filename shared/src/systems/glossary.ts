@@ -369,8 +369,8 @@ const COMMON: Record<string, string> = {
  *  assert that everything *else* is documented. */
 export const NON_RULES_LABELS = new Set(
   ['+', '±', 'Age', 'Appearance', 'Description', 'Detail / portrait', 'Eyes', 'Hair', 'Height',
-    'Item', 'Name', 'Nameplate colour', 'Nameplate quip', 'Notes', 'Notes (RoF…)', 'Qty', 'Skin',
-    'Source', 'Token image', 'Type', 'Use',
+    'Item', 'Name', 'Notes', 'Notes (RoF…)', 'Profile / Bio (public-facing)', 'Qty', 'Skin',
+    'Source', 'Token colour', 'Token image', 'Type', 'Use',
   ].map((s) => s.toLowerCase()),
 );
 

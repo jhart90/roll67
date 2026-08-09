@@ -59,6 +59,12 @@ import { hasSeenHex, socketsSeeingToken, syncMapVision } from '../visionService.
 import { broadcastDirectory } from '../directory.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
 
+/** A colour deliberately chosen on the character sheet, if it's a valid one. */
+function sheetTokenColor(character?: { sheet: Record<string, unknown> }): string | undefined {
+  const c = character?.sheet.tokenColor;
+  return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : undefined;
+}
+
 /** The colour a member is shown in everywhere else, so a new token matches. */
 function colorForOwner(campaignId: string, userId: string): string {
   const m = campaigns.members(campaignId).find((x) => x.userId === userId);
@@ -94,10 +100,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         const look = character ? tokenLookFor(character) : { size: 1, shape: 'circle' as TokenShape };
         return { size: payload.size ?? look.size, shape: payload.shape ?? look.shape };
       })(),
-      // A token starts in the colour of whoever will control it — the linked
-      // character's owner, or the DM placing it. One less thing to set by hand,
-      // and the map reads as "whose is whose" straight away.
-      color: payload.color ?? colorForOwner(d.campaignId, character?.ownerUserId ?? d.userId),
+      // A token starts in the colour its SHEET asks for; failing that, the
+      // colour of whoever will control it — the linked character's owner, or
+      // the DM placing it. One less thing to set by hand, and the map reads as
+      // "whose is whose" straight away.
+      color: payload.color
+        ?? sheetTokenColor(character)
+        ?? colorForOwner(d.campaignId, character?.ownerUserId ?? d.userId),
       vision: payload.vision ?? null,
       bar: payload.bar ?? null,
     });

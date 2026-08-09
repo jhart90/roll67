@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nameplateFor, QUIP_MAX } from '../src/systems/nameplate.js';
+import { nameplateFor } from '../src/systems/nameplate.js';
 import type { Character } from '../src/types.js';
 
 const ch = (system: Character['system'], sheet: Record<string, unknown>): Character => ({
@@ -15,20 +15,14 @@ describe('nameplateFor', () => {
     expect(p.lines.some((l) => /Seasoned|Novice|Veteran/.test(l))).toBe(true);
   });
 
-  it('falls back to the quip where a system has no Concept field', () => {
-    const p5 = nameplateFor(ch('dnd5e', { level: 4, class: 'Bard', race: 'Tiefling', quip: 'Owes money everywhere' }), '#000000', null);
+  it('describes 5e and SWN characters from their own sheet fields', () => {
+    const p5 = nameplateFor(ch('dnd5e', { level: 4, class: 'Bard', race: 'Tiefling', background: 'Charlatan' }), '#000000', null);
     expect(p5.lines).toContain('Level 4 Bard');
-    expect(p5.lines).toContain('Owes money everywhere');
     expect(p5.lines).toContain('Tiefling');
-    const pSwn = nameplateFor(ch('swn', { level: 2, class: 'Psychic', homeworld: 'Ketter', quip: 'Hears the ship' }), '#000000', null);
+    expect(p5.lines).toContain('Charlatan');
+    const pSwn = nameplateFor(ch('swn', { level: 2, class: 'Psychic', homeworld: 'Ketter' }), '#000000', null);
     expect(pSwn.lines).toContain('Level 2 Psychic');
-    expect(pSwn.lines).toContain('Hears the ship');
-  });
-
-  it('prefers a SWADE concept over a quip when both are set', () => {
-    const p = nameplateFor(ch('swade', { concept: 'Gunslinger', quip: 'ignored' }), '#000000', null);
-    expect(p.lines).toContain('Gunslinger');
-    expect(p.lines).not.toContain('ignored');
+    expect(pSwn.lines).toContain('Ketter');
   });
 
   it('drops empty rows rather than rendering blanks', () => {
@@ -36,17 +30,32 @@ describe('nameplateFor', () => {
     expect(p.lines.every((l) => l.trim().length > 0)).toBe(true);
   });
 
-  it('caps an over-long quip', () => {
-    const p = nameplateFor(ch('dnd5e', { quip: 'x'.repeat(500) }), '#000000', null);
-    expect(p.lines.some((l) => l.length > QUIP_MAX)).toBe(false);
+  it('shows the TOKEN art — the nameplate labels the piece on the map', () => {
+    const p = nameplateFor(ch('swade', { detailImage: '/uploads/portrait.png' }), '#112233', '/uploads/tok.png');
+    expect(p.portraitUrl).toBe('/uploads/tok.png');
   });
 
-  it('takes colour and portrait from the sheet, else the token', () => {
-    const dflt = nameplateFor(ch('swade', {}), '#112233', '/uploads/tok.png');
-    expect(dflt.color).toBe('#112233');
-    expect(dflt.portraitUrl).toBe('/uploads/tok.png');
-    const over = nameplateFor(ch('swade', { nameplateColor: '#ff0000', detailImage: '/uploads/art.png' }), '#112233', '/uploads/tok.png');
-    expect(over.color).toBe('#ff0000');
-    expect(over.portraitUrl).toBe('/uploads/art.png');
+  it("uses the sheet's token image when the token itself carries no art", () => {
+    const p = nameplateFor(
+      ch('swade', { tokenImage: '/uploads/tok.png', detailImage: '/uploads/portrait.png' }), '#112233', null,
+    );
+    expect(p.portraitUrl).toBe('/uploads/tok.png');
+  });
+
+  it('falls back to the detail portrait only when there is no token image at all', () => {
+    const p = nameplateFor(ch('swade', { detailImage: '/uploads/portrait.png' }), '#112233', null);
+    expect(p.portraitUrl).toBe('/uploads/portrait.png');
+    expect(nameplateFor(ch('swade', {}), '#112233', null).portraitUrl).toBeNull();
+  });
+
+  it('takes its colour from the token — there is no separate nameplate colour', () => {
+    // A sheet carrying the retired override must not resurrect it.
+    const p = nameplateFor(ch('swade', { nameplateColor: '#ff0000' }), '#112233', null);
+    expect(p.color).toBe('#112233');
+  });
+
+  it('no longer surfaces the retired quip field', () => {
+    const p = nameplateFor(ch('dnd5e', { level: 1, quip: 'Owes money everywhere' }), '#000000', null);
+    expect(p.lines).not.toContain('Owes money everywhere');
   });
 });

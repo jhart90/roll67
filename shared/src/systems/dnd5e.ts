@@ -301,8 +301,8 @@ const bioTab: SheetTab = {
       fields: [
         { id: 'tokenImage', label: 'Token image', type: 'image', width: 'half' },
         { id: 'detailImage', label: 'Detail / portrait', type: 'image', width: 'half' },
-        { id: 'quip', label: 'Nameplate quip', type: 'text', width: 'half' },
-        { id: 'nameplateColor', label: 'Nameplate colour', type: 'text', width: 'half' },
+        { id: 'tokenColor', label: 'Token colour', type: 'color', width: 'half' },
+        { id: 'bioPublic', label: 'Profile / Bio (public-facing)', type: 'textarea', width: 'full' },
       ],
     },
     {

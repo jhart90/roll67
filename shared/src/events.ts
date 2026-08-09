@@ -1025,6 +1025,10 @@ export interface PublicSheetPayload {
   lines: string[];
   portraitUrl: string | null;
   tokenImageUrl: string | null;
+  /** The big Detail / portrait artwork, headlining the Profile tab. */
+  detailImageUrl: string | null;
+  /** The character's own public-facing write-up, in their player's words. */
+  bioText: string;
   bio: Array<{ title: string; entries: Array<{ label: string; text: string }> }>;
 }
 export interface RollStatsGetPayload { characterId?: string | null }

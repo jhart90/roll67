@@ -109,6 +109,8 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       lines: plate.lines,
       portraitUrl: plate.portraitUrl,
       tokenImageUrl: str(ch.sheet, 'tokenImage', '').trim() || tok?.artUrl || null,
+      detailImageUrl: str(ch.sheet, 'detailImage', '').trim() || null,
+      bioText: str(ch.sheet, 'bioPublic', '').trim(),
       bio,
     };
     socket.emit(S2C.PUBLIC_SHEET, payload);
@@ -366,9 +368,15 @@ function applyCharacterPatch(
   const artId = typeof (patch as Record<string, unknown>).tokenImageAssetId === 'string'
     ? (patch as Record<string, string>).tokenImageAssetId
     : undefined;
+  // Token colour lives on the SHEET now (the old right-click picker is gone),
+  // so picking one there repaints every one of this character's tokens — and
+  // with it their nameplate, which takes its colour from the token.
+  const rawColor = (patch as Record<string, unknown>).tokenColor;
+  const color = typeof rawColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : undefined;
   const touchedMaps = new Set<string>();
   for (const t of tokens.forCharacter(character.id)) {
     const tokenPatch: Record<string, unknown> = artId !== undefined ? { bar: hp, artAssetId: artId } : { bar: hp };
+    if (color !== undefined && t.color !== color) tokenPatch.color = color;
     if (name !== undefined && t.name !== updated.name) tokenPatch.name = updated.name;
     tokens.update(t.id, tokenPatch);
     io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(t.id)! });

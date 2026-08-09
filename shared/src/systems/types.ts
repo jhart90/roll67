@@ -4,7 +4,7 @@
 
 import type { AoeSpec, SheetData, VisionStats } from '../types.js';
 
-export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'image';
+export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'image' | 'color';
 
 export interface FieldDef {
   id: string;

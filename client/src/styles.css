@@ -595,6 +595,9 @@ button.link:hover { text-decoration: underline; }
 .wc-field.wc-check { align-items: center; }
 .wc-field.wc-check input { margin: 5px 0; }
 
+/* Soundboard page toggles (3 pages of 4x4 pads). */
+.soundboard-pages { display: flex; gap: 4px; margin-bottom: 6px; }
+
 /* Per-device music/effects sliders in the jukebox panel. */
 .local-vol-row { display: flex; align-items: center; gap: 8px; padding: 2px 8px; font-size: 12px; }
 .local-vol-row span { flex: 0 0 150px; }

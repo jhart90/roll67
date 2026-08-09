@@ -523,7 +523,7 @@ export const audioTracks = {
 
 // ---------- soundboard ----------
 
-export const SOUNDBOARD_SLOTS = 16; // 4x4 grid
+export const SOUNDBOARD_SLOTS = 48; // 3 pages of 4x4
 
 export const soundboard = {
   forCampaign(campaignId: string): SoundboardSlot[] {

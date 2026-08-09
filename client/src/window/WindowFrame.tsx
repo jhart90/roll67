@@ -2,7 +2,11 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import { createPortal } from 'react-dom';
 import { useWindowManager, type WindowInstance } from '../store/windowManager';
 
-const POPUP_FEATURES = 'width=720,height=640';
+const DEFAULT_POPUP_FEATURES = 'width=720,height=640';
+// Compact windows get a compact popup — the soundboard is a small pad grid.
+const POPUP_FEATURES_BY_KIND: Partial<Record<WindowInstance['kind'], string>> = {
+  soundboard: 'width=360,height=320',
+};
 
 /** Generic draggable/poppable chrome wrapping one window instance's content. */
 export function WindowFrame({ win, children }: { win: WindowInstance; children: ReactNode }) {
@@ -11,7 +15,7 @@ export function WindowFrame({ win, children }: { win: WindowInstance; children: 
 
   useEffect(() => {
     if (!win.poppedOut) return;
-    const w = window.open('', '', POPUP_FEATURES);
+    const w = window.open('', '', POPUP_FEATURES_BY_KIND[win.kind] ?? DEFAULT_POPUP_FEATURES);
     if (!w) {
       // Popup blocked — fall back to staying docked instead of vanishing silently.
       useWindowManager.getState().popIn(win.id);

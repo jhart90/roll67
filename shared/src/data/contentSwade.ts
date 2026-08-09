@@ -190,7 +190,8 @@ const POWERS: P[] = [
   ['Environmental Protection', 2, 'Novice', 'Breathe/operate in a hostile environment'],
   ['Fear', 2, 'Novice', 'Target makes a Spirit roll or panics', { rangeFt: 72, save: 'spirit', onSave: 'negate', condition: 'frightened' }],
   ['Fly', 3, 'Veteran', 'Fly at Pace 12'],
-  // Flat 5 healing = one Wound (the engine mends a Wound per full 4 points).
+  // Healing is resolved as a trait roll vs TN 4 (see combat.ts healsWounds):
+  // a success mends one Wound, a raise two. The amount below is vestigial.
   ['Healing', 3, 'Novice', 'Heal a Wound (two with a raise) within the golden hour', { damage: '5', heal: true, rangeFt: 5 }],
   ['Illusion', 3, 'Novice', 'Create a visual illusion'],
   ['Invisibility', 5, 'Seasoned', 'Turn a willing target invisible (harder to hit or notice)', { heal: true, rangeFt: 5, condition: 'invisible' }],
@@ -270,7 +271,7 @@ const GEAR: G[] = [
   ['Flint & Steel', 'Start fires'],
   ['Canteen', 'A day of water'],
   ['Rations (5 days)', 'Trail food'],
-  ['First Aid Kit', 'Field dressing: 2d4+2 healing (a Wound mends per 4 points, steadies the Shaken); +1 Healing while equipped', { trait: 'Healing', amount: 1 }],
+  ['First Aid Kit', 'Field dressing: +1 to Healing rolls while carried. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.', { trait: 'Healing', amount: 1 }],
   ['Lockpicks', '+1 to Thievery to open locks', { trait: 'Thievery', amount: 1 }],
   ['Crowbar', '+1 Strength to force things open', { trait: 'Strength', amount: 1 }],
   ['Binoculars', 'See distant detail'],
@@ -278,8 +279,8 @@ const GEAR: G[] = [
   ['Cell Phone', 'Modern communication'],
   ['Climbing Gear', '+2 to Athletics (climbing)', { trait: 'Athletics', amount: 2 }],
   ['Whetstone', 'Weapon maintenance'],
-  ['Healing Potion', 'Drink: 2d6 healing — mends a Wound per 4 points and steadies the Shaken'],
-  ['Antitoxin', 'Shrugs off one poison; 1d6 healing'],
+  ['Healing Potion', 'Drink to treat a Wound: a Healing roll mends one on a success, two on a raise, and steadies the Shaken. Used up.'],
+  ['Antitoxin', 'Shrugs off one poison. Used up.'],
   ['Bandages', 'Basic field dressing; +1 Healing while equipped', { trait: 'Healing', amount: 1 }],
   ['Surgical Kit', 'Full medical instruments; +2 Healing while equipped', { trait: 'Healing', amount: 2 }],
   ['Camouflage Cloak', '+2 Stealth in matching terrain while worn', { trait: 'Stealth', amount: 2 }],
@@ -305,7 +306,7 @@ const GEAR: G[] = [
   ['Radio', 'Short-range team communication'],
   ['Night Vision Goggles', 'Ignore Dim and Dark lighting penalties'],
   ['Motion Detector', '+2 Notice for approaching movement', { trait: 'Notice', amount: 2 }],
-  ['Medkit (Modern)', 'Trauma kit: 2d6 healing; +2 Healing while equipped', { trait: 'Healing', amount: 2 }],
+  ['Medkit (Modern)', 'Trauma kit: +2 to Healing rolls while carried. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.', { trait: 'Healing', amount: 2 }],
   ['Vacc Suit', 'Sealed suit for vacuum and hostile atmospheres'],
   ['Jetpack', 'Short bursts of powered flight'],
   ['Comm Unit', 'Personal communicator with encryption'],

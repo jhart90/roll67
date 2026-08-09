@@ -216,12 +216,21 @@ describe('racial abilities are addable from the compendium after creation', () =
 });
 
 describe('expanded SWADE gear and weapons stay automated', () => {
-  it('new healing gear becomes a usable heal item', () => {
-    for (const [name, amount] of [['Healing Potion', '2d6'], ['Medkit (Modern)', '2d6'], ['Antitoxin', '1d6']] as const) {
+  it('healing gear is usable, with the Healing roll deciding the amount', () => {
+    // SWADE healing has no points: the roll's margin is the result (a success
+    // mends one Wound, a raise two), so these carry no dice of their own.
+    for (const name of ['Healing Potion', 'Medkit (Modern)'] as const) {
       const { row } = sheetAfter('swade', name);
       expect(row.effect, name).toBe('heal');
-      expect(row.amount, name).toBe(amount);
+      expect(row.amount, name).toBe('');
     }
+  });
+
+  it('antitoxin cures poison rather than mending Wounds', () => {
+    // It used to grant "1d6 healing", which the old points-to-Wounds rule
+    // turned into a free Wound — an antitoxin never healed injuries.
+    const { row } = sheetAfter('swade', 'Antitoxin');
+    expect(row.effect).toBeUndefined();
   });
 
   it('new gear with a trait bonus boosts that trait once equipped', () => {

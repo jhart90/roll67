@@ -284,8 +284,9 @@ export interface Token {
  *  do not control. Computed server-side: players never receive other
  *  players' sheets, so it cannot be derived on the client. */
 /** What each descriptive line IS, so the nameplate can style it: a rank or
- *  level badge, the character's concept, or where they come from. */
-export type NameplateLineKind = 'rank' | 'concept' | 'origin';
+ *  level badge, a standing (SWADE's Wild Card / Extra), the character's
+ *  concept, or where they come from. */
+export type NameplateLineKind = 'rank' | 'status' | 'concept' | 'origin';
 export interface NameplateLine { text: string; kind: NameplateLineKind }
 
 export interface TokenNameplate {

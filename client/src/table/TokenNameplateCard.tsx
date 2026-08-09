@@ -84,7 +84,16 @@ export function TokenNameplateCard() {
         : <div className="nameplate-portrait-empty">🎭</div>}
       <div className="nameplate-body">
         <strong className="nameplate-name">{plate.name}</strong>
-        {plate.lines.map((line, i) => (
+        {/* Badges (rank, Wild Card / Extra) share one row; the descriptive
+            lines stack under them. */}
+        {plate.lines.some((l) => l.kind === 'rank' || l.kind === 'status') && (
+          <span className="nameplate-badges">
+            {plate.lines.filter((l) => l.kind === 'rank' || l.kind === 'status').map((l, i) => (
+              <span key={i} className={`np-badge np-${l.kind}${l.text === 'Extra' ? ' np-extra' : ''}`}>{l.text}</span>
+            ))}
+          </span>
+        )}
+        {plate.lines.filter((l) => l.kind !== 'rank' && l.kind !== 'status').map((line, i) => (
           <span key={i} className={`nameplate-line np-${line.kind}`}>{line.text}</span>
         ))}
       </div>

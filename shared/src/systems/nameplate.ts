@@ -31,12 +31,17 @@ export function nameplateFor(character: Character, tokenColor: string, tokenArtU
 function linesFor(system: GameSystem, sheet: SheetData): NameplateLine[] {
   const join = (...parts: string[]) => parts.filter((p) => p).join(' ');
   const rank = (text: string): NameplateLine => ({ text, kind: 'rank' });
+  const status = (text: string): NameplateLine => ({ text, kind: 'status' });
   const concept = (text: string): NameplateLine => ({ text, kind: 'concept' });
   const origin = (text: string): NameplateLine => ({ text, kind: 'origin' });
   if (system === 'swade') {
     const advances = num(sheet, 'advances', 0);
     return [
       rank(join(rankForAdvances(advances), advances > 0 ? `(${advances} advances)` : '')),
+      // Wild Card vs Extra is the single most load-bearing fact about a SWADE
+      // combatant — three wounds and a Wild Die, or one hit and gone. Only
+      // SWADE has the distinction, so only SWADE shows the badge.
+      status(sheet.wildCard === false ? 'Extra' : 'Wild Card'),
       concept(str(sheet, 'concept', '').trim()),
       origin(str(sheet, 'ancestry', '').trim()),
     ];

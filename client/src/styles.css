@@ -736,22 +736,26 @@ button.link:hover { text-decoration: underline; }
 .sc-chip.tone-use      { color: #b8e0a8; border-color: #6aa84f55; background: #6aa84f14; }
 .sc-chip.tone-flag     { color: #e8dca8; border-color: #a89a4f55; background: #a89a4f14; }
 
-/* Nameplate lines: the rank is a badge (it's a standing, not a sentence),
-   while where-you're-from sinks back toward the card. */
-.nameplate-line.np-rank {
-  align-self: flex-start;
+/* Nameplate badges (rank, Wild Card / Extra) sit together on one row;
+   where-you're-from sinks back toward the card. */
+.nameplate-badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.np-badge {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 1px 8px; border-radius: 999px;
+  padding: 1px 8px; border-radius: 999px; white-space: nowrap;
   background: rgba(255, 255, 255, 0.16);
   border: 1px solid rgba(255, 255, 255, 0.28);
 }
-.nameplate-line.np-origin { color: rgba(255, 255, 255, 0.62); }
-.public-sheet-id .np-rank {
-  align-self: flex-start;
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 1px 8px; border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18); border: 1px solid rgba(255, 255, 255, 0.3);
+/* A Wild Card is the one worth spotting across the table; an Extra recedes. */
+.np-badge.np-status {
+  background: rgba(255, 214, 122, 0.28);
+  border-color: rgba(255, 214, 122, 0.6);
 }
+.np-badge.np-status.np-extra {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  font-weight: 600; opacity: 0.75;
+}
+.nameplate-line.np-origin { color: rgba(255, 255, 255, 0.62); }
 .public-sheet-id .np-origin { opacity: 0.7; }
 
 /* Call-for-save target list: select all / none beside the count. */

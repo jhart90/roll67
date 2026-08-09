@@ -548,7 +548,15 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
   // items with a flat numeric AC/save bonus become equippable for it.
   if (entry.kind === 'gear' || entry.kind === 'magicitem') {
     const heal = healAmountFrom(`${entry.subtitle} ${entry.detail ?? ''}`);
-    const usable = heal ? { effect: 'heal', amount: heal, range: 5 } : {};
+    // SWADE healing has no amount to parse — the Healing roll's margin IS the
+    // result — so a kit is recognised by treating Wounds rather than by
+    // quoting dice. Without this, rewriting those descriptions to match the
+    // rules would quietly stop the kits being usable at all.
+    const swadeHeal = isSwade && /\bWound\b/i.test(`${entry.subtitle} ${entry.detail ?? ''}`)
+      && /\bheal(ing)?\b/i.test(`${entry.subtitle} ${entry.detail ?? ''}`);
+    const usable = heal
+      ? { effect: 'heal', amount: heal, range: 5 }
+      : swadeHeal ? { effect: 'heal', amount: '', range: 5 } : {};
     const bonus = entry.kind === 'magicitem' ? parseAcSaveBonus(entry.subtitle) : { ac: 0, save: 0 };
     const equip = { equipped: false, acBonus: bonus.ac, saveBonus: bonus.save };
     if (isSwade) {

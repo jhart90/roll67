@@ -37,6 +37,24 @@ describe('nameplateFor', () => {
     expect(p5.lines.find((l) => l.text === 'Tiefling')?.kind).toBe('origin');
   });
 
+  it('badges a SWADE combatant as Wild Card or Extra', () => {
+    // The single most load-bearing fact in a fight: three wounds and a Wild
+    // Die, or one hit and gone.
+    const wc = nameplateFor(ch('swade', { wildCard: true }), '#000000', null);
+    expect(wc.lines.find((l) => l.kind === 'status')?.text).toBe('Wild Card');
+    const extra = nameplateFor(ch('swade', { wildCard: false }), '#000000', null);
+    expect(extra.lines.find((l) => l.kind === 'status')?.text).toBe('Extra');
+    // An unset sheet is a Wild Card, matching the rest of the engine.
+    expect(nameplateFor(ch('swade', {}), '#000000', null).lines.find((l) => l.kind === 'status')?.text).toBe('Wild Card');
+  });
+
+  it('leaves the Wild Card badge off systems that have no such idea', () => {
+    for (const sys of ['dnd5e', 'swn'] as const) {
+      const p = nameplateFor(ch(sys, { level: 3, wildCard: true }), '#000000', null);
+      expect(p.lines.some((l) => l.kind === 'status')).toBe(false);
+    }
+  });
+
   it('drops empty rows rather than rendering blanks', () => {
     const p = nameplateFor(ch('dnd5e', { level: 1 }), '#000000', null);
     expect(p.lines.every((l) => l.text.trim().length > 0)).toBe(true);

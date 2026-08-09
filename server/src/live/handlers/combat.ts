@@ -1148,6 +1148,26 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // attacks/heals with no roll of their own) or after the attack/save
     // card's dice have settled.
     const resolveDamage = (): void => {
+      // A SWADE heal has no amount to roll — the Healing roll already posted
+      // above IS the whole resolution, and its margin decides the Wounds. So
+      // apply the mending and stop: rolling the item's vestigial dice here
+      // produced a second card showing a number that was then thrown away.
+      if (action.healsWounds) {
+        const mended = swadeWoundsHealed(hit, raise);
+        consumeAmmoAndItem();
+        if (mended > 0 && targetChar) {
+          const targetId = targetChar.id;
+          undo.push({ t: 'hp', characterId: targetId, delta: mended });
+          // resolveDamage is ALREADY called once the Healing roll's dice have
+          // settled — waiting a second settle here just left the patient
+          // bleeding for another beat.
+          const fresh = characters.byId(targetId);
+          if (fresh) applySwadeWoundHeal(io, d.campaignId, fresh, mended);
+          floatHp(io, d.campaignId, src.mapId, tgt.id, mended, 'heal');
+        }
+        return;
+      }
+
       // A crit doubles the dice. Resistance/vulnerability/immunity from the
       // target's sheet then scales the total. A SWADE raise (beating TN 4 by
       // 4+) adds a bonus d6 that aces, per the book.

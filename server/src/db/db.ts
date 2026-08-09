@@ -142,6 +142,20 @@ runOnce('hide-legacy-shops-tables', () => {
   db.exec('UPDATE shops SET players_can_buy = 0');
   db.exec('UPDATE rollable_tables SET players_can_roll = 0');
 });
+// Player-run characters and SWADE Wild Cards now default to a 1.5-hex
+// hexagon. Bring existing tokens up to it — but only ones still sitting at
+// the old 1-hex circle default, so any size/shape the DM chose on purpose
+// survives untouched.
+runOnce('protagonist-token-look', () => {
+  db.exec(`
+    UPDATE tokens SET size = 1.5, shape = 'hexagon'
+    WHERE size = 1 AND shape = 'circle' AND character_id IN (
+      SELECT id FROM characters
+      WHERE owner_user_id IS NOT NULL
+         OR (system = 'swade' AND json_extract(sheet_json, '$.wildCard') = 1)
+    )
+  `);
+});
 
 // Chest-folder unification: folders can be placed on maps as chests
 ensureColumn('world_folders', 'items_json', "items_json TEXT NOT NULL DEFAULT '[]'");

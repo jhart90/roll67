@@ -19,6 +19,33 @@ export function resetSwadeTurnMoves(campaignId: string): void {
   swadeTurnMoves.delete(campaignId);
 }
 
+/** SWADE marks its heroes and named villains as Wild Cards on the sheet;
+ *  other systems have no such concept. */
+function isWildCard(character: { system: string; sheet: Record<string, unknown> }): boolean {
+  return character.system === 'swade' && character.sheet.wildCard === true;
+}
+
+/**
+ * How a character's token should look. Player-run characters and Wild Cards
+ * are the table's protagonists, so they get the bigger hexagon by default;
+ * rank-and-file Extras stay 1-hex circles. An explicit choice recorded on the
+ * sheet (the creator wizard's Appearance step, or a DM resize on the map)
+ * always wins — the default only fills the gap.
+ */
+export function tokenLookFor(
+  character: { system: string; ownerUserId: string | null; sheet: Record<string, unknown> },
+): { size: number; shape: TokenShape } {
+  const featured = character.ownerUserId !== null || isWildCard(character);
+  const sh = character.sheet;
+  const size = Number(sh.tokenSize) > 0
+    ? Math.max(0.5, Math.min(4, Number(sh.tokenSize)))
+    : (featured ? 1.5 : 1);
+  const shape = typeof sh.tokenShape === 'string'
+    ? (sh.tokenShape as TokenShape)
+    : (featured ? 'hexagon' : 'circle');
+  return { size, shape };
+}
+
 /** Did this token spend its running die this turn? (−2 to other actions.) */
 export function hasRunThisTurn(campaignId: string, tokenId: string): boolean {
   return swadeTurnMoves.get(campaignId)?.get(tokenId)?.runBonus != null;
@@ -63,8 +90,10 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       q: payload.q,
       r: payload.r,
       layer: payload.layer ?? 'token',
-      size: payload.size ?? 1,
-      shape: payload.shape ?? 'circle',
+      ...(() => {
+        const look = character ? tokenLookFor(character) : { size: 1, shape: 'circle' as TokenShape };
+        return { size: payload.size ?? look.size, shape: payload.shape ?? look.shape };
+      })(),
       // A token starts in the colour of whoever will control it — the linked
       // character's owner, or the DM placing it. One less thing to set by hand,
       // and the map reads as "whose is whose" straight away.
@@ -136,6 +165,21 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       const ch = characters.byId(token.characterId);
       if (ch) {
         characters.update(ch.id, undefined, { ...ch.sheet, tokenImageAssetId: tokenPatch.artAssetId });
+        const updatedCh = characters.byId(ch.id)!;
+        io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
+        if (updatedCh.ownerUserId) io.to(userRoom(updatedCh.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
+      }
+    }
+    // Appearance sync: resizing/reshaping a character-linked token records the
+    // choice on the sheet, so the look follows the character onto every other
+    // map (placement reads the sheet when there's no token to copy from).
+    if ((tokenPatch.size !== undefined || tokenPatch.shape !== undefined) && token.characterId) {
+      const ch = characters.byId(token.characterId);
+      if (ch) {
+        const sheet = { ...ch.sheet };
+        if (tokenPatch.size !== undefined) sheet.tokenSize = tokenPatch.size;
+        if (tokenPatch.shape !== undefined) sheet.tokenShape = tokenPatch.shape;
+        characters.update(ch.id, undefined, sheet);
         const updatedCh = characters.byId(ch.id)!;
         io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
         if (updatedCh.ownerUserId) io.to(userRoom(updatedCh.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updatedCh });
@@ -337,8 +381,12 @@ export function placeCharacterToken(
   const { removedIds, upserted } = db.transaction(() => {
     const removed: string[] = [];
     let existingOnTarget: string | null = null;
+    // Moving between maps must not reset the token's look: remember how it
+    // appeared on the map it is leaving and carry that across.
+    let priorLook: { size: number; shape: TokenShape; color: string } | null = null;
     for (const t of tokens.forCharacter(character.id)) {
       if (t.mapId === mapId) { existingOnTarget = t.id; continue; }
+      priorLook ??= { size: t.size, shape: t.shape, color: t.color };
       tokens.delete(t.id);
       removed.push(t.id);
       touchedMaps.add(t.mapId);
@@ -365,12 +413,14 @@ export function placeCharacterToken(
       const fallbackColor = character.ownerUserId
         ? colorForOwner(campaignId, character.ownerUserId)
         : TOKEN_COLORS[Math.abs(hashStr(character.id)) % TOKEN_COLORS.length];
+      const look = priorLook ?? tokenLookFor(character);
       const created = tokens.create({
         mapId, characterId: character.id, name: character.name, artAssetId,
         q: hex.q, r: hex.r, layer: character.ownerUserId ? 'token' : 'gm',
-        size: Math.max(1, Math.min(4, Number(sh.tokenSize) || 1)),
-        shape: typeof sh.tokenShape === 'string' ? (sh.tokenShape as TokenShape) : 'circle',
-        color: typeof sh.tokenColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(sh.tokenColor) ? sh.tokenColor : fallbackColor,
+        size: look.size,
+        shape: look.shape,
+        color: priorLook?.color
+          ?? (typeof sh.tokenColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(sh.tokenColor) ? sh.tokenColor : fallbackColor),
         vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
       });
       touchedMaps.add(mapId);

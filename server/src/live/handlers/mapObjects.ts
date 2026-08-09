@@ -8,7 +8,7 @@ import {
 import { campaigns, characters, chat, handouts, mapObjects, maps, tokens, worldFolders } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { socketsSeeingHex, syncMapVision } from '../visionService.js';
-import { centerHex, hashStr, TOKEN_COLORS } from './tokens.js';
+import { centerHex, hashStr, tokenLookFor, TOKEN_COLORS } from './tokens.js';
 import { broadcastHandouts } from './table.js';
 
 function requireCampaign(socket: Socket) {
@@ -157,7 +157,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
         const hp = systemFor(char.system).hp(char.sheet);
         const created = tokens.create({
           mapId: obj.mapId, characterId: char.id, name: char.name, artAssetId,
-          q: hex.q, r: hex.r, layer: char.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
+          q: hex.q, r: hex.r, layer: char.ownerUserId ? 'token' : 'gm', ...tokenLookFor(char),
           color: TOKEN_COLORS[Math.abs(hashStr(char.id)) % TOKEN_COLORS.length],
           vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
         });

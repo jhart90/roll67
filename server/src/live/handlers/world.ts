@@ -14,7 +14,7 @@ import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom
 import { broadcastDirectory } from '../directory.js';
 import { mapObjectsVisibleTo, socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
-import { centerHex, hashStr, TOKEN_COLORS } from './tokens.js';
+import { centerHex, hashStr, tokenLookFor, TOKEN_COLORS } from './tokens.js';
 
 function campaignSystem(campaignId: string): string {
   return campaigns.byId(campaignId)?.system ?? 'dnd5e';
@@ -410,7 +410,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
           const hp = systemFor(char.system).hp(char.sheet);
           const created = tokens.create({
             mapId, characterId: char.id, name: char.name, artAssetId,
-            q: hex.q, r: hex.r, layer: char.ownerUserId ? 'token' : 'gm', size: 1, shape: 'circle',
+            q: hex.q, r: hex.r, layer: char.ownerUserId ? 'token' : 'gm', ...tokenLookFor(char),
             color: TOKEN_COLORS[Math.abs(hashStr(char.id)) % TOKEN_COLORS.length],
             vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
           });

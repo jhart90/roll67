@@ -19,16 +19,21 @@ export interface AppearanceChoice {
   artPreviewUrl: string | null;
 }
 
+// The wizard only ever builds player characters, and those take the
+// protagonist token by default (matching the server's own default look).
 export const DEFAULT_APPEARANCE: AppearanceChoice = {
-  tokenColor: null, tokenShape: 'circle', tokenSize: 1, tokenImageAssetId: null, artPreviewUrl: null,
+  tokenColor: null, tokenShape: 'hexagon', tokenSize: 1.5, tokenImageAssetId: null, artPreviewUrl: null,
 };
 
-/** Sheet fields for a finished choice — spread into the creator's sheetPatch. */
+/** Sheet fields for a finished choice — spread into the creator's sheetPatch.
+ *  Shape and size are ALWAYS written: the server falls back to the
+ *  protagonist look when the sheet is silent, so omitting a deliberate
+ *  "plain 1-hex circle" choice would silently override it. */
 export function appearancePatch(a: AppearanceChoice): Record<string, unknown> {
   return {
     ...(a.tokenColor ? { tokenColor: a.tokenColor } : {}),
-    ...(a.tokenShape !== 'circle' ? { tokenShape: a.tokenShape } : {}),
-    ...(a.tokenSize !== 1 ? { tokenSize: a.tokenSize } : {}),
+    tokenShape: a.tokenShape,
+    tokenSize: a.tokenSize,
     ...(a.tokenImageAssetId ? { tokenImageAssetId: a.tokenImageAssetId } : {}),
   };
 }

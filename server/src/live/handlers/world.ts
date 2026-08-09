@@ -8,11 +8,11 @@ import {
   type SheetData, type Shop, type ShopItem, type UpdateCustomItemPayload, type UpdateLocationPayload, type UpdateShopPayload,
   type UpdateWorldFolderPayload, type WorldReorderPayload,
 } from 'shared';
-import { campaigns, characters, chat, customItems, locations, mapObjects, maps, shops, tokens, worldFolders, worldSort } from '../../db/repos.js';
+import { campaigns, characters, chat, customItems, handouts, locations, mapObjects, maps, rollableTables, shops, tokens, worldFolders, worldSort, worldVis } from '../../db/repos.js';
 import { db } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { broadcastDirectory } from '../directory.js';
-import { syncMapVision } from '../visionService.js';
+import { mapObjectsVisibleTo, socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
 import { centerHex, hashStr, TOKEN_COLORS } from './tokens.js';
 
@@ -80,11 +80,61 @@ export function broadcastLocations(io: Server, campaignId: string): void {
   }
 }
 
-/** Folders are pure organization (no secrecy toggle) — everyone gets the full set. */
+/**
+ * Folders a player may know about: only those that (transitively) hold
+ * something they can already see. A folder is DM scaffolding until then, and
+ * a chest-folder's `items` are its literal contents — sending the whole set
+ * to everyone let a player enumerate unrevealed treasure from the world tab.
+ * The DM always gets the full set.
+ */
+export function foldersVisibleTo(campaignId: string, userId: string): ReturnType<typeof worldFolders.forCampaign> {
+  const all = worldFolders.forCampaign(campaignId);
+  const byId = new Map(all.map((f) => [f.id, f]));
+  // Seed with the parent of every non-folder thing this player can see. Each
+  // collection is filtered exactly as its own broadcast filters it.
+  const disc = worldVis.discovered(campaignId);
+  const ov = worldVis.overrides(campaignId);
+  // Same rule the world directory uses: discovered unless force-hidden,
+  // hidden unless force-revealed.
+  const shows = (kind: string, key: string, base: boolean): boolean => {
+    const o = ov.get(`${kind}:${key}`);
+    return o ? o === 'reveal' : base;
+  };
+  const seeds: Array<string | null | undefined> = [];
+  for (const c of characters.forCampaign(campaignId)) {
+    if (shows('character', c.id, c.ownerUserId === userId || disc.has(`character:${c.id}`))) seeds.push(c.parentId);
+  }
+  for (const s of shopsForUser(campaignId, userId, false)) seeds.push(s.parentId);
+  for (const t of rollableTables.forCampaign(campaignId)) if (t.playersCanRoll) seeds.push(t.parentId);
+  for (const l of locations.forCampaign(campaignId)) if (l.visibleToPlayers) seeds.push(l.parentId);
+  for (const h of handouts.forCampaign(campaignId)) {
+    if (h.sharedAll || h.sharedWith.includes(userId)) seeds.push(h.parentId);
+  }
+  for (const m of maps.forCampaign(campaignId)) {
+    if (shows('map', m.id, disc.has(`map:${m.id}`))) seeds.push(m.parentId);
+    // A chest-folder standing on ground the player has seen reveals itself.
+    for (const o of mapObjectsVisibleTo(userId, false, m.id, mapObjects.forMap(m.id))) {
+      if (o.worldFolderId) seeds.push(o.worldFolderId);
+    }
+  }
+  const keep = new Set<string>();
+  for (const seed of seeds) {
+    let cur = seed ?? null;
+    while (cur && byId.has(cur) && !keep.has(cur)) {
+      keep.add(cur);
+      cur = byId.get(cur)!.parentId ?? null;
+    }
+  }
+  return all.filter((f) => keep.has(f.id));
+}
+
 export function broadcastWorldFolders(io: Server, campaignId: string): void {
   const all = worldFolders.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
-    socket.emit(S2C.WORLD_FOLDERS, { folders: all });
+    const d = sdata(socket);
+    socket.emit(S2C.WORLD_FOLDERS, {
+      folders: d.role === 'dm' ? all : foldersVisibleTo(campaignId, d.userId),
+    });
   }
 }
 
@@ -297,7 +347,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
       const occupied = new Set(existingObjs.map((o) => packHex({ q: o.q, r: o.r })));
       const hex = (q != null && r != null) ? { q, r } : firstFreeHex(spawn, occupied, map.grid);
       const obj = mapObjects.create(mapId, 'chest', f.name, '', hex.q, hex.r, { worldFolderId: folderId });
-      io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+      for (const s of socketsSeeingHex(io, d.campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
     }
 
     // 2. Collect all character descendants recursively.
@@ -420,7 +470,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
       const occupied = new Set(existing.map((o) => packHex({ q: o.q, r: o.r })));
       const hex = (q != null && r != null) ? { q, r } : firstFreeHex(spawn, occupied, map.grid);
       const obj = mapObjects.create(mapId, 'shop', shop.name, shop.description ?? '', hex.q, hex.r, { shopId });
-      io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+      for (const s of socketsSeeingHex(io, d.campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
     }
   }, 'DROP_SHOP_ON_MAP'));
 

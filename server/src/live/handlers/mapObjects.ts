@@ -7,7 +7,7 @@ import {
 } from 'shared';
 import { campaigns, characters, chat, handouts, mapObjects, maps, tokens, worldFolders } from '../../db/repos.js';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { syncMapVision } from '../visionService.js';
+import { socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { centerHex, hashStr, TOKEN_COLORS } from './tokens.js';
 import { broadcastHandouts } from './table.js';
 
@@ -43,7 +43,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     const map = maps.byId(payload.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
     const obj = mapObjects.create(payload.mapId, payload.kind, payload.name, payload.description ?? '', payload.q, payload.r);
-    io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+    for (const s of socketsSeeingHex(io, d.campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
   }, 'PLACE_MAP_OBJECT'));
 
   socket.on(C2S.UPDATE_MAP_OBJECT, safe(socket, ({ objectId, patch }: UpdateMapObjectPayload) => {
@@ -55,7 +55,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map object.');
     mapObjects.update(objectId, patch);
     const updated = mapObjects.byId(objectId)!;
-    io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
   }, 'UPDATE_MAP_OBJECT'));
 
   socket.on(C2S.DELETE_MAP_OBJECT, safe(socket, ({ objectId }: DeleteMapObjectPayload) => {
@@ -97,7 +97,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     const remaining = obj.items.filter((i: { id: string }) => i.id !== itemId);
     mapObjects.update(objectId, { items: remaining });
     const updated = mapObjects.byId(objectId)!;
-    io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
     postTake(io, d.campaignId, d.username, item.name);
   }, 'TAKE_CHEST_ITEM'));
 
@@ -116,7 +116,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     }
     mapObjects.update(objectId, { items: [] });
     const updated = mapObjects.byId(objectId)!;
-    io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
   }, 'TAKE_ALL_CHEST'));
 
   socket.on(C2S.OPEN_CHEST, safe(socket, ({ objectId }: OpenChestPayload) => {

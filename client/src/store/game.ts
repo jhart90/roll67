@@ -851,6 +851,12 @@ export function wireSocket(): void {
       exploredLog,
       tokens: tokensByIdReusing(s.tokens, p.tokens),
       knownDoors: p.knownDoors,
+      // Loot on this map is authoritative per update: chests appear as the
+      // party explores toward them and drop away when they can't be seen.
+      mapObjects: {
+        ...Object.fromEntries(Object.entries(s.mapObjects).filter(([, o]) => o.mapId !== p.mapId)),
+        ...mapObjectsById(p.mapObjects ?? []),
+      },
       dragGhosts: {},
     });
   });

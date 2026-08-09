@@ -362,8 +362,10 @@ export const shops = {
   create(campaignId: string, name: string, currency: string): Shop {
     const id = newId();
     const maxOrder = (stmt('SELECT MAX(sort_order) as m FROM shops WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
-    stmt('INSERT INTO shops (id, campaign_id, name, currency, sort_order) VALUES (?, ?, ?, ?, ?)').run(id, campaignId, name, currency, maxOrder + 1);
-    return { id, name, description: '', currency, playersCanBuy: true, items: [] };
+    stmt('INSERT INTO shops (id, campaign_id, name, currency, players_can_buy, sort_order) VALUES (?, ?, ?, ?, 0, ?)').run(id, campaignId, name, currency, maxOrder + 1);
+    // Hidden until the DM opens it: a freshly created shop is prep work, not
+    // something the party can already browse and buy from.
+    return { id, name, description: '', currency, playersCanBuy: false, items: [] };
   },
   update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[]; parentId?: string | null; linkedCharacterId?: string | null; artAssetId?: string | null }): void {
     const cur = stmt('SELECT * FROM shops WHERE id = ?').get(id) as ShopRow | undefined;
@@ -1068,9 +1070,11 @@ export const rollableTables = {
   create(campaignId: string, name: string): RollableTable {
     const id = newId();
     const maxOrder = (stmt('SELECT MAX(sort_order) as m FROM rollable_tables WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
-    stmt('INSERT INTO rollable_tables (id, campaign_id, name, players_can_roll, items_json, sort_order) VALUES (?, ?, ?, 1, ?, ?)')
+    stmt('INSERT INTO rollable_tables (id, campaign_id, name, players_can_roll, items_json, sort_order) VALUES (?, ?, ?, 0, ?, ?)')
       .run(id, campaignId, name, '[]', maxOrder + 1);
-    return { id, name, playersCanRoll: true, items: [] };
+    // DM prep by default — the DM flips playersCanRoll when the table is
+    // meant to be public.
+    return { id, name, playersCanRoll: false, items: [] };
   },
   update(id: string, fields: { name?: string; playersCanRoll?: boolean; items?: RollableTable['items']; parentId?: string | null }): void {
     const cur = stmt('SELECT * FROM rollable_tables WHERE id = ?').get(id) as TableRow | undefined;

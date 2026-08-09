@@ -12,12 +12,12 @@ import {
   handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders, worldSort,
 } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
-import { buildMapState, dropVisionCache } from '../visionService.js';
+import { buildMapState, dropVisionCache, mapObjectsVisibleTo } from '../visionService.js';
 import { emitCustomNpcs } from './characters.js';
 import { initiativeViewFor } from './combat.js';
 import { buildDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
-import { shopsForUser, sendShopPresentationTo } from './world.js';
+import { foldersVisibleTo, shopsForUser, sendShopPresentationTo } from './world.js';
 
 function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   const all = handouts.forCampaign(campaignId);
@@ -46,7 +46,12 @@ export function buildCampaignState(campaignId: string, userId: string, username:
     macros: macros.forUser(userId, campaignId),
     initiative: initiativeViewFor(initiative.get(campaignId), isDm, campaignId),
     chatTail: chat.tailFor(campaignId, userId, username, isDm, CHAT_TAIL),
-    mapObjects: mapObjects.forCampaign(campaignId),
+    // Loot/chests across every map: the DM gets all, a player only what
+    // stands on ground they have actually seen (otherwise the world tab
+    // enumerates every unrevealed chest in the campaign).
+    mapObjects: isDm
+      ? mapObjects.forCampaign(campaignId)
+      : maps.forCampaign(campaignId).flatMap((m) => mapObjectsVisibleTo(userId, false, m.id, mapObjects.forMap(m.id))),
   };
 }
 
@@ -132,7 +137,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       sendShopPresentationTo(socket);
       const allLoc = locations.forCampaign(campaignId);
       socket.emit(S2C.LOCATIONS, { locations: role === 'dm' ? allLoc : allLoc.filter((l) => l.visibleToPlayers) });
-      socket.emit(S2C.WORLD_FOLDERS, { folders: worldFolders.forCampaign(campaignId) });
+      socket.emit(S2C.WORLD_FOLDERS, { folders: role === 'dm' ? worldFolders.forCampaign(campaignId) : foldersVisibleTo(campaignId, d.userId) });
       socket.emit(S2C.WORLD_SORT, { orders: worldSort.forCampaign(campaignId) });
       socket.emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(campaignId) });
     }

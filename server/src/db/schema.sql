@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS shops (
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   currency TEXT NOT NULL DEFAULT 'gp',
-  players_can_buy INTEGER NOT NULL DEFAULT 1,
+  players_can_buy INTEGER NOT NULL DEFAULT 0,
   items_json TEXT NOT NULL DEFAULT '[]',
   parent_id TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS rollable_tables (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  players_can_roll INTEGER NOT NULL DEFAULT 1,
+  players_can_roll INTEGER NOT NULL DEFAULT 0,
   items_json TEXT NOT NULL DEFAULT '[]',
   parent_id TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0

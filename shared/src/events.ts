@@ -846,6 +846,8 @@ export interface VisionUpdatePayload {
   newlyExplored: number[];
   /** Full list of tokens currently visible to this viewer. */
   tokens: TokenView[];
+  /** Loot/chests/shop markers on ground this viewer has seen (full list). */
+  mapObjects: MapObject[];
   /** Doors inside the viewer's explored region (full list). */
   knownDoors: Door[];
   /** Non-null when this update belongs to a DM view-as preview. */

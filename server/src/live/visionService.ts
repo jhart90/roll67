@@ -10,7 +10,7 @@ import {
   S2C, type Door, type FovInput, type Hex, type Light, type MapObject, type MapStatePayload, type Point, type Segment, type Token,
   nameplateFor, type TokenView, type VisibilityLitMask, type VisionStats, type VisionUpdatePayload,
 } from 'shared';
-import { campaigns, characters, doorMemory, fog, maps, tokens, worldVis } from '../db/repos.js';
+import { campaigns, characters, doorMemory, fog, mapObjects, maps, tokens, worldVis } from '../db/repos.js';
 import { broadcastDirectory } from './directory.js';
 
 // Debounced world-tab refresh after new discoveries. io is captured from the
@@ -381,7 +381,7 @@ export function buildMapState(
   };
   const allTokens = tokens.forMap(map.id);
 
-  const objs = mapObjectList ?? [];
+  const allObjs = mapObjectList ?? [];
 
   if (viewer.isDm && !viewer.viewingAs) {
     return {
@@ -397,7 +397,7 @@ export function buildMapState(
       fadeLitMask: null,
       explored: null,
       knownDoors: [],
-      mapObjects: objs,
+      mapObjects: allObjs,
       viewingAs: null,
     };
   }
@@ -419,7 +419,7 @@ export function buildMapState(
       fadeLitMask: null,
       explored: null,
       knownDoors: [],
-      mapObjects: objs,
+      mapObjects: allObjs,
       viewingAs: viewer.viewingAs ?? null,
     };
   }
@@ -450,7 +450,10 @@ export function buildMapState(
     fadeLitMask: view.fadeLitMask,
     explored: [...view.explored],
     knownDoors: view.knownDoors,
-    mapObjects: objs,
+    // Filter with the view just computed above: on a fresh join no FOV pass
+    // has populated the cache yet, so a cache lookup here would hide every
+    // chest the party is standing next to.
+    mapObjects: mapObjectsVisibleTo(targetUser, false, map.id, allObjs, new Set([...view.visible, ...view.explored])),
     viewingAs: viewer.viewingAs ?? null,
   };
 }
@@ -476,6 +479,9 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
   const map = maps.byId(mapId);
   if (!map || map.campaignId !== campaignId) return;
   const allTokens = tokens.forMap(mapId);
+  // Loot/chests reveal themselves as players explore, so every vision update
+  // carries the viewer's own filtered list (same contract as `tokens`).
+  const mapObjectList = mapObjects.forMap(mapId);
 
   const sockets = campaignSockets(io, campaignId);
   const sentToUser = new Set<string>();
@@ -499,6 +505,7 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
         const view = computeUserMapView(d.viewingAs, map, allTokens, shared);
         const payload: VisionUpdatePayload = {
           mapId,
+          mapObjects: mapObjectsVisibleTo(d.viewingAs, false, mapId, mapObjectList),
           visible: [...view.visible],
           fade: [...view.fade],
           visiblePolygons: view.visiblePolygons,
@@ -520,6 +527,7 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
     const view = computeUserMapView(d.userId, map, allTokens, shared);
     const payload: VisionUpdatePayload = {
       mapId,
+      mapObjects: mapObjectsVisibleTo(d.userId, false, mapId, mapObjectList),
       visible: [...view.visible],
       fade: [...view.fade],
       visiblePolygons: view.visiblePolygons,
@@ -533,6 +541,42 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
     };
     io.to(userRoom(d.userId)).emit(S2C.VISION_UPDATE, payload);
   }
+}
+
+/**
+ * Map objects (chests, loot piles, shop markers) a viewer may know about.
+ * The DM sees everything; a player sees only what stands on a hex they have
+ * explored — otherwise the whole map's treasure is enumerable from the world
+ * tab the moment they join.
+ */
+export function mapObjectsVisibleTo(
+  userId: string, isDm: boolean, mapId: string, objs: MapObject[], seen?: Set<number>,
+): MapObject[] {
+  if (isDm) return objs;
+  // Prefer an explicitly supplied set (a view computed moments ago), then the
+  // live cache, then the fog persisted from earlier sessions — a join happens
+  // before any FOV pass has run, and a returning player still knows the
+  // ground they explored last time.
+  let inSight = seen;
+  if (!inSight) {
+    const cache = visionCache.get(cacheKey(userId, mapId));
+    inSight = cache ? new Set([...cache.visible, ...cache.explored]) : new Set(fog.get(userId, mapId));
+  }
+  return objs.filter((o) => inSight!.has(packHex({ q: o.q, r: o.r })));
+}
+
+/** Player sockets that can currently see a hex (loot/chest reveal events). */
+export function socketsSeeingHex(io: Server, campaignId: string, mapId: string, q: number, r: number): Socket[] {
+  const out: Socket[] = [];
+  const key = packHex({ q, r });
+  for (const socket of campaignSockets(io, campaignId)) {
+    const d = sdata(socket);
+    if (d.role === 'dm') { out.push(socket); continue; }
+    if (campaigns.viewMapIdFor(campaignId, d.userId) !== mapId) continue;
+    const cache = visionCache.get(cacheKey(d.userId, mapId));
+    if (cache?.visible.has(key) || cache?.explored.has(key)) out.push(socket);
+  }
+  return out;
 }
 
 /** Player sockets that can currently see a token (for drag ghosts). */

@@ -2,7 +2,8 @@ import type { Server } from 'socket.io';
 import { MAX_WOUNDS, S2C, conditionsOf, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
-import { syncMapVision } from './visionService.js';
+import { socketsSeeingHex, syncMapVision } from './visionService.js';
+import { broadcastWorldFolders } from './handlers/world.js';
 import { applyAdv } from './handlers/chat.js';
 
 /** A condition a concentration spell inflicted, recorded on the CASTER's
@@ -296,9 +297,9 @@ export function dropCarriedLoot(io: Server, campaignId: string, characterId: str
     const hex = firstFreeHex({ q: tok.q, r: tok.r }, occupied, map.grid);
     const obj = mapObjects.create(tok.mapId, 'chest', folder.name, '', hex.q, hex.r, { worldFolderId: folder.id });
     worldFolders.update(folder.id, { parentId: tok.mapId });
-    io.to(campaignRoom(campaignId)).emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+    for (const s of socketsSeeingHex(io, campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
   }
-  io.to(campaignRoom(campaignId)).emit(S2C.WORLD_FOLDERS, { folders: worldFolders.forCampaign(campaignId) });
+  broadcastWorldFolders(io, campaignId);
 }
 
 // ---------- SWADE wound ladder ----------

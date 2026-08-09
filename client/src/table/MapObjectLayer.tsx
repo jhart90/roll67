@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useRef, useState } from 'react';
 import type { MapObject } from 'shared';
 import { hexDistance, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -7,6 +7,11 @@ import { mapPixelSize, useStage } from '../util/stage';
 const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject }) {
   const map = useGameStore((s) => s.map)!;
   const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const stage = useStage();
+  // DM drag-to-relocate: live pixel position while dragging, committed to a
+  // hex on release. A drag suppresses the click-to-open that release fires.
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const dragMoved = useRef(false);
 
   const pos = hexToPixel({ q: obj.q, r: obj.r }, map.grid);
   const r = map.grid.hexSize * 0.5;
@@ -29,6 +34,18 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
     // gate it opened the loot popup (and even the chest) on top of the
     // DM's context-menu editor.
     if (e.button !== 0) return;
+    // A DM drag ends here: snap to the released hex, and don't ALSO open it.
+    if (dragPos) {
+      (e.currentTarget as SVGGElement).releasePointerCapture?.(e.pointerId);
+      const moved = dragMoved.current;
+      const hex = pixelToHex(dragPos, map.grid);
+      setDragPos(null);
+      dragMoved.current = false;
+      if (moved) {
+        intents.updateMapObject(obj.id, { q: hex.q, r: hex.r });
+        return;
+      }
+    }
     if (obj.kind === 'shop' && obj.shopId) {
       if (!playerInRange(obj.interactRange)) return;
       useGameStore.setState({ presentedShopId: obj.shopId });
@@ -50,13 +67,26 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
     e.stopPropagation();
+    if (!isDm || e.button !== 0) return;
+    (e.currentTarget as SVGGElement).setPointerCapture(e.pointerId);
+    dragMoved.current = false;
+    setDragPos(stage.toMap(e.clientX, e.clientY));
   }
 
+  function onPointerMove(e: React.PointerEvent<SVGGElement>) {
+    if (!dragPos) return;
+    const p = stage.toMap(e.clientX, e.clientY);
+    if (Math.hypot(p.x - pos.x, p.y - pos.y) > map.grid.hexSize * 0.4) dragMoved.current = true;
+    setDragPos(p);
+  }
+
+  const at = dragPos && dragMoved.current ? dragPos : pos;
   return (
     <g
-      transform={`translate(${pos.x.toFixed(1)},${pos.y.toFixed(1)})`}
-      style={{ cursor: 'pointer', pointerEvents: 'all' }}
+      transform={`translate(${at.x.toFixed(1)},${at.y.toFixed(1)})`}
+      style={{ cursor: isDm ? 'grab' : 'pointer', pointerEvents: 'all' }}
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onContextMenu={onContextMenu}
     >

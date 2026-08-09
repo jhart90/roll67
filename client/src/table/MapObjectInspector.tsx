@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { contentForSystem, type ContentEntry } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
@@ -7,10 +8,22 @@ export function MapObjectInspector() {
   const you = useGameStore((s) => s.you);
   const campaign = useGameStore((s) => s.campaign);
   const obj = useGameStore((s) => (s.inspectedObjectId ? s.mapObjects[s.inspectedObjectId] : null));
+  const customItems = useGameStore((s) => s.customItems);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
   const [newItemName, setNewItemName] = useState('');
+
+  // Compendium + campaign custom items, so a chest item typed by name links
+  // its contentId (full apply-on-take logic downstream) instead of being a
+  // plain string. Typing suggests via the datalist below.
+  const catalog = useMemo<ContentEntry[]>(() => {
+    if (!campaign) return [];
+    const custom = customItems.map((c) => {
+      try { return JSON.parse(c.entryJson) as ContentEntry; } catch { return null; }
+    }).filter((e): e is ContentEntry => !!e);
+    return [...contentForSystem(campaign.system), ...custom];
+  }, [campaign, customItems]);
 
   if (!obj || you?.role !== 'dm' || !campaign) return null;
 
@@ -32,7 +45,13 @@ export function MapObjectInspector() {
   function addItem() {
     if (!newItemName.trim() || !obj) return;
     const id = crypto.randomUUID();
-    intents.updateMapObject(obj.id, { items: [...obj.items, { id, name: newItemName.trim(), description: '' }] });
+    const name = newItemName.trim();
+    // A name matching a compendium/custom entry links its id, so taking the
+    // item can apply the real thing (weapon, potion…) rather than a label.
+    const entry = catalog.find((e) => e.name.toLowerCase() === name.toLowerCase());
+    intents.updateMapObject(obj.id, {
+      items: [...obj.items, { id, name, description: entry?.subtitle ?? '', ...(entry ? { contentId: entry.id } : {}) }],
+    });
     setNewItemName('');
   }
 
@@ -117,12 +136,16 @@ export function MapObjectInspector() {
           </ul>
           <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
             <input
-              placeholder="New item name…"
+              placeholder="Add item (compendium names autocomplete)…"
+              list="chest-item-catalog"
               value={newItemName}
               onChange={(e) => setNewItemName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') addItem(); }}
               style={{ flex: 1, fontSize: 12 }}
             />
+            <datalist id="chest-item-catalog">
+              {catalog.map((e) => <option key={e.id} value={e.name} />)}
+            </datalist>
             <button className="small" onClick={addItem}>Add</button>
           </div>
         </>

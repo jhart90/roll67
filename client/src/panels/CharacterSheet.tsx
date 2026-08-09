@@ -774,10 +774,12 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
               {character.system === 'swade' ? '⬆ Advance' : '⬆ Level Up'}
             </button>
           )}
-          {editable && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
+          {/* Handing out gear is the DM's call — players don't shop the
+              compendium straight onto their own sheets. */}
+          {you.role === 'dm' && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
         </div>
 
-        {showCompendium && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
+        {showCompendium && you.role === 'dm' && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
         {showLevelUp && (character.system === 'swade'
           ? <SwadeAdvanceWizard character={character} onClose={() => setShowLevelUp(false)} />
           : character.system === 'swn'

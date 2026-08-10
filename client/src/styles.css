@@ -722,6 +722,13 @@ button.link:hover { text-decoration: underline; }
   border-color: color-mix(in srgb, #c2564f 50%, var(--border));
 }
 .sheet-card.card-bad .sc-title { color: #f0bdb8; }
+.sheet-card.card-info {
+  background: color-mix(in srgb, #4a7fc2 15%, var(--panel-2));
+  border-color: color-mix(in srgb, #4a7fc2 50%, var(--border));
+}
+.sheet-card.card-info .sc-title { color: #b9d3f2; }
+/* Major and Minor share the severity colour, so Major carries the weight. */
+.sc-chip.chip-major { font-weight: 800; letter-spacing: 0.02em; }
 
 /* Chip tones: the same kind of fact wears the same colour everywhere. */
 .sc-chip.tone-damage   { color: #f0a5a0; border-color: #c2564f55; background: #c2564f14; }

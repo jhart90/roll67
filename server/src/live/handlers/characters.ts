@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, canEditCharacter, conditionsOf, num, playerColorFor, roll, str, systemFor,
+  C2S, S2C, canEditCharacter, conditionsOf, num, playerColorFor, roll, rows, str, systemFor,
   type CreateCharacterPayload, type CustomNpcView, type DeleteCharacterPayload,
   type DeleteCustomNpcPayload, type LevelUpRollPayload,
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
@@ -13,6 +13,23 @@ import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
+
+/**
+ * A player's keys are exactly the ones the DM issued — no more, no fewer.
+ *
+ * Every key row in their submitted inventory is discarded and the STORED key
+ * rows are put back verbatim. Filtering their submission instead was the
+ * obvious approach and the wrong one: a sheet edit sends the whole inventory,
+ * so a rejected forgery took the real key down with it, and any harmless
+ * client-side normalisation of a key row would silently destroy it. Keys are
+ * DM property; players carry them.
+ */
+function withPlayerSafeKeys(character: Character, patch: SheetData): SheetData {
+  if (!Array.isArray(patch.inventory)) return patch;
+  const issued = rows(character.sheet, 'inventory').filter((r) => r.isKey === true);
+  const withoutKeys = (patch.inventory as SheetData[]).filter((r) => r?.isKey !== true);
+  return { ...patch, inventory: [...withoutKeys, ...issued] };
+}
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -259,7 +276,14 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
       broadcastDirectory(io, d.campaignId);
     }
-    applyCharacterPatch(io, d.campaignId, character, patch, name, d.username);
+    // Keys are DM-issued and a player must not be able to mint or re-label
+    // one: renaming a pebble to "Patch's Lab Key" would open Patch's lab. Any
+    // key row in a PLAYER's update must already exist on the stored sheet,
+    // unchanged and in no greater quantity — they can drop keys, never forge
+    // or edit them. (The DM edits keys freely; that is what the Key Manager
+    // is for.)
+    const safePatch = d.role === 'dm' ? patch : withPlayerSafeKeys(character, patch);
+    applyCharacterPatch(io, d.campaignId, character, safePatch, name, d.username);
   }, 'UPDATE_CHARACTER'));
 
   socket.on(C2S.LEVEL_UP_ROLL, safe(socket, ({ characterId, patch, hitDie, conMod, avgHp, label }: LevelUpRollPayload) => {

@@ -181,8 +181,9 @@ const ALWAYS_SHOW = new Set(['damage', 'die', 'severity']);
  * you have (an Edge, a wielded weapon), red for something working against you.
  */
 const SECTION_THEME: Record<string, string> = {
-  edges: 'card-good',
-  racialTraits: 'card-bad',
+  edges: 'card-good',        // green — an advantage you have
+  hindrances: 'card-bad',    // red — something working against you
+  racialTraits: 'card-info', // blue — what you were born with
 };
 
 const EQUIP_COL: Record<string, string> = {
@@ -482,7 +483,9 @@ function ListEditor({
               </div>
               {(chips.length > 0 || rider) && (
                 <div className="sc-chips">
-                  {chips.map((c, j) => <span key={j} className={`sc-chip tone-${c.tone}`}>{c.text}</span>)}
+                  {chips.map((c, j) => (
+                    <span key={j} className={`sc-chip tone-${c.tone}${c.text === 'Major' ? ' chip-major' : ''}`}>{c.text}</span>
+                  ))}
                   {rider && <span className="sc-chip sc-rider" title={RIDER_BTN_TITLE}>⚡ {rider}</span>}
                 </div>
               )}

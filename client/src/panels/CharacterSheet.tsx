@@ -1,18 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
-  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, conditionsOf, needsNpcBoost, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
-import { Compendium } from './Compendium';
+import { openWindow } from '../store/windowManager';
 import { AssetPicker } from './AssetPicker';
-import { LevelUpWizard } from './LevelUpWizard';
-import { NpcBoostWizard } from './NpcBoostWizard';
 import { ClassFeatures } from './ClassFeatures';
-import { SwnLevelUpWizard } from './SwnLevelUpWizard';
 import { SwnFeatures } from './SwnFeatures';
-import { SwadeAdvanceWizard } from './SwadeAdvanceWizard';
 import { CombatStatus } from './CombatStatus';
 import { SheetTerm } from '../util/Term';
 import { RollStatsTab } from './RollStats';
@@ -863,8 +859,6 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
   const members = useGameStore((s) => s.members);
   const character = useGameStore((s) => s.characters.find((c) => c.id === characterId));
   const [tabId, setTabId] = useState<string | null>(null);
-  const [showCompendium, setShowCompendium] = useState(false);
-  const [showLevelUp, setShowLevelUp] = useState(false);
   const [pickingField, setPickingField] = useState<string | null>(null);
 
   if (!character || !you) return null;
@@ -915,24 +909,25 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
           />
           <span className="dim">{schema.name}{character.ownerUserId ? '' : ' · NPC'}</span>
           <span className="spacer" />
+          {/* Both open as their own windows rather than modals over this one:
+              picking an Advance means reading the sheet underneath it. */}
           {editable && (
-            <button className="link" onClick={() => setShowLevelUp(true)}>
+            <button
+              className="link"
+              onClick={() => openWindow('levelUp', character.id,
+                {}, `${character.system === 'swade' ? 'Advance' : 'Level Up'} — ${character.name}`)}
+            >
               {character.system === 'swade' ? '⬆ Advance' : '⬆ Level Up'}
             </button>
           )}
           {/* Handing out gear is the DM's call — players don't shop the
               compendium straight onto their own sheets. */}
-          {you.role === 'dm' && <button className="link" onClick={() => setShowCompendium(true)}>+ Compendium</button>}
+          {you.role === 'dm' && (
+            <button className="link" onClick={() => openWindow('compendium', character.id, {}, `Compendium — ${character.name}`)}>
+              + Compendium
+            </button>
+          )}
         </div>
-
-        {showCompendium && you.role === 'dm' && <Compendium character={character} onClose={() => setShowCompendium(false)} />}
-        {showLevelUp && (character.system === 'swade'
-          ? <SwadeAdvanceWizard character={character} onClose={() => setShowLevelUp(false)} />
-          : character.system === 'swn'
-            ? <SwnLevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />
-            : needsNpcBoost(String(character.sheet.class ?? ''))
-              ? <NpcBoostWizard character={character} onClose={() => setShowLevelUp(false)} />
-              : <LevelUpWizard character={character} onClose={() => setShowLevelUp(false)} />)}
 
         <div className="sheet-tabs">
           {schema.tabs.map((t) => (

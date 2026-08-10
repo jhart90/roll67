@@ -618,10 +618,18 @@ button.link:hover { text-decoration: underline; }
   position: relative; /* anchors the drop-above insertion line */
 }
 .wt-row:hover { background: rgba(255, 255, 255, 0.05); }
-/* Nest-into indicator: the whole prospective parent row lights up. */
+/* Selection: a soft blue plate behind the row. Deliberately the same blue the
+   drop-into indicator uses, because they mean the same thing — "this row is
+   the one" — and the outline is what tells them apart. */
+.wt-row.selected { background: rgba(108, 155, 210, 0.26); }
+.wt-row.selected:hover { background: rgba(108, 155, 210, 0.32); }
+/* Nest-into indicator: the whole prospective parent row lights up, selection
+   blue plus an outline so it reads as a live target rather than a leftover
+   selection. */
 .wt-row.drop-on { background: rgba(108, 155, 210, 0.25); outline: 2px solid var(--accent); outline-offset: -1px; }
 /* Re-order indicator: a dotted insertion line across the row's top edge —
-   "release here and the dragged item slots in at this line". */
+   "release here and the dragged item slots in at this line". Drawn slightly
+   proud of the row so it reads as sitting BETWEEN two rows, not on one. */
 .wt-row.drop-above::before {
   content: ''; position: absolute; left: 4px; right: 4px; top: -2px;
   border-top: 3px dotted var(--accent); pointer-events: none;
@@ -968,6 +976,19 @@ button.link:hover { text-decoration: underline; }
 .chat-input button { flex: 0 0 auto; }
 
 /* ---------- generic draggable/poppable window chrome ---------- */
+
+/* The wizards and the compendium were centred modals; they are windows now.
+   The backdrop class stays on the wrapper because a pile of `.sheet-backdrop
+   .panel` rules style the controls inside them, but `display: contents` means
+   it generates no box at all — no fixed positioning, no dimming, no click
+   trap. Selectors still match through it, so nothing inside restyles. */
+.wizard-shell { display: contents; }
+/* Free-floating, so they size to their content instead of to the viewport,
+   and scroll inside the frame once they outgrow it. */
+.wizard-shell .panel.swc-wizard,
+.wizard-shell .sheet-window.npc-library {
+  max-width: min(760px, 92vw); max-height: 78vh; overflow-y: auto;
+}
 
 .win-frame {
   position: fixed;
@@ -2584,13 +2605,42 @@ th > .term { border-bottom-style: dotted; }
 .counter-slot-picker button.active { background: rgba(255, 255, 255, 0.06); font-weight: 700; }
 /* Per-player share ticks. Capped and scrollable so a big table can't push the
    rest of the menu off the bottom of the screen. */
-.counter-share-list { max-height: 160px; overflow-y: auto; padding: 2px 4px; }
+.counter-share-list { max-height: 168px; overflow-y: auto; padding: 2px 4px; }
+/* A grid, not a flex row: the tick boxes have to line up in one column no
+   matter how long the names are, and a name that wraps must not drag its box
+   out of that column. Every property the global `label` rule sets (block
+   display, a 12px bottom margin, the dim colour) is overridden here — that
+   rule is written for form fields stacked in a panel, not menu rows. */
 .counter-share-row {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; padding: 3px 4px; border-radius: 5px; cursor: pointer;
+  display: grid; grid-template-columns: 14px 1fr 6px;
+  align-items: center; gap: 8px;
+  position: relative; margin: 0; padding: 5px 6px;
+  font-size: 12px; color: var(--text); border-radius: 5px;
+  cursor: pointer; user-select: none;
 }
 .counter-share-row:hover { background: rgba(255, 255, 255, 0.06); }
-.counter-share-row input { margin: 0; cursor: pointer; }
+.counter-share-row input { position: absolute; opacity: 0; width: 0; height: 0; }
+.counter-share-row .sc-box {
+  width: 14px; height: 14px; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--panel);
+  position: relative; transition: background 0.12s, border-color 0.12s;
+}
+.counter-share-row:hover .sc-box { border-color: var(--accent); }
+.counter-share-row.on .sc-box { background: var(--accent); border-color: var(--accent); }
+.counter-share-row.on .sc-box::after {
+  content: ''; position: absolute; left: 4px; top: 1px;
+  width: 4px; height: 8px; border: solid #0d1117;
+  border-width: 0 2px 2px 0; transform: rotate(42deg);
+}
+/* Long names wrap inside their own column rather than widening the menu. */
+.counter-share-name { overflow-wrap: anywhere; }
+/* Presence, matching the dots in the member bar — offline reads as a hollow
+   ring so the row still has something in that column and stays aligned. */
+.counter-share-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  border: 1px solid var(--text-dim); background: none;
+}
+.counter-share-dot.online { background: #4cc47e; border-color: #4cc47e; }
 /* In the wide top/bottom banners the gauge wrapper vanishes from layout, so
    the name and track stay direct children of the bar exactly as before. Only
    a side dock turns it into a real box (see .counters-side). */

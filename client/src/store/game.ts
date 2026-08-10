@@ -308,6 +308,15 @@ interface GameState {
   selectedLightId: string | null;
   selectedWallId: string | null;
   selectedDoorId: string | null;
+  /** The row the World pane is showing as selected, as `${kind}:${id}`. Kept
+   *  here rather than inside the panel so selecting a token on the MAP can
+   *  light up its row too — one selection, two views of it. */
+  worldSelectedKey: string | null;
+  setWorldSelection(key: string | null): void;
+  /** Map object (chest, shop, prop) wearing the selection ring. Distinct from
+   *  `inspectedObjectId`: selecting shows you which one, inspecting edits it. */
+  selectedObjectId: string | null;
+  selectObject(id: string | null): void;
   /** Local-only: mute audio on this device without affecting others. */
   clientMuted: boolean;
   /** This device's own music volume (multiplies the DM's jukebox volume). */
@@ -563,6 +572,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   tool: 'select',
   selectedTokenId: null,
   selectedTokenIds: [],
+  worldSelectedKey: null,
+  selectedObjectId: null,
   inspectorTokenId: null,
   openInspector(inspectorTokenId) { set({ inspectorTokenId }); },
   selectedLightId: null,
@@ -627,6 +638,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
+      worldSelectedKey: null, selectedObjectId: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
       // Transient slices that used to leak into the NEXT campaign: a live
       // ruler from campaign A rendering over campaign B's map, a stale error
@@ -657,17 +669,36 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
   selectToken(id: string | null, additive?: boolean) {
+    // Picking a token anywhere lights up its World-pane row as well, and
+    // drops whatever else was selected there — one selection, two views. A
+    // multi-select has no single row to point at, so the tree goes quiet.
     if (!id) {
-      set({ selectedTokenId: null, selectedTokenIds: [] });
+      set({ selectedTokenId: null, selectedTokenIds: [], worldSelectedKey: null, selectedObjectId: null });
       return;
     }
     if (additive) {
       const ids = get().selectedTokenIds;
       const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
-      set({ selectedTokenIds: next, selectedTokenId: next[0] ?? null });
+      set({
+        selectedTokenIds: next, selectedTokenId: next[0] ?? null,
+        worldSelectedKey: next.length === 1 ? `token:${next[0]}` : null,
+        selectedObjectId: null,
+      });
     } else {
-      set({ selectedTokenId: id, selectedTokenIds: [id] });
+      set({ selectedTokenId: id, selectedTokenIds: [id], worldSelectedKey: `token:${id}`, selectedObjectId: null });
     }
+  },
+  setWorldSelection(worldSelectedKey) { set({ worldSelectedKey }); },
+  selectObject(selectedObjectId) {
+    // A map object and a token are the same kind of "the thing I'm pointing
+    // at", so picking one releases the other. The World pane follows along;
+    // when the pick CAME from the tree it overwrites this with the row that
+    // was actually clicked, which may be the shop or chest-folder this object
+    // only stands in for.
+    set({
+      selectedObjectId, selectedTokenId: null, selectedTokenIds: [],
+      worldSelectedKey: selectedObjectId ? `mapobject:${selectedObjectId}` : null,
+    });
   },
   selectLight(selectedLightId) { set({ selectedLightId }); },
   selectWall(selectedWallId) { set({ selectedWallId, selectedDoorId: null, selectedLightId: null }); },
@@ -826,6 +857,8 @@ export function wireSocket(): void {
       dragGhosts: {},
       selectedTokenId: null,
       selectedTokenIds: [],
+      worldSelectedKey: null,
+      selectedObjectId: null,
       inspectorTokenId: null,
       inspectedObjectId: null,
       lootPopupId: null,

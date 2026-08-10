@@ -20,13 +20,8 @@ export function NpcBoostWizard({ character, onClose }: { character: Character; o
   }
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="sheet-backdrop wizard-shell">
       <div className="panel levelup">
-        <div className="dock-header">
-          <h3>Boost NPC — {character.name}</h3>
-          <button className="link" onClick={onClose}>close</button>
-        </div>
-
         <p className="dim" style={{ fontSize: 12 }}>
           This NPC has no PC class, so there's nothing for the regular Level Up wizard to apply.
           This scales its stats by Challenge Rating tier instead (DMG Monster Statistics by CR).

@@ -39,9 +39,6 @@ import { Toolbar } from '../table/Toolbar';
 import { AudioPlayer } from '../table/AudioPlayer';
 import { Jukebox } from '../panels/Jukebox';
 import { WindowHost } from '../window/WindowHost';
-import { SwadeCharacterCreator } from '../panels/SwadeCharacterCreator';
-import { SwnCharacterCreator } from '../panels/SwnCharacterCreator';
-import { Dnd5eCharacterCreator } from '../panels/Dnd5eCharacterCreator';
 import { TurnBanner, useTurnTint } from '../panels/TurnBanner';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
@@ -114,6 +111,15 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   // The creator wizard opens for players only when the DM deploys it to them
   // (right-click their presence pill → "Send character creator") — no
   // auto-open on join, no player-side launch button.
+  //
+  // The store flag is a one-shot REQUEST to open, not the window's own state:
+  // it is consumed here and cleared, so asking a second time re-opens the
+  // window rather than setting an already-true boolean and doing nothing.
+  useEffect(() => {
+    if (!showCharacterCreator) return;
+    openWindow('characterCreator', 'new', {}, 'Create a Character');
+    useGameStore.getState().setShowCharacterCreator(false);
+  }, [showCharacterCreator]);
 
   // Changing a style control restyles the selected label as you go; with
   // nothing selected it just arms the next label you place.
@@ -468,15 +474,6 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <TargetPopup />
         <CastLevelPopup />
         <LootPopup />
-        {showCharacterCreator && campaign.system === 'swade' && (
-          <SwadeCharacterCreator onClose={() => useGameStore.getState().setShowCharacterCreator(false)} />
-        )}
-        {showCharacterCreator && campaign.system === 'swn' && (
-          <SwnCharacterCreator onClose={() => useGameStore.getState().setShowCharacterCreator(false)} />
-        )}
-        {showCharacterCreator && campaign.system === 'dnd5e' && (
-          <Dnd5eCharacterCreator onClose={() => useGameStore.getState().setShowCharacterCreator(false)} />
-        )}
       </div>
 
       {targeting && targeting.action.source === 'attack' && (

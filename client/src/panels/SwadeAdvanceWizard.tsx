@@ -102,13 +102,8 @@ export function SwadeAdvanceWizard({ character, onClose }: { character: Characte
     || e.entry.name.toLowerCase().includes(edgeFilter.trim().toLowerCase()));
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 70 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="sheet-backdrop wizard-shell">
       <div className="panel levelup swc-wizard">
-        <div className="dock-header">
-          <h3>Advance — {character.name}</h3>
-          <button className="link" onClick={onClose}>close</button>
-        </div>
-
         <div className="swc-steps">
           {STEPS.map((s, i) => (
             <button key={s.id} className={i === stepIdx ? 'active' : ''} disabled={i > stepIdx} onClick={() => setStepIdx(i)}>

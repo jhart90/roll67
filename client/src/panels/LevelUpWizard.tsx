@@ -106,13 +106,8 @@ export function LevelUpWizard({ character, onClose }: { character: Character; on
   }
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="sheet-backdrop wizard-shell">
       <div className="panel levelup swc-wizard">
-        <div className="dock-header">
-          <h3>Level Up — {character.name}{plan ? ` → level ${plan.toLevel}` : ''}</h3>
-          <button className="link" onClick={onClose}>close</button>
-        </div>
-
         {curLevel >= 20 ? (
           <p className="dim">Already at level 20.</p>
         ) : (

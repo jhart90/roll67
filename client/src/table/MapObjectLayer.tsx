@@ -8,6 +8,7 @@ import { openWindow } from '../store/windowManager';
 const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject }) {
   const map = useGameStore((s) => s.map)!;
   const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const selected = useGameStore((s) => s.selectedObjectId === obj.id);
   const stage = useStage();
   // DM drag-to-relocate: live pixel position while dragging, committed to a
   // hex on release. A drag suppresses the click-to-open that release fires.
@@ -78,6 +79,9 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
     e.stopPropagation();
+    // Picking it here is the same act as picking its row in the World pane,
+    // so it lights up in both places.
+    if (e.button === 0) useGameStore.getState().selectObject(obj.id);
     if (!isDm || e.button !== 0) return;
     (e.currentTarget as SVGGElement).setPointerCapture(e.pointerId);
     dragMoved.current = false;
@@ -101,6 +105,11 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
       onPointerUp={onPointerUp}
       onContextMenu={onContextMenu}
     >
+      {/* The same gold dashed ring a selected token wears — a chest picked in
+          the World pane should look picked here in exactly the same way. */}
+      {selected && (
+        <circle r={r + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" style={{ pointerEvents: 'none' }} />
+      )}
       {artUrl ? (
         <image
           href={artUrl}

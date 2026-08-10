@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { needsNpcBoost } from 'shared';
 import { useGameStore } from '../store/game';
 import { closeWindow, useWindowManager } from '../store/windowManager';
 import { WindowFrame } from './WindowFrame';
@@ -17,6 +18,14 @@ import { RollStatsWindow } from '../panels/RollStats';
 import { IronDiceWindow } from '../panels/IronDice';
 import { PublicSheetWindow } from '../panels/PublicSheet';
 import { MapDetailsWindow } from '../panels/MapDetails';
+import { SwadeCharacterCreator } from '../panels/SwadeCharacterCreator';
+import { SwnCharacterCreator } from '../panels/SwnCharacterCreator';
+import { Dnd5eCharacterCreator } from '../panels/Dnd5eCharacterCreator';
+import { SwadeAdvanceWizard } from '../panels/SwadeAdvanceWizard';
+import { SwnLevelUpWizard } from '../panels/SwnLevelUpWizard';
+import { NpcBoostWizard } from '../panels/NpcBoostWizard';
+import { LevelUpWizard } from '../panels/LevelUpWizard';
+import { Compendium } from '../panels/Compendium';
 
 /** Mounted once at the top level: renders every open window instance,
  *  each in its own draggable/poppable WindowFrame, so multiple windows
@@ -27,6 +36,8 @@ export function WindowHost() {
   const shops = useGameStore((s) => s.shopList);
   const tables = useGameStore((s) => s.tableList);
   const locations = useGameStore((s) => s.locationList);
+  const characters = useGameStore((s) => s.characters);
+  const system = useGameStore((s) => s.campaign?.system);
 
   return (
     <>
@@ -85,6 +96,28 @@ export function WindowHost() {
           case 'accountDetails':
             content = <AccountDetails onClose={onClose} />;
             break;
+          case 'characterCreator':
+            content = system === 'swade' ? <SwadeCharacterCreator onClose={onClose} />
+              : system === 'swn' ? <SwnCharacterCreator onClose={onClose} />
+                : system === 'dnd5e' ? <Dnd5eCharacterCreator onClose={onClose} />
+                  : null;
+            break;
+          case 'levelUp': {
+            // Which wizard is the character's own business, not the opener's,
+            // so the branch lives here rather than at every ⬆ button.
+            const ch = characters.find((c) => c.id === w.key);
+            content = !ch ? null
+              : ch.system === 'swade' ? <SwadeAdvanceWizard character={ch} onClose={onClose} />
+                : ch.system === 'swn' ? <SwnLevelUpWizard character={ch} onClose={onClose} />
+                  : needsNpcBoost(String(ch.sheet.class ?? '')) ? <NpcBoostWizard character={ch} onClose={onClose} />
+                    : <LevelUpWizard character={ch} onClose={onClose} />;
+            break;
+          }
+          case 'compendium': {
+            const ch = characters.find((c) => c.id === w.key);
+            content = ch ? <Compendium character={ch} onClose={onClose} /> : null;
+            break;
+          }
         }
         if (!content) return null;
         return <WindowFrame key={w.id} win={w}>{content}</WindowFrame>;

@@ -226,13 +226,8 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 70 }}>
+    <div className="sheet-backdrop wizard-shell">
       <div className="panel levelup swc-wizard">
-        <div className="dock-header">
-          <h3>Create a Character — Savage Worlds</h3>
-          <button className="link" onClick={onClose}>close</button>
-        </div>
-
         <div className="swc-steps">
           {STEPS.map((s, i) => (
             <button key={s.id} className={i === stepIdx ? 'active' : ''} disabled={i > stepIdx} onClick={() => setStepIdx(i)}>

@@ -82,13 +82,8 @@ export function SwnLevelUpWizard({ character, onClose }: { character: Character;
   }
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="sheet-backdrop wizard-shell">
       <div className="panel levelup swc-wizard">
-        <div className="dock-header">
-          <h3>Level Up — {character.name}{plan ? ` → level ${plan.toLevel}` : ''}</h3>
-          <button className="link" onClick={onClose}>close</button>
-        </div>
-
         {established && curLevel >= 10 ? (
           <p className="dim">Already at level 10 (the SWN maximum).</p>
         ) : plan && (

@@ -15,7 +15,13 @@ export type WindowKind =
   | 'ironDice'
   | 'publicSheet'
   | 'mapDetails'
-  | 'accountDetails';
+  | 'accountDetails'
+  // Long-running jobs that used to be centred modals. They are multi-minute
+  // tasks you want to do WITH the map and your sheet visible, so they belong
+  // in the window system like everything else.
+  | 'characterCreator'
+  | 'levelUp'
+  | 'compendium';
 
 export interface WindowInstance {
   /** `${kind}:${key}` — opening the same kind+key again focuses this instance. */

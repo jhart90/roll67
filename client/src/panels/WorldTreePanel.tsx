@@ -201,6 +201,7 @@ export function WorldTreePanel() {
   // dragged item just before it among its siblings (top half).
   const [dropTarget, setDropTarget] = useState<{ id: string; mode: 'into' | 'above' } | 'root' | null>(null);
   const worldSort = useGameStore((s) => s.worldSort);
+  const worldSelectedKey = useGameStore((s) => s.worldSelectedKey);
 
   // "View as" has to bend the world tree too, not just the map. The server
   // already re-scopes every payload to the previewed player (viewerFor), but
@@ -333,7 +334,42 @@ export function WorldTreePanel() {
     else setReading(node);
   }
 
-  // The primary left-click action.
+  /**
+   * Mark a row as the selection, and point at the same thing on the map when
+   * it has a piece there — a token, or the chest/shop/prop object standing in
+   * for it. Everything else (a handout, a folder of notes) selects in the tree
+   * alone; there is nothing on the map to ring.
+   */
+  function selectNode(node: TreeNode) {
+    const s = useGameStore.getState();
+    const onThisMap = (mapId: string | null | undefined) => !!mapId && mapId === currentMapId;
+
+    // Which token, if any, this row IS on the map.
+    const tokenId = node.kind === 'token' && onThisMap(node.tokenMapId) ? node.id
+      : node.kind === 'character' && onThisMap(node.tokenMapId)
+        ? Object.values(s.tokens).find((t) => t.characterId === node.id && t.mapId === currentMapId)?.id ?? null
+        : null;
+    // ...and which map object. A shop or a chest-folder is a world entity
+    // whose piece on the map is a separate object standing in for it.
+    const obj = tokenId ? null
+      : node.kind === 'mapobject' ? s.mapObjects[node.id]
+        : Object.values(s.mapObjects).find((o) =>
+          (node.kind === 'shop' && o.shopId === node.id)
+          || (node.kind === 'folder' && o.worldFolderId === node.id));
+
+    // Both map setters clear the tree key (they are also what a click on the
+    // MAP goes through), so the row is claimed last and wins either way.
+    if (tokenId) s.selectToken(tokenId, false);
+    else if (obj && obj.mapId === currentMapId) s.selectObject(obj.id);
+    // Nothing on this map answers to this row — drop any stale ring rather
+    // than leaving the map pointing at whatever was picked before.
+    else { s.selectObject(null); s.selectToken(null); }
+    s.setWorldSelection(`${node.kind}:${node.id}`);
+  }
+
+  // The primary left-click action. `selectNode` runs LAST everywhere: `open`
+  // does its own token selecting, which would otherwise move the highlight off
+  // the row that was actually clicked and onto that token's row.
   function activate(node: TreeNode, hasKids: boolean) {
     // The DM jumps their view to the map they clicked. A player instead gets
     // the details window — viewMap is DM-only server-side, so asking for it
@@ -342,10 +378,12 @@ export function WorldTreePanel() {
     if (node.kind === 'map') {
       if (isDm) intents.viewMap(node.id);
       else openWindow('mapDetails', node.id, {}, node.name || 'Map');
-      return;
+    } else if (hasKids) {
+      toggle(node.id);
+    } else {
+      open(node);
     }
-    if (hasKids) toggle(node.id);
-    else open(node);
+    selectNode(node);
   }
 
   /** True if `maybeAncestorId` is at or above `nodeId` in the tree (cycle guard). */
@@ -474,10 +512,11 @@ export function WorldTreePanel() {
     const isOpen = expanded.has(node.id);
     const isDropOn = typeof dropTarget === 'object' && dropTarget?.id === node.id && dropTarget.mode === 'into';
     const isDropAbove = typeof dropTarget === 'object' && dropTarget?.id === node.id && dropTarget.mode === 'above';
+    const isSelected = worldSelectedKey === `${node.kind}:${node.id}`;
     return (
       <div key={`${node.kind}:${node.id}`}>
         <div
-          className={`wt-row ${isDropOn ? 'drop-on' : ''} ${isDropAbove ? 'drop-above' : ''}`}
+          className={`wt-row ${isSelected ? 'selected' : ''} ${isDropOn ? 'drop-on' : ''} ${isDropAbove ? 'drop-above' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
           {...(node.kind === 'map' ? { 'data-map-id': node.id } : {})}
           draggable={isDm && node.kind !== 'mapobject'}
@@ -503,11 +542,12 @@ export function WorldTreePanel() {
           } : undefined}
           onDragEnd={isDm ? () => { dragRef.current = null; setDropTarget(null); } : undefined}
           onClick={() => activate(node, kids.length > 0)}
-          onDoubleClick={() => open(node)}
+          onDoubleClick={() => { open(node); selectNode(node); }}
           onContextMenu={(e) => {
             e.preventDefault();
-            if (isDm && node.kind === 'folder') { setCtxMenu({ x: e.clientX, y: e.clientY, folderId: node.id }); return; }
-            open(node);
+            if (isDm && node.kind === 'folder') setCtxMenu({ x: e.clientX, y: e.clientY, folderId: node.id });
+            else open(node);
+            selectNode(node);
           }}
           title={node.kind === 'map' ? 'Click to open in the viewer · double/right-click to edit · drag to re-parent or re-order' : 'Click to expand · double/right-click to open · drag onto a row to nest, onto its top edge to re-order'}
         >

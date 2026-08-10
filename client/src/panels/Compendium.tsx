@@ -180,13 +180,14 @@ export function Compendium({ character, system, onClose, onPick }: {
   let lastKind = '';
 
   return (
-    <div className="sheet-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="sheet-backdrop wizard-shell">
       <div className="sheet-window npc-library">
         <div className="sheet-header">
-          <h3 style={{ margin: 0 }}>Compendium</h3>
           <span className="dim">add to {character ? character.name : 'shop'}</span>
           <span className="spacer" />
           {isDm && !creating && <button className="link" onClick={() => setCreating(true)}>+ custom item</button>}
+          {/* Still its own close: the shop picker renders this inline rather
+              than in a window, so there is no frame ✕ to fall back on. */}
           <button className="link" onClick={onClose}>close</button>
         </div>
 

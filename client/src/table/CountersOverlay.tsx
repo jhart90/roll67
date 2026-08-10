@@ -316,20 +316,31 @@ function SharePicker({ counter }: { counter: Counter }) {
       </div>
       {players.length > 0 && (
         <div className="counter-share-list">
-          {players.map((p) => (
-            <label key={p.userId} className="counter-share-row" title={p.online ? 'Online' : 'Offline'}>
-              <input
-                type="checkbox"
-                checked={shownTo(p.userId)}
-                onChange={() => {
-                  const next = new Set(shared.map((s) => s.userId));
-                  if (next.has(p.userId)) next.delete(p.userId); else next.add(p.userId);
-                  setShare(players.filter((x) => next.has(x.userId)).map((x) => x.userId));
-                }}
-              />
-              <span className={p.online ? '' : 'dim'}>{p.username}</span>
-            </label>
-          ))}
+          {players.map((p) => {
+            const on = shownTo(p.userId);
+            return (
+              // The app's own tick box (see .sc-equip): a native checkbox is
+              // the one control that never matches a dark UI.
+              <label
+                key={p.userId}
+                className={`counter-share-row ${on ? 'on' : ''}`}
+                title={`${p.username} — ${p.online ? 'online' : 'offline'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => {
+                    const next = new Set(shared.map((s) => s.userId));
+                    if (next.has(p.userId)) next.delete(p.userId); else next.add(p.userId);
+                    setShare(players.filter((x) => next.has(x.userId)).map((x) => x.userId));
+                  }}
+                />
+                <span className="sc-box" aria-hidden="true" />
+                <span className="counter-share-name">{p.username}</span>
+                <span className={`counter-share-dot ${p.online ? 'online' : ''}`} />
+              </label>
+            );
+          })}
         </div>
       )}
     </>

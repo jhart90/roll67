@@ -169,13 +169,8 @@ export function Dnd5eCharacterCreator({ onClose }: { onClose: () => void }) {
     .map((id) => SKILLS_5E.find((s) => s.id === id)?.label ?? id);
 
   return (
-    <div className="sheet-backdrop" style={{ zIndex: 70 }}>
+    <div className="sheet-backdrop wizard-shell">
       <div className="panel levelup swc-wizard">
-        <div className="dock-header">
-          <h3>Create a Character — D&amp;D 5e</h3>
-          <button className="link" onClick={onClose}>close</button>
-        </div>
-
         <div className="swc-steps">
           {STEPS.map((s, i) => (
             <button key={s.id} className={i === stepIdx ? 'active' : ''} disabled={i > stepIdx} onClick={() => setStepIdx(i)}>

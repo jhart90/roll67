@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Counter } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { AnchoredMenu } from '../util/AnchoredMenu';
 
 /**
  * DM counters: giant segmented banner bars spanning ~75% of the map pane,
@@ -62,7 +63,7 @@ export function CountersOverlay() {
 
       {menu && menuCounter && (
         <div className="wt-ctx-backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
-          <div className="wt-ctx-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+          <AnchoredMenu x={menu.x} y={menu.y} className="wt-ctx-menu" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => { intents.counterUpdate(menu.id, { visible: !menuCounter.visible }); setMenu(null); }}>
               {menuCounter.visible ? '🙈 Hide from players' : '👁 Show to players'}
             </button>
@@ -84,7 +85,7 @@ export function CountersOverlay() {
             <button onClick={() => { if (confirm(`Delete counter "${menuCounter.name}"?`)) intents.counterDelete(menu.id); setMenu(null); }}>
               🗑 Delete
             </button>
-          </div>
+          </AnchoredMenu>
         </div>
       )}
 

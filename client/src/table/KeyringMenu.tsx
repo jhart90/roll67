@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { KeyItem, SheetData } from 'shared';
 import { keyCount, keyScopeLabel, keysOnSheet } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -20,6 +20,11 @@ export function KeyringMenu() {
   const doors = useGameStore((s) => s.dmGeometry?.doors);
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
   const [open, setOpen] = useState(false);
+  // The door editor can send the DM straight here to cut the key it needs.
+  const summoned = useGameStore((s) => s.keyManagerOpen);
+  useEffect(() => {
+    if (summoned) { setOpen(true); useGameStore.setState({ keyManagerOpen: false }); }
+  }, [summoned]);
   const plateOpen = useGameStore((s) => {
     const t = s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined;
     if (!t?.nameplate || !s.you) return false;

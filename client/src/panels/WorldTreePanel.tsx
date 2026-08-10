@@ -3,6 +3,7 @@ import type { Character, Counter, DirectoryPayload, Handout, Light, LocationNode
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
+import { AnchoredMenu } from '../util/AnchoredMenu';
 
 // 'mapobject' nodes (loot/chests placed on the current map) live only in
 // this tree — they are not draggable, so the kind is not part of WorldDragKind.
@@ -591,7 +592,7 @@ export function WorldTreePanel() {
 
       {ctxMenu && (
         <div className="wt-ctx-backdrop" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}>
-          <div className="wt-ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }} onClick={(e) => e.stopPropagation()}>
+          <AnchoredMenu x={ctxMenu.x} y={ctxMenu.y} className="wt-ctx-menu" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => { placeFolderOnMap(ctxMenu.folderId, useGameStore.getState().map?.id ?? ''); setCtxMenu(null); }}
               disabled={!useGameStore.getState().map}
             >Place all on current map</button>
@@ -609,7 +610,7 @@ export function WorldTreePanel() {
             })()}
             <hr />
             <button onClick={() => { setFolderEdit(ctxMenu.folderId); setCtxMenu(null); }}>Folder details…</button>
-          </div>
+          </AnchoredMenu>
         </div>
       )}
     </div>

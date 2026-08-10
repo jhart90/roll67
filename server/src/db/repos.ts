@@ -1563,6 +1563,7 @@ interface MapObjectRow {
   interact_range: number;
   locked?: number;
   key_name?: string | null;
+  linked_character_id?: string | null;
   created_at: number;
 }
 
@@ -1582,6 +1583,7 @@ function toMapObject(row: MapObjectRow) {
     interactRange: row.interact_range ?? 1,
     locked: row.locked === 1,
     keyName: row.key_name ?? null,
+    linkedCharacterId: row.linked_character_id ?? null,
   };
 }
 
@@ -1609,7 +1611,7 @@ export const mapObjects = {
       .run(id, mapId, name, description, kind, q, r, '[]', wfId, sId, range, now());
     return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, items_json: '[]', world_folder_id: wfId, shop_id: sId, interact_range: range, created_at: now() });
   },
-  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null }): void {
+  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }): void {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (patch.name !== undefined) { sets.push('name = ?'); vals.push(patch.name); }
@@ -1621,6 +1623,7 @@ export const mapObjects = {
     if (patch.interactRange !== undefined) { sets.push('interact_range = ?'); vals.push(patch.interactRange); }
     if (patch.locked !== undefined) { sets.push('locked = ?'); vals.push(patch.locked ? 1 : 0); }
     if (patch.keyName !== undefined) { sets.push('key_name = ?'); vals.push(patch.keyName ?? null); }
+    if (patch.linkedCharacterId !== undefined) { sets.push('linked_character_id = ?'); vals.push(patch.linkedCharacterId ?? null); }
     if (sets.length === 0) return;
     vals.push(id);
     stmt(`UPDATE map_objects SET ${sets.join(', ')} WHERE id = ?`).run(...vals);

@@ -287,6 +287,8 @@ interface GameState {
   /** Pass true/false to answer the cook prompt; omit to be asked. */
   confirmAoeTargeting(cook?: boolean): void;
   cookPrompt: { label: string } | null;
+  /** Set from the door editor's "create a new key" so the DM lands in the Key Manager. */
+  keyManagerOpen: boolean;
   /** Pending spell cast awaiting a slot-level choice. */
   castPrompt: { characterId: string; rollableId: string; label: string; levels: number[] } | null;
   beginCast(characterId: string, rollableId: string, minLevel: number, label: string): void;
@@ -534,6 +536,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
   cookPrompt: null,
+  keyManagerOpen: false,
   castPrompt: null,
   beginCast(characterId, rollableId, minLevel, label) {
     const c = get().characters.find((x) => x.id === characterId);
@@ -1644,7 +1647,7 @@ export const intents = {
   // map loot objects
   placeMapObject: (mapId: string, kind: 'item' | 'chest', name: string, q: number, r: number, description?: string) =>
     socket.emit(C2S.PLACE_MAP_OBJECT, { mapId, kind, name, description, q, r }),
-  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: LootItem[]; interactRange?: number; locked?: boolean; keyName?: string | null }) =>
+  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: LootItem[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }) =>
     socket.emit(C2S.UPDATE_MAP_OBJECT, { objectId, patch }),
   deleteMapObject: (objectId: string) => socket.emit(C2S.DELETE_MAP_OBJECT, { objectId }),
   takeMapItem: (objectId: string) => socket.emit(C2S.TAKE_MAP_ITEM, { objectId }),

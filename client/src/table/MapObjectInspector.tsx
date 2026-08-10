@@ -6,6 +6,7 @@ import { useUploadProgress } from '../util/useUploadProgress';
 
 export function MapObjectInspector() {
   const you = useGameStore((s) => s.you);
+  const characters = useGameStore((st) => st.characters);
   const campaign = useGameStore((s) => s.campaign);
   const obj = useGameStore((s) => (s.inspectedObjectId ? s.mapObjects[s.inspectedObjectId] : null));
   const customItems = useGameStore((s) => s.customItems);
@@ -145,6 +146,19 @@ export function MapObjectInspector() {
               />
             </label>
           )}
+          {/* A chest can be carried by a character instead of sitting on the
+              floor — the same relationship a shop has with its shopkeeper. */}
+          <label>
+            Carried by
+            <select
+              value={obj.linkedCharacterId ?? ''}
+              onChange={(e) => intents.updateMapObject(obj.id, { linkedCharacterId: e.target.value || null })}
+              title="Whose token IS this container. Leave unset for a chest on the ground."
+            >
+              <option value="">— on the ground —</option>
+              {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
           <h4>Items in Chest</h4>
           {obj.items.length === 0 && <p className="dim" style={{ fontSize: 12 }}>No items yet.</p>}
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12 }}>

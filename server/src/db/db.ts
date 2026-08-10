@@ -86,6 +86,8 @@ ensureColumn('tokens', 'revealed_at', 'revealed_at INTEGER');
 // Chests lock like doors: a flag plus the inventory item that opens them.
 ensureColumn('map_objects', 'locked', 'locked INTEGER NOT NULL DEFAULT 0');
 ensureColumn('map_objects', 'key_name', 'key_name TEXT');
+// A container can BE a character: the token carries the chest / is the shop.
+ensureColumn('map_objects', 'linked_character_id', 'linked_character_id TEXT');
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 // Chat shows "Character (Player)" for anything a character did.

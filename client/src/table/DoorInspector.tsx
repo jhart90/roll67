@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DoorType } from 'shared';
+import { keysOnSheet } from 'shared';
 import { intents, useGameStore } from '../store/game';
 
 /** Floating editor for a door/gate selected with the cursor tool (right-click,
@@ -11,6 +12,14 @@ export function DoorInspector() {
   const door = useGameStore((s) =>
     s.selectedDoorId ? s.dmGeometry?.doors.find((d) => d.id === s.selectedDoorId) : undefined);
 
+  // Every key name already cut, from anyone's inventory — the Key Manager is
+  // where they come from, so the door offers exactly those.
+  const characters = useGameStore((s) => s.characters);
+  const existingKeys = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of characters) for (const k of keysOnSheet(c.sheet)) names.add(k.name);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [characters]);
   const isGeneric = !door?.keyName || door.keyName === 'Key';
   const [customKey, setCustomKey] = useState(isGeneric ? '' : door?.keyName ?? '');
   const [keyMode, setKeyMode] = useState<'generic' | 'specific'>(isGeneric ? 'generic' : 'specific');
@@ -95,19 +104,26 @@ export function DoorInspector() {
             </label>
             {keyMode === 'specific' && (
               <label>
-                Item name
-                <input
-                  type="text"
+                Which key
+                {/* Pick from the keys that actually exist rather than typing a
+                    name and hoping it matches one — a typo here is a door
+                    nobody can ever open. */}
+                <select
                   value={customKey}
-                  onChange={(e) => setCustomKey(e.target.value)}
-                  onBlur={() => {
-                    const name = customKey.trim() || 'Key';
-                    update({ keyName: name });
-                    if (name === 'Key') setKeyMode('generic');
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === '__new') { useGameStore.setState({ keyManagerOpen: true }); return; }
+                    setCustomKey(v);
+                    update({ keyName: v.trim() || 'Key' });
                   }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                  placeholder="e.g. Rusty Brass Key"
-                />
+                >
+                  <option value="">— pick a key —</option>
+                  {existingKeys.map((name) => <option key={name} value={name}>{name}</option>)}
+                  {customKey && !existingKeys.includes(customKey) && (
+                    <option value={customKey}>{customKey} (not cut yet)</option>
+                  )}
+                  <option value="__new">➕ Create a new key…</option>
+                </select>
               </label>
             )}
           </>

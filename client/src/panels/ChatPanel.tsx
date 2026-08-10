@@ -5,6 +5,7 @@ import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
 import { DIE_COLORS, DieShape } from '../table/DiceShapes';
 import { DICE_ROLE_DEFAULTS } from '../table/dice3d';
+import { AnchoredMenu } from '../util/AnchoredMenu';
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -352,7 +353,7 @@ export function ChatPanel() {
       </div>
 
       {menu && menuMsg && (
-        <div className="chat-context-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+        <AnchoredMenu x={menu.x} y={menu.y} className="chat-context-menu" onClick={(e) => e.stopPropagation()}>
           {menuMsg.hidden ? (
             <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>
           ) : (
@@ -363,7 +364,7 @@ export function ChatPanel() {
               )}
             </>
           )}
-        </div>
+        </AnchoredMenu>
       )}
 
       <form className="chat-input" onSubmit={send}>

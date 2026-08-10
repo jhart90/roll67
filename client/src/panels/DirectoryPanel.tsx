@@ -3,6 +3,7 @@ import { useGameStore, intents } from '../store/game';
 import type { WorldVisState } from 'shared';
 import { HandoutsSection } from './HandoutsPanel';
 import { RollableTables } from './RollableTables';
+import { AnchoredMenu } from '../util/AnchoredMenu';
 
 const SYSTEM_LABEL: Record<string, string> = { dnd5e: 'D&D 5e', swn: 'SWN' };
 
@@ -123,12 +124,12 @@ export function DirectoryPanel() {
         )}
       </div>
       {visMenu && (
-        <div className="dir-vis-menu" style={{ left: visMenu.x, top: visMenu.y }} onMouseLeave={() => setVisMenu(null)}>
+        <AnchoredMenu x={visMenu.x} y={visMenu.y} className="dir-vis-menu" onMouseLeave={() => setVisMenu(null)}>
           <div className="dim" style={{ padding: '2px 8px', fontSize: 11 }}>{visMenu.name}</div>
           <button onClick={() => { intents.worldOverride(visMenu.kind, visMenu.key, 'reveal'); setVisMenu(null); }}>👁 Reveal to all players</button>
           <button onClick={() => { intents.worldOverride(visMenu.kind, visMenu.key, 'hide'); setVisMenu(null); }}>🚫 Hide from all players</button>
           <button onClick={() => { intents.worldOverride(visMenu.kind, visMenu.key, 'clear'); setVisMenu(null); }}>↺ Follow what they've seen</button>
-        </div>
+        </AnchoredMenu>
       )}
     </div>
   );

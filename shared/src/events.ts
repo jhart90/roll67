@@ -640,6 +640,10 @@ export interface MapObject {
   worldFolderId: string | null;
   /** Links this map object to a shop placed on the map. */
   shopId: string | null;
+  /** A character who IS this container — the token carries the chest (or is
+   *  the shopkeeper) rather than it sitting on the ground. Shops have carried
+   *  linkedCharacterId for a while; chests get the same. */
+  linkedCharacterId?: string | null;
   /** How many hexes away a player must be to interact (default 1). */
   interactRange: number;
   /** A locked chest refuses to open for a player without the key. Same rule
@@ -676,6 +680,7 @@ export interface UpdateMapObjectPayload {
     interactRange?: number;
     locked?: boolean;
     keyName?: string | null;
+    linkedCharacterId?: string | null;
   };
 }
 

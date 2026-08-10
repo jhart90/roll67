@@ -610,7 +610,7 @@ describe('Ammunition & caliber', () => {
 
   it('guns import with a matching caliber column', () => {
     const cases: Array<[string, string]> = [
-      ['9mm Pistol', 'bullets-medium'],
+      ['Glock (9mm)', 'bullets-medium'],
       ['Sniper Rifle', 'bullets-large'],
       ['Laser Pistol', 'battery-pistol'],
       ['Pump Shotgun', 'shells'],

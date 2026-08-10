@@ -92,7 +92,7 @@ describe('Pepper Spray', () => {
     const act = actionsFor('Pepper Spray').find((a) => a.label === 'Pepper Spray')!;
     expect(act.hardRange).toBe(true);
     // An ordinary firearm keeps its bands.
-    const pistol = actionsFor('9mm Pistol').find((a) => a.label === '9mm Pistol')!;
+    const pistol = actionsFor('Glock (9mm)').find((a) => a.label === 'Glock (9mm)')!;
     expect(pistol.hardRange).toBeUndefined();
   });
 });

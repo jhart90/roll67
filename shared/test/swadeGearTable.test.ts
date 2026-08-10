@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { applyEntry, contentForSystem, shopItemFromEntry } from '../src/data/compendium.js';
 import { swade } from '../src/systems/swade.js';
-import type { SheetData } from '../src/types.js';
+import { combatActions } from '../src/systems/combat.js';
+import type { Character, SheetData } from '../src/types.js';
 
 /**
  * The core gear tables, entered as [compendium name, cost, weight]. Weight is
@@ -437,6 +438,50 @@ describe('SWADE gear tables', () => {
     expect(row.range).toBe(range);
     expect(row.aoeHexes ?? 0).toBe(blast);
     if (blast > 0) expect(row.aoeShape).toBe('sphere');
+  });
+
+  /**
+   * Powers the book puts on a template but which used to be single-target
+   * here. Each must reach the sheet with its area AND become a real targeted
+   * AoE action — a template that generates no action is inert data.
+   */
+  const AREA_POWERS: Array<[string, string]> = [
+    ['Stun', 'stunned'],
+    ['Fear', 'frightened'],
+    ['Entangle', 'entangled'],
+    ['Slumber', 'unconscious'],
+    ['Silence', 'silenced'],
+    ['Light/Darkness', 'blinded'],
+  ];
+
+  it.each(AREA_POWERS)('%s covers a Medium Blast Template and inflicts %s', (name, condition) => {
+    const entry = byName.get(name)!;
+    expect(entry.kind).toBe('power');
+    const base = swade.defaultSheet();
+    const row = applyEntry(entry, base)!.row as SheetData;
+    expect(row.aoeShape).toBe('sphere');
+    expect(row.aoeHexes).toBe(3);
+    expect(row.condition).toBe(condition);
+
+    // ...and it has to survive into an actual action with its template.
+    const sheet: SheetData = {
+      ...base,
+      arcaneSkill: 'Spellcasting',
+      skills: [{ name: 'Spellcasting', die: 'd8' }],
+      powers: [row],
+    };
+    const character = { id: 'c', campaignId: 'x', ownerUserId: 'u', name: 'T', system: 'swade', sheet } as unknown as Character;
+    const action = combatActions(character).find((a) => a.label === name);
+    expect(action, `${name} produced no action`).toBeDefined();
+    expect(action!.aoe).toMatchObject({ shape: 'sphere', sizeHexes: 3 });
+    expect(action!.appliesCondition).toBe(condition);
+  });
+
+  it('no longer carries a bare "9mm Pistol" — the named 9mms replace it', () => {
+    expect(byName.has('9mm Pistol')).toBe(false);
+    for (const kept of ['Glock (9mm)', 'H&K MP5 (9mm)', 'Uzi (9mm)']) {
+      expect(byName.has(kept), `${kept} should still be here`).toBe(true);
+    }
   });
 
   it('gives the flamethrower and the claymore a cone rather than a sphere', () => {

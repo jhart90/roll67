@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 import { intents, useGameStore } from '../store/game';
 import { defaultColorFor, playerColorFor } from '../util/playerColor';
-
-const PLAYER_COLOR_PALETTE = [
-  '#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#d2d26c', '#d26cb0',
-];
+import { WHEEL_COLORS } from '../util/palette';
 
 /** Rename yourself + pick your player color -- shown when you click your own pill. */
 function SelfProfileMenu({ userId, username, playerColor }: { userId: string; username: string; playerColor: string | null }) {
@@ -33,23 +30,20 @@ function SelfProfileMenu({ userId, username, playerColor }: { userId: string; us
       />
       <div className="dice-color-row">
         <span className="dim" style={{ fontSize: 11 }}>Color:</span>
-        <button
-          className={`link ${playerColor === null ? 'active' : ''}`}
-          style={{ fontSize: 11 }}
-          title="Use the automatic default color"
-          onClick={() => intents.setPlayerColor(null)}
-        >
-          default
-        </button>
-        {PLAYER_COLOR_PALETTE.map((c) => (
-          <button
-            key={c}
-            className={`dice-color-swatch ${current === c ? 'active' : ''}`}
-            style={{ background: c }}
-            title={c}
-            onClick={() => intents.setPlayerColor(c)}
-          />
-        ))}
+        {/* The same wheel the pinned pills offer — one palette across the app.
+            Nobody has to reset to the automatic colour: it is what you get
+            until you pick, and picking one of these IS the choice. */}
+        <div className="player-colors">
+          {WHEEL_COLORS.map((c) => (
+            <button
+              key={c}
+              className={`pill-swatch ${current === c ? 'active' : ''}`}
+              style={{ background: c }}
+              title={c}
+              onClick={() => intents.setPlayerColor(c)}
+            />
+          ))}
+        </div>
         <input
           type="color"
           className="dice-color-custom"

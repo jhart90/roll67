@@ -1659,10 +1659,15 @@ button.link:hover { text-decoration: underline; }
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
-  min-width: 180px;
+  /* Wide enough for the colour wheel's eight fixed 18px columns plus this
+     padding — the grid does not squeeze, so a narrower menu would overflow. */
+  min-width: 200px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   z-index: 40;
 }
+/* The player-colour wheel, in the same eight-per-row grid the pinned-pill
+   picker uses — it is the same palette, so it should read the same way. */
+.player-colors { display: grid; grid-template-columns: repeat(8, 18px); gap: 3px; }
 .presence-menu-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
 .presence-menu .link { text-align: left; padding: 3px 4px; }
 .presence-menu .link:hover { background: var(--panel-2); border-radius: 4px; text-decoration: none; }
@@ -2661,7 +2666,12 @@ th > .term { border-bottom-style: dotted; }
 .counter-slot-picker button.active { background: rgba(255, 255, 255, 0.06); font-weight: 700; }
 /* Per-player share ticks. Capped and scrollable so a big table can't push the
    rest of the menu off the bottom of the screen. */
-.counter-share-list { max-height: 168px; overflow-y: auto; padding: 2px 4px; }
+/* Sunk a shade below the menu around it, so the one part of this pop-up that
+   scrolls looks like a pane rather than like more menu. */
+.counter-share-list {
+  max-height: 168px; overflow-y: auto; padding: 3px 4px; margin: 2px 6px;
+  background: rgba(0, 0, 0, 0.28); border: 1px solid var(--border); border-radius: 6px;
+}
 /* A grid, not a flex row: the tick boxes have to line up in one column no
    matter how long the names are, and a name that wraps must not drag its box
    out of that column. Every property the global `label` rule sets (block

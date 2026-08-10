@@ -1412,6 +1412,52 @@ async function main() {
   dmSock.emit('deleteShop', { shopId: secret.id });
   dmSock.emit('deleteLocation', { locationId: loc.id });
 
+  // ---------- counter sharing ----------
+  console.log('counter sharing:');
+  // Only one player is connected, so "shared with nobody" and "shared with
+  // them" are the two ends worth proving; the middle state is the same code
+  // path with a longer list.
+  const madeCounter = waitFor(dmSock, 'counters', 5000, (p) => p.mapId === mapId && p.counters.length > 0);
+  dmSock.emit('counterCreate', { mapId });
+  const counter = (await madeCounter).counters[0];
+  ok(!!counter, 'DM created a counter');
+
+  // Fresh counters start hidden, so the player's list must not have it.
+  const pHidden = waitFor(playerSock, 'counters', 5000, (p) => p.mapId === mapId);
+  playerSock.emit('countersGet', { mapId });
+  ok(!(await pHidden).counters.some((c) => c.id === counter.id), 'a new counter is hidden from players');
+
+  // Shared with nobody but this player: they get it.
+  const pShared = waitFor(playerSock, 'counters', 5000, (p) => p.counters.some((c) => c.id === counter.id));
+  dmSock.emit('counterUpdate', { counterId: counter.id, patch: { visible: true, sharedWith: [player.user.id] } });
+  const got = (await pShared).counters.find((c) => c.id === counter.id);
+  ok(!!got, 'a counter shared with a named player reaches them');
+  ok(got.sharedWith === null, "the share list itself is stripped before it leaves the DM's screen");
+
+  // Shared with someone else only: it goes away again.
+  const pRevoked = waitFor(playerSock, 'counters', 5000, (p) => !p.counters.some((c) => c.id === counter.id));
+  dmSock.emit('counterUpdate', { counterId: counter.id, patch: { visible: true, sharedWith: [dm.user.id] } });
+  await pRevoked;
+  ok(true, 'sharing with someone else revokes it from this player');
+  // ...and the DM is not a player, so that list sanitizes to empty rather than
+  // quietly persisting an id that can never match a player.
+  const dmView = waitFor(dmSock, 'counters', 5000, (p) => p.counters.some((c) => c.id === counter.id));
+  dmSock.emit('countersGet', { mapId });
+  const dmCounter = (await dmView).counters.find((c) => c.id === counter.id);
+  ok(Array.isArray(dmCounter.sharedWith) && dmCounter.sharedWith.length === 0, 'a share list drops ids that are not campaign players');
+
+  // Back to everyone.
+  const pAll = waitFor(playerSock, 'counters', 5000, (p) => p.counters.some((c) => c.id === counter.id));
+  dmSock.emit('counterUpdate', { counterId: counter.id, patch: { visible: true, sharedWith: null } });
+  await pAll;
+  ok(true, 'sharing with everyone reaches the player again');
+
+  // A player cannot reach in and reveal one to themselves.
+  const counterDenied = waitFor(playerSock, 'errorMsg');
+  playerSock.emit('counterUpdate', { counterId: counter.id, patch: { visible: false } });
+  ok(/only the dm/i.test((await counterDenied).message), 'players cannot edit counters');
+  dmSock.emit('counterDelete', { counterId: counter.id });
+
   // ---------- group initiative ----------
   console.log('group initiative:');
   dmSock.emit('initClear');

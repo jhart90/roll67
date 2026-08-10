@@ -275,16 +275,17 @@ function ActionTerm({ name }: { name: string }) {
 /**
  * Who a message came from. Anything a character did is attributed to the
  * character first — "Kira (jackh)" — because at the table people track the
- * character, not the account. Tinted with that player's colour, the same one
- * used for their presence dot and their tokens' rings.
+ * character, not the account.
+ *
+ * Deliberately the same dim grey as the timestamp beside it: the byline is
+ * metadata, and colouring it per-player put a row of competing brights above
+ * every message, pulling the eye off the roll cards that actually matter. Who
+ * is who is still legible from the presence dots and the token rings.
  */
 function ChatFrom({ msg, playerHidden }: { msg: ChatMessage; playerHidden: boolean }) {
-  const members = useGameStore((s) => s.members);
   if (playerHidden) return <span className="chat-from">DM</span>;
-  const member = msg.fromUserId ? members.find((m) => m.userId === msg.fromUserId) : undefined;
-  const color = member ? playerColorFor(member) : null;
   return (
-    <span className="chat-from" style={color ? { color } : undefined}>
+    <span className="chat-from">
       {msg.fromCharacter
         ? <>{msg.fromCharacter} <span className="chat-from-player">({msg.fromName})</span></>
         : msg.fromName}

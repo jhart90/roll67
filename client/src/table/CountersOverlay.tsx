@@ -132,7 +132,10 @@ export function CountersOverlay() {
     <div
       key={c.id}
       className={`counter-bar ${!c.visible ? 'counter-hidden' : ''}`}
-      title={isDm && !c.visible ? `${c.name} — hidden from players (right-click to reveal)` : c.name}
+      title={!isDm ? c.name
+        : !c.visible ? `${c.name} — hidden from players (right-click to share)`
+          : c.sharedWith === null ? `${c.name} — shared with everyone`
+            : `${c.name} — shared with ${c.sharedWith.length} player${c.sharedWith.length === 1 ? '' : 's'} (right-click to change)`}
       // Everyone can rearrange their own screen, so everyone gets the menu.
       onContextMenu={(e) => { e.preventDefault(); setMenu({ id: c.id, x: e.clientX, y: e.clientY }); }}
       draggable
@@ -202,9 +205,7 @@ export function CountersOverlay() {
           <AnchoredMenu x={menu.x} y={menu.y} className="wt-ctx-menu" onClick={(e) => e.stopPropagation()}>
             {isDm && (
               <>
-                <button onClick={() => { intents.counterUpdate(menu.id, { visible: !menuCounter.visible }); setMenu(null); }}>
-                  {menuCounter.visible ? '🙈 Hide from players' : '👁 Show to players'}
-                </button>
+                <SharePicker counter={menuCounter} />
                 <button onClick={() => { setEditing(menuCounter); setMenu(null); }}>✏️ Edit…</button>
                 <hr />
               </>
@@ -259,6 +260,78 @@ export function CountersOverlay() {
       )}
 
       {editing && <CounterEditor counter={editing} onClose={() => setEditing(null)} />}
+    </>
+  );
+}
+
+/**
+ * Who can see this counter. Three states rolled into one control, because the
+ * DM thinks of it as one question:
+ *
+ *   hidden           — `visible: false`
+ *   the whole table  — `visible: true, sharedWith: null`
+ *   named players    — `visible: true, sharedWith: [ids]`
+ *
+ * Ticking every player collapses back to null rather than freezing today's
+ * roster into a list, so a player who joins next week still sees the doom
+ * clock. Untick one from "everyone" and you get all-but-them, which is the
+ * move you actually want when one character is out of the room.
+ *
+ * Whether a player then SEES it still depends on knowing the map — the server
+ * checks both. Sharing a counter is not a way to leak a map's existence.
+ */
+function SharePicker({ counter }: { counter: Counter }) {
+  const players = useGameStore((s) => s.members).filter((m) => m.role === 'player');
+  const shownTo = (userId: string) =>
+    counter.visible && (counter.sharedWith === null || counter.sharedWith.includes(userId));
+  const shared = players.filter((p) => shownTo(p.userId));
+
+  const setShare = (list: string[]) => intents.counterUpdate(counter.id, {
+    visible: list.length > 0,
+    // Everybody in the campaign ticked = "everyone", not a snapshot of them.
+    sharedWith: list.length === players.length ? null : list,
+  });
+
+  const summary = !counter.visible || shared.length === 0 ? 'no one'
+    : counter.sharedWith === null ? 'everyone'
+      : shared.length === 1 ? shared[0].username
+        : `${shared.length} players`;
+
+  return (
+    <>
+      <span className="wt-ctx-label">Shared with {summary}</span>
+      <div className="counter-slot-picker">
+        <button
+          className={counter.visible && counter.sharedWith === null ? 'active' : ''}
+          onClick={() => intents.counterUpdate(counter.id, { visible: true, sharedWith: null })}
+        >
+          👁 Everyone
+        </button>
+        <button
+          className={!counter.visible || shared.length === 0 ? 'active' : ''}
+          onClick={() => intents.counterUpdate(counter.id, { visible: false, sharedWith: null })}
+        >
+          🙈 No one
+        </button>
+      </div>
+      {players.length > 0 && (
+        <div className="counter-share-list">
+          {players.map((p) => (
+            <label key={p.userId} className="counter-share-row" title={p.online ? 'Online' : 'Offline'}>
+              <input
+                type="checkbox"
+                checked={shownTo(p.userId)}
+                onChange={() => {
+                  const next = new Set(shared.map((s) => s.userId));
+                  if (next.has(p.userId)) next.delete(p.userId); else next.add(p.userId);
+                  setShare(players.filter((x) => next.has(x.userId)).map((x) => x.userId));
+                }}
+              />
+              <span className={p.online ? '' : 'dim'}>{p.username}</span>
+            </label>
+          ))}
+        </div>
+      )}
     </>
   );
 }

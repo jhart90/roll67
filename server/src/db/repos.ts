@@ -1268,8 +1268,9 @@ export const counters = {
     const cur = this.byId(id);
     if (!cur) return;
     const next = { ...cur, ...patch };
-    stmt(`UPDATE counters SET map_id = ?, name = ?, color = ?, max = ?, value = ?, visible = ?, position = ? WHERE id = ?`)
-      .run(next.mapId, next.name, next.color, next.max, next.value, next.visible ? 1 : 0, next.position, id);
+    stmt(`UPDATE counters SET map_id = ?, name = ?, color = ?, max = ?, value = ?, visible = ?, shared_with = ?, position = ? WHERE id = ?`)
+      .run(next.mapId, next.name, next.color, next.max, next.value, next.visible ? 1 : 0,
+        next.sharedWith === null ? null : JSON.stringify(next.sharedWith), next.position, id);
   },
   delete(id: string): void {
     stmt('DELETE FROM counters WHERE id = ?').run(id);
@@ -1297,10 +1298,22 @@ function toCounter(row: Record<string, unknown>): Counter {
     name: String(row.name), color: String(row.color),
     max: Number(row.max), value: Number(row.value),
     visible: row.visible === 1,
+    sharedWith: parseSharedWith(row.shared_with),
     // Any unrecognised value falls back to the top banner rather than
     // vanishing into a dock that doesn't render.
     position: isCounterPosition(row.position) ? row.position : 'top',
   };
+}
+
+/** NULL (or anything unparseable) means the whole table, which is both the
+ *  pre-existing behaviour and the safe direction: a corrupt row shows a
+ *  counter the DM meant to share rather than silently hiding one. */
+function parseSharedWith(raw: unknown): string[] | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null;
+  } catch { return null; }
 }
 
 /** Per-player private notes on characters (the public sheet scratchpad). */

@@ -359,6 +359,13 @@ function migrateCounterSideSlots(): void {
 }
 migrateCounterSideSlots();
 
+// Per-player counter sharing: a JSON array of user ids, or NULL for the whole
+// table. Added AFTER the rebuild above on purpose — that migration copies the
+// column list it finds and recreates the table from a fixed DDL, so a column
+// added before it would be selected into a table that has no room for it.
+// NULL is both "never set" and "everyone", which is what old counters want.
+ensureColumn('counters', 'shared_with', 'shared_with TEXT');
+
 // Manual world-tree ordering: rank per "kind:id" key, campaign-scoped.
 // Items without a rank sort after ranked ones, alphabetically.
 db.exec(`

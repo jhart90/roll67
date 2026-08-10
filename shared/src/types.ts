@@ -262,11 +262,25 @@ export interface Counter {
   max: number;
   /** Filled increments. */
   value: number;
+  /** The master switch. False hides it from every player regardless of
+   *  `sharedWith`; the DM always sees their own counters either way. */
   visible: boolean;
+  /** Who it is shared with once `visible` is on. Null means the whole table —
+   *  the ordinary case, and what every counter created before this field
+   *  existed does. A list names the only players who get it, which is how the
+   *  DM runs a clock one faction can see and the rest cannot. An empty list is
+   *  therefore "nobody", distinct from null. */
+  sharedWith: string[] | null;
   /** Which edge of the map pane it docks to. Top and bottom are full-width
    *  banners; left and right are narrow columns down the sides, kept clear of
    *  the tool rail, the chat dock, and the bottom pill/Benny/Keyring row. */
   position: CounterPosition;
+}
+
+/** Whether a counter reaches one player, ignoring whether they know its map. */
+export function counterSharedWith(c: Counter, userId: string): boolean {
+  if (!c.visible) return false;
+  return c.sharedWith === null || c.sharedWith.includes(userId);
 }
 
 export const COUNTER_POSITIONS = ['top', 'bottom', 'left', 'right'] as const;

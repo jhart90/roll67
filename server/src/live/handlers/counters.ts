@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
-import { C2S, S2C, isCounterPosition, type Counter, type CounterUpdatePayload } from 'shared';
-import { counters, maps, worldVis } from '../../db/repos.js';
+import { C2S, S2C, counterSharedWith, isCounterPosition, type Counter, type CounterUpdatePayload } from 'shared';
+import { campaigns, counters, maps, worldVis } from '../../db/repos.js';
 import { campaignSockets, emitError, safe, sdata, viewerFor } from '../hub.js';
 
 function requireCampaign(socket: Socket) {
@@ -9,9 +9,13 @@ function requireCampaign(socket: Socket) {
   return d as typeof d & { campaignId: string; role: 'dm' | 'player' };
 }
 
-/** A counter reaches a player only if the DM revealed it AND the player has
- *  personally been on (or been shown) its map — 'visible' means visible at
- *  the table, not announced campaign-wide to people who were never there. */
+/** A counter reaches a player only if the DM revealed it, shared it with them
+ *  (or with everyone), AND the player has personally been on (or been shown)
+ *  its map — 'visible' means visible at the table, not announced campaign-wide
+ *  to people who were never there.
+ *
+ *  `sharedWith` is stripped on the way out: who else can see the doom clock is
+ *  the DM's business, and shipping the list would let a player read it. */
 function countersFor(campaignId: string, userId: string, list: Counter[]): Counter[] {
   const disc = worldVis.discovered(campaignId, userId);
   const ov = worldVis.overrides(campaignId);
@@ -19,7 +23,9 @@ function countersFor(campaignId: string, userId: string, list: Counter[]): Count
     const o = ov.get(`map:${mapId}`);
     return o ? o === 'reveal' : disc.has(`map:${mapId}`);
   };
-  return list.filter((c) => c.visible && knowsMap(c.mapId));
+  return list
+    .filter((c) => counterSharedWith(c, userId) && knowsMap(c.mapId))
+    .map((c) => ({ ...c, sharedWith: null }));
 }
 
 /** Push one map's counters to everyone: DM gets all, players their own view. */
@@ -69,6 +75,16 @@ export function registerCounterHandlers(io: Server, socket: Socket): void {
     if (typeof patch.max === 'number' && Number.isFinite(patch.max)) clean.max = Math.max(1, Math.min(100, Math.round(patch.max)));
     if (typeof patch.value === 'number' && Number.isFinite(patch.value)) clean.value = Math.round(patch.value);
     if (typeof patch.visible === 'boolean') clean.visible = patch.visible;
+    // Null means the whole table. A list is intersected with the campaign's
+    // actual players so a stale id from a member who has since left can't sit
+    // in the row forever, and so the DM never shares a counter with themselves
+    // (they see everything anyway) or with an account in another campaign.
+    if (patch.sharedWith === null) {
+      clean.sharedWith = null;
+    } else if (Array.isArray(patch.sharedWith)) {
+      const players = new Set(campaigns.members(d.campaignId).filter((m) => m.role === 'player').map((m) => m.userId));
+      clean.sharedWith = [...new Set(patch.sharedWith.filter((u): u is string => typeof u === 'string' && players.has(u)))];
+    }
     if (isCounterPosition(patch.position)) clean.position = patch.position;
     if (typeof patch.mapId === 'string') {
       const target = maps.byId(patch.mapId);

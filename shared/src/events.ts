@@ -1111,7 +1111,7 @@ export interface PublicSheetGetPayload { characterId: string }
 export interface DmNotesGetPayload { characterId: string }
 export interface DmNotesSetPayload { characterId: string; text: string }
 export interface DmNotesPayload { characterId: string; text: string }
-export interface CounterUpdatePayload { counterId: string; patch: Partial<Pick<Counter, 'mapId' | 'name' | 'color' | 'max' | 'value' | 'visible' | 'position'>> }
+export interface CounterUpdatePayload { counterId: string; patch: Partial<Pick<Counter, 'mapId' | 'name' | 'color' | 'max' | 'value' | 'visible' | 'sharedWith' | 'position'>> }
 export interface CountersPayload { mapId: string; counters: Counter[] }
 export interface PrivateNotesGetPayload { characterId: string }
 export interface PrivateNotesSetPayload { characterId: string; text: string }

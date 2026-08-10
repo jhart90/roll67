@@ -6,7 +6,15 @@ import { Term } from '../util/Term';
 /** The chat dock owns the right edge of the screen, so 'lower right' means
  *  the lower right of the MAP, not of the window. */
 const DOCK_W = 300;
-const DEFAULT_POS = { x: DOCK_W + 16, y: 16 }; // insets from the bottom-RIGHT
+/**
+ * How far off the floor the card must stay. The Benny coin and the Keyring
+ * sit at bottom: 16 in this same corner and are ~30px tall, so 60 clears them
+ * with a real gap rather than resting on their heads. Applied as a FLOOR, not
+ * just a default: a card dragged (or remembered from before this existed) down
+ * into that strip is nudged back up rather than burying the chips.
+ */
+const NAMEPLATE_MIN_BOTTOM = 60;
+const DEFAULT_POS = { x: DOCK_W + 16, y: NAMEPLATE_MIN_BOTTOM }; // insets from the bottom-RIGHT
 const STORAGE_KEY = 'roll67.nameplatePos';
 
 /** Where this player last dragged the card, so every later one opens there. */
@@ -14,7 +22,9 @@ function loadPos(): { x: number; y: number } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const p = raw ? JSON.parse(raw) : null;
-    if (typeof p?.x === 'number' && typeof p?.y === 'number') return p;
+    if (typeof p?.x === 'number' && typeof p?.y === 'number') {
+      return { x: p.x, y: Math.max(NAMEPLATE_MIN_BOTTOM, p.y) };
+    }
   } catch { /* unreadable or disabled storage: fall back to the default */ }
   return { ...DEFAULT_POS };
 }
@@ -54,10 +64,12 @@ export function TokenNameplateCard() {
     const onMove = (ev: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      // Both axes are inverted: x is a CSS `right`, y a CSS `bottom`.
+      // Both axes are inverted: x is a CSS `right`, y a CSS `bottom`. The
+      // floor keeps the card off the Benny/Keyring chips no matter where it
+      // is dragged.
       setPos({
         x: Math.max(0, d.originX - (ev.clientX - d.startX)),
-        y: Math.max(0, d.originY - (ev.clientY - d.startY)),
+        y: Math.max(NAMEPLATE_MIN_BOTTOM, d.originY - (ev.clientY - d.startY)),
       });
     };
     const onUp = () => {

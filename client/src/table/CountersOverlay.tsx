@@ -1,7 +1,54 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Counter, CounterPosition } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { AnchoredMenu } from '../util/AnchoredMenu';
+
+/** Gap left between a bottom-docked counter and the chrome beneath it. */
+const BOTTOM_GAP = 12;
+/** Where the bottom dock sits when there is no chrome under it at all. */
+const BOTTOM_FLOOR = 14;
+
+/**
+ * How much room the bottom-left furniture is taking right now: the presence
+ * pills and the pinned-roll toolbar, both of which WRAP — a player with a lot
+ * of pinned "move" pills grows the toolbar to several rows, and a counter
+ * parked at a fixed offset would sit on top of them.
+ *
+ * Measured rather than guessed, because "however many rows they've made" has
+ * no constant. Re-measured on resize and whenever the two elements change
+ * size, which is exactly when a pill is pinned, unpinned, or rewraps.
+ */
+function useBottomChrome(): number {
+  const [clearance, setClearance] = useState(BOTTOM_FLOOR);
+  useEffect(() => {
+    const measure = () => {
+      let highest = 0;
+      for (const sel of ['.toolbar', '.presence-bar']) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        // Empty flex containers still have a rect; ignore ones with no height.
+        if (r.height <= 0) continue;
+        highest = Math.max(highest, window.innerHeight - r.top);
+      }
+      setClearance(highest > 0 ? highest + BOTTOM_GAP : BOTTOM_FLOOR);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    for (const sel of ['.toolbar', '.presence-bar']) {
+      const el = document.querySelector(sel);
+      if (el) ro.observe(el);
+    }
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+    // No dependency array on purpose: the toolbar and presence bar mount and
+    // unmount independently of this component, so the observers have to be
+    // re-attached each render to catch elements that were not there last time.
+    // Self-limiting — measuring to the same number is a no-op setState, which
+    // React bails out of rather than re-rendering.
+  });
+  return clearance;
+}
 
 /** The four docks, and what each is called in the move menu. */
 const SLOTS: Array<{ id: CounterPosition; label: string }> = [
@@ -38,6 +85,7 @@ export function CountersOverlay() {
   const isDm = useGameStore((s) => s.you?.role) === 'dm';
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editing, setEditing] = useState<Counter | null>(null);
+  const bottomClearance = useBottomChrome();
 
   if (counters.length === 0) return null;
 
@@ -88,7 +136,7 @@ export function CountersOverlay() {
         <div className="counters-edge counters-top">
           {counters.filter((c) => c.position === 'top').map(renderBar)}
         </div>
-        <div className="counters-edge counters-bottom">
+        <div className="counters-edge counters-bottom" style={{ bottom: bottomClearance }}>
           {counters.filter((c) => c.position === 'bottom').map(renderBar)}
         </div>
         <div className="counters-side counters-left">

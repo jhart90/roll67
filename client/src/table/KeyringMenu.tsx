@@ -25,12 +25,6 @@ export function KeyringMenu() {
   useEffect(() => {
     if (summoned) { setOpen(true); useGameStore.setState({ keyManagerOpen: false }); }
   }, [summoned]);
-  const plateOpen = useGameStore((s) => {
-    const t = s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined;
-    if (!t?.nameplate || !s.you) return false;
-    return !(t.characterId && s.characters.some((c) => c.id === t.characterId && c.ownerUserId === s.you!.userId));
-  });
-
   const isDm = you?.role === 'dm';
   const mine = useMemo(
     () => characters.filter((c) => c.ownerUserId === you?.userId),
@@ -53,7 +47,7 @@ export function KeyringMenu() {
   if (!you) return null;
 
   return (
-    <div className={`keyring-menu${plateOpen ? ' raised' : ''}`}>
+    <div className="keyring-menu">
       <button className="keyring-chip" onClick={() => setOpen((o) => !o)} title={isDm ? 'Key Manager' : 'Your keyring'}>
         🔑{isDm ? ' DM' : ` ${total}`}
       </button>

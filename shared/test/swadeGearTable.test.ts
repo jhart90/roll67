@@ -323,6 +323,66 @@ describe('SWADE gear tables', () => {
     expect(rowFor('Chainsaw')).toMatchObject({ damage: '1d8!+2d6!+4', ap: 0 });
   });
 
+  /**
+   * Weapons this project invented — era-parity reskins and the 1960s agency
+   * loadout — paired with the book weapon each is meant to BE, mechanically.
+   * They exist so a cross-era table is fair: a legionary's gladius and a
+   * spacer's carbon knife should kill at the same rate, with only the flavour
+   * differing. Pinning them against their counterpart means a change to the
+   * book row can never quietly leave a variant behind, which is exactly what
+   * happened when the range cap was lifted.
+   */
+  const PARITY: Array<[string, string]> = [
+    // Sidearm tier
+    ['Composite War Bow', 'Glock (9mm)'],
+    ['Chu-Ko-Nu Repeating Crossbow', 'Glock (9mm)'],
+    ['Peacemaker Revolver (.45)', 'Glock (9mm)'],
+    ['Pulse Laser Pistol', 'Glock (9mm)'],
+    ['Browning Hi-Power', 'Glock (9mm)'],
+    // Heavy sidearm tier
+    ['Gastraphetes (Belly Bow)', 'Smith & Wesson (.357)'],
+    ['Heavy Blaster Pistol', 'Smith & Wesson (.357)'],
+    // Longarm tier
+    ['English Longbow (War Shaft)', 'Hunting Rifle (.308)'],
+    ['Winchester Repeater', 'Hunting Rifle (.308)'],
+    ['Phase Carbine', 'Hunting Rifle (.308)'],
+    // Marksman tier
+    ['Siege Arbalest', 'Barrett (.50)'],
+    ['Buffalo Gun (.50-90)', 'Barrett (.50)'],
+    ['Photon Lance', 'Barrett (.50)'],
+    // Scattergun tier
+    ['Grapeshot Hand-Mortar', 'Pump Shotgun'],
+    ['Scatter Blaster', 'Pump Shotgun'],
+    // Automatic tier
+    ['Gatling Gun (Crank)', 'M-16 (5.56mm)'],
+    ['Pulse Repeater Rifle', 'M-16 (5.56mm)'],
+    // 1960s agency loadout
+    ['S&W Model 10 (.38 Special)', 'Police Revolver (.38)'],
+    ['Colt Detective Special (Snub)', 'Police Revolver (.38)'],
+    ['High Standard HDM (Suppressed .22)', 'Ruger (.22)'],
+    ['M1 Carbine', 'Spencer Carbine (.52)'],
+    ['Thompson M1928 SMG', 'Tommy Gun (.45)'],
+    ['Lipstick Pistol (Single Shot)', 'Derringer (.41)'],
+    // Melee tiers
+    ['Gladius', 'Short Sword'],
+    ['Bowie Knife', 'Short Sword'],
+    ['Carbon-Edge Knife', 'Short Sword'],
+    ['Khopesh', 'Long Sword'],
+    ['Cavalry Saber', 'Long Sword'],
+    ['Ceramic Longblade', 'Long Sword'],
+    ['Rhomphaia', 'Great Sword'],
+    ['Blackjack (Sap)', 'Billy Club/Baton'],
+  ];
+
+  it.each(PARITY)('%s hits like its book counterpart, %s', (variant, book) => {
+    const sheet = { ...swade.defaultSheet(), strength: 'd8' };
+    const a = applyEntry(byName.get(variant)!, sheet)!.row as SheetData;
+    const b = applyEntry(byName.get(book)!, sheet)!.row as SheetData;
+    expect(a.damage, `${variant} damage`).toBe(b.damage);
+    expect(a.ap, `${variant} AP`).toBe(b.ap);
+    expect(a.range, `${variant} range`).toBe(b.range);
+  });
+
   it.each(BALLISTIC)('%s soaks 4 off a ranged hit, per its ballistic asterisk', (name) => {
     expect(byName.get(name)!.armor?.rangedArmor).toBe(4);
   });

@@ -86,46 +86,49 @@ const WEAPONS: W[] = [
   // damage tier, with identical damage, AP, range and riders. Magazines and
   // reload speeds stay period flavour. The RAW-priced originals above are
   // untouched; these are for cross-era campaigns where the eras must be fair.
-  ['Composite War Bow', 'Ranged', '2d6!', 'piercing', 'ranged', ['range 60/120/240', 'AP 1', 'era: ancient — sidearm parity with 9mm Pistol & Pulse Laser Pistol', 'caliber: arrows']],
+  ['Composite War Bow', 'Ranged', '2d6!', 'piercing', 'ranged', ['range 60/120/240', 'AP 1', 'era: ancient — sidearm parity with the Glock (9mm)', 'caliber: arrows']],
   ['Chu-Ko-Nu Repeating Crossbow', 'Ranged', '2d6!', 'piercing', 'ranged', ['range 60/120/240', 'AP 1', 'mag 10', 'era: medieval — sidearm parity', 'caliber: bolts']],
   ['Peacemaker Revolver (.45)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 1', 'mag 6', 'era: old west — sidearm parity', 'caliber: bullets-medium']],
   ['Pulse Laser Pistol', 'Ranged', '2d6!', 'energy', 'ranged', ['range 60/120/240', 'AP 1', 'mag 24', 'era: future — sidearm parity', 'caliber: battery-pistol']],
-  ['Gastraphetes (Belly Bow)', 'Ranged', '2d6!+1', 'piercing', 'ranged', ['range 60/120/240', 'AP 1', '1 action to reload', 'era: ancient Greece — heavy sidearm parity with .44 Magnum & Revolver (.357)', 'caliber: bolts']],
+  ['Gastraphetes (Belly Bow)', 'Ranged', '2d6!+1', 'piercing', 'ranged', ['range 60/120/240', 'AP 1', '1 action to reload', 'era: ancient Greece — heavy sidearm parity with the Smith & Wesson (.357)', 'caliber: bolts']],
   ['Heavy Blaster Pistol', 'Ranged', '2d6!+1', 'energy', 'ranged', ['range 60/120/240', 'AP 1', 'mag 12', 'era: future — heavy sidearm parity', 'caliber: battery-pistol']],
-  ['English Longbow (War Shaft)', 'Ranged', '2d8!', 'piercing', 'ranged', ['range 60/120/240', 'AP 2', 'min Str d8', 'era: medieval — longarm parity with Hunting Rifle & Bolt-Action Rifle', 'caliber: arrows']],
-  ['Winchester Repeater', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 2', 'mag 15', 'era: old west — longarm parity', 'caliber: bullets-medium']],
-  ['Phase Carbine', 'Ranged', '2d8!', 'energy', 'ranged', ['range 60/120/240', 'AP 2', 'mag 30', 'era: future — longarm parity', 'caliber: battery-rifle']],
-  ['Siege Arbalest', 'Ranged', '2d10!', 'piercing', 'ranged', ['range 60/120/240', 'AP 4', 'snapfire', '2 actions to reload', 'era: medieval — marksman parity with Sniper Rifle', 'caliber: bolts']],
-  ['Buffalo Gun (.50-90)', 'Ranged', '2d10!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 4', 'snapfire', 'mag 1', 'era: old west — marksman parity', 'caliber: bullets-large']],
-  ['Photon Lance', 'Ranged', '2d10!', 'energy', 'ranged', ['range 60/120/240', 'AP 4', 'snapfire', 'mag 10', 'era: future — marksman parity']],
-  ['Grapeshot Hand-Mortar', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 30/60/120', '2 actions to reload', 'damage 3d6/2d6/1d6 by range band', 'era: black powder — scattergun parity with Pump Shotgun', 'caliber: shot']],
+  ['English Longbow (War Shaft)', 'Ranged', '2d8!', 'piercing', 'ranged', ['range 120/240/480', 'AP 2', 'min Str d8', 'era: medieval — longarm parity with the Hunting Rifle (.308)', 'caliber: arrows']],
+  ['Winchester Repeater', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 120/240/480', 'AP 2', 'mag 15', 'era: old west — longarm parity', 'caliber: bullets-medium']],
+  ['Phase Carbine', 'Ranged', '2d8!', 'energy', 'ranged', ['range 120/240/480', 'AP 2', 'mag 30', 'era: future — longarm parity', 'caliber: battery-rifle']],
+  ['Siege Arbalest', 'Ranged', '2d10!', 'piercing', 'ranged', ['range 250/500/1000', 'AP 4', 'snapfire', '2 actions to reload', 'era: medieval — marksman parity with the Barrett (.50)', 'caliber: bolts']],
+  ['Buffalo Gun (.50-90)', 'Ranged', '2d10!', 'kinetic', 'ranged', ['range 250/500/1000', 'AP 4', 'snapfire', 'mag 1', 'era: old west — marksman parity', 'caliber: bullets-large']],
+  ['Photon Lance', 'Ranged', '2d10!', 'energy', 'ranged', ['range 250/500/1000', 'AP 4', 'snapfire', 'mag 10', 'era: future — marksman parity']],
+  ['Grapeshot Hand-Mortar', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 60/120/240', '2 actions to reload', 'damage 3d6/2d6/1d6 by range band', 'era: black powder — scattergun parity with the Pump Shotgun', 'caliber: shot']],
   ['Scatter Blaster', 'Ranged', '3d6!', 'energy', 'ranged', ['range 60/120/240', 'mag 8', 'damage 3d6/2d6/1d6 by range band', 'era: future — scattergun parity', 'caliber: battery-rifle']],
   ['Thunderclap Powder Bomb', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'era: medieval China — grenade parity with Frag Grenade']],
   ['Micro-Frag Sphere', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'era: future — grenade parity']],
   // Automatic-fire parity tier (matches the Assault Rifle's 2d8!/AP 2/RoF 3).
   // No ancient/medieval members: sustained automatic fire simply doesn't
   // exist before self-contained cartridges.
-  ['Gatling Gun (Crank)', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 2', 'mag 40', 'RoF 3', 'snapfire', 'era: old west — automatic parity with Assault Rifle', 'caliber: bullets-medium']],
-  ['Pulse Repeater Rifle', 'Ranged', '2d8!', 'energy', 'ranged', ['range 60/120/240', 'AP 2', 'mag 60', 'RoF 3', 'era: future — automatic parity', 'caliber: battery-rifle']],
+  ['Gatling Gun (Crank)', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 120/240/480', 'AP 2', 'mag 40', 'RoF 3', 'snapfire', 'era: old west — automatic parity with the M-16 (5.56mm)', 'caliber: bullets-medium']],
+  ['Pulse Repeater Rifle', 'Ranged', '2d8!', 'energy', 'ranged', ['range 120/240/480', 'AP 2', 'mag 60', 'RoF 3', 'era: future — automatic parity', 'caliber: battery-rifle']],
   ['Gladius', 'Melee', '1d6!', 'slashing', 'str', ['era: ancient Rome — blade parity with Short Sword & Bowie Knife']],
   ['Bowie Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: old west — blade parity']],
   ['Carbon-Edge Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: future — blade parity']],
   ['Khopesh', 'Melee', '1d8!', 'slashing', 'str', ['era: ancient Egypt — sword parity with Long Sword']],
   ['Cavalry Saber', 'Melee', '1d8!', 'slashing', 'str', ['era: old west — sword parity']],
-  ['Ceramic Longblade', 'Melee', '1d8!', 'slashing', 'str', ['era: future — sword parity (Vibro-Blade is the AP 4 upgrade, not this tier)']],
-  ['Rhomphaia', 'Melee', '1d10!', 'slashing', 'str', ['two-handed', 'Parry −1', 'era: ancient Thrace — greatblade parity with Great Sword']],
+  // Careful with the wording: applyEntry parses "AP <n>" out of the JOINED
+  // prop text, so a note that merely MENTIONS a number grants it. This one
+  // used to say "the AP 4 upgrade" and was handing itself AP 4.
+  ['Ceramic Longblade', 'Melee', '1d8!', 'slashing', 'str', ['era: future — sword parity; the Vibro-Blade is the armour-piercing upgrade, not this tier']],
+  ['Rhomphaia', 'Melee', '1d10!', 'slashing', 'str', ['two-handed', 'era: ancient Thrace — greatblade parity with Great Sword']],
   // --- 1960s FBI / CIA (JFK era) ---
   // What agents of various junior ranks actually carried: revolvers as
   // standard issue, a pistol and carbine from the field office armory, and
   // the Agency's quieter tools. Sidearm-tier damage throughout — right for
   // Novice opposition or Novice player agents.
-  ['S&W Model 10 (.38 Special)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 60/120/240', 'mag 6', 'era: 1960s — FBI standard issue', 'caliber: bullets-medium']],
-  ['Colt Detective Special (Snub)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 30/60/120', 'mag 6', 'concealable', 'era: 1960s — FBI/CIA plainclothes', 'caliber: bullets-medium']],
+  ['S&W Model 10 (.38 Special)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 50/100/200', 'mag 6', 'era: 1960s — FBI standard issue', 'caliber: bullets-medium']],
+  ['Colt Detective Special (Snub)', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 50/100/200', 'mag 6', 'concealable', 'era: 1960s — FBI/CIA plainclothes', 'caliber: bullets-medium']],
   ['Browning Hi-Power', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 1', 'mag 13', 'era: 1960s — CIA field issue', 'caliber: bullets-medium']],
-  ['High Standard HDM (Suppressed .22)', 'Ranged', '2d4!', 'kinetic', 'ranged', ['range 30/60/120', 'mag 10', 'suppressed — nearly silent (Notice −4 to hear the shot)', 'era: 1960s — CIA covert work', 'caliber: bullets-small']],
-  ['M1 Carbine', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 60/120/240', 'mag 15', 'era: 1960s — FBI armory long gun', 'caliber: bullets-medium']],
-  ['Thompson M1928 SMG', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 1', 'mag 30', 'RoF 3', 'era: 1960s — FBI armory, senior agents only', 'caliber: bullets-medium']],
-  ['Lipstick Pistol (Single Shot)', 'Ranged', '2d4!', 'kinetic', 'ranged', ['range 6/12/24', 'mag 1', 'concealable anywhere, passes any search', 'era: 1960s — CIA gadget', 'caliber: bullets-small']],
+  ['High Standard HDM (Suppressed .22)', 'Ranged', '2d4!', 'kinetic', 'ranged', ['range 50/100/200', 'mag 10', 'suppressed — nearly silent (Notice −4 to hear the shot)', 'era: 1960s — CIA covert work', 'caliber: bullets-small']],
+  ['M1 Carbine', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 100/200/400', 'AP 2', 'mag 15', 'era: 1960s — FBI armory long gun', 'caliber: bullets-medium']],
+  ['Thompson M1928 SMG', 'Ranged', '2d6!+1', 'kinetic', 'ranged', ['range 60/120/240', 'AP 1', 'mag 30', 'RoF 3', 'era: 1960s — FBI armory, senior agents only', 'caliber: bullets-medium']],
+  ['Lipstick Pistol (Single Shot)', 'Ranged', '2d4!', 'kinetic', 'ranged', ['range 15/30/60', 'mag 1', 'concealable anywhere, passes any search', 'era: 1960s — CIA gadget', 'caliber: bullets-small']],
   ['Blackjack (Sap)', 'Melee', '1d4!', 'bludgeoning', 'str', ['nonlethal', 'Vigor roll or Stunned', 'concealable', 'era: 1960s — FBI/CIA close work']],
   // No damage at all — the whole attack IS the rider. 'max range' keeps it at
   // arm's length rather than letting the band ladder spray it four tiles.

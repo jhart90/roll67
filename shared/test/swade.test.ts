@@ -205,9 +205,10 @@ describe('SWADE library & compendium', () => {
     const applied = applyEntry(rifle, swade.defaultSheet())!;
     expect(applied.row.damage).toBe('2d8!');
     expect(applied.row.skill).toBe('Shooting');
-    // Campaign range cap: every gun but the Sniper Rifle tops out at 60 ft
-    // Short (12 tiles), giving 12/24/48-tile bands.
-    expect(applied.row.range).toBe(60);
+    // Book range: the tables' 24" Short, at 5 ft per tabletop inch, so one
+    // inch is one tile on a standard hex. The old campaign-wide 60 ft cap was
+    // retired by request in favour of the printed distances.
+    expect(applied.row.range).toBe(120);
   });
 
   it('the Sniper Rifle is exempt from the range cap', () => {
@@ -216,12 +217,16 @@ describe('SWADE library & compendium', () => {
     expect(applied.row.range).toBe(300);
   });
 
-  it('no other SWADE ranged weapon exceeds the 60 ft Short cap', () => {
+  // The 60 ft Short cap that used to live here was retired by request: guns
+  // now carry the ranges their tables print, so a Barrett reaches 250 ft Short
+  // and a derringer 15. What remains worth asserting is that every ranged
+  // weapon states SOME reach rather than silently falling back to a default.
+  it('every ranged weapon carries a real range', () => {
     for (const e of contentForSystem('swade')) {
-      if (e.kind !== 'weapon' || !e.weapon || e.name === 'Sniper Rifle') continue;
+      if (e.kind !== 'weapon' || e.weapon?.ability !== 'ranged') continue;
       const applied = applyEntry(e, swade.defaultSheet());
       const range = Number(applied?.row.range ?? 0);
-      expect(range, `${e.name} range ${range}`).toBeLessThanOrEqual(60);
+      expect(range, `${e.name} range ${range}`).toBeGreaterThan(0);
     }
   });
 
@@ -347,7 +352,10 @@ describe('SWADE library & compendium', () => {
     expect(applyEntry(entries.find((c) => c.name === 'Crossbow')!, sheet)!.row).toMatchObject({ ap: 2 });
     expect(applyEntry(entries.find((c) => c.name === 'Assault Rifle')!, sheet)!.row).toMatchObject({ ap: 2, ammo: 30 });
     expect(applyEntry(entries.find((c) => c.name === 'Rapier')!, sheet)!.row).toMatchObject({ parryBonus: 1, wielded: false });
-    expect(applyEntry(entries.find((c) => c.name === 'Great Sword')!, sheet)!.row).toMatchObject({ parryBonus: -1 });
+    // A Parry PENALTY belongs to the great axe, not the great sword — the
+    // table gives "AP 2, Parry −1, two hands" to the axe and only "two hands"
+    // to the sword.
+    expect(applyEntry(entries.find((c) => c.name === 'Axe, Great')!, sheet)!.row).toMatchObject({ parryBonus: -1, ap: 2 });
   });
 
   it('a wielded Rapier and a maintained Deflection raise Parry; Armor/Protection raise Toughness', () => {

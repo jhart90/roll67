@@ -243,7 +243,8 @@ describe('expanded SWADE gear and weapons stay automated', () => {
     expect(sheetAfter('swade', 'Vibro-Blade').row.ap).toBe(4);
     expect(sheetAfter('swade', 'Rapier (Main Gauche)').row.parryBonus).toBe(1);
     expect(sheetAfter('swade', 'Combat Shotgun').row.ammo).toBe(8);
-    expect(sheetAfter('swade', 'Laser Rifle').row.ap).toBe(4);
+    // AP 2 per the laser table; it used to carry a tuned AP 4.
+    expect(sheetAfter('swade', 'Laser Rifle').row.ap).toBe(2);
   });
 
   it('new save-or-condition powers become targeted actions', () => {

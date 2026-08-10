@@ -253,6 +253,76 @@ describe('SWADE gear tables', () => {
     expect(entry!.gear?.weight).toBe(weight);
   });
 
+  /**
+   * Range in feet, damage, and AP, straight from the tables. Range is the
+   * printed Short band in tabletop inches × 5, so one inch is one tile on a
+   * standard 5-ft hex. AP 0 means the table's "—".
+   */
+  const RANGED_STATS: Array<[string, number, string, number]> = [
+    ['Bow', 60, '2d6!', 0],
+    ['Crossbow', 50, '2d6!', 2],
+    ['Heavy Crossbow', 75, '2d8!', 2],
+    ['Longbow', 75, '2d6!', 1],
+    ['Sling', 20, '1d4!', 0],
+    ['Axe, Throwing', 15, '1d6!', 0],
+    ['Spear/Javelin', 15, '1d6!', 0],
+    ['Compound Bow', 60, '1d6!', 1],
+    ['Crossbow (Modern)', 75, '2d6!', 2],
+    ['Flintlock Pistol', 25, '2d6!+1', 0],
+    ['Musket', 50, '2d8!', 0],
+    ['Kentucky Rifle', 75, '2d8!', 2],
+    ['Springfield Model 1861', 75, '2d8!', 0],
+    ['Derringer (.41)', 15, '2d4!', 0],
+    ['Police Revolver (.38)', 50, '2d6!', 0],
+    ['Colt Peacemaker (.45)', 60, '2d6!+1', 1],
+    ['Colt 1911 (.45)', 60, '2d6!+1', 1],
+    ['Desert Eagle (.50)', 75, '2d8!', 2],
+    ['Glock (9mm)', 60, '2d6!', 1],
+    ['Ruger (.22)', 50, '2d4!', 0],
+    ['H&K MP5 (9mm)', 60, '2d6!', 1],
+    ['Uzi (9mm)', 60, '2d6!', 1],
+    ['Sawed-Off Double-Barrel', 25, '3d6!', 0],
+    ['Streetsweeper', 60, '3d6!', 0],
+    ['Barrett (.50)', 250, '2d10!', 4],
+    ['M1 Garand (.30-06)', 120, '2d8!', 2],
+    ['Hunting Rifle (.308)', 120, '2d8!', 2],
+    ['Sharps Big 50 (.50)', 150, '2d10!', 2],
+    ['Spencer Carbine (.52)', 100, '2d8!', 2],
+    ['AK47 (7.62mm)', 120, '2d8!+1', 2],
+    ['M-16 (5.56mm)', 120, '2d8!', 2],
+    ['Steyr AUG (5.56mm)', 120, '2d8!', 2],
+    ['Browning Automatic Rifle (BAR)', 100, '2d8!', 2],
+    ['Gatling (.45)', 120, '2d8!', 2],
+    ['Minigun (7.62mm)', 150, '2d8!+1', 2],
+    ['M2 Browning (.50 Cal)', 250, '2d10!', 4],
+    ['M60 (7.62mm)', 150, '2d8!+1', 2],
+    ['MG42 (7.92mm)', 150, '2d8!+1', 2],
+    ['SAW (5.56mm)', 150, '2d8!', 2],
+    ['Laser Pistol', 75, '2d6!', 2],
+    ['Laser SMG', 75, '2d6!', 2],
+    ['Laser Rifle', 150, '3d6!', 2],
+    ['Gatling Laser', 250, '3d6!+4', 2],
+  ];
+
+  it.each(RANGED_STATS)('%s reaches %i ft Short for %s, AP %i', (name, range, damage, ap) => {
+    const row = applyEntry(byName.get(name)!, swade.defaultSheet())!.row as SheetData;
+    expect(row.range).toBe(range);
+    expect(row.damage).toBe(damage);
+    expect(row.ap).toBe(ap);
+  });
+
+  /** Melee damage composes the wielder's Strength die with the weapon's. */
+  it('melee weapons compose Str + their own die, with the table\'s AP', () => {
+    const rowFor = (name: string) =>
+      applyEntry(byName.get(name)!, { ...swade.defaultSheet(), strength: 'd8' })!.row as SheetData;
+    expect(rowFor('Axe, Great')).toMatchObject({ damage: '1d8!+1d10!', ap: 2, parryBonus: -1 });
+    expect(rowFor('Great Sword')).toMatchObject({ damage: '1d8!+1d10!', ap: 0 });
+    expect(rowFor('Katana')).toMatchObject({ damage: '1d8!+1d6!+1', ap: 0 });
+    expect(rowFor('Molecular Knife')).toMatchObject({ damage: '1d8!+1d4!+2', ap: 2 });
+    expect(rowFor('Laser Sword')).toMatchObject({ damage: '1d8!+1d6!+8', ap: 12 });
+    expect(rowFor('Chainsaw')).toMatchObject({ damage: '1d8!+2d6!+4', ap: 0 });
+  });
+
   it.each(BALLISTIC)('%s soaks 4 off a ranged hit, per its ballistic asterisk', (name) => {
     expect(byName.get(name)!.armor?.rangedArmor).toBe(4);
   });

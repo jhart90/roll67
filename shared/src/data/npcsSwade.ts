@@ -277,7 +277,19 @@ function sheetFor(r: Row): SheetData {
       name, skill, damage, dtype, range, notes: '',
       ...(meta?.save ? { save: meta.save, onSave: meta.onSave ?? 'negate', saveDc: 4 } : {}),
       ...(meta?.condition ? { condition: meta.condition } : {}),
-      ...(meta?.aoeShape && meta.aoeSize ? { aoeShape: meta.aoeShape, aoeSize: meta.aoeSize } : {}),
+      // A template is either measured in feet (cones) or in tiles beyond the
+      // target (SWADE's Small/Medium/Large blasts). Requiring aoeSize dropped
+      // every tile-based one on the floor: 21 attacks — every swarm, the
+      // Lich's Blast, the War Mech's missiles, the dinosaur tail sweeps, and
+      // all the vehicle guns — were declared as areas in the data and arrived
+      // at the sheet as ordinary single-target attacks.
+      ...(meta?.aoeShape && (meta.aoeSize || meta.aoeHexes)
+        ? {
+          aoeShape: meta.aoeShape,
+          ...(meta.aoeSize ? { aoeSize: meta.aoeSize } : {}),
+          ...(meta.aoeHexes ? { aoeHexes: meta.aoeHexes } : {}),
+        }
+        : {}),
       ...(meta?.ap ? { ap: meta.ap } : {}),
     })),
     armor: (r.armor ?? []).map(([name, armor, parryBonus]) => ({ name, armor, parryBonus, equipped: true, notes: '' })),

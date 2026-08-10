@@ -119,4 +119,33 @@ describe('SWADE bestiary', () => {
       expect(String(v.sheet.notes ?? ''), `${v.name} should note its crew`).toMatch(/Crew/);
     }
   });
+
+  /**
+   * A template is measured either in feet (cones) or in tiles beyond the
+   * target (SWADE's Small/Medium/Large blasts). sheetFor used to copy a shape
+   * only when a FOOT size came with it, so every tile-based blast in the
+   * bestiary — swarms, the Lich, the war machines, the tail sweeps, the
+   * vehicle guns — arrived on the sheet as a plain single-target attack and
+   * silently stopped being an area at the table.
+   */
+  it('carries every declared blast template through to the sheet', () => {
+    const withArea = NPCS_SWADE.flatMap((n) =>
+      ((n.sheet.attacks ?? []) as Array<Record<string, unknown>>)
+        .filter((a) => a.aoeShape)
+        .map((a) => ({ npc: n.name, attack: String(a.name), shape: a.aoeShape, hexes: a.aoeHexes, ft: a.aoeSize })));
+    // Both kinds must survive, and a shape must never arrive sizeless.
+    expect(withArea.filter((a) => typeof a.hexes === 'number').length).toBeGreaterThanOrEqual(20);
+    expect(withArea.filter((a) => typeof a.ft === 'number').length).toBeGreaterThanOrEqual(5);
+    for (const a of withArea) {
+      expect(a.hexes ?? a.ft, `${a.npc} — ${a.attack} has a shape but no size`).toBeTruthy();
+    }
+    // Spot-checks across the kinds of thing that were losing their area.
+    const find = (npc: string, attack: string) =>
+      ((NPCS_SWADE.find((n) => n.name === npc)!.sheet.attacks ?? []) as Array<Record<string, unknown>>)
+        .find((a) => a.name === attack)!;
+    expect(find('Rat Swarm', 'Swarming Bites')).toMatchObject({ aoeShape: 'sphere', aoeHexes: 1 });
+    expect(find('Zombie Horde', 'Clawing Mass')).toMatchObject({ aoeShape: 'sphere', aoeHexes: 3 });
+    expect(find('War Mech', 'Missile Pod')).toMatchObject({ aoeShape: 'sphere', aoeHexes: 5 });
+    expect(find('Young Dragon', 'Fiery Breath')).toMatchObject({ aoeShape: 'cone', aoeSize: 54 });
+  });
 });

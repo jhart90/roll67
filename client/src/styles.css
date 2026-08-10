@@ -1018,6 +1018,19 @@ button.link:hover { text-decoration: underline; }
   .map-flash { animation: none; opacity: 0.9; }
 }
 
+/* A picker rendered inside a window frame. Same trick as .wizard-shell, but
+   applied from OUTSIDE: these components are still used as real modals
+   elsewhere (SwnLevelUpWizard opens the focus picker inline), so the neutering
+   has to be a property of where they are mounted, not of the component. The
+   frame supplies the title and the ✕, so the picker's own header goes too. */
+.picker-in-window .sheet-backdrop { display: contents; }
+.picker-in-window > .sheet-backdrop > * > .sheet-header,
+.picker-in-window > .sheet-backdrop > * > .dock-header { display: none; }
+.picker-in-window .sheet-window,
+.picker-in-window .panel {
+  max-width: min(720px, 92vw); max-height: 74vh; overflow-y: auto;
+}
+
 .win-frame {
   position: fixed;
 }

@@ -26,6 +26,7 @@ import { SwnLevelUpWizard } from '../panels/SwnLevelUpWizard';
 import { NpcBoostWizard } from '../panels/NpcBoostWizard';
 import { LevelUpWizard } from '../panels/LevelUpWizard';
 import { Compendium } from '../panels/Compendium';
+import { AssetPickerWindow, SheetPickerWindow, parsePickerKey } from '../panels/SheetPickerWindow';
 
 /** Mounted once at the top level: renders every open window instance,
  *  each in its own draggable/poppable WindowFrame, so multiple windows
@@ -116,6 +117,26 @@ export function WindowHost() {
           case 'compendium': {
             const ch = characters.find((c) => c.id === w.key);
             content = ch ? <Compendium character={ch} onClose={onClose} /> : null;
+            break;
+          }
+          // Both wrap their child so the picker's own backdrop and header stop
+          // applying — the frame is the window now (see .picker-in-window).
+          case 'sheetPicker': {
+            const { what, characterId } = parsePickerKey(w.key);
+            content = (
+              <div className="picker-in-window">
+                <SheetPickerWindow characterId={characterId} what={what} onClose={onClose} />
+              </div>
+            );
+            break;
+          }
+          case 'assetPicker': {
+            const i = w.key.indexOf(':');
+            content = (
+              <div className="picker-in-window">
+                <AssetPickerWindow characterId={w.key.slice(i + 1)} fieldId={w.key.slice(0, i)} onClose={onClose} />
+              </div>
+            );
             break;
           }
         }

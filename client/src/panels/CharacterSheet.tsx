@@ -6,7 +6,6 @@ import {
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
-import { AssetPicker } from './AssetPicker';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnFeatures } from './SwnFeatures';
 import { CombatStatus } from './CombatStatus';
@@ -859,7 +858,6 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
   const members = useGameStore((s) => s.members);
   const character = useGameStore((s) => s.characters.find((c) => c.id === characterId));
   const [tabId, setTabId] = useState<string | null>(null);
-  const [pickingField, setPickingField] = useState<string | null>(null);
 
   if (!character || !you) return null;
   const schema = systemFor(character.system);
@@ -880,16 +878,6 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
     if (!character) return;
     const verb = on ? verbLabel.toLowerCase() : `un${verbLabel.toLowerCase()}`;
     intents.chat(`${character.name} ${verb} ${itemName}.`);
-  }
-
-  function applyImage(fieldId: string, url: string, assetId: string) {
-    if (!character) return;
-    // Setting the token image also carries the assetId so the server can
-    // repaint this character's tokens on every map.
-    const p: SheetData = { [fieldId]: url };
-    if (fieldId === 'tokenImage') p.tokenImageAssetId = assetId;
-    intents.updateCharacter(character.id, p);
-    setPickingField(null);
   }
 
   return (
@@ -967,7 +955,8 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
                 derived={derived}
                 readOnly={!editable}
                 onPatch={patch}
-                onEditImage={setPickingField}
+                onEditImage={(fieldId) => openWindow('assetPicker', `${fieldId}:${character.id}`, {},
+                  fieldId === 'tokenImage' ? `Token image — ${character.name}` : `Portrait — ${character.name}`)}
                 inheritedColor={inheritedColor}
                 onEquipChange={announceEquip}
               />
@@ -1003,13 +992,6 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
         )}
       </div>
 
-      {pickingField && (
-        <AssetPicker
-          title={pickingField === 'tokenImage' ? 'Choose a token image' : 'Choose a portrait image'}
-          onPick={(a) => applyImage(pickingField, a.url, a.id)}
-          onClose={() => setPickingField(null)}
-        />
-      )}
     </>
   );
 }

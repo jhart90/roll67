@@ -21,7 +21,11 @@ export type WindowKind =
   // in the window system like everything else.
   | 'characterCreator'
   | 'levelUp'
-  | 'compendium';
+  | 'compendium'
+  // Sheet pickers: choosing a feat/focus/invocation/image is a browse, and a
+  // browse over the sheet you are choosing FOR should not cover it.
+  | 'sheetPicker'
+  | 'assetPicker';
 
 export interface WindowInstance {
   /** `${kind}:${key}` — opening the same kind+key again focuses this instance. */

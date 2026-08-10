@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import type { Character } from 'shared';
 import {
-  applyBackground, applyFocus, applyPackage, bestPsychicSkillLevel, effortMaxFor, getSwnClass,
-  hasDiscipline, hasFocus, num, rows, str, termDesc, SWN_BACKGROUNDS, SWN_FOCI, SWN_PACKAGES, takenFocusIds,
+  bestPsychicSkillLevel, effortMaxFor, getSwnClass,
+  hasDiscipline, hasFocus, num, rows, str, termDesc, SWN_FOCI,
 } from 'shared';
 import { intents } from '../store/game';
+import { openWindow } from '../store/windowManager';
+import { PICKER_TITLE, pickerKey, type PickerWhat } from './SheetPickerWindow';
 import { Term } from '../util/Term';
-
-type Modal = null | 'focus' | 'background' | 'package';
 
 /** SWN Core-tab panel: class ability, attack bonus, psychic Effort, and the foci
  *  list with pickers that add foci, a background, or an equipment package —
  *  auto-applying skills/gear/HP and announcing the change in chat. */
 export function SwnFeatures({ character, editable }: { character: Character; editable: boolean }) {
-  const [modal, setModal] = useState<Modal>(null);
   const sheet = character.sheet;
   const cls = getSwnClass(String(sheet.class ?? ''));
   const foci = Array.isArray(sheet.foci) ? (sheet.foci as Array<Record<string, unknown>>) : [];
@@ -38,25 +37,10 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
     .map((pw, i) => ({ pw, i }))
     .filter(({ pw }) => !str(pw, 'damage', '').trim());
 
-  function addFocus(id: string) {
-    const f = SWN_FOCI.find((x) => x.id === id)!;
-    const already = takenFocusIds(sheet).includes(id);
-    intents.updateCharacter(character.id, applyFocus(sheet, id));
-    intents.chat(`${character.name} ${already ? 'advances' : 'gains'} the ${f.name} focus.`);
-    setModal(null);
-  }
-  function addBackground(id: string) {
-    const b = SWN_BACKGROUNDS.find((x) => x.id === id)!;
-    intents.updateCharacter(character.id, applyBackground(sheet, id));
-    intents.chat(`${character.name} takes the ${b.name} background (free ${b.freeSkill}).`);
-    setModal(null);
-  }
-  function addPackage(id: string) {
-    const p = SWN_PACKAGES.find((x) => x.id === id)!;
-    intents.updateCharacter(character.id, applyPackage(sheet, id));
-    intents.chat(`${character.name} outfits with the ${p.name} equipment package.`);
-    setModal(null);
-  }
+  /** The three "+ X" buttons all open the same picker window, keyed by what
+   *  it is choosing and for whom. The adding itself lives there. */
+  const openPicker = (what: PickerWhat) =>
+    openWindow('sheetPicker', pickerKey(what, character.id), {}, `${PICKER_TITLE[what]} — ${character.name}`);
 
   return (
     <section className="sheet-section class-features">
@@ -132,43 +116,12 @@ export function SwnFeatures({ character, editable }: { character: Character; edi
 
       {editable && (
         <div className="cf-ki-actions">
-          <button className="btn btn-sm" onClick={() => setModal('focus')}>+ Focus</button>
-          <button className="btn btn-sm" onClick={() => setModal('background')}>+ Background</button>
-          <button className="btn btn-sm" onClick={() => setModal('package')}>+ Equipment package</button>
+          <button className="btn btn-sm" onClick={() => openPicker('focus')}>+ Focus</button>
+          <button className="btn btn-sm" onClick={() => openPicker('background')}>+ Background</button>
+          <button className="btn btn-sm" onClick={() => openPicker('package')}>+ Equipment package</button>
         </div>
       )}
 
-      {modal === 'focus' && (
-        <PickerModal
-          title="Foci" subtitle={`add to ${character.name}`} onClose={() => setModal(null)}
-          taken={new Set(takenFocusIds(sheet))}
-          items={SWN_FOCI.map((f) => ({
-            id: f.id, name: f.name,
-            tag: f.combat ? 'combat' : f.grantsSkill ? f.grantsSkill : undefined,
-            desc: f.level1,
-          }))}
-          onAdd={addFocus}
-        />
-      )}
-      {modal === 'background' && (
-        <PickerModal
-          title="Backgrounds" subtitle={`add to ${character.name}`} onClose={() => setModal(null)}
-          taken={new Set()}
-          items={SWN_BACKGROUNDS.map((b) => ({ id: b.id, name: b.name, tag: `free ${b.freeSkill}`, desc: b.desc }))}
-          onAdd={addBackground}
-        />
-      )}
-      {modal === 'package' && (
-        <PickerModal
-          title="Equipment packages" subtitle={`add to ${character.name}`} onClose={() => setModal(null)}
-          taken={new Set()}
-          items={SWN_PACKAGES.map((p) => ({
-            id: p.id, name: p.name, tag: `${p.credits} cr`,
-            desc: `${p.desc} · ${[...p.weapons.map((w) => w.name), ...p.armor.map((a) => a.name)].join(', ')}`,
-          }))}
-          onAdd={addPackage}
-        />
-      )}
     </section>
   );
 }

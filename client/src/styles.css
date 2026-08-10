@@ -2515,47 +2515,56 @@ th > .term { border-bottom-style: dotted; }
    begins below the app top bar, and 152px of floor clearance keeps these off
    the raised Benny/Keyring chips (bottom: 136px) and the pinned-pill toolbar
    and presence row beneath them. */
-/* Standing counters queue side by side along the edge, centred in a band that
-   stops short of the top bar and the bottom pill/Benny/Keyring row. Width is
+/* Standing counters run the FULL height of the pane — from just under the top
+   bar down to the measured top of the pinned-pill rows (set inline). Width is
    capped so a stack of them can never crowd out the map itself; past the cap
    the row scrolls. */
 .counters-side {
-  position: absolute; top: 12px; bottom: 152px; max-width: 38%;
-  display: flex; flex-direction: row; justify-content: flex-start; align-items: center;
+  position: absolute; top: 12px; max-width: 38%;
+  display: flex; flex-direction: row; justify-content: flex-start; align-items: stretch;
   gap: 8px; pointer-events: none; overflow-x: auto; overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 .counters-left { left: 0; }
 /* Anchored to the right edge, so a second counter grows inward, not off-map. */
 .counters-right { right: 0; justify-content: flex-end; }
-/* A side counter stands UP: the track runs vertically and fills from the
-   bottom like a gauge, so several can sit side by side down the edge of the
-   map without any of them stealing the width a top banner needs. */
+/* Tall and narrow: a thermometer down the edge of the map rather than a card.
+   Everything is sized to keep the whole thing under 60px wide. */
 .counters-side .counter-bar {
   flex-direction: column; align-items: center;
-  width: 104px; min-width: 0; flex: 0 0 auto; gap: 6px; padding: 8px;
+  width: 58px; min-width: 0; flex: 0 0 auto; gap: 4px; padding: 8px 5px;
+}
+/* Title beside the track, reading bottom-to-top like a chart's Y-axis label —
+   which is the only way a full name fits next to a 58px-wide gauge. */
+.counters-side .counter-gauge {
+  display: flex; flex-direction: row; align-items: stretch; justify-content: center;
+  gap: 5px; flex: 1 1 auto; min-height: 0; width: 100%;
 }
 .counters-side .counter-name {
-  max-width: 100%; white-space: normal; text-align: center;
-  font-size: 11px; line-height: 1.25;
-  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2;
-  -webkit-box-orient: vertical; overflow: hidden;
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  max-width: none; max-height: 100%; text-align: center;
+  font-size: 11px; line-height: 1; overflow: hidden; text-overflow: ellipsis;
 }
 /* column-reverse is what makes it read as a gauge: segment 0 sits at the
    BOTTOM, so a filling counter climbs rather than draining downward. */
 .counters-side .counter-track {
   flex-direction: column-reverse;
-  width: 28px; height: 190px; flex: 0 0 auto;
+  width: 20px; height: auto; flex: 0 0 20px; align-self: stretch;
 }
-.counters-side .counter-seg { width: 100%; flex: 1; }
-.counters-side .counter-count { font-size: 11px; }
-.counters-side .counter-btns { justify-content: center; }
+.counters-side .counter-seg { width: 100%; flex: 1; min-height: 0; }
+.counters-side .counter-count { font-size: 10px; }
+.counters-side .counter-btns { justify-content: center; gap: 2px; }
+.counters-side .counter-btns .icon-btn { width: 20px; height: 18px; padding: 0; font-size: 12px; }
 
 /* Four-way dock picker in the counter's right-click menu. */
 .wt-ctx-label { font-size: 11px; color: var(--text-dim); padding: 2px 8px; }
 .counter-slot-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 0 4px; }
 .counter-slot-picker button { font-size: 12px; padding: 4px 6px; border-radius: 6px; }
 .counter-slot-picker button.active { background: rgba(255, 255, 255, 0.06); font-weight: 700; }
+/* In the wide top/bottom banners the gauge wrapper vanishes from layout, so
+   the name and track stay direct children of the bar exactly as before. Only
+   a side dock turns it into a real box (see .counters-side). */
+.counter-gauge { display: contents; }
 .counter-bar {
   display: flex; align-items: center; gap: 8px; padding: 4px 10px; pointer-events: auto;
   background: rgba(10, 13, 20, 0.82); border: 1px solid var(--border); border-radius: 10px;

@@ -3,8 +3,11 @@ import type { Counter, CounterPosition } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { AnchoredMenu } from '../util/AnchoredMenu';
 
-/** Gap left between a bottom-docked counter and the chrome beneath it. */
+/** Gap left between a counter and the chrome beneath it. */
 const BOTTOM_GAP = 12;
+/** Everything that occupies the foot of the map pane. The pill toolbar and the
+ *  presence row both WRAP; the Benny and Keyring chips sit in the corner. */
+const BOTTOM_CHROME = ['.toolbar', '.presence-bar', '.benny-menu', '.keyring-menu'];
 /** Where the bottom dock sits when there is no chrome under it at all. */
 const BOTTOM_FLOOR = 14;
 
@@ -23,7 +26,7 @@ function useBottomChrome(): number {
   useEffect(() => {
     const measure = () => {
       let highest = 0;
-      for (const sel of ['.toolbar', '.presence-bar']) {
+      for (const sel of BOTTOM_CHROME) {
         const el = document.querySelector(sel);
         if (!el) continue;
         const r = el.getBoundingClientRect();
@@ -106,15 +109,20 @@ export function CountersOverlay() {
         if (pos !== c.position) intents.counterUpdate(c.id, { position: pos });
       } : undefined}
     >
-      <span className="counter-name">{c.name}</span>
-      <div className="counter-track" style={{ gap: c.max > 40 ? 1 : 3 }}>
-        {Array.from({ length: c.max }, (_, i) => (
-          <div
-            key={i}
-            className="counter-seg"
-            style={i < c.value ? { background: c.color } : undefined}
-          />
-        ))}
+      {/* Wrapper so a side counter can stand the title alongside the track as
+          a Y-axis label. It is `display: contents` in the top/bottom docks, so
+          those keep the plain name-then-track row they always had. */}
+      <div className="counter-gauge">
+        <span className="counter-name">{c.name}</span>
+        <div className="counter-track" style={{ gap: c.max > 40 ? 1 : 3 }}>
+          {Array.from({ length: c.max }, (_, i) => (
+            <div
+              key={i}
+              className="counter-seg"
+              style={i < c.value ? { background: c.color } : undefined}
+            />
+          ))}
+        </div>
       </div>
       <span className="counter-count">{c.value}/{c.max}</span>
       {isDm && (
@@ -139,10 +147,12 @@ export function CountersOverlay() {
         <div className="counters-edge counters-bottom" style={{ bottom: bottomClearance }}>
           {counters.filter((c) => c.position === 'bottom').map(renderBar)}
         </div>
-        <div className="counters-side counters-left">
+        {/* The side docks run the full height of the pane, stopping at the
+            same measured floor the bottom dock uses. */}
+        <div className="counters-side counters-left" style={{ bottom: bottomClearance }}>
           {counters.filter((c) => c.position === 'left').map(renderBar)}
         </div>
-        <div className="counters-side counters-right">
+        <div className="counters-side counters-right" style={{ bottom: bottomClearance }}>
           {counters.filter((c) => c.position === 'right').map(renderBar)}
         </div>
       </div>

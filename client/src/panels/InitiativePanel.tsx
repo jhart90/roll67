@@ -12,7 +12,7 @@ export function InitiativePanel() {
   const [saving, setSaving] = useState(false);
 
   if (!you) return null;
-  const isDm = you.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const swade = campaign?.system === 'swade';
   const cardMode = !!state.cardMode;
   const pending = state.pendingDraws ?? [];

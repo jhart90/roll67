@@ -11,7 +11,7 @@ import { intents, useGameStore } from '../store/game';
 export function IncapPrompt() {
   const prompt = useGameStore((s) => s.incapPrompt);
   const character = useGameStore((s) => s.characters.find((c) => c.id === prompt?.characterId));
-  const isDm = useGameStore((s) => s.you?.role) === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const [soaked, setSoaked] = useState(false);
 
   useEffect(() => { setSoaked(false); }, [prompt?.characterId]);

@@ -39,7 +39,7 @@ interface VisMenu { kind: 'map' | 'token' | 'character'; key: string; name: stri
 export function DirectoryPanel() {
   const you = useGameStore((s) => s.you);
   const dir = useGameStore((s) => s.directory);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
 
   // Refresh when the tab opens so the tree is current.
   useEffect(() => { intents.requestDirectory(); }, []);

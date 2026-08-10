@@ -108,7 +108,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const lastSent = useRef(0);
   const dragOrigin = useRef<{ x: number; y: number } | null>(null);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const movable = !!you && tool === 'select' && targetState === 'off' &&
     canMoveToken(you.role, you.userId, token, character);
 

@@ -96,7 +96,7 @@ export function LocationsPanel() {
   const handouts = useGameStore((s) => s.handoutList);
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<LocationNode | null>(null);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const open = locations.find((l) => l.id === openId);
 
   // Build a shallow tree (depth by walking parents present in the list).

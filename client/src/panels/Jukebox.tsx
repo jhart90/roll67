@@ -17,7 +17,7 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
   const fileRef = useRef<HTMLInputElement>(null);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
 
   useEffect(() => { if (isDm) intents.requestAssets(); }, [isDm]);
   if (!campaign) return null;

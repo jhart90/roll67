@@ -10,7 +10,7 @@ import { intents, useGameStore } from '../store/game';
  * mistake can ever leak it.
  */
 export function NotesTab({ character, editable }: { character: Character; editable: boolean }) {
-  const isDm = useGameStore((s) => s.you?.role) === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const secret = useGameStore((s) => s.dmNotesData[character.id]);
 
   const saved = String(character.sheet.playerNotes ?? '');

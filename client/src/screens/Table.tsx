@@ -130,7 +130,12 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
     if (map && sel) intents.upsertMapText(map.id, { ...sel, ...textStyle, ...patch });
   }
 
-  const isDm = you?.role === 'dm';
+  // Two different questions. `isDm` is "am I acting as the DM right now", which
+  // every capability gate wants and which the preview turns off. `isDmAccount`
+  // is "is this the DM's account", which only the preview's own controls want —
+  // hiding those inside the preview would trap them in it.
+  const isDm = useGameStore((s) => s.isDm());
+  const isDmAccount = useGameStore((s) => s.isDmAccount());
   const players = members.filter((m) => m.role === 'player');
   const tools = isDm ? [...PLAYER_TOOLS, ...DM_TOOLS] : PLAYER_TOOLS;
 
@@ -149,20 +154,25 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <span className="topbar-title">{campaign.name}</span>
         {map && <span className="dim">· {map.name}</span>}
         <span className="spacer" />
+        {/* The preview's own switch stays on `isDmAccount` — it is the way OUT
+            of the preview, so it has to outlive being inside one. Everything
+            else in this bar is a DM tool and goes with the preview. */}
+        {isDmAccount && (
+          <label className="viewas">
+            View as
+            <select
+              value={viewingAs ?? ''}
+              onChange={(e) => intents.dmViewAs(e.target.value || null)}
+            >
+              <option value="">God mode (DM)</option>
+              {players.map((p) => (
+                <option key={p.userId} value={p.userId}>{p.username}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {isDm && (
           <>
-            <label className="viewas">
-              View as
-              <select
-                value={viewingAs ?? ''}
-                onChange={(e) => intents.dmViewAs(e.target.value || null)}
-              >
-                <option value="">God mode (DM)</option>
-                {players.map((p) => (
-                  <option key={p.userId} value={p.userId}>{p.username}</option>
-                ))}
-              </select>
-            </label>
             <button onClick={() => setShowMaps((v) => !v)}>Maps</button>
             <button onClick={() => openWindow('assetLibrary', 'main', {}, 'Asset Library')}>Assets</button>
           </>

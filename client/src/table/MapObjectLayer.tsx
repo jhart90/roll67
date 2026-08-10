@@ -67,7 +67,7 @@ function TreasureChest({ r }: { r: number }) {
 
 const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject }) {
   const map = useGameStore((s) => s.map)!;
-  const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const isDm = useGameStore((s) => s.isDm());
   const selected = useGameStore((s) => s.selectedObjectId === obj.id);
   const flashing = useGameStore((s) => s.worldHover?.kind === 'object' && s.worldHover.id === obj.id);
   const stage = useStage();
@@ -228,7 +228,7 @@ export function MapObjectLayer() {
   const mapObjects = useGameStore((s) => s.mapObjects);
   const map = useGameStore((s) => s.map);
   const tool = useGameStore((s) => s.tool);
-  const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const isDm = useGameStore((s) => s.isDm());
   const lootKind = useGameStore((s) => s.lootKind);
   const stage = useStage();
 

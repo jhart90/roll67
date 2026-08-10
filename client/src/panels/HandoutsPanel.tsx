@@ -65,7 +65,7 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
  *  controls. Opened from the World tree. */
 export function HandoutWindow({ handout, onClose }: { handout: Handout | null; onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign)!;
-  const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const isDm = useGameStore((s) => s.isDm());
   const players = useGameStore((s) => s.members).filter((m) => m.role === 'player');
   const [title, setTitle] = useState(handout?.title ?? '');
   const [body, setBody] = useState(handout?.bodyMd ?? '');
@@ -222,7 +222,7 @@ export function HandoutsSection() {
   const [openId, setOpenId] = useState<string | null>(null);
 
   if (!you) return null;
-  const isDm = you.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const open = handoutList.find((h) => h.id === openId);
 
   if (editing !== null) {

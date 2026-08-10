@@ -12,7 +12,7 @@ export function BackgroundCanvas({ map }: { map: MapView }) {
   // The DM painting terrain needs the whole grid, including over ground they
   // have marked inaccessible — they are aiming a brush at it. Everyone else
   // (players, and the DM's ordinary god-mode view) gets the holed grid.
-  const painting = useGameStore((s) => s.tool === 'terrain' && s.you?.role === 'dm');
+  const painting = useGameStore((s) => s.tool === 'terrain' && s.isDm());
   const blocked = map.blocked;
 
   // The background image is loaded once per URL and kept, so a redraw — which

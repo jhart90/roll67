@@ -108,7 +108,7 @@ function slotForDrop(x: number, y: number, pane: DOMRect): CounterPosition {
  */
 export function CountersOverlay() {
   const counters = useGameStore((s) => s.counters);
-  const isDm = useGameStore((s) => s.you?.role) === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   // Second page of the context menu: which map to send this counter to.
   const [sendingToMap, setSendingToMap] = useState(false);

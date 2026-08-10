@@ -388,7 +388,17 @@ interface GameState {
   openSheet(characterId: string | null): void;
   clearError(): void;
 
+  /** Am I acting as the DM RIGHT NOW? False while previewing a player — the
+   *  whole point of the preview is to stand in their shoes, so every capability
+   *  gate and every DM-only overlay should read this. */
   isDm(): boolean;
+  /** Is my ACCOUNT the DM, preview or not? Only for the controls that manage
+   *  the preview itself, which must survive being inside it. */
+  isDmAccount(): boolean;
+  /** Whose account the UI should answer to: the previewed player while the DM
+   *  is previewing, otherwise me. "My characters", "my pills", "my keys" all
+   *  read this, so the preview shows THEIR party rather than the DM's. */
+  asUserId(): string | null;
   effectiveVisible(): Set<number> | null;
 }
 
@@ -746,7 +756,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     }, kind === 'info' ? 3500 : 6000);
   },
 
-  isDm() { return get().you?.role === 'dm'; },
+  isDm() { const s = get(); return s.you?.role === 'dm' && !s.viewingAs; },
+  isDmAccount() { return get().you?.role === 'dm'; },
+  asUserId() { const s = get(); return s.viewingAs ?? s.you?.userId ?? null; },
   effectiveVisible() {
     const s = get();
     if (s.you?.role === 'dm' && !s.viewingAs) return null;

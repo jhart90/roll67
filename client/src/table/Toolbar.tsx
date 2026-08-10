@@ -84,6 +84,11 @@ export function Toolbar() {
   const dragRef = useRef<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
+  // While previewing a player the row shows THEIR pills, so editing has to be
+  // off: the buttons would write to the DM's own list while displaying someone
+  // else's, and nothing on screen would say so.
+  const previewing = useGameStore((s) => !!s.viewingAs);
+
   if (!you) return null;
 
   function addPill(e: React.FormEvent) {
@@ -146,7 +151,7 @@ export function Toolbar() {
                 : { background: 'var(--panel-2)', color: 'var(--text)' }}
               disabled={disabled}
               onClick={() => intents.runMacro(m.id)}
-              onContextMenu={(e) => { e.preventDefault(); setEditingId((id) => (id === m.id ? null : m.id)); }}
+              onContextMenu={(e) => { e.preventDefault(); if (!previewing) setEditingId((id) => (id === m.id ? null : m.id)); }}
               title={disabled ? `${reason} · drag to reorder · right-click to edit` : `${kind} · drag to reorder · right-click to edit`}
             >
               {m.name}
@@ -158,7 +163,7 @@ export function Toolbar() {
         );
       })}
 
-      {adding ? (
+      {previewing ? null : adding ? (
         <form className="pill-add-form" onSubmit={addPill}>
           <input placeholder="name" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
           <input placeholder="/r 1d20+5" value={newCmd} onChange={(e) => setNewCmd(e.target.value)} />
@@ -169,7 +174,7 @@ export function Toolbar() {
         <button className="toolbar-edit" title="Add a pill" onClick={() => { setAdding(true); setEditingId(null); }}>+</button>
       )}
 
-      {macros.length === 0 && !adding && (
+      {macros.length === 0 && !adding && !previewing && (
         <span className="dim toolbar-hint">Pin rolls from a character sheet, or click + to add a pill · right-click a pill to edit</span>
       )}
     </div>

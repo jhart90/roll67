@@ -14,7 +14,7 @@ import { authHeaders } from '../api';
 export function MapDetailsWindow({ mapId }: { mapId: string }) {
   const entry = useGameStore((s) => s.directory?.maps.find((m) => m.id === mapId));
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
-  const isDm = useGameStore((s) => s.you?.role) === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const tokens = useGameStore((s) => s.directory?.tokens ?? []);
   const [art, setArt] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);

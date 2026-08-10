@@ -133,7 +133,7 @@ export function Compendium({ character, system, onClose, onPick }: {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const sys = (character?.system ?? system ?? 'dnd5e') as GameSystem;
   const kinds = useMemo(() => contentKinds(sys), [sys]);
 

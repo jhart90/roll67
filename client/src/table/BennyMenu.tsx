@@ -23,7 +23,7 @@ export function BennyMenu() {
   const [pickedId, setPickedId] = useState<string | null>(null);
 
   if (!you || campaign?.system !== 'swade') return null;
-  const isDm = you.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
 
   // The DM's menu awards rather than spends: every player-controlled Wild
   // Card, one click each, announced in chat. (NPC bennies live on sheets.)
@@ -57,7 +57,8 @@ export function BennyMenu() {
     );
   }
 
-  const mine = characters.filter((c) => c.system === 'swade' && c.ownerUserId === you.userId);
+  const asUser = useGameStore((s) => s.asUserId());
+  const mine = characters.filter((c) => c.system === 'swade' && c.ownerUserId === asUser);
   if (mine.length === 0) return null;
   const ch = mine.find((c) => c.id === pickedId) ?? mine[0];
   const sheet = ch.sheet as Record<string, unknown>;

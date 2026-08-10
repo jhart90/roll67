@@ -80,7 +80,7 @@ export function PresenceBar() {
   }, [menuFor, profileOpen]);
 
   if (!you || !campaign) return null;
-  const isDm = you.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const online = members.filter((m) => m.online);
   const offline = members.filter((m) => !m.online);
 

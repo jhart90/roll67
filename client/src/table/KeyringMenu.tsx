@@ -20,16 +20,17 @@ export function KeyringMenu() {
   const doors = useGameStore((s) => s.dmGeometry?.doors);
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
   const system = useGameStore((s) => s.campaign?.system ?? 'dnd5e');
+  const asUser = useGameStore((s) => s.asUserId());
   const [open, setOpen] = useState(false);
   // The door editor can send the DM straight here to cut the key it needs.
   const summoned = useGameStore((s) => s.keyManagerOpen);
   useEffect(() => {
     if (summoned) { setOpen(true); useGameStore.setState({ keyManagerOpen: false }); }
   }, [summoned]);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const mine = useMemo(
-    () => characters.filter((c) => c.ownerUserId === you?.userId),
-    [characters, you?.userId],
+    () => characters.filter((c) => c.ownerUserId === asUser),
+    [characters, asUser],
   );
   const myKeys = useMemo(
     () => mine.flatMap((c) => keysOnSheet(c.sheet).map((k) => ({ k, owner: c.name }))),

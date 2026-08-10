@@ -31,7 +31,7 @@ export function TokenInspector() {
   const { progress, upload } = useUploadProgress();
 
   if (!token || !you || !campaign) return null;
-  const isDm = you.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   // A player gets this panel only for a token they control, and only to
   // recolour it — the server enforces the same limit, this just avoids
   // showing controls that would be rejected.

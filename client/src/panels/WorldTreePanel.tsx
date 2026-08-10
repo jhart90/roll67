@@ -198,7 +198,7 @@ export function WorldTreePanel() {
   const handouts = useGameStore((s) => s.handoutList);
   const maps = useGameStore((s) => s.mapsMeta);
   const folders = useGameStore((s) => s.worldFolderList);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
 
   const allTokens = useGameStore((s) => s.tokens);
   const dmLights = useGameStore((s) => s.dmGeometry?.lights ?? NO_LIGHTS);

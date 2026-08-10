@@ -329,7 +329,7 @@ function Message({ msg, isDm, hl, onMenu }: {
 
 export function ChatPanel() {
   const chatLog = useGameStore((s) => s.chatLog);
-  const isDm = useGameStore((s) => s.you?.role === 'dm');
+  const isDm = useGameStore((s) => s.isDm());
   const hl = useNameHighlights();
   const [text, setText] = useState('');
   const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);

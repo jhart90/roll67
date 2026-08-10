@@ -65,7 +65,7 @@ function VerifyTool({ seeds }: { seeds: Array<{ commit: string; seedHex: string;
 /** 🛡 IronDice: what it is, the live commitment, and the verification tools. */
 export function IronDiceWindow() {
   const info = useGameStore((s) => s.ironDice);
-  const isDm = useGameStore((s) => s.you?.role) === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   useEffect(() => { intents.getIronDice(); }, []);
 
   return (

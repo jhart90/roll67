@@ -12,7 +12,7 @@ export function TerrainCanvas({ grid }: { grid: GridConfig }) {
   // leaves the terrain tool it stops being drawn for anyone — at the table its
   // only tell is that the hex grid stops there (see BackgroundCanvas), which
   // reads as "not part of the map" without a slab of overlay on the art.
-  const painting = useGameStore((s) => s.tool === 'terrain' && s.you?.role === 'dm');
+  const painting = useGameStore((s) => s.tool === 'terrain' && s.isDm());
   const blocked = painting ? map.blocked : null;
   const { width, height } = mapPixelSize(map);
 

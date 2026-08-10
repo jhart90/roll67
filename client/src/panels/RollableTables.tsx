@@ -41,7 +41,7 @@ export function RollableTables() {
   const you = useGameStore((s) => s.you);
   const tables = useGameStore((s) => s.tableList);
   const [editing, setEditing] = useState<RollableTable | null>(null);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
 
   return (
     <div className="dir-section">

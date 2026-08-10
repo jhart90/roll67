@@ -19,12 +19,14 @@ export function Soundboard() {
   const campaign = useGameStore((s) => s.campaign);
   const slots = useGameStore((s) => s.soundboardSlots);
   const { progress, upload } = useUploadProgress();
+  // Which pad is one click away from being wiped, if any.
+  const [arming, setArming] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Which square the pending file-picker will fill.
   const [target, setTarget] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
 
   if (!campaign) return null;
   if (!isDm) {
@@ -84,19 +86,35 @@ export function Soundboard() {
         {Array.from({ length: PAGE_SIZE }, (_, cell) => {
           const i = page * PAGE_SIZE + cell;
           const slot = byIndex.get(i);
+          const armed = arming === i;
           return (
             <button
               key={i}
-              className={`soundboard-pad ${slot ? 'filled' : 'empty'}`}
+              className={`soundboard-pad ${slot ? 'filled' : 'empty'} ${armed ? 'armed' : ''}`}
               disabled={busy}
-              title={slot ? `Play "${slot.label}" for everyone — right-click to clear` : 'Click to upload a sound'}
-              onClick={() => (slot ? intents.playSfx(i) : pickFor(i))}
+              title={armed ? 'Click again to clear this pad'
+                : slot ? `Play "${slot.label}" for everyone — right-click to clear` : 'Click to upload a sound'}
+              onClick={() => {
+                // Armed: EITHER button finishes the job, so the second click
+                // does not have to be the same one that started it.
+                if (armed) { intents.clearSoundboardSlot(i); setArming(null); return; }
+                if (slot) intents.playSfx(i); else pickFor(i);
+              }}
               onContextMenu={(e) => {
                 e.preventDefault();
-                if (slot) intents.clearSoundboardSlot(i);
+                if (!slot) return;
+                // Arming is a state, not an action: a stray right-click used to
+                // wipe a sound outright with nothing to catch it.
+                setArming(armed ? null : i);
               }}
+              onPointerLeave={armed ? () => setArming(null) : undefined}
             >
-              {slot
+              {armed ? (
+                <span className="soundboard-pad-confirm">
+                  <span className="soundboard-pad-icon">✕</span>
+                  <span className="soundboard-pad-label">Delete?</span>
+                </span>
+              ) : slot
                 ? <><span className="soundboard-pad-icon">▶</span><span className="soundboard-pad-label">{slot.label}</span></>
                 : <span className="soundboard-pad-icon dim">+</span>}
             </button>
@@ -113,7 +131,7 @@ export function Soundboard() {
       />
       <UploadProgressBar progress={progress} />
       <p className="dim" style={{ fontSize: 11, margin: '6px 0 0' }}>
-        Click an empty pad to upload a short sound · click a pad to play it for everyone · right-click to clear it.
+        Click an empty pad to upload a short sound · click a pad to play it for everyone · right-click to clear it (asks first).
       </p>
     </div>
   );

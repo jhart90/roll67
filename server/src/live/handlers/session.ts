@@ -53,6 +53,9 @@ export function sendWorldViewTo(socket: Socket): void {
   socket.emit(S2C.HANDOUTS, { handouts: handoutsVisibleTo(campaignId, v.userId, v.isDm) });
   socket.emit(S2C.WORLD_SORT, { orders: worldSort.forCampaign(campaignId) });
   socket.emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(campaignId) });
+  // Pinned pills belong to a person, so the preview shows the previewed
+  // player's — the DM's own row of macros is not what that player sees.
+  socket.emit(S2C.MACROS, { macros: macros.forUser(v.userId, campaignId) });
 }
 
 export function buildCampaignState(campaignId: string, userId: string, username: string, isDm: boolean): CampaignStatePayload {

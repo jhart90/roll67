@@ -43,7 +43,7 @@ function PrivateNotesTab({ characterId, name }: { characterId: string; name: str
 
 export function PublicSheetWindow({ characterId }: { characterId: string }) {
   const sheet = useGameStore((s) => s.publicSheets[characterId]);
-  const isDm = useGameStore((s) => s.you?.role) === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const [tab, setTab] = useState<'profile' | 'stats' | 'notes'>('profile');
   useEffect(() => { intents.getPublicSheet(characterId); }, [characterId]);
 

@@ -220,7 +220,7 @@ export function ShopsPanel() {
   const shops = useGameStore((s) => s.shopList);
   const [detail, setDetail] = useState<string | null>(null);
   const [editing, setEditing] = useState<Shop | null>(null);
-  const isDm = you?.role === 'dm';
+  const isDm = useGameStore((s) => s.isDm());
   const detailShop = shops.find((s) => s.id === detail);
 
   return (

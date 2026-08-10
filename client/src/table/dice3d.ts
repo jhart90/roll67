@@ -651,35 +651,92 @@ function drawAceEffect(
   const fade = 1 - phase;
 
   if (style === 'explosion') {
-    // A shockwave ring that races outward and thins as it goes, with debris
-    // thrown clear of it — brief and violent rather than a steady pulse.
-    const ring = size * (0.5 + phase * 3.2);
-    ctx.globalAlpha = fade * fade * 0.9;
-    ctx.strokeStyle = 'rgba(255, 168, 64, 0.95)';
-    ctx.lineWidth = Math.max(0.6, size * 0.22 * fade);
+    // A movie fireball going off BEHIND the die (this whole function draws
+    // before the die's own faces, so the die stays silhouetted against it).
+    // Layered the way a real one reads: white flash, boiling fireball, black
+    // smoke rolling off the top of it, shockwave, then the debris.
+
+    // 1. The flash — enormous, white, and over almost before you see it.
+    const flash = 1 - Math.min(1, phase * 5);
+    if (flash > 0) {
+      ctx.globalAlpha = flash * 0.95;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 5.2 * (0.4 + phase * 3));
+      g.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      g.addColorStop(0.35, 'rgba(255, 244, 190, 0.9)');
+      g.addColorStop(1, 'rgba(255, 180, 60, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, size * 5.2 * (0.4 + phase * 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 2. The fireball: overlapping blobs at their own radii and speeds, so the
+    // edge boils instead of expanding as one clean circle.
+    const grow = 1 - Math.pow(1 - phase, 2.2); // fast out, then settling
+    for (let b = 0; b < 11; b++) {
+      const ang = (b / 11) * Math.PI * 2 + b * 1.31;
+      const lean = size * (0.25 + (b % 4) * 0.32) * grow * 2.6;
+      const bx = cx + Math.cos(ang) * lean;
+      // Fireballs climb as they burn out.
+      const by = cy + Math.sin(ang) * lean * 0.78 - grow * size * 0.85;
+      const br = size * (1.15 + (b % 3) * 0.42) * (0.45 + grow * 1.35);
+      // Cools from white-hot through orange to a dull red as it dies.
+      const heat = Math.max(0, 1 - phase * 1.35);
+      ctx.globalAlpha = Math.min(1, fade * 1.5) * 0.72;
+      const g = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+      g.addColorStop(0, `rgba(255, ${170 + 80 * heat}, ${60 + 120 * heat}, ${0.55 + 0.45 * heat})`);
+      g.addColorStop(0.55, `rgba(${230 + 25 * heat}, ${90 + 70 * heat}, 24, ${0.5 + 0.3 * heat})`);
+      g.addColorStop(1, 'rgba(90, 22, 6, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 3. Black smoke rolling off the fireball as it burns down.
+    const sooty = Math.max(0, (phase - 0.28) / 0.72);
+    if (sooty > 0) {
+      for (let s = 0; s < 7; s++) {
+        const ang = (s / 7) * Math.PI * 2 + s * 0.9;
+        const d = size * (1.1 + sooty * 2.4);
+        const sx = cx + Math.cos(ang) * d * 0.85;
+        const sy = cy + Math.sin(ang) * d * 0.6 - sooty * size * 1.5;
+        const sr = size * (0.75 + sooty * 1.5);
+        ctx.globalAlpha = sooty * fade * 0.75;
+        const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+        g.addColorStop(0, 'rgba(38, 32, 30, 0.9)');
+        g.addColorStop(1, 'rgba(30, 26, 24, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 4. Shockwave: a thin bright ring outrunning the fire.
+    const ring = size * (0.6 + phase * 5.5);
+    ctx.globalAlpha = fade * fade * 0.85;
+    ctx.strokeStyle = 'rgba(255, 226, 150, 0.95)';
+    ctx.lineWidth = Math.max(0.6, size * 0.16 * fade);
     ctx.beginPath();
     ctx.arc(cx, cy, ring, 0, Math.PI * 2);
     ctx.stroke();
-    // Hot core, gone almost at once.
-    const core = 1 - Math.min(1, phase * 3);
-    if (core > 0) {
-      ctx.globalAlpha = core * 0.85;
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 1.6);
-      g.addColorStop(0, 'rgba(255, 250, 214, 1)');
-      g.addColorStop(0.4, 'rgba(255, 150, 40, 0.8)');
-      g.addColorStop(1, 'rgba(200, 40, 0, 0)');
-      ctx.fillStyle = g;
+
+    // 5. Debris and sparks thrown clear, pulled down as they fly.
+    for (let s = 0; s < 18; s++) {
+      const ang = (s / 18) * Math.PI * 2 + s * 0.61;
+      const speed = 0.75 + ((s * 13) % 7) / 7 * 1.5;
+      const d = size * (0.7 + phase * 4.4 * speed);
+      const gravity = size * 2.2 * phase * phase;
+      const ember = s % 3 === 0;
+      ctx.globalAlpha = fade * (ember ? 1 : 0.85);
+      ctx.fillStyle = ember ? 'rgba(255, 214, 128, 0.95)' : 'rgba(58, 42, 34, 0.9)';
       ctx.beginPath();
-      ctx.arc(cx, cy, size * 1.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = fade;
-    ctx.fillStyle = 'rgba(90, 60, 40, 0.9)';
-    for (let s = 0; s < 9; s++) {
-      const ang = (s / 9) * Math.PI * 2 + s * 0.7;
-      const d = size * (0.6 + phase * 3.6) * (0.7 + (s % 3) * 0.2);
-      ctx.beginPath();
-      ctx.arc(cx + Math.cos(ang) * d, cy + Math.sin(ang) * d - phase * size * 0.4, Math.max(0.5, size * 0.09 * fade), 0, Math.PI * 2);
+      ctx.arc(
+        cx + Math.cos(ang) * d,
+        cy + Math.sin(ang) * d * 0.8 - size * 0.5 + gravity,
+        Math.max(0.5, size * (ember ? 0.07 : 0.1) * fade), 0, Math.PI * 2,
+      );
       ctx.fill();
     }
     return;
@@ -718,33 +775,63 @@ function drawAceEffect(
   }
 
   if (style === 'disco') {
-    // A mirror-ball: coloured beams sweeping out of the die, plus a glitter
-    // of specks caught in them.
-    const spin = phase * Math.PI * 2.4;
-    ctx.globalAlpha = fade * 0.55;
-    for (let b = 0; b < 8; b++) {
-      const ang = spin + (b / 8) * Math.PI * 2;
-      const hue = (b * 45 + phase * 220) % 360;
-      const reach = size * 3.1;
+    // The die IS the mirror ball: a slow turn throwing dots of coloured light
+    // out across the room around it. The sparkles carry this one — the beams
+    // are just the haze they travel through — so there are a lot of them, and
+    // the whole rig turns lazily rather than spinning.
+    const spin = phase * Math.PI * 0.55;
+
+    // Faint beams, wide and soft, to hint at light in the air.
+    ctx.globalAlpha = fade * 0.28;
+    for (let b = 0; b < 10; b++) {
+      const ang = spin + (b / 10) * Math.PI * 2;
+      const hue = (b * 36 + phase * 40) % 360;
+      const reach = size * 3.6;
       const g = ctx.createLinearGradient(cx, cy, cx + Math.cos(ang) * reach, cy + Math.sin(ang) * reach);
-      g.addColorStop(0, `hsla(${hue}, 95%, 72%, 0.85)`);
+      g.addColorStop(0, `hsla(${hue}, 95%, 74%, 0.7)`);
       g.addColorStop(1, `hsla(${hue}, 95%, 60%, 0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, reach, ang - 0.13, ang + 0.13);
+      ctx.arc(cx, cy, reach, ang - 0.2, ang + 0.2);
       ctx.closePath();
       ctx.fill();
     }
-    ctx.globalAlpha = fade;
-    for (let s = 0; s < 10; s++) {
-      const ang = spin * 1.7 + (s / 10) * Math.PI * 2;
-      const d = size * (1 + ((s * 7) % 10) / 10 * 1.6);
-      ctx.fillStyle = `hsla(${(s * 36 + phase * 300) % 360}, 100%, 80%, 0.95)`;
-      ctx.beginPath();
-      ctx.arc(cx + Math.cos(ang) * d, cy + Math.sin(ang) * d, Math.max(0.5, size * 0.07), 0, Math.PI * 2);
-      ctx.fill();
+
+    // The dots themselves: three rings at different radii, each turning at a
+    // slightly different rate so the field never looks like one rigid wheel.
+    // Each dot twinkles on its own clock, the way a facet catches the light
+    // only when it comes round to the right angle.
+    for (let ring = 0; ring < 3; ring++) {
+      const count = 14 + ring * 4;
+      const radius = size * (1.35 + ring * 0.95);
+      const rate = 1 + ring * 0.22;
+      for (let s = 0; s < count; s++) {
+        const ang = spin * rate + (s / count) * Math.PI * 2 + ring * 0.7;
+        // Squashed vertically so the dots read as scattered around a room
+        // rather than pinned to a flat circle.
+        const px = cx + Math.cos(ang) * radius;
+        const py = cy + Math.sin(ang) * radius * 0.62;
+        const twinkle = 0.35 + 0.65 * Math.pow(Math.abs(Math.sin(phase * 6 + s * 1.7 + ring)), 2);
+        ctx.globalAlpha = fade * twinkle;
+        ctx.fillStyle = `hsla(${(s * 47 + ring * 90 + phase * 60) % 360}, 100%, ${68 + 12 * twinkle}%, 1)`;
+        const r = size * (0.05 + 0.045 * twinkle);
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(0.5, r), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
+
+    // A tight bright core, so the ball itself looks lit rather than lighting
+    // everything else from nowhere.
+    ctx.globalAlpha = fade * 0.4;
+    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 1.25);
+    core.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+    core.addColorStop(1, 'rgba(200, 220, 255, 0)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 1.25, 0, Math.PI * 2);
+    ctx.fill();
     return;
   }
 
@@ -787,25 +874,66 @@ function drawAceEffect(
   }
 
   if (style === 'smoke') {
-    // Puffs billowing up off the die: each starts small and tight, then grows
-    // and thins as it climbs, so the column looks like it is dispersing rather
-    // than a circle being scaled.
-    for (let p = 0; p < 6; p++) {
-      const t = (phase * 1.15 + p * 0.17) % 1;
-      const rise = t * size * 2.6;
-      const drift = Math.sin(t * 3.4 + p * 2.1) * size * 0.55 * t;
-      const r = size * (0.34 + t * 1.15);
-      // Thickest in the middle of its life, gone by the end.
-      const puff = Math.sin(Math.min(1, t) * Math.PI) * fade;
-      ctx.globalAlpha = puff * 0.42;
-      const shade = 118 + ((p * 37) % 60);
-      const g = ctx.createRadialGradient(cx + drift, cy - rise, 0, cx + drift, cy - rise, r);
-      g.addColorStop(0, `rgba(${shade}, ${shade}, ${shade + 8}, 0.95)`);
-      g.addColorStop(0.6, `rgba(${shade - 20}, ${shade - 20}, ${shade - 12}, 0.5)`);
-      g.addColorStop(1, `rgba(90, 90, 96, 0)`);
+    // A dense bank of smoke bursting off the die in every direction, not a
+    // wisp rising off the top. Three passes, back to front: a wide base cloud
+    // that swallows the die, billows rolling outward on all sides, then a
+    // lighter crown drifting up off the whole thing.
+
+    // The die sits in the middle of it, so the cloud has to be opaque enough
+    // to actually read against the map — hence alphas near 1 rather than the
+    // faint 0.4 this had, and a full-strength hold before it thins out.
+    const thin = Math.max(0, (phase - 0.55) / 0.45); // only starts clearing late
+    const body = 1 - thin;
+
+    // 1. Base cloud: one big soft mass centred on the die.
+    {
+      const r = size * (1.1 + 2.5 * Math.min(1, phase * 1.6));
+      ctx.globalAlpha = body * 0.82;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, 'rgba(150, 150, 158, 0.95)');
+      g.addColorStop(0.55, 'rgba(122, 122, 130, 0.7)');
+      g.addColorStop(1, 'rgba(96, 96, 104, 0)');
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.arc(cx + drift, cy - rise, r, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 2. Billows: 18 puffs pushed out evenly on every side, each on its own
+    // clock and its own size so the edge churns instead of scaling.
+    for (let p = 0; p < 18; p++) {
+      const ang = (p / 18) * Math.PI * 2 + p * 0.83;
+      const t = Math.min(1, phase * (0.85 + ((p * 11) % 7) / 7 * 0.6));
+      const push = size * (0.5 + t * 2.7) * (0.75 + ((p * 5) % 4) / 4 * 0.5);
+      // Smoke still rises, so the whole cloud leans upward as it spreads.
+      const px = cx + Math.cos(ang) * push;
+      const py = cy + Math.sin(ang) * push * 0.85 - t * size * 0.7;
+      const r = size * (0.55 + t * 1.25);
+      const shade = 128 + ((p * 29) % 54);
+      ctx.globalAlpha = body * (0.55 + 0.4 * Math.sin(Math.min(1, t) * Math.PI));
+      const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, `rgba(${shade}, ${shade}, ${shade + 8}, 0.98)`);
+      g.addColorStop(0.5, `rgba(${shade - 24}, ${shade - 24}, ${shade - 16}, 0.72)`);
+      g.addColorStop(1, 'rgba(84, 84, 92, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 3. Crown: paler smoke lifting off the top of the bank.
+    for (let c = 0; c < 6; c++) {
+      const t = (phase * 1.3 + c * 0.16) % 1;
+      const px = cx + Math.sin(t * 4 + c * 2.3) * size * 0.9;
+      const py = cy - size * (0.8 + t * 2.6);
+      const r = size * (0.5 + t * 1.1);
+      ctx.globalAlpha = body * (1 - t) * 0.6;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, 'rgba(178, 178, 186, 0.9)');
+      g.addColorStop(1, 'rgba(150, 150, 158, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fill();
     }
     return;

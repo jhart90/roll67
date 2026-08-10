@@ -1,8 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, hexDistance, firstFreeHex, packHex, systemFor,
-  type DeleteMapObjectPayload, type OpenChestPayload, type PlaceMapObjectPayload,
-  type TakeAllChestPayload, type TakeChestItemPayload,
+  C2S, S2C, acquirePatch, hexDistance, firstFreeHex, packHex, systemFor,
+  type Character, type DeleteMapObjectPayload, type GameSystem, type OpenChestPayload, type PlaceMapObjectPayload,
+  type SheetData, type TakeAllChestPayload, type TakeChestItemPayload,
   type TakeMapItemPayload, type UpdateMapObjectPayload,
 } from 'shared';
 import { campaigns, characters, chat, handouts, mapObjects, maps, tokens, worldFolders } from '../../db/repos.js';
@@ -28,13 +28,53 @@ function playerWithinRange(userId: string, mapId: string, q: number, r: number, 
   return false;
 }
 
-function postTake(io: Server, campaignId: string, playerName: string, itemName: string): void {
+function postTake(io: Server, campaignId: string, playerName: string, itemName: string, intoName?: string): void {
   const msg = chat.add(campaignId, {
     userId: null, fromName: 'System', kind: 'system',
-    text: `${playerName} has taken ${itemName}`,
+    text: intoName ? `${playerName} has taken ${itemName} (added to ${intoName})` : `${playerName} has taken ${itemName}`,
     roll: null, recipients: null,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+}
+
+/**
+ * Which character actually pockets the loot. A player takes with the character
+ * of theirs standing closest to the container — with several tokens in reach,
+ * the near one is the one whose hand is in the chest. The DM, who owns nobody
+ * in particular, takes with whoever is nearest regardless of ownership.
+ */
+function takerFor(
+  role: string, userId: string, mapId: string, q: number, r: number,
+): Character | null {
+  let best: { ch: Character; dist: number } | null = null;
+  for (const t of tokens.forMap(mapId)) {
+    if (!t.characterId) continue;
+    const ch = characters.byId(t.characterId);
+    if (!ch) continue;
+    if (role !== 'dm' && ch.ownerUserId !== userId) continue;
+    const dist = hexDistance({ q: t.q, r: t.r }, { q, r });
+    if (!best || dist < best.dist) best = { ch, dist };
+  }
+  return best?.ch ?? null;
+}
+
+/**
+ * Move one item out of a container and onto a character's sheet. Chest loot is
+ * free — the price-zero end of the same acquisition path a shop purchase runs
+ * through, so a looted weapon becomes a real attack row exactly as a bought one
+ * does. Returns the name of who took it, or null if nobody could.
+ */
+function grantLoot(
+  io: Server, campaignId: string, taker: Character, item: { name: string; contentId?: string; description?: string },
+): string {
+  const patch = acquirePatch(taker.sheet as SheetData, taker.system as GameSystem, {
+    name: item.name, contentId: item.contentId, notes: item.description || 'found',
+  });
+  characters.update(taker.id, undefined, { ...taker.sheet, ...patch });
+  const updated = characters.byId(taker.id)!;
+  io.to(dmRoom(campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
+  if (updated.ownerUserId) io.to(userRoom(updated.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
+  return updated.name;
 }
 
 /**
@@ -100,9 +140,12 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
       emitError(socket, 'You are not close enough to pick that up.'); return;
     }
+    const taker = takerFor(d.role, d.userId, obj.mapId, obj.q, obj.r);
+    if (!taker) { emitError(socket, 'No character of yours is here to pick that up.'); return; }
+    const into = grantLoot(io, d.campaignId, taker, { name: obj.name, description: obj.description });
     mapObjects.delete(objectId);
     io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_REMOVED, { objectId });
-    postTake(io, d.campaignId, d.username, obj.name);
+    postTake(io, d.campaignId, d.username, obj.name, into);
   }, 'TAKE_MAP_ITEM'));
 
   socket.on(C2S.TAKE_CHEST_ITEM, safe(socket, ({ objectId, itemId }: TakeChestItemPayload) => {
@@ -120,11 +163,18 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     }
     const item = obj.items.find((i: { id: string }) => i.id === itemId);
     if (!item) throw new Error('Item not in chest.');
-    const remaining = obj.items.filter((i: { id: string }) => i.id !== itemId);
+    const taker = takerFor(d.role, d.userId, obj.mapId, obj.q, obj.r);
+    if (!taker) { emitError(socket, 'No character of yours is here to take it.'); return; }
+    // A pile of several hands one over and keeps the rest; a single item
+    // empties its row.
+    const left = Math.max(0, (item.qty ?? 1) - 1);
+    const remaining = left > 0
+      ? obj.items.map((i) => (i.id === itemId ? { ...i, qty: left } : i))
+      : obj.items.filter((i: { id: string }) => i.id !== itemId);
     mapObjects.update(objectId, { items: remaining });
     const updated = mapObjects.byId(objectId)!;
     for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
-    postTake(io, d.campaignId, d.username, item.name);
+    postTake(io, d.campaignId, d.username, item.name, grantLoot(io, d.campaignId, taker, item));
   }, 'TAKE_CHEST_ITEM'));
 
   socket.on(C2S.TAKE_ALL_CHEST, safe(socket, ({ objectId }: TakeAllChestPayload) => {
@@ -141,8 +191,17 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
       if (blocked) { emitError(socket, blocked); return; }
     }
     if (obj.items.length === 0) return;
+    const taker = takerFor(d.role, d.userId, obj.mapId, obj.q, obj.r);
+    if (!taker) { emitError(socket, 'No character of yours is here to take it.'); return; }
     for (const item of obj.items) {
-      postTake(io, d.campaignId, d.username, item.name);
+      // Re-read the taker each time: every grant rewrites their sheet, and
+      // stacking patches onto a stale copy would drop all but the last item.
+      const fresh = characters.byId(taker.id);
+      if (!fresh) break;
+      for (let n = item.qty ?? 1; n > 0; n--) {
+        const into = grantLoot(io, d.campaignId, characters.byId(taker.id) ?? fresh, item);
+        postTake(io, d.campaignId, d.username, item.name, into);
+      }
     }
     mapObjects.update(objectId, { items: [] });
     const updated = mapObjects.byId(objectId)!;

@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, applyEntry, contentById, firstFreeHex, normalizeCurrency, packHex, systemFor,
+  C2S, S2C, acquirePatch, firstFreeHex, normalizeCurrency, packHex, systemFor,
   type BuyItemPayload, type CreateCustomItemPayload, type CreateLocationPayload, type CreateShopPayload,
   type CreateWorldFolderPayload, type DeleteCustomItemPayload, type DeleteLocationPayload, type DeleteShopPayload,
   type DeleteWorldFolderPayload, type DropFolderOnCharacterPayload, type DropFolderOnMapPayload, type DropShopOnMapPayload, type GameSystem,
@@ -227,23 +227,15 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const purse = Number((character.sheet as Record<string, unknown>)[currencyField]) || 0;
     if (purse < item.price) { emitError(socket, `Not enough ${currencyField}: needs ${item.price}, has ${purse}.`); return; }
 
-    // Deduct currency + transfer the item's logic to the buyer's sheet. A
-    // compendium-backed item (contentId) applies its full entry — a weapon
-    // becomes the buyer's attack, a potion becomes a usable item — while a
-    // plain/custom item just lands in inventory (carrying any usable effect).
+    // Money out and goods in, in a single write — never a state where the
+    // purse is lighter but the item never arrived. Shared with the chest-take
+    // path (see acquirePatch), so bought and looted items land identically.
     const sheet = character.sheet as SheetData;
-    const entry = item.contentId ? contentById(item.contentId) : undefined;
-    const applied = entry ? applyEntry(entry, sheet) : null;
-    const listId = applied?.listId ?? 'inventory';
-    const row = applied?.row ?? {
-      name: item.name,
-      ...(system === 'swn' ? { qty: 1, enc: 1 } : { qty: 1, weight: 0 }),
-      ...(item.effect ? { effect: item.effect, amount: item.amount ?? '', range: item.range ?? 5 } : {}),
-      notes: item.notes || 'purchased',
-    };
-    const list = Array.isArray(sheet[listId]) ? [...(sheet[listId] as SheetData[])] : [];
-    list.push(row as SheetData);
-    characters.update(characterId, undefined, { ...sheet, [currencyField]: purse - item.price, [listId]: list });
+    const gained = acquirePatch(sheet, system, {
+      name: item.name, contentId: item.contentId, notes: item.notes || 'purchased',
+      effect: item.effect, amount: item.amount, range: item.range,
+    });
+    characters.update(characterId, undefined, { ...sheet, [currencyField]: purse - item.price, ...gained });
     const updated = characters.byId(characterId)!;
     io.to(dmRoom(d.campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
     if (updated.ownerUserId) io.to(userRoom(updated.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });

@@ -1184,6 +1184,69 @@ async function main() {
   playerSock.emit('buyItem', { shopId: shop.id, itemIndex: 1, characterId: pc.id });
   ok(!!(await buyDenied).message, 'buying without funds is refused');
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 0, inventory: [] } });
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.length === 0);
+
+  // ---------- chests: the price-zero end of the same buying path ----------
+  // Taking loot used to delete the row and post a chat line WITHOUT ever
+  // touching the taker's sheet, so chest contents were decorative. These
+  // checks are the guard on that: what you take, you are holding afterwards.
+  console.log('chests:');
+  // Put the PC somewhere known, then drop the chest on their own hex.
+  dmSock.emit('moveToken', { tokenId: pcToken.id, ...homeHex });
+  await new Promise((r) => setTimeout(r, 400));
+  const chestSeen = waitFor(dmSock, 'mapObjectUpserted', 5000, (p) => p.object.name === 'Smoke Chest');
+  dmSock.emit('placeMapObject', { mapId, kind: 'chest', name: 'Smoke Chest', description: '', ...homeHex });
+  const chest = (await chestSeen).object;
+  ok(!!chest, 'DM placed a chest');
+
+  const stocked = waitFor(dmSock, 'mapObjectUpserted', 5000, (p) => p.object.id === chest.id && p.object.items.length === 2);
+  dmSock.emit('updateMapObject', {
+    objectId: chest.id,
+    patch: {
+      items: [
+        { id: 'smoke-loot-1', name: 'Bandage', description: 'field dressing', qty: 2 },
+        { id: 'smoke-loot-2', name: 'Lantern', description: '', qty: 1 },
+      ],
+    },
+  });
+  await stocked;
+  ok(true, 'chest stocked with two rows');
+
+  // Take one of a pile of two: it lands on the sheet, one is left behind.
+  const tookOne = waitFor(playerSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id
+    && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Bandage'));
+  const chestAfterOne = waitFor(dmSock, 'mapObjectUpserted', 5000, (p) => p.object.id === chest.id
+    && p.object.items.some((i) => i.id === 'smoke-loot-1' && i.qty === 1));
+  playerSock.emit('takeChestItem', { objectId: chest.id, itemId: 'smoke-loot-1' });
+  const afterTake = (await tookOne).character;
+  ok(afterTake.sheet.inventory.some((r) => r.name === 'Bandage'), 'taking from a chest puts the item on the sheet');
+  await chestAfterOne;
+  ok(true, 'a pile of two leaves one behind rather than emptying');
+
+  // Take All sweeps the rest onto the sheet — including the second Bandage.
+  const tookAll = waitFor(playerSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id
+    && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Lantern'));
+  const chestEmpty = waitFor(dmSock, 'mapObjectUpserted', 5000, (p) => p.object.id === chest.id && p.object.items.length === 0);
+  playerSock.emit('takeAllChest', { objectId: chest.id });
+  const afterAll = (await tookAll).character;
+  await chestEmpty;
+  ok(afterAll.sheet.inventory.filter((r) => r.name === 'Bandage').length === 2, 'Take All grants every one of a stacked pile');
+  ok(afterAll.sheet.inventory.some((r) => r.name === 'Lantern'), 'Take All grants the remaining rows too');
+
+  // Out of reach is refused — the range gate still guards the free path.
+  const farChestSeen = waitFor(dmSock, 'mapObjectUpserted', 5000, (p) => p.object.name === 'Far Chest');
+  dmSock.emit('placeMapObject', { mapId, kind: 'chest', name: 'Far Chest', description: '', q: 22, r: 12 });
+  const farChest = (await farChestSeen).object;
+  dmSock.emit('updateMapObject', { objectId: farChest.id, patch: { items: [{ id: 'far-loot', name: 'Unreachable', description: '' }] } });
+  await new Promise((r) => setTimeout(r, 300));
+  const reachDenied = waitFor(playerSock, 'errorMsg', 5000);
+  playerSock.emit('takeChestItem', { objectId: farChest.id, itemId: 'far-loot' });
+  ok(!!(await reachDenied).message, 'a chest out of reach refuses to be looted');
+
+  dmSock.emit('deleteMapObject', { objectId: chest.id });
+  dmSock.emit('deleteMapObject', { objectId: farChest.id });
+  dmSock.emit('updateCharacter', { characterId: pc.id, patch: { gp: 0, inventory: [] } });
+  await waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.length === 0);
 
   // ---------- present shop to players ----------
   console.log('present shop:');

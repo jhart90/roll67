@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
-import { contentForSystem, type ContentEntry } from 'shared';
+import type { LootItem } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { StockList, type KeyedStock } from '../panels/StockEditor';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 
@@ -9,24 +10,37 @@ export function MapObjectInspector() {
   const characters = useGameStore((st) => st.characters);
   const campaign = useGameStore((s) => s.campaign);
   const obj = useGameStore((s) => (s.inspectedObjectId ? s.mapObjects[s.inspectedObjectId] : null));
-  const customItems = useGameStore((s) => s.customItems);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
-  const [newItemName, setNewItemName] = useState('');
 
-  // Compendium + campaign custom items, so a chest item typed by name links
-  // its contentId (full apply-on-take logic downstream) instead of being a
-  // plain string. Typing suggests via the datalist below.
-  const catalog = useMemo<ContentEntry[]>(() => {
-    if (!campaign) return [];
-    const custom = customItems.map((c) => {
-      try { return JSON.parse(c.entryJson) as ContentEntry; } catch { return null; }
-    }).filter((e): e is ContentEntry => !!e);
-    return [...contentForSystem(campaign.system), ...custom];
-  }, [campaign, customItems]);
+  // A chest's contents in the shared stock shape. The LootItem's own id IS the
+  // row key, so editing a row can never lose track of which item it is — and
+  // the server finds items by that id when someone takes one.
+  const stock = useMemo<KeyedStock[]>(() => (obj?.items ?? []).map((it) => ({
+    key: it.id,
+    name: it.name,
+    price: 0,
+    qty: it.qty ?? 1,
+    notes: it.description,
+    ...(it.contentId ? { contentId: it.contentId } : {}),
+  })), [obj?.items]);
 
   if (!obj || you?.role !== 'dm' || !campaign) return null;
+
+  /** Back to LootItems, preserving each row's id (a new row gets its key). */
+  function saveStock(next: KeyedStock[]) {
+    if (!obj) return;
+    intents.updateMapObject(obj.id, {
+      items: next.map((row): LootItem => ({
+        id: row.key,
+        name: row.name,
+        description: row.notes,
+        qty: Math.max(1, row.qty),
+        ...(row.contentId ? { contentId: row.contentId } : {}),
+      })),
+    });
+  }
 
   async function onArt(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -41,29 +55,6 @@ export function MapObjectInspector() {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
     }
-  }
-
-  function addItem() {
-    if (!newItemName.trim() || !obj) return;
-    const id = crypto.randomUUID();
-    const name = newItemName.trim();
-    // A name matching a compendium/custom entry links its id, so taking the
-    // item can apply the real thing (weapon, potion…) rather than a label.
-    const entry = catalog.find((e) => e.name.toLowerCase() === name.toLowerCase());
-    intents.updateMapObject(obj.id, {
-      items: [...obj.items, { id, name, description: entry?.subtitle ?? '', ...(entry ? { contentId: entry.id } : {}) }],
-    });
-    setNewItemName('');
-  }
-
-  function removeItem(itemId: string) {
-    if (!obj) return;
-    intents.updateMapObject(obj.id, { items: obj.items.filter((i) => i.id !== itemId) });
-  }
-
-  function updateItemName(itemId: string, name: string) {
-    if (!obj) return;
-    intents.updateMapObject(obj.id, { items: obj.items.map((i) => (i.id === itemId ? { ...i, name } : i)) });
   }
 
   return (
@@ -159,34 +150,17 @@ export function MapObjectInspector() {
               {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          <h4>Items in Chest</h4>
-          {obj.items.length === 0 && <p className="dim" style={{ fontSize: 12 }}>No items yet.</p>}
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 12 }}>
-            {obj.items.map((item) => (
-              <li key={item.id} style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
-                <input
-                  value={item.name}
-                  onChange={(e) => updateItemName(item.id, e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <button className="small danger" onClick={() => removeItem(item.id)}>✕</button>
-              </li>
-            ))}
-          </ul>
-          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-            <input
-              placeholder="Add item (compendium names autocomplete)…"
-              list="chest-item-catalog"
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') addItem(); }}
-              style={{ flex: 1, fontSize: 12 }}
-            />
-            <datalist id="chest-item-catalog">
-              {catalog.map((e) => <option key={e.id} value={e.name} />)}
-            </datalist>
-            <button className="small" onClick={addItem}>Add</button>
-          </div>
+          {/* The same stock surface a shop's shelves use — a chest is just a
+              container whose contents are free, so the price column is off. */}
+          <StockList
+            items={stock}
+            onChange={saveStock}
+            system={campaign.system}
+            title="Items in Chest"
+            showPrice={false}
+            unlimited={false}
+            emptyText="Empty — add items below or from the compendium."
+          />
         </>
       )}
 

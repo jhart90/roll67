@@ -18,6 +18,7 @@ export * from './dice/roller.js';
 export * from './dice/iron.js';
 export * from './systems/nameplate.js';
 export * from './systems/swadeDamage.js';
+export * from './systems/acquire.js';
 export * from './systems/rollStats.js';
 export * from './systems/playerColor.js';
 export * from './systems/index.js';

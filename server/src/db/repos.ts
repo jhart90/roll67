@@ -641,6 +641,7 @@ interface MapRow {
   texts_json: string;
   spawn_json: string | null;
   terrain_json: string;
+  blocked_json?: string;
   sort_order: number;
 }
 
@@ -700,6 +701,7 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     isScene: row.is_scene === 1,
     spawn: row.spawn_json ? safeParse(row.spawn_json, null) : null,
     terrain: safeParse(row.terrain_json, []),
+    blocked: safeParse(row.blocked_json ?? '[]', []),
   };
 }
 
@@ -756,6 +758,9 @@ export const maps = {
   },
   setTerrain(id: string, terrain: number[]): void {
     stmt('UPDATE maps SET terrain_json = ? WHERE id = ?').run(JSON.stringify(terrain), id);
+  },
+  setBlocked(id: string, blocked: number[]): void {
+    stmt('UPDATE maps SET blocked_json = ? WHERE id = ?').run(JSON.stringify(blocked), id);
   },
   delete(id: string): void {
     stmt('DELETE FROM maps WHERE id = ?').run(id);

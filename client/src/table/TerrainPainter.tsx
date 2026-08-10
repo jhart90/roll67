@@ -8,6 +8,9 @@ export function TerrainPainter() {
   const tool = useGameStore((s) => s.tool);
   const brush = useGameStore((s) => s.terrainBrush);
   const erasing = useGameStore((s) => s.terrainErase);
+  const kind = useGameStore((s) => s.terrainKind);
+  const radius = useGameStore((s) => s.terrainRadius);
+  const painted = kind === 'blocked' ? (map.blocked ?? []) : (map.terrain ?? []);
   const stage = useStage();
   const { width, height } = mapPixelSize(map);
 
@@ -17,14 +20,28 @@ export function TerrainPainter() {
   const [preview, setPreview] = useState<number[] | null>(null);
 
   const commit = useCallback((hexKeys: Set<number>) => {
-    const existing = new Set(map.terrain ?? []);
+    const existing = new Set(painted);
     if (erasing) {
       for (const k of hexKeys) existing.delete(k);
     } else {
       for (const k of hexKeys) existing.add(k);
     }
-    intents.setTerrain(map.id, [...existing]);
-  }, [map.id, map.terrain, erasing]);
+    // Only the set being painted is sent; the other is left untouched.
+    intents.setTerrain(map.id, kind === 'blocked' ? { blocked: [...existing] } : { terrain: [...existing] });
+  }, [map.id, painted, erasing, kind]);
+
+  /** Every hex within the brush radius of `centre`. */
+  const splat = useCallback((centre: { q: number; r: number }): number[] => {
+    if (radius <= 0) return [packHex(centre)];
+    const keys: number[] = [];
+    for (let dq = -radius; dq <= radius; dq++) {
+      for (let dr = -radius; dr <= radius; dr++) {
+        const h = { q: centre.q + dq, r: centre.r + dr };
+        if (hexDistance(centre, h) <= radius) keys.push(packHex(h));
+      }
+    }
+    return keys;
+  }, [radius]);
 
   if (tool !== 'terrain') return null;
 
@@ -38,9 +55,7 @@ export function TerrainPainter() {
     startHex.current = hex;
 
     if (brush === 'brush') {
-      const key = packHex(hex);
-      const d = new Set<number>([key]);
-      setDraft(d);
+      setDraft(new Set<number>(splat(hex)));
       try { (e.target as SVGRectElement).setPointerCapture(e.pointerId); } catch {}
     } else {
       try { (e.target as SVGRectElement).setPointerCapture(e.pointerId); } catch {}
@@ -55,7 +70,7 @@ export function TerrainPainter() {
     if (brush === 'brush') {
       setDraft((prev) => {
         const next = new Set(prev);
-        next.add(packHex(hex));
+        for (const k of splat(hex)) next.add(k);
         return next;
       });
     } else if (brush === 'rect') {
@@ -112,7 +127,7 @@ export function TerrainPainter() {
 
   // Render draft/preview hexes as SVG paths for immediate visual feedback
   const draftKeys = brush === 'brush' ? draft : preview ? new Set(preview) : null;
-  const existingSet = new Set(map.terrain ?? []);
+  const existingSet = new Set(painted);
 
   return (
     <svg
@@ -132,8 +147,8 @@ export function TerrainPainter() {
           <path
             key={key}
             d={d}
-            fill={erasing ? 'rgba(210, 108, 108, 0.35)' : 'rgba(139, 90, 43, 0.35)'}
-            stroke={erasing ? 'rgba(210, 108, 108, 0.6)' : 'rgba(139, 90, 43, 0.6)'}
+            fill={erasing ? 'rgba(210, 108, 108, 0.35)' : kind === 'blocked' ? 'rgba(26, 32, 44, 0.55)' : 'rgba(139, 90, 43, 0.35)'}
+            stroke={erasing ? 'rgba(210, 108, 108, 0.6)' : kind === 'blocked' ? 'rgba(120, 140, 170, 0.8)' : 'rgba(139, 90, 43, 0.6)'}
             strokeWidth={1.5}
             pointerEvents="none"
           />

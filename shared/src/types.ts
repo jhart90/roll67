@@ -207,6 +207,9 @@ export interface MapDef extends MapMeta {
   spawn: Hex | null;
   /** Packed hex keys painted as rough terrain. */
   terrain: number[];
+  /** Packed hex keys painted as INACCESSIBLE — a chasm, lava, deep water.
+   *  No token may stand here, DM's included: it is scenery, not cover. */
+  blocked: number[];
   texts: MapText[];
 }
 
@@ -219,6 +222,9 @@ export interface MapView extends MapMeta {
   spawn?: Hex | null;
   /** Packed hex keys painted as rough terrain. */
   terrain: number[];
+  /** Packed hex keys painted as INACCESSIBLE — a chasm, lava, deep water.
+   *  No token may stand here, DM's included: it is scenery, not cover. */
+  blocked: number[];
   /** Labels are for reading, so players get them too. */
   texts: MapText[];
 }

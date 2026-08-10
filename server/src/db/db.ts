@@ -78,6 +78,8 @@ ensureColumn('rollable_tables', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'spawn_json', 'spawn_json TEXT');
 ensureColumn('maps', 'terrain_json', "terrain_json TEXT NOT NULL DEFAULT '[]'");
+// Ground no token may stand on — a chasm, lava, deep water.
+ensureColumn('maps', 'blocked_json', "blocked_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('maps', 'texts_json', "texts_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('maps', 'is_scene', 'is_scene INTEGER NOT NULL DEFAULT 0');
 ensureColumn('tokens', 'revealed_at', 'revealed_at INTEGER');

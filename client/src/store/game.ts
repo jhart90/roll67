@@ -333,8 +333,14 @@ interface GameState {
   setDoorType(t: DoorType): void;
   terrainBrush: TerrainBrush;
   terrainErase: boolean;
+  /** Which ground the terrain tool paints. */
+  terrainKind: 'rough' | 'blocked';
+  /** Brush radius in tiles (0 = a single hex). */
+  terrainRadius: number;
   setTerrainBrush(b: TerrainBrush): void;
   setTerrainErase(e: boolean): void;
+  setTerrainKind(kind: 'rough' | 'blocked'): void;
+  setTerrainRadius(n: number): void;
 
   // actions
   join(campaignId: string): void;
@@ -582,8 +588,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   setDoorType(doorType) { set({ doorType }); },
   terrainBrush: 'brush',
   terrainErase: false,
+  terrainKind: 'rough' as const,
+  terrainRadius: 0,
   setTerrainBrush(terrainBrush) { set({ terrainBrush }); },
   setTerrainErase(terrainErase) { set({ terrainErase }); },
+  setTerrainKind(terrainKind) { set({ terrainKind }); },
+  setTerrainRadius(n) { set({ terrainRadius: Math.max(0, Math.min(6, Math.round(n))) }); },
 
   join(campaignId) {
     connectSocket();
@@ -1324,7 +1334,9 @@ export const intents = {
     socket.emit(C2S.UPDATE_MAP, { mapId, ...fields }),
   setGrid: (mapId: string, grid: Partial<GridConfig>) => socket.emit(C2S.SET_GRID_CONFIG, { mapId, grid }),
   setSpawn: (mapId: string, q: number, r: number) => socket.emit(C2S.SET_SPAWN, { mapId, q, r }),
-  setTerrain: (mapId: string, terrain: number[]) => socket.emit(C2S.SET_TERRAIN, { mapId, terrain }),
+  /** Send only the set being edited; the other is left as it is. */
+  setTerrain: (mapId: string, sets: { terrain?: number[]; blocked?: number[] } | number[]) =>
+    socket.emit(C2S.SET_TERRAIN, { mapId, ...(Array.isArray(sets) ? { terrain: sets } : sets) }),
 
   upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway' | 'stainedglass'; flip?: boolean; glassColor?: string; rainbow?: boolean }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),

@@ -382,6 +382,7 @@ export function buildMapState(
     grid: map.grid,
     spawn: map.spawn ?? null,
     terrain: map.terrain ?? [],
+    blocked: map.blocked ?? [],
     texts: map.texts ?? [],
   };
   const allTokens = tokens.forMap(map.id);

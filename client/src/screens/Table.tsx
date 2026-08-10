@@ -92,6 +92,8 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const selectedTextId = useGameStore((s) => s.selectedTextId);
   const terrainBrush = useGameStore((s) => s.terrainBrush);
   const terrainErase = useGameStore((s) => s.terrainErase);
+  const terrainKind = useGameStore((s) => s.terrainKind);
+  const terrainRadius = useGameStore((s) => s.terrainRadius);
   const [showMaps, setShowMaps] = useState(false);
   const [showDice, setShowDice] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
@@ -341,6 +343,24 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         {tool === 'terrain' && map && isDm && (
           <div className="draw-options">
+            <span className="dim" style={{ fontSize: 12 }}>Paint:</span>
+            <button
+              className={terrainKind === 'rough' ? 'active' : ''}
+              style={{ fontSize: 12 }}
+              title="Difficult ground — costs extra movement, but can be crossed."
+              onClick={() => useGameStore.getState().setTerrainKind('rough')}
+            >
+              ⛰️ Difficult
+            </button>
+            <button
+              className={terrainKind === 'blocked' ? 'active' : ''}
+              style={{ fontSize: 12 }}
+              title="Impassable — a chasm, lava, deep water. No token can stand here at all."
+              onClick={() => useGameStore.getState().setTerrainKind('blocked')}
+            >
+              ⛔ Inaccessible
+            </button>
+            <span style={{ width: 8, display: 'inline-block' }} />
             <span className="dim" style={{ fontSize: 12 }}>Shape:</span>
             {(['brush', 'rect', 'circle'] as TerrainBrush[]).map((b) => (
               <button
@@ -352,6 +372,22 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
                 {b === 'brush' ? '🖌️ Brush' : b === 'rect' ? '▬ Rect' : '⬤ Circle'}
               </button>
             ))}
+            {terrainBrush === 'brush' && (
+              <span className="brush-shelf">
+                <span className="dim">Size</span>
+                <button
+                  title="Smaller brush"
+                  disabled={terrainRadius <= 0}
+                  onClick={() => useGameStore.getState().setTerrainRadius(terrainRadius - 1)}
+                >−</button>
+                <span className="brush-size">{terrainRadius * 2 + 1}<span className="dim"> tile{terrainRadius ? 's' : ''}</span></span>
+                <button
+                  title="Bigger brush"
+                  disabled={terrainRadius >= 6}
+                  onClick={() => useGameStore.getState().setTerrainRadius(terrainRadius + 1)}
+                >+</button>
+              </span>
+            )}
             <span style={{ width: 8, display: 'inline-block' }} />
             <button
               className={terrainErase ? 'active' : ''}

@@ -176,11 +176,13 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, spawn });
   }, 'SET_SPAWN'));
 
-  socket.on(C2S.SET_TERRAIN, safe(socket, ({ mapId, terrain }: SetTerrainPayload) => {
+  socket.on(C2S.SET_TERRAIN, safe(socket, ({ mapId, terrain, blocked }: SetTerrainPayload) => {
     const { d } = requireDmMap(socket, mapId);
-    const packed = Array.isArray(terrain) ? terrain.filter((n) => typeof n === 'number' && Number.isFinite(n)) : [];
-    maps.setTerrain(mapId, packed);
-    io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, terrain: packed } as MapEditedPayload);
+    const clean = (v: unknown) => (Array.isArray(v) ? v.filter((n) => typeof n === 'number' && Number.isFinite(n)) : []);
+    const out: MapEditedPayload = { mapId };
+    if (terrain !== undefined) { const p = clean(terrain); maps.setTerrain(mapId, p); out.terrain = p; }
+    if (blocked !== undefined) { const p = clean(blocked); maps.setBlocked(mapId, p); out.blocked = p; }
+    io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, out);
   }, 'SET_TERRAIN'));
 
   // ----- walls -----

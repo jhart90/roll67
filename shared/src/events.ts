@@ -243,7 +243,7 @@ export interface UpdateMapPayload {
 }
 export interface SetGridConfigPayload { mapId: string; grid: Partial<GridConfig> }
 export interface SetSpawnPayload { mapId: string; q: number; r: number }
-export interface SetTerrainPayload { mapId: string; terrain: number[] }
+export interface SetTerrainPayload { mapId: string; terrain?: number[]; blocked?: number[] }
 
 export interface UpsertWallPayload {
   mapId: string;
@@ -858,6 +858,7 @@ export interface MapEditedPayload {
   bgHeight?: number;
   spawn?: import('./types.js').Hex | null;
   terrain?: number[];
+  blocked?: number[];
 }
 
 export interface VisionUpdatePayload {

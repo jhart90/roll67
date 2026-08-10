@@ -762,6 +762,17 @@ button.link:hover { text-decoration: underline; }
 .save-targets-head { display: flex; align-items: baseline; gap: 6px; width: 100%; }
 .save-targets-head .spacer { flex: 1; }
 .save-targets-head button { font-size: 11px; padding: 0 4px; }
+
+/* Brush-size shelf, sitting under the Brush shape button. */
+.brush-shelf {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex-basis: 100%; margin-top: 4px; font-size: 12px;
+}
+.brush-shelf button {
+  font-size: 13px; line-height: 1; width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.brush-shelf .brush-size { min-width: 54px; text-align: center; font-variant-numeric: tabular-nums; }
 /* The open editor: spans the whole grid, shows every field. */
 .sheet-card-edit { grid-column: 1 / -1; background: var(--panel); }
 .sc-fields {

@@ -8,6 +8,7 @@ export function TerrainCanvas({ grid }: { grid: GridConfig }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const map = useGameStore((s) => s.map)!;
   const terrain = map.terrain;
+  const blocked = map.blocked;
   const { width, height } = mapPixelSize(map);
 
   useEffect(() => {
@@ -16,6 +17,24 @@ export function TerrainCanvas({ grid }: { grid: GridConfig }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, width, height);
+
+    // Impassable ground reads as a hole in the floor, not as difficult
+    // going: dark fill, cold rim, no hatching to confuse it with rough.
+    if (blocked && blocked.length > 0) {
+      ctx.fillStyle = 'rgba(14, 18, 26, 0.72)';
+      ctx.strokeStyle = 'rgba(120, 140, 170, 0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (const packed of blocked) {
+        const corners = hexCorners(unpackHex(packed), grid);
+        ctx.moveTo(corners[0].x, corners[0].y);
+        for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.stroke();
+    }
+
     if (!terrain || terrain.length === 0) return;
 
     ctx.fillStyle = 'rgba(139, 90, 43, 0.28)';
@@ -45,7 +64,7 @@ export function TerrainCanvas({ grid }: { grid: GridConfig }) {
       ctx.stroke();
     }
     ctx.restore();
-  }, [terrain, grid, width, height]);
+  }, [terrain, blocked, grid, width, height]);
 
   return (
     <canvas

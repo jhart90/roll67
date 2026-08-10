@@ -94,6 +94,10 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     const map = maps.byId(payload.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
     if (!inBounds({ q: payload.q, r: payload.r }, map.grid)) throw new Error('Off the map.');
+    if ((map.blocked ?? []).includes(packHex({ q: payload.q, r: payload.r }))) {
+      emitError(socket, 'Nothing can stand there — that ground is impassable.');
+      return;
+    }
     const character = payload.characterId ? characters.byId(payload.characterId) : undefined;
     tokens.create({
       mapId: payload.mapId,
@@ -258,6 +262,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     }
     if (!inBounds({ q, r }, map.grid)) {
       emitError(socket, 'That is off the map.');
+      return;
+    }
+    // Inaccessible ground is scenery, not cover: a chasm or a lava flow has
+    // nowhere to stand, so nobody occupies it — the DM included, since a
+    // token parked there could never be reached or left by anyone else.
+    if ((map.blocked ?? []).includes(packHex({ q, r }))) {
+      emitError(socket, 'Nothing can stand there — that ground is impassable.');
       return;
     }
     // Bound, Entangled, Stunned, Bleeding Out… pinned characters stay put

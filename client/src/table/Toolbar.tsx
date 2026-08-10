@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Character, Macro } from 'shared';
 import { castableLevels, combatActions, systemFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { readableOn } from '../util/playerColor';
 
 /** Whether a pill can currently fire, and why not (out of item / spell slot). */
 function pillDisabled(m: Macro, characters: Character[]): { disabled: boolean; reason?: string } {
@@ -22,7 +23,19 @@ function pillDisabled(m: Macro, characters: Character[]): { disabled: boolean; r
   return { disabled: false };
 }
 
-export const PILL_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#d2d26c', '#8a93a6'];
+/**
+ * Pill colours, two rows of eight. The first row is the original palette and
+ * stays in its original order — a pill's colour is stored as a hex string, so
+ * reordering would not restyle anything, but the swatch a player reaches for
+ * out of habit would move under their finger.
+ *
+ * Black is the near-black the dice palette already uses rather than #000: a
+ * pure-black pill reads as a hole in the toolbar instead of a coloured pill.
+ */
+export const PILL_COLORS = [
+  '#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#d2d26c', '#8a93a6',
+  '#ffffff', '#14171d', '#ff7fbf', '#4c6ef5', '#9ccc4f', '#a97455', '#ff6a3d', '#00c2d1',
+];
 
 function EditPill({ macro, index, total, onClose }: { macro: Macro; index: number; total: number; onClose: () => void }) {
   const macros = useGameStore((s) => s.macroList);
@@ -130,7 +143,14 @@ export function Toolbar() {
           >
             <button
               className={`roll-pill ${disabled ? 'pill-disabled' : ''}`}
-              style={{ background: m.color ?? 'var(--panel-2)' }}
+              // The label used to be hardcoded near-black, which was safe while
+              // every colour on offer was a pastel. Black is on offer now, so
+              // the text has to follow the background's luminance.
+              style={m.color
+                ? { background: m.color, color: readableOn(m.color) }
+                // Pre-dating the palette: a dark panel needs light text, not
+                // the near-black the stylesheet assumes for a coloured pill.
+                : { background: 'var(--panel-2)', color: 'var(--text)' }}
               disabled={disabled}
               onClick={() => intents.runMacro(m.id)}
               onContextMenu={(e) => { e.preventDefault(); setEditingId((id) => (id === m.id ? null : m.id)); }}

@@ -136,20 +136,77 @@ const WEAPONS: W[] = [
   ['Stun Gun', 'Ranged', '0', 'energy', 'ranged', ['range 6', 'nonlethal', 'Vigor roll or Stunned', 'mag 3', 'recharges for two hours once spent'], 25, 0.5],
 ];
 
-// [name, category, bonus, rangedArmor, notes] — category 'Shield' means the
-// bonus is Parry; rangedArmor applies only against ranged attacks that hit.
-type A = [string, string, number, number, string];
+// [name, category, bonus, rangedArmor, notes, cost?, weight?]
+// Category 'Shield' means the bonus is Parry rather than Armor. `rangedArmor`
+// is the soak applied only to ranged hits — it carries both the armor tables'
+// ballistic asterisk ("reduces damage from bullets by 4") and the armor a
+// shield gives someone shooting through it.
+//
+// The tables repeat names across their sections (a Jacket, Leggings and a Cap
+// appear under two different materials; Vambraces and Greaves under two), so
+// entries are prefixed by material — an id is system+kind+name, and two rows
+// sharing one would shadow each other.
+//
+// Minimum Strength and a shield's Cover penalty ride in the notes: they are
+// real table data but nothing in the engine reads them yet, and inventing
+// half-wired columns for them would be worse than saying so plainly.
+type A = [string, string, number, number, string, number?, number?];
 const ARMOR: A[] = [
-  ['Leather Jacket', 'Armor', 1, 0, 'Covers torso/arms'],
+  // ---- Medieval & ancient: cloth / light leather ----
+  ['Cloth Jacket', 'Armor', 1, 0, 'Torso and arms · Min Str d4', 20, 5],
+  ['Cloth Robes', 'Armor', 1, 0, 'Torso, arms and legs · Min Str d4', 30, 8],
+  ['Cloth Leggings', 'Armor', 1, 0, 'Legs · Min Str d4', 20, 5],
+  ['Cloth Cap', 'Armor', 1, 0, 'Head · Min Str d4', 5, 1],
+  // ---- Thick leather / tough hides ----
+  ['Hardened Leather Jacket', 'Armor', 2, 0, 'Boiled leather; torso and arms · Min Str d6', 80, 8],
+  ['Hardened Leather Leggings', 'Armor', 2, 0, 'Boiled leather; legs · Min Str d6', 40, 7],
+  ['Hardened Leather Cap', 'Armor', 2, 0, 'Boiled leather; head · Min Str d6', 20, 1],
+  // ---- Chain mail (chain, splint, scale, ring, samurai) ----
+  ['Chain Mail', 'Armor', 3, 0, 'Chain shirt; torso and arms · Min Str d8', 300, 25],
+  ['Chain Leggings', 'Armor', 3, 0, 'Legs · Min Str d8', 150, 10],
+  ['Chain Hood', 'Armor', 3, 0, 'Head · Min Str d8', 25, 4],
+  // ---- Bronze (pre-iron-age settings) ----
+  ['Bronze Barding', 'Armor', 3, 0, 'Horse barding · Min Str d10', 1500, 50],
+  ['Bronze Corselet', 'Armor', 3, 0, 'Torso · Min Str d8', 80, 13],
+  ['Bronze Vambraces', 'Armor', 3, 0, 'Arms · Min Str d8. Halve cost and weight for half the pair.', 40, 5],
+  ['Bronze Greaves', 'Armor', 3, 0, 'Legs · Min Str d8. Halve cost and weight for half the pair.', 50, 6],
+  ['Bronze Helmet', 'Armor', 3, 0, 'Head · Min Str d8', 25, 6],
+  // ---- Plate mail ----
+  ['Plate Barding', 'Armor', 4, 0, 'Horse barding · Min Str d10', 1500, 50],
+  ['Plate Corselet', 'Armor', 4, 0, 'Torso · Min Str d10', 500, 30],
+  ['Plate Vambraces', 'Armor', 4, 0, 'Arms · Min Str d10. Halve cost and weight for half the pair.', 200, 10],
+  ['Plate Greaves', 'Armor', 4, 0, 'Legs · Min Str d10. Halve cost and weight for half the pair.', 200, 10],
+  ['Helm, Pot', 'Armor', 4, 0, 'Head · Min Str d10', 100, 4],
+  ['Helm, Enclosed', 'Armor', 4, 0, 'Head, full face · Min Str d10', 200, 8],
+  // ---- Modern: cloth / leather ----
+  ['Leather Jacket', 'Armor', 1, 0, 'Thick coat or leather jacket; torso and arms · Min Str d4', 100, 5],
+  ['Leather Riding Chaps', 'Armor', 1, 0, 'Legs · Min Str d4', 70, 5],
+  ['Kevlar Riding Jacket', 'Armor', 2, 0, 'Torso and arms · Min Str d4', 350, 8],
+  ['Kevlar Riding Jeans', 'Armor', 2, 0, 'Legs · Min Str d4', 175, 4],
+  ['Bike Helmet', 'Armor', 2, 0, 'Head · Min Str d4', 50, 1],
+  ['Motorcycle Helmet', 'Armor', 3, 0, 'Head · Min Str d4', 100, 3],
+  // ---- Modern: body armor. The starred rows soak 4 off bullets. ----
+  ['Flak Jacket', 'Armor', 2, 0, 'Vietnam-era fragmentation vest; torso · Min Str d6', 40, 10],
+  ['Kevlar Vest', 'Armor', 2, 4, 'Torso · Min Str d6. Ballistic: soaks 4 from bullets.', 200, 5],
+  ['Kevlar Vest w/ Inserts', 'Armor', 4, 4, 'Ceramic inserts; torso · Min Str d8. Ballistic: soaks 4 from bullets.', 500, 17],
+  ['Kevlar Helmet', 'Armor', 4, 4, 'Head · Min Str d4. Ballistic: soaks 4 from bullets.', 80, 5],
+  ['Bombproof Suit', 'Armor', 10, 0, 'Entire body · Min Str d12. Only the hands are dexterous: Agility and skills needing more than hand-work cap at d6, and Pace drops 2 on top of any Min Str penalty.', 25000, 25],
+  // ---- Futuristic ----
+  ['Body Armor', 'Armor', 4, 4, 'Light armored clothing of complex polymers; torso, arms and legs · Min Str d4. Ballistic: soaks 4 from bullets.', 200, 4],
+  ['Infantry Battle Suit', 'Armor', 6, 4, 'Full suit with boots and gloves; torso, arms and legs · Min Str d6. Ballistic: soaks 4 from bullets.', 800, 12],
+  ['Battle Helmet', 'Armor', 6, 4, 'Head, full face · Min Str d6. Ballistic: soaks 4 from bullets.', 100, 2],
+  // ---- Shields. Medieval and modern give +2 to anyone shooting through
+  //      them; polymer gives +4. Cover is the penalty an attacker takes. ----
+  ['Small Shield', 'Shield', 1, 2, '+1 Parry · no Cover · Min Str d4', 50, 4],
+  ['Medium Shield', 'Shield', 2, 2, '+2 Parry · Cover −2 · Min Str d6', 100, 8],
+  ['Large Shield', 'Shield', 3, 2, '+3 Parry · Cover −4 · Min Str d8', 200, 12],
+  ['Riot Shield', 'Shield', 3, 2, '+3 Parry · Cover −4 · Min Str d4', 80, 5],
+  ['Ballistic Shield', 'Shield', 3, 4, '+3 Parry · Cover −4 · Min Str d6. Soaks 4 from firearms shot through it.', 250, 9],
+  ['Polymer Shield, Small', 'Shield', 1, 4, '+1 Parry · no Cover · Min Str d4', 200, 2],
+  ['Polymer Shield, Medium', 'Shield', 2, 4, '+2 Parry · Cover −2 · Min Str d4', 300, 4],
+  ['Polymer Shield, Large', 'Shield', 3, 4, '+3 Parry · Cover −4 · Min Str d6', 400, 6],
+  // ---- Not from the core tables: kept for settings that want them. ----
   ['Leather Armor', 'Armor', 2, 0, 'Covers torso/arms/legs'],
-  ['Chain Mail', 'Armor', 3, 0, 'Flexible metal links'],
-  ['Plate Corselet', 'Armor', 4, 0, 'Rigid breastplate'],
-  ['Kevlar Vest', 'Armor', 2, 0, 'Modern ballistic vest; negates 4 AP from bullets'],
-  ['Kevlar Vest w/ Inserts', 'Armor', 4, 0, 'Ceramic plate inserts'],
-  ['Small Shield', 'Shield', 1, 0, '+1 Parry'],
-  ['Medium Shield', 'Shield', 2, 2, '+2 Parry, +2 Armor vs ranged that hits'],
-  ['Large Shield', 'Shield', 3, 2, '+3 Parry, +2 Armor vs ranged that hits'],
-  ['Cloth Robes', 'Armor', 1, 0, 'Padded cloth; better than nothing'],
   ['Hide Armor', 'Armor', 2, 0, 'Layered animal hide'],
   ['Scale Armor', 'Armor', 3, 0, 'Overlapping metal scales'],
   ['Brigandine', 'Armor', 3, 0, 'Plates riveted inside a cloth coat'],
@@ -157,10 +214,8 @@ const ARMOR: A[] = [
   ['Full Plate', 'Armor', 5, 0, 'Complete articulated harness; heavy'],
   ['Helmet (Leather)', 'Armor', 1, 0, 'Protects the head only'],
   ['Helmet (Steel)', 'Armor', 3, 0, 'Protects the head only'],
-  ['Flak Jacket', 'Armor', 2, 0, 'Military fragmentation vest'],
   ['Riot Gear', 'Armor', 3, 0, 'Full-body modern protective suit'],
   ['Body Armor (Military)', 'Armor', 4, 0, 'Plate carrier with ballistic inserts'],
-  ['Infantry Battle Suit', 'Armor', 6, 0, 'Sealed powered infantry armor'],
   ['Powered Battle Armor', 'Armor', 10, 0, 'Sci-fi powered exoskeleton; sealed and strength-boosting'],
   ['Energy Shield', 'Shield', 2, 4, '+2 Parry, +4 Armor vs ranged energy'],
 ];
@@ -614,13 +669,16 @@ export const CONTENT_SWADE: ContentEntry[] = [
       ? { gear: { ...(cost !== undefined ? { cost } : {}), ...(weight !== undefined ? { weight } : {}) } }
       : {}),
   })),
-  ...ARMOR.map(([name, category, baseAc, rangedArmor, notes], i): ContentEntry => ({
+  ...ARMOR.map(([name, category, baseAc, rangedArmor, notes, cost, weight], i): ContentEntry => ({
     id: contentSlug('swade', 'armor', name),
     system: 'swade', kind: 'armor', name, category, order: i,
     subtitle: category === 'Shield'
       ? `+${baseAc} Parry${rangedArmor ? `, +${rangedArmor} Armor vs ranged` : ''}`
       : `+${baseAc} Armor`,
     armor: { baseAc, addDex: false, rangedArmor, notes },
+    ...(cost !== undefined || weight !== undefined
+      ? { gear: { ...(cost !== undefined ? { cost } : {}), ...(weight !== undefined ? { weight } : {}) } }
+      : {}),
   })),
   ...POWERS.map(([name, cost, rank, subtitle, mech], i): ContentEntry => ({
     id: contentSlug('swade', 'power', name),

@@ -93,6 +93,66 @@ const GEAR_TABLE: Array<[string, number, number]> = [
   ['Sling Stones (20)', 2, 1],
 ];
 
+/**
+ * The armor tables, as [name, Armor/Parry bonus, cost, weight]. Shields carry
+ * their bonus as Parry; everything else as Armor.
+ */
+const ARMOR_TABLE: Array<[string, number, number, number]> = [
+  // Medieval & ancient
+  ['Cloth Jacket', 1, 20, 5],
+  ['Cloth Robes', 1, 30, 8],
+  ['Cloth Leggings', 1, 20, 5],
+  ['Cloth Cap', 1, 5, 1],
+  ['Hardened Leather Jacket', 2, 80, 8],
+  ['Hardened Leather Leggings', 2, 40, 7],
+  ['Hardened Leather Cap', 2, 20, 1],
+  ['Chain Mail', 3, 300, 25],
+  ['Chain Leggings', 3, 150, 10],
+  ['Chain Hood', 3, 25, 4],
+  ['Bronze Barding', 3, 1500, 50],
+  ['Bronze Corselet', 3, 80, 13],
+  ['Bronze Vambraces', 3, 40, 5],
+  ['Bronze Greaves', 3, 50, 6],
+  ['Bronze Helmet', 3, 25, 6],
+  ['Plate Barding', 4, 1500, 50],
+  ['Plate Corselet', 4, 500, 30],
+  ['Plate Vambraces', 4, 200, 10],
+  ['Plate Greaves', 4, 200, 10],
+  ['Helm, Pot', 4, 100, 4],
+  ['Helm, Enclosed', 4, 200, 8],
+  // Modern
+  ['Leather Jacket', 1, 100, 5],
+  ['Leather Riding Chaps', 1, 70, 5],
+  ['Kevlar Riding Jacket', 2, 350, 8],
+  ['Kevlar Riding Jeans', 2, 175, 4],
+  ['Bike Helmet', 2, 50, 1],
+  ['Motorcycle Helmet', 3, 100, 3],
+  ['Flak Jacket', 2, 40, 10],
+  ['Kevlar Vest', 2, 200, 5],
+  ['Kevlar Vest w/ Inserts', 4, 500, 17],
+  ['Kevlar Helmet', 4, 80, 5],
+  ['Bombproof Suit', 10, 25000, 25],
+  // Futuristic
+  ['Body Armor', 4, 200, 4],
+  ['Infantry Battle Suit', 6, 800, 12],
+  ['Battle Helmet', 6, 100, 2],
+  // Shields — the bonus is Parry
+  ['Small Shield', 1, 50, 4],
+  ['Medium Shield', 2, 100, 8],
+  ['Large Shield', 3, 200, 12],
+  ['Riot Shield', 3, 80, 5],
+  ['Ballistic Shield', 3, 250, 9],
+  ['Polymer Shield, Small', 1, 200, 2],
+  ['Polymer Shield, Medium', 2, 300, 4],
+  ['Polymer Shield, Large', 3, 400, 6],
+];
+
+/** The tables' ballistic asterisk: soaks 4 off a ranged hit. */
+const BALLISTIC = [
+  'Kevlar Vest', 'Kevlar Vest w/ Inserts', 'Kevlar Helmet',
+  'Body Armor', 'Infantry Battle Suit', 'Battle Helmet',
+];
+
 /** Personal defence rides the weapon table (they are attacks), not gear. */
 const DEFENCE_TABLE: Array<[string, number, number]> = [
   ['Pepper Spray', 15, 0.5],
@@ -116,6 +176,33 @@ describe('SWADE gear tables', () => {
     expect(entry!.kind).toBe('weapon');
     expect(entry!.gear?.cost).toBe(cost);
     expect(entry!.gear?.weight).toBe(weight);
+  });
+
+  it.each(ARMOR_TABLE)('%s is in the compendium at +%i, cost %i, weight %s', (name, bonus, cost, weight) => {
+    const entry = byName.get(name);
+    expect(entry, `no swade entry named ${name}`).toBeDefined();
+    expect(entry!.kind).toBe('armor');
+    expect(entry!.armor?.baseAc).toBe(bonus);
+    expect(entry!.gear?.cost).toBe(cost);
+    expect(entry!.gear?.weight).toBe(weight);
+  });
+
+  it.each(BALLISTIC)('%s soaks 4 off a ranged hit, per its ballistic asterisk', (name) => {
+    expect(byName.get(name)!.armor?.rangedArmor).toBe(4);
+  });
+
+  it('puts a shield bonus on Parry and body armor on Armor', () => {
+    const rowFor = (name: string): SheetData =>
+      applyEntry(byName.get(name)!, swade.defaultSheet())!.row as SheetData;
+    const shield = rowFor('Large Shield');
+    expect(shield.parryBonus).toBe(3);
+    expect(shield.armor).toBe(0);
+    const plate = rowFor('Plate Corselet');
+    expect(plate.armor).toBe(4);
+    expect(plate.parryBonus).toBe(0);
+    // Weight rides onto the row from the table, not a guess.
+    expect(plate.weight).toBe(30);
+    expect(shield.weight).toBe(12);
   });
 
   it('prices a shop shelf from the item, not from a flat per-kind number', () => {

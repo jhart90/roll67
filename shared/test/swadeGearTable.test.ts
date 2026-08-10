@@ -153,6 +153,64 @@ const BALLISTIC = [
   'Body Armor', 'Infantry Battle Suit', 'Battle Helmet',
 ];
 
+/**
+ * The weapon tables, as [compendium name, cost, weight]. Several rows already
+ * existed under this project's own names — a book "Axe, Hand" is the compendium
+ * "Hand Axe" — so the name here is whichever one the compendium carries.
+ *
+ * Ranges are deliberately NOT pinned: the campaign caps every gun's Short band
+ * at 60ft (12 tiles) with the Sniper Rifle exempt, which is a table decision
+ * that outranks the book's printed distances. See swade.test.ts.
+ */
+const WEAPON_TABLE: Array<[string, number, number]> = [
+  // Melee: medieval
+  ['Hand Axe', 100, 2], ['Battle Axe', 300, 4], ['Axe, Great', 400, 7],
+  ['Club', 25, 2], ['Club, Heavy', 50, 5], ['Dagger', 25, 1],
+  ['Flail', 200, 3], ['Halberd', 250, 6], ['Katana', 1000, 3],
+  ['Lance', 300, 6], ['Mace', 100, 4], ['Maul', 400, 10],
+  ['Pike', 400, 18], ['Rapier', 150, 2], ['Spear', 100, 3],
+  ['Staff', 10, 4], ['Great Sword', 400, 6], ['Long Sword', 300, 3],
+  ['Short Sword', 100, 2], ['Warhammer', 250, 2],
+  // Melee: modern
+  ['Bangstick', 5, 2], ['Bayonet', 25, 1], ['Billy Club/Baton', 10, 1],
+  ['Brass Knuckles', 20, 1], ['Chainsaw', 200, 20], ['Switchblade', 10, 0.5],
+  ['Survival Knife', 50, 1],
+  // Melee: futuristic
+  ['Molecular Knife', 250, 0.5], ['Molecular Sword', 500, 2], ['Laser Sword', 1000, 2],
+  // Ranged: medieval
+  ['Axe, Throwing', 100, 3], ['Bow', 250, 3], ['Crossbow', 250, 5],
+  ['Heavy Crossbow', 400, 8], ['Longbow', 300, 3], ['Net (Weighted)', 50, 8],
+  ['Sling', 10, 1], ['Spear/Javelin', 100, 3],
+  // Ranged: modern
+  ['Compound Bow', 200, 3], ['Crossbow (Modern)', 300, 7],
+  // Black powder
+  ['Flintlock Pistol', 150, 3], ['Musket', 300, 15], ['Blunderbuss', 300, 12],
+  ['Kentucky Rifle', 300, 8], ['Springfield Model 1861', 250, 11],
+  // Pistols
+  ['Derringer (.41)', 100, 1], ['Police Revolver (.38)', 150, 2],
+  ['Colt Peacemaker (.45)', 200, 4], ['Smith & Wesson (.357)', 250, 5],
+  ['Colt 1911 (.45)', 200, 4], ['Desert Eagle (.50)', 300, 8],
+  ['Glock (9mm)', 200, 3], ['Ruger (.22)', 100, 2],
+  // Submachine guns
+  ['H&K MP5 (9mm)', 300, 10], ['Tommy Gun (.45)', 350, 13], ['Uzi (9mm)', 300, 9],
+  // Shotguns
+  ['Double-Barrel Shotgun', 150, 11], ['Pump Shotgun', 150, 8],
+  ['Sawed-Off Double-Barrel', 150, 6], ['Streetsweeper', 450, 10],
+  // Rifles
+  ['Barrett (.50)', 750, 35], ['M1 Garand (.30-06)', 300, 10],
+  ['Hunting Rifle (.308)', 350, 8], ['Sharps Big 50 (.50)', 400, 11],
+  ['Spencer Carbine (.52)', 250, 8], ["Winchester '73 (.44-40)", 300, 10],
+  // Assault rifles
+  ['AK47 (7.62mm)', 450, 10], ['M-16 (5.56mm)', 400, 8], ['Steyr AUG (5.56mm)', 400, 8],
+  // Machine guns
+  ['Browning Automatic Rifle (BAR)', 300, 17], ['Gatling (.45)', 500, 170],
+  ['Minigun (7.62mm)', 100000, 85], ['M2 Browning (.50 Cal)', 1500, 84],
+  ['M60 (7.62mm)', 6000, 33], ['MG42 (7.92mm)', 750, 26], ['SAW (5.56mm)', 4000, 20],
+  // Lasers
+  ['Laser Pistol', 250, 2], ['Laser SMG', 500, 4],
+  ['Laser Rifle', 700, 8], ['Gatling Laser', 1000, 20],
+];
+
 /** Personal defence rides the weapon table (they are attacks), not gear. */
 const DEFENCE_TABLE: Array<[string, number, number]> = [
   ['Pepper Spray', 15, 0.5],
@@ -183,6 +241,14 @@ describe('SWADE gear tables', () => {
     expect(entry, `no swade entry named ${name}`).toBeDefined();
     expect(entry!.kind).toBe('armor');
     expect(entry!.armor?.baseAc).toBe(bonus);
+    expect(entry!.gear?.cost).toBe(cost);
+    expect(entry!.gear?.weight).toBe(weight);
+  });
+
+  it.each(WEAPON_TABLE)('%s is a weapon costing %i and weighing %s', (name, cost, weight) => {
+    const entry = byName.get(name);
+    expect(entry, `no swade entry named ${name}`).toBeDefined();
+    expect(entry!.kind).toBe('weapon');
     expect(entry!.gear?.cost).toBe(cost);
     expect(entry!.gear?.weight).toBe(weight);
   });

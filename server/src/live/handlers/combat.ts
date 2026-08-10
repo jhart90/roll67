@@ -1427,16 +1427,23 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // the target's HP yet. That (and the impact animation over their token)
       // is deferred to fire only once this roll's own dice have visibly
       // settled, so the token never reacts before the player sees why.
-      let hpNote = '';
+      // The card is built as rows rather than one run-on sentence (see the
+      // text assembly below), so what the target's state was and what it
+      // became are collected separately instead of concatenated here.
+      /** What the roll was measured against — " (Toughness 5)". */
+      let defenseTag = '';
+      /** The verdict line, when the system has one distinct from the amount
+       *  rolled. SWADE does — a hit is Shaken or Wounds, not points. */
+      let verdictRow = '';
+      /** Where the target stands afterwards: "INCAPACITATED", "Kira 12/20". */
+      let statusRow = '';
       let applyToTarget: (() => void) | null = null;
       if (action.healsWounds && targetChar) {
         // Wound mending has its own application path — applyHpDelta's point
         // arithmetic (4 points to a Wound) would misread a wound count.
         const before = num(targetChar.sheet, 'wounds', 0);
         const after = Math.max(0, before - woundsMended);
-        hpNote = woundsMended === 0
-          ? ' — no Wounds mended'
-          : ` — mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'} (${tgt.name} ${after} of 3)`;
+        if (woundsMended > 0) statusRow = `${tgt.name} now ${after} of 3 Wounds`;
         if (woundsMended > 0) {
           undo.push({ t: 'hp', characterId: targetChar.id, delta: woundsMended });
           const targetId = targetChar.id;
@@ -1451,16 +1458,19 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           if (targetChar.system === 'swade' && delta < 0) {
             // The wound ladder, not the HP pool: preview the same outcome
             // applyHpDelta will compute when it actually lands.
-            const out = swadeDamageOutcome(-delta, Number(systemFor('swade').derive(targetChar.sheet).toughness) || 4, {
+            const toughness = Number(systemFor('swade').derive(targetChar.sheet).toughness) || 4;
+            const out = swadeDamageOutcome(-delta, toughness, {
               alreadyShaken: conditionsOf(targetChar.sheet).includes('shaken'),
               wildCard: targetChar.sheet.wildCard !== false,
               currentWounds: num(targetChar.sheet, 'wounds', 0),
             });
-            hpNote = ` — ${out.summary}`;
+            defenseTag = ` (Toughness ${toughness})`;
+            verdictRow = `${out.verdict} (${-delta} vs. Toughness ${toughness})`;
+            statusRow = out.stateNote ?? '';
           } else {
             const { patch, note } = computeHpDelta(targetChar, delta);
             const nh = systemFor(targetChar.system).hp({ ...targetChar.sheet, ...patch });
-            hpNote = ` (${tgt.name} ${nh.hp}/${nh.maxHp})${note}`;
+            statusRow = `${tgt.name} ${nh.hp}/${nh.maxHp}${note}`;
           }
           undo.push({ t: 'hp', characterId: targetChar.id, delta });
           const targetId = targetChar.id;
@@ -1474,7 +1484,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         } else if (tgt.bar) {
           const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
           const nh = Math.max(0, Math.min(cap, tgt.bar.hp + delta));
-          hpNote = ` (${tgt.name} ${nh}/${tgt.bar.maxHp})`;
+          statusRow = `${tgt.name} ${nh}/${tgt.bar.maxHp}`;
           undo.push({ t: 'hp', tokenId: tgt.id, delta });
           applyToTarget = () => {
             // Re-read live and apply the DELTA, never a precomputed absolute:
@@ -1496,23 +1506,43 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // its sheet (e.g. the Savage Attacker reroll above).
       consumeAmmoAndItem();
 
-      const verb = action.effect === 'heal' ? 'uses' : 'attacks';
-      const outcome = action.healsWounds
+      const healing = action.effect === 'heal' || action.healsWounds;
+      // Name the bonus die's source on the headline, so an extra die in the
+      // breakdown reads as a reward rather than a bug.
+      const rollTag = crit ? ' (crit ×2 dice)' : raise && !action.healsWounds ? ' (raise +1d6)' : '';
+      const amountRow = action.healsWounds
         ? (woundsMended === 0
-          ? 'no Wounds mended'
-          : `mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'}${raise ? ' (raise!)' : ''}`)
+          ? 'No Wounds mended'
+          : `Mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'}${raise ? ' (raise!)' : ''}`)
         : action.effect === 'heal'
-        ? `heals ${applied}`
-        // Name the bonus die's source, so an extra die in the breakdown reads
-        // as a reward rather than a bug.
-        : hit ? `${applied} damage${crit ? ' (crit ×2 dice)' : raise ? ' (raise +1d6)' : ''}${resistTag}` : 'no damage';
+        ? `Heals ${applied}`
+        : hit ? `${applied} damage${resistTag}` : 'No damage';
+
+      // Four rows rather than one run-on sentence: what was rolled, what it
+      // was rolled against, what it did, and where that leaves the target.
+      //
+      //   Kira's Carbon-Edge Knife damage roll (raise +1d6)
+      //   vs. Training Dummy (Toughness 5)
+      //   1 Wound (12 vs. Toughness 5)
+      //   INCAPACITATED
+      //
+      // Where the system has no verdict distinct from the number rolled (an
+      // HP pool, a bare token bar), the amount IS the verdict and the third
+      // row carries it instead.
+      const rows = [
+        `${actor.name}'s ${action.label} ${healing ? 'healing' : 'damage'} roll${rollTag}`,
+        `${healing ? 'on' : 'vs.'} ${tgt.name}${defenseTag}`,
+        verdictRow || amountRow,
+        // With a SWADE verdict above it the raw amount is already quoted in
+        // the "(12 vs. Toughness 5)" parenthetical — except for the tag that
+        // explains why it shrank, which would otherwise be lost.
+        ...(verdictRow && resistTag ? [resistTag.trim()] : []),
+        statusRow,
+      ];
       // A to-hit or save roll already posted its own card above (see the
-      // dispatch below) — this card is damage-only, not a restatement of
-      // the attack/target line. Only a no-roll action (e.g. a plain heal)
-      // reaches this function with neither, so it still needs the full line.
-      const text = (deferredSave || attackBreakdown)
-        ? `${actor.name}'s ${action.label} — ${tgt.name}: ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim()
-        : `${actor.name} ${verb} ${action.effect === 'heal' ? action.label + ' on' : ''} ${tgt.name}${action.effect === 'heal' ? '' : ': ' + action.label}${hitLabel} · ${outcome}${hpNote}`.replace(/\s+/g, ' ').trim();
+      // dispatch below); this card is the damage half either way, so the rows
+      // read the same whether or not one preceded it.
+      const text = rows.map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
       const cardRoll = amountRoll;
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text, roll: cardRoll, recipients: null,

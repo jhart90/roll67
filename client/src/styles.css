@@ -924,7 +924,9 @@ button.link:hover { text-decoration: underline; }
   letter-spacing: 0.08em; text-transform: uppercase;
 }
 .roll-card.critfail .roll-total { color: #ff8080; }
-.roll-label { font-size: 12px; color: var(--text-dim); margin-bottom: 2px; }
+/* pre-line, not pre: damage cards arrive as several short rows joined by
+   newlines, and a long one still has to wrap inside the chat dock. */
+.roll-label { font-size: 12px; color: var(--text-dim); margin-bottom: 2px; white-space: pre-line; }
 .roll-main { display: flex; justify-content: space-between; align-items: center; }
 .roll-expr { font-family: monospace; font-size: 13px; color: var(--accent-2); }
 .roll-total { font-size: 22px; font-weight: 800; }

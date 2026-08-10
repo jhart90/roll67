@@ -25,6 +25,13 @@ export interface SwadeHitResult {
   incapacitated: boolean;
   /** Chat-ready description of what the hit did. */
   summary: string;
+  /** Just the verdict — "No effect", "Shaken", "2 Wounds". The same words
+   *  `summary` opens with, split out so a chat card can put the verdict and
+   *  the arithmetic behind it on their own line. */
+  verdict: string;
+  /** Where the target stands afterwards — "INCAPACITATED", "now 2 Wounds,
+   *  Shaken" — or null when the hit changed nothing to report. */
+  stateNote: string | null;
 }
 
 export function swadeDamageOutcome(
@@ -37,6 +44,7 @@ export function swadeDamageOutcome(
     return {
       shaken: false, woundsDealt: 0, woundsAfter: opts.currentWounds, incapacitated: false,
       summary: `no effect (${damageTotal} vs Toughness ${toughness})`,
+      verdict: 'No effect', stateNote: null,
     };
   }
   const raises = Math.floor(margin / 4);
@@ -46,14 +54,18 @@ export function swadeDamageOutcome(
   const woundsAfter = Math.min(opts.currentWounds + woundsDealt, MAX_WOUNDS + 1);
   const incapacitated = opts.wildCard ? woundsAfter > MAX_WOUNDS : woundsDealt > 0;
 
-  const parts: string[] = [];
-  if (woundsDealt > 0) parts.push(`${woundsDealt} Wound${woundsDealt === 1 ? '' : 's'}`);
-  else parts.push(opts.alreadyShaken ? 'Shaken (again)' : 'Shaken');
-  if (woundsDealt > 0 && !incapacitated) parts.push(`now ${woundsAfter}, Shaken`);
-  if (incapacitated) parts.push('INCAPACITATED');
+  const verdict = woundsDealt > 0
+    ? `${woundsDealt} Wound${woundsDealt === 1 ? '' : 's'}`
+    : (opts.alreadyShaken ? 'Shaken (again)' : 'Shaken');
+  const stateNote = incapacitated ? 'INCAPACITATED'
+    : woundsDealt > 0 ? `now ${woundsAfter} Wound${woundsAfter === 1 ? '' : 's'}, Shaken`
+      : null;
+
+  const parts = [verdict, ...(stateNote ? [stateNote] : [])];
   return {
     shaken: true, woundsDealt, woundsAfter, incapacitated,
     summary: `${parts.join(' — ')} (${damageTotal} vs Toughness ${toughness})`,
+    verdict, stateNote,
   };
 }
 

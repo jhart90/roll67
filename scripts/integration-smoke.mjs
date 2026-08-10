@@ -353,6 +353,14 @@ async function main() {
   ok(sf === null, 'no floating damage number appears while the attack roll is still animating');
   const damageCard = await damageCardP;
   ok(!damageCard.msg.text.includes('HIT'), "the damage roll is its own later card, not a restatement of the attack roll's HIT/MISS line");
+  // Laid out as rows: what was rolled, what it was rolled against, what it
+  // did, where that leaves the target.
+  const dmgRows = damageCard.msg.text.split('\n');
+  console.log(dmgRows.map((r) => `      | ${r}`).join('\n'));
+  ok(dmgRows.length >= 3, `the damage card is broken into rows (${dmgRows.length})`);
+  ok(/damage roll$|damage roll \(/.test(dmgRows[0]), 'row 1 names whose roll it is');
+  ok(dmgRows[1].startsWith('vs. Timing Dummy'), 'row 2 names the target');
+  ok(/\d+ damage/.test(dmgRows[2]), 'row 3 is the damage dealt');
   const applied = await waitFor(dmSock, 'tokenUpserted', 3500, (p) => p.token.id === dummy.id && p.token.bar.hp < 20).catch(() => null);
   ok(!!applied, "target HP changes once the damage roll's own dice have settled (+1s pause)");
 

@@ -77,3 +77,44 @@ describe('Injury Table', () => {
     expect(rollInjuryTable(seq(6, 1)).location).toBe('Head (scarred)');
   });
 });
+
+// The chat card lays the outcome out as rows — headline, defence, verdict,
+// state — rather than one run-on sentence, so it needs the pieces apart.
+describe('outcome rows for the chat card', () => {
+  it('splits a miss into a verdict and no state', () => {
+    const r = swadeDamageOutcome(4, 5, wc);
+    expect(r.verdict).toBe('No effect');
+    expect(r.stateNote).toBe(null);
+  });
+
+  it('reports Shaken with nothing to add', () => {
+    const r = swadeDamageOutcome(6, 5, wc);
+    expect(r.verdict).toBe('Shaken');
+    expect(r.stateNote).toBe(null);
+  });
+
+  it('names the re-Shake that upgrades to a Wound', () => {
+    const r = swadeDamageOutcome(6, 5, { ...wc, alreadyShaken: true });
+    expect(r.verdict).toBe('1 Wound');
+    expect(r.stateNote).toBe('now 1 Wound, Shaken');
+  });
+
+  it('carries the wound count into the state line', () => {
+    const r = swadeDamageOutcome(13, 5, { ...wc, currentWounds: 1 });
+    expect(r.verdict).toBe('2 Wounds');
+    expect(r.stateNote).toBe('now 3 Wounds, Shaken');
+  });
+
+  // The screenshot case: an Extra taking its first Wound drops on the spot,
+  // so the state line is the incapacitation, not a wound tally.
+  it('replaces the tally with INCAPACITATED when the target drops', () => {
+    const r = swadeDamageOutcome(12, 5, { alreadyShaken: false, wildCard: false, currentWounds: 0 });
+    expect(r.verdict).toBe('1 Wound');
+    expect(r.stateNote).toBe('INCAPACITATED');
+  });
+
+  it('keeps the one-line summary agreeing with the pieces', () => {
+    const r = swadeDamageOutcome(12, 5, { alreadyShaken: false, wildCard: false, currentWounds: 0 });
+    expect(r.summary).toBe('1 Wound — INCAPACITATED (12 vs Toughness 5)');
+  });
+});

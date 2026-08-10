@@ -6,7 +6,8 @@
 import { contentSlug, type ContentEntry } from './compendiumTypes.js';
 
 // [name, category, weaponDie, type, ability, props]
-type W = [string, string, string, string, 'str' | 'ranged' | 'none', string[]];
+// [name, category, weaponDie, type, ability, props, cost?, weight?]
+type W = [string, string, string, string, 'str' | 'ranged' | 'none', string[], number?, number?];
 const WEAPONS: W[] = [
   ['Unarmed', 'Melee', '', 'bludgeoning', 'str', []],
   // Grabbed off the floor mid-brawl: −2 to attack rolls, per the quick rules.
@@ -128,7 +129,11 @@ const WEAPONS: W[] = [
   ['Blackjack (Sap)', 'Melee', '1d4!', 'bludgeoning', 'str', ['nonlethal', 'Vigor roll or Stunned', 'concealable', 'era: 1960s — FBI/CIA close work']],
   // No damage at all — the whole attack IS the rider. 'max range' keeps it at
   // arm's length rather than letting the band ladder spray it four tiles.
-  ['Pepper Spray', 'Ranged', '0', 'poison', 'ranged', ['range 10', 'max range', 'nonlethal', 'Vigor roll or Stunned', 'mag 3', 'concealable']],
+  // Personal defence: no damage at all, the whole attack IS the Stun rider.
+  // The spray has a hard 10ft reach and no range penalty ('max range'); the
+  // stun gun is a real 1/2/4″ banded shot.
+  ['Pepper Spray', 'Ranged', '0', 'poison', 'ranged', ['range 10', 'max range', 'nonlethal', 'Vigor roll or Stunned', 'mag 5', 'concealable'], 15, 0.5],
+  ['Stun Gun', 'Ranged', '0', 'energy', 'ranged', ['range 6', 'nonlethal', 'Vigor roll or Stunned', 'mag 3', 'recharges for two hours once spent'], 25, 0.5],
 ];
 
 // [name, category, bonus, rangedArmor, notes] — category 'Shield' means the
@@ -244,20 +249,23 @@ const POWERS: P[] = [
 // Ammunition, per the SWADE gear table: [name, caliber, batch qty, subtitle].
 // The caliber key matches the 'caliber: x' prop on the weapons it feeds, so
 // the sheet can tell at a glance which rounds fit which gun.
-type Ammo = [string, string, number, string];
+// [name, caliber, batch qty, subtitle, cost, weight] — cost and weight are for
+// the whole batch the row buys, since that is how the tables price ammunition
+// (per 50 rounds, per 25 shells) rather than per round.
+type Ammo = [string, string, number, string, number, number];
 const AMMUNITION: Ammo[] = [
-  ['Arrows (20)', 'arrows', 20, 'For bows of every era'],
-  ['Crossbow Bolts (20)', 'bolts', 20, 'For crossbows, arbalests, and repeaters'],
-  ['Bullets, Small (50)', 'bullets-small', 50, '.22 to .32 caliber'],
-  ['Bullets, Medium (50)', 'bullets-medium', 50, '9mm to .45 caliber'],
-  ['Bullets, Large (50)', 'bullets-large', 50, '.50 caliber and larger rounds'],
-  ['Laser Battery (Pistol)', 'battery-pistol', 24, 'One full magazine for a laser sidearm'],
-  ['Laser Battery (Rifle/SMG)', 'battery-rifle', 30, 'One full magazine for a laser long arm'],
-  ['Laser Battery (Gatling)', 'battery-gatling', 100, 'One full drum for a laser gatling'],
-  ['Shot & Powder (10)', 'shot', 10, 'For black powder weapons'],
-  ['Shotgun Shells (25)', 'shells', 25, 'Standard buckshot'],
-  ['Shotgun Slugs (25)', 'slugs', 25, 'Solid slugs — trade spread for reach'],
-  ['Sling Stones (20)', 'stones', 20, 'Smooth river stones'],
+  ['Arrows (20)', 'arrows', 20, 'For bows of every era', 10, 4],
+  ['Crossbow Bolts (20)', 'bolts', 20, 'For crossbows, arbalests, and repeaters', 10, 4],
+  ['Bullets, Small (50)', 'bullets-small', 50, '.22 to .32 caliber', 10, 1],
+  ['Bullets, Medium (50)', 'bullets-medium', 50, '9mm to .45 caliber', 20, 2],
+  ['Bullets, Large (50)', 'bullets-large', 50, '.50 caliber and larger rounds', 30, 15],
+  ['Laser Battery (Pistol)', 'battery-pistol', 24, 'One full magazine for a laser sidearm', 20, 0.25],
+  ['Laser Battery (Rifle/SMG)', 'battery-rifle', 30, 'One full magazine for a laser long arm', 20, 0.5],
+  ['Laser Battery (Gatling)', 'battery-gatling', 100, 'One full drum for a laser gatling', 50, 4],
+  ['Shot & Powder (10)', 'shot', 10, 'For black powder weapons', 1, 0.5],
+  ['Shotgun Shells (25)', 'shells', 25, 'Standard buckshot', 15, 1.5],
+  ['Shotgun Slugs (25)', 'slugs', 25, 'Solid slugs — trade spread for reach', 20, 1.5],
+  ['Sling Stones (20)', 'stones', 20, 'Smooth river stones', 2, 1],
 ];
 
 // [name, subtitle, traitBonus?, mech?] — a trait bonus becomes a live "+N to
@@ -266,62 +274,115 @@ const AMMUNITION: Ammo[] = [
 // item reaches, whether its range is a hard cap, whether only Wild Cards can
 // be targeted, and how many charges it arrives with.
 type GearMech = { healRangeFt?: number; wildCardOnly?: boolean; hardRange?: boolean; qty?: number };
-type G = [string, string, { trait: string; amount: number }?, GearMech?];
+// [name, subtitle, cost?, weight?, traitBonus?, mech?]
+// Cost is the list price and weight is in pounds, both from the core gear
+// tables. A weight of 0 is the tables' "—": pocket stuff that never troubles
+// encumbrance. Entries with no cost/weight predate the tables being entered
+// and fall back to the per-kind price and the weights.ts lookup.
+type G = [string, string, number?, number?, { trait: string; amount: number }?, GearMech?];
 const GEAR: G[] = [
-  ['Backpack', 'Standard load carrier'],
-  ['Bedroll', 'Sleeping kit'],
-  ['Rope (10 yards)', 'Hemp climbing rope'],
-  ['Grappling Hook', 'Anchors a rope'],
-  ['Torch', '1 hour of light, 4″ radius'],
-  ['Flashlight', '10″ beam, batteries last a session'],
-  ['Lantern', '4″ radius, burns 3 hours per pint of oil'],
-  ['Flint & Steel', 'Start fires'],
-  ['Canteen', 'A day of water'],
-  ['Rations (5 days)', 'Trail food'],
-  ['First Aid Kit', 'Field dressing: +1 to Healing rolls while carried. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.', { trait: 'Healing', amount: 1 }],
-  ['Lockpicks', '+1 to Thievery to open locks', { trait: 'Thievery', amount: 1 }],
-  ['Crowbar', '+1 Strength to force things open', { trait: 'Strength', amount: 1 }],
+  // ---- Animals & tack ----
+  ['Horse', 'A riding horse; carries a rider and their kit', 300, 0],
+  ['War Horse', 'Trained to stay steady in a fight', 750, 0],
+  ['Saddle', 'Plain riding saddle and harness', 10, 10],
+  ['Elaborate Saddle', 'Fine tack, worked leather and fittings', 50, 10],
+  // ---- Adventuring gear ----
+  ['Backpack', 'Standard load carrier', 50, 2],
+  ['Bedroll', 'Sleeping bag, winterised', 25, 4],
+  ['Blanket', 'Wool blanket', 10, 4],
+  ['Camera (Disposable)', 'One roll, then throw it away', 10, 1],
+  ['Camera (Regular)', 'Film camera with a changeable lens', 75, 2],
+  ['Camera (Digital)', 'Digital stills and video', 300, 1],
+  ['Candle', 'One hour of light, 2″ radius', 1, 1],
+  ['Rope (10 yards)', 'Hemp climbing rope', 10, 15],
+  ['Rope, Nylon (20 yards)', 'Lighter and stronger than hemp', 10, 3],
+  ['Grappling Hook', 'Anchors a rope', 100, 2],
+  ['Torch', '1 hour of light, 4″ radius', 5, 1],
+  ['Flashlight', '10″ beam', 20, 3],
+  ['Lantern', '4 hours of light, 4″ radius', 25, 3],
+  ['Lighter', 'Pocket flame', 2, 0],
+  ['Flint & Steel', 'Start fires', 3, 1],
+  ['Canteen', 'A day of water', 5, 1],
+  ['Flask (Ceramic)', 'Holds a pint of anything', 5, 1],
+  ['Goggles', 'Keeps grit and glare out of your eyes', 20, 1],
+  ['Hammer', 'Drives pitons, nails and stakes', 10, 1],
+  ['Shovel', 'Digs in, or out', 5, 5],
+  ['Soap', 'A bar of it', 1, 0.2],
+  ['Umbrella', 'Keeps the weather off', 5, 2],
+  ['Quiver', 'Holds 20 arrows or bolts', 25, 2],
+  ['Rations (5 days)', 'Trail food; keeps about a week', 10, 5],
+  ['First Aid Kit', 'Field dressing: +1 to Healing rolls while carried. Three uses. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.', 10, 1, { trait: 'Healing', amount: 1 }],
+  ['Lockpicks', '+1 to Thievery to open locks', 200, 1, { trait: 'Thievery', amount: 1 }],
+  ['Crowbar', '+1 Strength to force things open', 10, 2, { trait: 'Strength', amount: 1 }],
   ['Binoculars', 'See distant detail'],
   ['Gas Mask', 'Protects against inhaled toxins'],
   ['Cell Phone', 'Modern communication'],
-  ['Climbing Gear', '+2 to Athletics (climbing)', { trait: 'Athletics', amount: 2 }],
-  ['Whetstone', 'Weapon maintenance'],
+  ['Climbing Gear', '+2 to Athletics (climbing)', undefined, undefined, { trait: 'Athletics', amount: 2 }],
+  ['Whetstone', 'Weapon maintenance', 1, 0],
   ['Healing Potion', 'Drink to treat a Wound: a Healing roll mends one on a success, two on a raise, and steadies the Shaken. Used up.'],
   // Flies the treatment to the patient: the Healing roll is made at range
   // rather than at arm's length. 40 tiles is a hard ceiling, not a Short band,
   // and only Wild Cards — the people who track Wounds — can be treated.
   ['Healing Drone', 'Single-use drone that carries a Healing roll to one Wild Card up to 40 tiles away. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.',
-    undefined, { healRangeFt: 200, wildCardOnly: true, hardRange: true, qty: 1 }],
+    undefined, undefined, undefined, { healRangeFt: 200, wildCardOnly: true, hardRange: true, qty: 1 }],
   ['Antitoxin', 'Shrugs off one poison. Used up.'],
-  ['Bandages', 'Basic field dressing; +1 Healing while equipped', { trait: 'Healing', amount: 1 }],
-  ['Surgical Kit', 'Full medical instruments; +2 Healing while equipped', { trait: 'Healing', amount: 2 }],
-  ['Camouflage Cloak', '+2 Stealth in matching terrain while worn', { trait: 'Stealth', amount: 2 }],
-  ['Disguise Kit', '+2 Performance when impersonating someone', { trait: 'Performance', amount: 2 }],
-  ['Forgery Kit', '+2 Thievery when faking documents', { trait: 'Thievery', amount: 2 }],
-  ['Research Library', '+2 Research while you have access to it', { trait: 'Research', amount: 2 }],
-  ['Toolkit', '+2 Repair while equipped', { trait: 'Repair', amount: 2 }],
-  ['Electronics Kit', '+2 Hacking while equipped', { trait: 'Hacking', amount: 2 }],
-  ['Musical Instrument', '+1 Performance while carried', { trait: 'Performance', amount: 1 }],
-  ['Riding Tack', '+1 Riding with a properly fitted saddle', { trait: 'Riding', amount: 1 }],
+  ['Bandages', 'Basic field dressing; +1 Healing while equipped', undefined, undefined, { trait: 'Healing', amount: 1 }],
+  ['Surgical Kit', 'Full medical instruments; +2 Healing while equipped', undefined, undefined, { trait: 'Healing', amount: 2 }],
+  ['Camouflage Cloak', '+2 Stealth in matching terrain while worn', undefined, undefined, { trait: 'Stealth', amount: 2 }],
+  ['Disguise Kit', '+2 Performance when impersonating someone', undefined, undefined, { trait: 'Performance', amount: 2 }],
+  ['Forgery Kit', '+2 Thievery when faking documents', undefined, undefined, { trait: 'Thievery', amount: 2 }],
+  ['Research Library', '+2 Research while you have access to it', undefined, undefined, { trait: 'Research', amount: 2 }],
+  ['Toolkit', '+2 Repair while equipped', 200, 5, { trait: 'Repair', amount: 2 }],
+  ['Electronics Kit', '+2 Hacking while equipped', undefined, undefined, { trait: 'Hacking', amount: 2 }],
+  ['Musical Instrument', '+1 Performance while carried', undefined, undefined, { trait: 'Performance', amount: 1 }],
+  ['Riding Tack', '+1 Riding with a properly fitted saddle', undefined, undefined, { trait: 'Riding', amount: 1 }],
   ['Survival Rations', 'A week of trail food'],
   ['Tent', 'Two-person shelter'],
   ['Waterskin', 'A day of water'],
   ['Chalk & Charcoal', 'Marking and sketching'],
   ['Spyglass', 'See distant detail'],
-  ['Compass', 'Never lose your bearing; +1 Survival to navigate', { trait: 'Survival', amount: 1 }],
-  ['Manacles', 'Restrain a captive'],
+  ['Compass', 'Never lose your bearing; +1 Survival to navigate', undefined, undefined, { trait: 'Survival', amount: 1 }],
+  ['Manacles', 'Handcuffs; restrain a captive', 15, 1],
   ['Caltrops', 'Scatter to slow pursuers'],
-  ['Oil Flask', 'Fuel for lanterns, or a makeshift firebomb'],
+  ['Oil Flask', 'A pint of lantern oil, or a makeshift firebomb', 2, 1],
   ['Holy Symbol', 'Focus for Faith-based powers'],
   ['Spell Components', 'Material focus for arcane powers'],
-  ['Signal Whistle', 'Carries far; coordinate in the field'],
+  ['Signal Whistle', 'Carries far; coordinate in the field', 2, 0],
   ['Radio', 'Short-range team communication'],
-  ['Night Vision Goggles', 'Ignore Dim and Dark lighting penalties'],
-  ['Motion Detector', '+2 Notice for approaching movement', { trait: 'Notice', amount: 2 }],
-  ['Medkit (Modern)', 'Trauma kit: +2 to Healing rolls while carried. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.', { trait: 'Healing', amount: 2 }],
+  ['Night Vision Goggles', 'Ignore Dim and Dark lighting penalties. Twice the price buys "active" goggles that ignore every Illumination penalty.', 500, 1],
+  ['Motion Detector', '+2 Notice for approaching movement', undefined, undefined, { trait: 'Notice', amount: 2 }],
+  ['Medkit (Modern)', 'Trauma kit: +2 to Healing rolls while carried, and ignores 1 point of Wound penalties. Five uses; $25 to refill. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.', 100, 4, { trait: 'Healing', amount: 2 }],
   ['Vacc Suit', 'Sealed suit for vacuum and hostile atmospheres'],
   ['Jetpack', 'Short bursts of powered flight'],
   ['Comm Unit', 'Personal communicator with encryption'],
+  // ---- Clothing ----
+  ['Boots, Hiking', 'Broken-in boots for long ground', 100, 2],
+  ['Camouflage Fatigues', 'Field dress in a matching pattern', 20, 3],
+  ['Clothing, Casual', 'Everyday wear', 20, 2],
+  ['Clothing, Formal', 'Good enough for the embassy party', 200, 3],
+  ['Winter Gear', 'Cloak or parka against the cold', 200, 3],
+  ['Winter Boots', 'Insulated and waterproof', 100, 1],
+  // ---- Computers & electronics ----
+  ['Desktop Computer', 'A full workstation; not going anywhere', 800, 20],
+  ['GPS', 'Tells you exactly where you are', 250, 1],
+  ['Hand Held Computer', 'Pocket machine', 250, 1],
+  ['Laptop', 'Portable workstation', 1200, 5],
+  // ---- Firearms accessories ----
+  ['Bipod/Tripod', 'An action to deploy; then negates Recoil and minimum Strength penalties', 100, 2],
+  ['Laser/Red Dot Sight', '+1 Shooting at Short and Medium range', 150, 1, { trait: 'Shooting', amount: 1 }],
+  ['Rifle Scope', 'Cancels 2 further points of penalty when Aiming', 100, 2],
+  // ---- Food ----
+  ['Fast Food Meal', 'Quick and forgettable', 8, 1],
+  ['Good Meal', 'A restaurant sit-down; more if the place is fine', 15, 0],
+  ['MRE (Meal Ready to Eat)', 'Military ration, one meal', 10, 1],
+  // ---- Surveillance ----
+  ['"Bug" (Micro Transmitter)', '12 hours of continuous transmission', 30, 0],
+  ['Button Camera', '12 hours of continuous recording', 50, 0],
+  ['Cellular Interceptor', 'Pulls mobile traffic out of the air', 650, 5],
+  ["Lineman's Telephone", 'A Repair roll taps it into a phone line', 150, 2],
+  ['Parabolic Microphone', 'Hear a whisper up to 200 yards off', 750, 4],
+  ['Telephone Tap', 'Listens in on a wired line', 250, 0],
+  ['Transmitter Detector', 'Sweeps a room for bugs', 525, 1],
 ];
 
 // ---------- Edges ----------
@@ -544,11 +605,14 @@ const HINDRANCES: H[] = [
 ];
 
 export const CONTENT_SWADE: ContentEntry[] = [
-  ...WEAPONS.map(([name, category, damage, damageType, ability, props], i): ContentEntry => ({
+  ...WEAPONS.map(([name, category, damage, damageType, ability, props, cost, weight], i): ContentEntry => ({
     id: contentSlug('swade', 'weapon', name),
     system: 'swade', kind: 'weapon', name, category, order: i,
     subtitle: `${damage ? `${ability === 'str' ? `Str+${damage}` : damage} ${damageType}` : `Str ${damageType}`}${props.length ? ` · ${props.join(', ')}` : ''}`,
     weapon: { damage, damageType, ability, props },
+    ...(cost !== undefined || weight !== undefined
+      ? { gear: { ...(cost !== undefined ? { cost } : {}), ...(weight !== undefined ? { weight } : {}) } }
+      : {}),
   })),
   ...ARMOR.map(([name, category, baseAc, rangedArmor, notes], i): ContentEntry => ({
     id: contentSlug('swade', 'armor', name),
@@ -572,17 +636,22 @@ export const CONTENT_SWADE: ContentEntry[] = [
       ...(mech?.condition ? { condition: mech.condition } : {}),
     },
   })),
-  ...GEAR.map(([name, subtitle, traitBonus, mech], i): ContentEntry => ({
+  ...GEAR.map(([name, subtitle, cost, weight, traitBonus, mech], i): ContentEntry => ({
     id: contentSlug('swade', 'gear', name),
     system: 'swade', kind: 'gear', name, category: 'Gear', order: i,
     subtitle,
-    gear: { ...(traitBonus ? { traitBonus } : {}), ...(mech ?? {}) },
+    gear: {
+      ...(traitBonus ? { traitBonus } : {}),
+      ...(cost !== undefined ? { cost } : {}),
+      ...(weight !== undefined ? { weight } : {}),
+      ...(mech ?? {}),
+    },
   })),
-  ...AMMUNITION.map(([name, caliber, qty, subtitle], i): ContentEntry => ({
+  ...AMMUNITION.map(([name, caliber, qty, subtitle, cost, weight], i): ContentEntry => ({
     id: contentSlug('swade', 'gear', name),
     system: 'swade', kind: 'gear', name, category: 'Ammunition', order: i,
     subtitle: `${subtitle} · caliber: ${caliber}`,
-    gear: { qty, caliber },
+    gear: { qty, caliber, cost, weight },
   })),
   ...EDGES.map(([name, category, requires, effect, mods], i): ContentEntry => ({
     id: contentSlug('swade', 'edge', name),

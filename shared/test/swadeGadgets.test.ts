@@ -61,14 +61,15 @@ describe('Healing Drone', () => {
 });
 
 describe('Pepper Spray', () => {
-  it('lands in attacks as a save-or-Stunned attack with three charges', () => {
+  it('lands in attacks as a save-or-Stunned attack with its five shots', () => {
     const sheet = sheetWith('Pepper Spray');
     const row = (sheet.attacks as SheetData[]).at(-1)!;
     expect(row.save).toBe('vigor');
     expect(row.onSave).toBe('negate');
     expect(row.condition).toBe('stunned');
-    expect(row.ammo).toBe(3);
-    expect(row.maxAmmo).toBe(3);
+    // Shots 5, per the personal-defence table.
+    expect(row.ammo).toBe(5);
+    expect(row.maxAmmo).toBe(5);
     expect(row.range).toBe(10);
     expect(row.hardRange).toBe(true);
   });

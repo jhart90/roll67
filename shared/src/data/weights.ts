@@ -64,7 +64,9 @@ export const GUESSED_WEIGHTS = new Set<string>();
 
 /** The weight to stamp on an item's sheet row. */
 export function weightFor(name: string, kind: string, explicit?: number): number {
-  if (typeof explicit === 'number' && explicit > 0) return explicit;
+  // >= 0, not > 0: the gear tables list a whole column of pocket items at "—",
+  // and a stated zero is an answer, not a missing value to guess over.
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= 0) return explicit;
   const known = ITEM_WEIGHT_LB[name];
   if (known !== undefined) return known;
   GUESSED_WEIGHTS.add(`${kind}:${name}`);

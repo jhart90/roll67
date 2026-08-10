@@ -85,7 +85,10 @@ export interface PowerData {
 
 export interface GearData {
   weight?: number;
-  cost?: string;
+  /** List price in the setting's currency. Drives what a shop charges for it
+   *  (see shopItemFromEntry) instead of one flat price per kind, which put a
+   *  laptop and a bar of soap on the same shelf at the same money. */
+  cost?: number;
   notes?: string;
   /** Ammo batches land in inventory with this quantity (rounds per purchase). */
   qty?: number;
@@ -259,7 +262,9 @@ export function shopItemFromEntry(entry: ContentEntry): {
 } {
   return {
     name: entry.name,
-    price: KIND_PRICE[entry.kind] ?? 10,
+    // An entry that knows its own list price uses it; the per-kind number is
+    // only the fallback for content that has never been priced.
+    price: entry.gear?.cost ?? KIND_PRICE[entry.kind] ?? 10,
     qty: -1,
     notes: entry.subtitle,
     contentId: entry.id,

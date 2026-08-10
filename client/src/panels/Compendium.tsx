@@ -37,7 +37,9 @@ function CustomItemEditor({ system, entry, onSave, onCancel }: {
   const [addDex, setAddDex] = useState(entry?.armor?.addDex ?? true);
   const [maxDex, setMaxDex] = useState(entry?.armor?.maxDex ?? undefined);
 
-  const [cost, setCost] = useState(entry?.gear?.cost ?? '');
+  // Held as text so the field can be empty; committed as a number, which is
+  // what a shop reads to price the item.
+  const [cost, setCost] = useState(entry?.gear?.cost === undefined ? '' : String(entry.gear.cost));
   const [gearNotes, setGearNotes] = useState(entry?.gear?.notes ?? '');
 
   function save() {
@@ -57,7 +59,11 @@ function CustomItemEditor({ system, entry, onSave, onCancel }: {
     } else if (kind === 'armor') {
       e.armor = { baseAc, addDex, maxDex };
     } else if (kind === 'gear' || kind === 'magicitem') {
-      e.gear = { cost: cost || undefined, notes: gearNotes || undefined };
+      const costNum = Number(cost);
+      e.gear = {
+        ...(cost.trim() !== '' && Number.isFinite(costNum) ? { cost: costNum } : {}),
+        notes: gearNotes || undefined,
+      };
     }
     onSave(e);
   }
@@ -95,7 +101,7 @@ function CustomItemEditor({ system, entry, onSave, onCancel }: {
       )}
       {(kind === 'gear' || kind === 'magicitem') && (
         <div style={{ display: 'flex', gap: 6 }}>
-          <input placeholder="Cost (e.g. 50 gp)" value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: 100 }} />
+          <input type="number" min={0} placeholder="Cost" title="List price — what a shop charges for it" value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: 100 }} />
           <input placeholder="Notes" value={gearNotes} onChange={(e) => setGearNotes(e.target.value)} style={{ flex: 1 }} />
         </div>
       )}

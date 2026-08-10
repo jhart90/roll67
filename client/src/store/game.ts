@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BleedPromptPayload, type StunPromptPayload, type IncapPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BlastChoice, type BlastOfferClosedPayload, type BlastOfferPayload, type BleedPromptPayload, type StunPromptPayload, type IncapPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -234,6 +234,8 @@ interface GameState {
   diceAnimEnding: boolean;
   /** SWADE: your Wild Card just took wounds it may Soak with a Benny. */
   soakOffer: SoakOfferPayload | null;
+  /** SWADE: a live grenade landed on one of yours — throw it back, or on it. */
+  blastOffer: BlastOfferPayload | null;
   /** SWADE: your Shaken character may roll Spirit to recover. */
   shakenPrompt: ShakenPromptPayload | null;
   /** SWADE: that move needs the running die — confirm or decline. */
@@ -431,6 +433,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceAnim: null,
   diceAnimEnding: false,
   soakOffer: null,
+  blastOffer: null,
   bennyState: {},
   bleedPrompt: null,
   shakenPrompt: null,
@@ -1098,6 +1101,17 @@ export function wireSocket(): void {
     useGameStore.setState({ soakOffer: p });
   });
 
+  socket.on(S2C.BLAST_OFFER, (p: BlastOfferPayload) => {
+    useGameStore.setState({ blastOffer: p });
+  });
+
+  // Somebody grabbed it, somebody lay on it, or the fuse ran out — either
+  // way this prompt is stale and must go, or it would offer a choice the
+  // server will now refuse.
+  socket.on(S2C.BLAST_OFFER_CLOSED, (p: BlastOfferClosedPayload) => {
+    useGameStore.setState((s) => (s.blastOffer?.blastId === p.blastId ? { blastOffer: null } : {}));
+  });
+
   socket.on(S2C.BLEED_PROMPT, (p: BleedPromptPayload) => {
     useGameStore.setState({ bleedPrompt: p });
   });
@@ -1531,6 +1545,13 @@ export const intents = {
   soakRoll: (characterId: string, spend: boolean) => {
     socket.emit(C2S.SOAK_ROLL, { characterId, spend });
     useGameStore.setState({ soakOffer: null });
+  },
+  /** Answer the grenade at your feet. Dismiss locally straight away: the
+   *  server closes the window for everyone, but the person who just clicked
+   *  should not sit looking at a prompt they've already answered. */
+  blastResponse: (blastId: string, characterId: string, choice: BlastChoice) => {
+    socket.emit(C2S.BLAST_RESPONSE, { blastId, characterId, choice });
+    useGameStore.setState({ blastOffer: null });
   },
   /** Spend a Benny from the Benny menu. */
   bennyUse: (characterId: string, use: BennyUseId) => socket.emit(C2S.BENNY_USE, { characterId, use }),

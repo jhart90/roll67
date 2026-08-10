@@ -127,6 +127,9 @@ export const C2S = {
   INIT_ACT_NOW: 'initActNow',
   /** SWADE: spend a Benny to Soak wounds just taken (or decline). */
   SOAK_ROLL: 'soakRoll',
+  /** SWADE: answer a live grenade sitting at your feet — throw it back
+   *  (Hot Potato), smother it (Covering), or stand fast. */
+  BLAST_RESPONSE: 'blastResponse',
   /** SWADE: spend a Benny from the Benny menu (reroll, recover, redraw…). */
   BENNY_USE: 'bennyUse',
   /** SWADE: DM hands a character a Benny (announced in chat). */
@@ -756,6 +759,11 @@ export const S2C = {
   SFX_PLAY: 'sfxPlay',
   /** SWADE: your Wild Card took wounds and may Soak them with a Benny. */
   SOAK_OFFER: 'soakOffer',
+  /** SWADE: a live grenade landed on you — the blast is parked for a beat
+   *  while you decide whether to throw it back or throw yourself on it. */
+  BLAST_OFFER: 'blastOffer',
+  /** That window shut — somebody acted, or the fuse ran out. */
+  BLAST_OFFER_CLOSED: 'blastOfferClosed',
   /** SWADE: which Benny reroll options are currently live for your character. */
   BENNY_STATE: 'bennyState',
   /** SWADE: your character is Bleeding Out and owes a Vigor roll. */
@@ -1012,6 +1020,47 @@ export interface SetDiceRoleColorPayload { role: DiceRole; color: string | null 
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }
 export interface SoakOfferPayload { characterId: string; name: string; wounds: number; bennies: number }
+
+/**
+ * SWADE grenades, the moment one lands and before it goes off. The blast is
+ * parked for a beat and everyone standing in it is asked the same question.
+ * One answer settles it for the whole blast: grabbing the grenade and
+ * smothering it are both physical monopolies on the thing, so the first
+ * decisive choice closes the window for everyone.
+ */
+export type BlastChoice = 'potato' | 'cover' | 'none';
+
+/** One character of yours standing in the blast, and what they may try. */
+export interface BlastCandidate {
+  characterId: string;
+  tokenId: string;
+  name: string;
+  /** Athletics penalty on the throw-back: −4, or −2 if they were on Hold. */
+  potatoMod: number;
+  /** They were on Hold, hence the softer penalty. */
+  onHold: boolean;
+}
+
+export interface BlastOfferPayload {
+  blastId: string;
+  /** The grenade's name, for the prompt's headline. */
+  label: string;
+  /** Who threw it — the hex a successful throw-back sends it to. */
+  throwerName: string;
+  /** Milliseconds left on the fuse before the blast resolves itself. */
+  graceMs: number;
+  /** Covering only means something when the blast actually deals damage. */
+  canCover: boolean;
+  candidates: BlastCandidate[];
+}
+
+export interface BlastOfferClosedPayload { blastId: string }
+
+export interface BlastResponsePayload {
+  blastId: string;
+  characterId: string;
+  choice: BlastChoice;
+}
 /** The Benny-menu uses the server can automate. Soak rides the existing SOAK_ROLL flow. */
 export type BennyUseId =
   | 'reroll-trait' | 'recover-shaken' | 'redraw-card' | 'reroll-damage' | 'regain-pp' | 'influence';

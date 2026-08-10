@@ -85,6 +85,35 @@ export function swadeHealOutcome(amount: number, currentWounds: number): { wound
   return { woundsHealed: healed, woundsAfter: currentWounds - healed };
 }
 
+// ---------- Grenades: Hot Potato and Covering ----------
+
+/**
+ * Hot Potato: a character standing in a live blast may snatch the grenade up
+ * and hurl it back. It is a desperate grab at a lit fuse — Athletics at −4,
+ * softened to −2 if they were on Hold and already poised to act.
+ */
+export function hotPotatoPenalty(onHold: boolean): number {
+  return onHold ? -2 : -4;
+}
+
+/**
+ * Covering: throwing yourself onto the grenade to smother it with your body.
+ * The coverer eats DOUBLE the blast; everyone else in it has the coverer's
+ * Toughness subtracted from their damage — that is literally how much blast
+ * the covering body soaks up before the rest gets through.
+ *
+ * Never returns a negative: a body big enough to absorb the whole blast means
+ * the others take nothing, not that they are healed by it.
+ */
+export function coverAdjustedDamage(
+  amount: number,
+  opts: { isCoverer: boolean; coverToughness: number },
+): number {
+  if (amount <= 0) return 0;
+  if (opts.isCoverer) return amount * 2;
+  return Math.max(0, amount - Math.max(0, opts.coverToughness));
+}
+
 /** One entry from SWADE's Injury Table (d6 location, d6 sub-effect). */
 export interface InjuryResult { location: string; effect: string }
 

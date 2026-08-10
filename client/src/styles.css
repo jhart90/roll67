@@ -2461,6 +2461,23 @@ th > .term { border-bottom-style: dotted; }
 .cook-notes b.bad { color: #e08a8a; }
 .benny-panel button:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* The parked blast: one card per character of yours standing in it. The fuse
+   readout is a real deadline — the server resolves the blast when it hits 0. */
+.blast-modal { max-width: 460px; max-height: 82vh; overflow-y: auto; }
+.blast-fuse {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(242, 178, 27, 0.16);
+  color: #f2b21b;
+}
+.blast-fuse.urgent { background: rgba(224, 138, 138, 0.2); color: #e08a8a; }
+.blast-candidate + .blast-candidate { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.blast-candidate > strong { display: inline-block; margin-bottom: 6px; }
+.blast-candidate .stk-tag { margin-left: 6px; font-size: 10px; opacity: 0.8; }
+
 /* ================= retro lobby (pre-campaign screens only) =================
    90s game-shop basement: neon storefront sign, rental-store carpet backdrop,
    wood-paneled membership card, chunky beveled gold buttons, price stickers.

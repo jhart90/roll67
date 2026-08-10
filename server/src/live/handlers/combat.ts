@@ -2,6 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
@@ -496,6 +497,10 @@ interface GroupSaveSpec {
   appliesCondition?: string;
   /** SWADE Evasion: the save is an Agility dive at −2. */
   evasion?: boolean;
+  /** SWADE Covering: somebody threw themselves on the grenade. They take
+   *  double damage and never get to dive clear (they are diving the other
+   *  way); their Toughness comes off everyone else's damage. */
+  cover?: { tokenId: string; name: string; toughness: number };
   /** When the source spell is concentration: the caster to record the
    *  inflicted conditions on, so ending concentration lifts them. */
   concentrationCasterId?: string;
@@ -559,6 +564,14 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const applications: Array<() => void> = [];
     for (const { tok, ch, passed } of results) {
       let amt = passed ? (spec.onSave === 'half' ? Math.floor(base / 2) : 0) : base;
+      // The covering body soaks its own Toughness out of the blast before
+      // anyone else's resistances get a say.
+      if (spec.cover) {
+        amt = coverAdjustedDamage(amt, {
+          isCoverer: tok.id === spec.cover.tokenId,
+          coverToughness: spec.cover.toughness,
+        });
+      }
       if (ch && spec.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, spec.damageType));
       if (amt <= 0) continue;
       if (!ch && !tok.bar) continue;
@@ -599,6 +612,23 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
 
   const postSave = (i: number): void => {
     const { tok, ch, sc } = targets[i];
+    // Whoever threw themselves on the grenade rolls nothing: they are not
+    // trying to get clear of the blast, they are holding it down. Counted as
+    // a failure so the full (then doubled) damage lands on them.
+    if (spec.cover && tok.id === spec.cover.tokenId) {
+      results.push({ tok, ch, passed: false });
+      const msg = chat.add(spec.campaignId, {
+        userId: spec.userId, fromName: spec.username, kind: 'system',
+        text: `🛡️ ${tok.name} throws themselves onto ${spec.label?.trim() || 'the blast'} — no dive, double damage, and Toughness ${spec.cover.toughness} comes off everyone else's.`,
+        characterId: ch?.id ?? null,
+        roll: null, recipients: null,
+      });
+      io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
+      if (i + 1 < targets.length) setTimeout(() => postSave(i + 1), SAVE_STEP_DELAY_MS);
+      else if (hasDamage) setTimeout(postDamage, SAVE_STEP_DELAY_MS);
+      else setTimeout(() => { applyConditions(); finish(); }, diceSettleDelayMs(1));
+      return;
+    }
     const br = roll(sc.expr);
     const passed = br.total >= sc.threshold;
     results.push({ tok, ch, passed });
@@ -624,6 +654,146 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
   };
 
   postSave(0);
+  return true;
+}
+
+// ---------- Grenades: the parked blast ----------
+
+/**
+ * What the people standing in a blast managed to change about it before it
+ * went off. An empty object is "nobody did anything" — the blast resolves
+ * exactly as it would have without the offer.
+ */
+interface BlastMod {
+  /** Hot Potato: thrown back, so the template re-centres here. */
+  aimHex?: Hex;
+  /** A fumbled catch adds the raise die, as a hand detonation does. */
+  damageExpr?: string;
+  /** Covering: who smothered it, and the Toughness they soak up. */
+  cover?: { tokenId: string; name: string; toughness: number };
+}
+
+interface PendingBlast {
+  id: string;
+  campaignId: string;
+  label: string;
+  throwerName: string;
+  /** Where a successful throw-back sends it: back at the thrower. */
+  throwerHex: Hex;
+  /** The blast's damage as it stands, so a fumbled catch can add the raise die. */
+  damageExpr: string;
+  /** Everyone still entitled to answer, by token id. */
+  candidates: Map<string, BlastCandidate>;
+  /** Shut the moment anyone acts — the grenade is one physical object, so
+   *  the first person to grab it or lie on it settles it for everybody. */
+  settled: boolean;
+  timer: ReturnType<typeof setTimeout>;
+  resume: (mod: BlastMod) => void;
+}
+
+/**
+ * How long the blast hangs there waiting for an answer. Long enough for a
+ * player to read the prompt and decide, short enough that a table doesn't
+ * stall on somebody who wandered off — the fuse runs out and it just goes off.
+ */
+const BLAST_GRACE_MS = 15_000;
+
+const pendingBlasts = new Map<string, PendingBlast>();
+
+/**
+ * Close the window and hand back whether THIS caller is the one who gets to
+ * resolve it. Everyone who loses the race gets false and must do nothing:
+ * the alternative is two people resolving the same grenade, which would
+ * apply the damage twice.
+ */
+function claimBlast(io: Server, pb: PendingBlast): boolean {
+  if (pb.settled) return false;
+  pb.settled = true;
+  clearTimeout(pb.timer);
+  pendingBlasts.delete(pb.id);
+  io.to(campaignRoom(pb.campaignId)).emit(S2C.BLAST_OFFER_CLOSED, { blastId: pb.id });
+  return true;
+}
+
+interface BlastOfferSpec {
+  io: Server;
+  campaignId: string;
+  label: string;
+  /** Who threw it — named in the prompt, and where a throw-back lands. */
+  throwerName: string;
+  throwerHex: Hex;
+  aoe: NonNullable<ReturnType<typeof combatActions>[number]['aoe']>;
+  originHex: Hex;
+  aimHex: Hex;
+  map: MapDef;
+  srcPx: ReturnType<typeof hexToPixel>;
+  sightSegs: ReturnType<typeof sightSegments>;
+  damageExpr: string;
+  resume: (mod: BlastMod) => void;
+}
+
+/**
+ * Offer Hot Potato / Covering to everyone caught in a freshly landed grenade.
+ * Returns false — having done nothing at all — when there is nobody in the
+ * blast who can answer (bare tokens with no sheet, an empty template), so the
+ * caller resolves immediately instead of stalling on a prompt nobody can see.
+ */
+function offerBlastChoice(spec: BlastOfferSpec): boolean {
+  const { io, campaignId, map } = spec;
+  const caught = tokensInAoe(spec.aoe, spec.originHex, spec.aimHex, map.grid, tokens.forMap(map.id))
+    .filter((tid) => {
+      const t = tokens.byId(tid);
+      return !!t && !rayBlocked(spec.srcPx, hexToPixel({ q: t.q, r: t.r }, map.grid), spec.sightSegs);
+    });
+
+  const state = initiative.get(campaignId);
+  const candidates = new Map<string, BlastCandidate>();
+  // Who gets asked, grouped by the person who answers: a player for their own
+  // character, the DM for everyone else's.
+  const byResponder = new Map<string | null, BlastCandidate[]>();
+  for (const tid of caught) {
+    const tok = tokens.byId(tid);
+    if (!tok?.characterId) continue;
+    const ch = characters.byId(tok.characterId);
+    if (!ch || ch.campaignId !== campaignId) continue;
+    // Someone already down is in no position to catch anything or choose to
+    // land on it — they are simply in the blast.
+    if (conditionsOf(ch.sheet).includes('incapacitated')) continue;
+    const onHold = state.entries.some((e) => e.tokenId === tok.id && e.held === true);
+    const cand: BlastCandidate = {
+      characterId: ch.id, tokenId: tok.id, name: tok.name,
+      potatoMod: hotPotatoPenalty(onHold), onHold,
+    };
+    candidates.set(tok.id, cand);
+    const responder = ch.ownerUserId ?? null;
+    const list = byResponder.get(responder);
+    if (list) list.push(cand);
+    else byResponder.set(responder, [cand]);
+  }
+  if (candidates.size === 0) return false;
+
+  const blastId = newId();
+  const canCover = usableAmount(spec.damageExpr);
+  const pb: PendingBlast = {
+    id: blastId, campaignId, label: spec.label,
+    throwerName: spec.throwerName, throwerHex: spec.throwerHex, damageExpr: spec.damageExpr,
+    candidates, settled: false, resume: spec.resume,
+    timer: setTimeout(() => {
+      const live = pendingBlasts.get(blastId);
+      // The fuse ran out — nobody moved, and it goes off where it landed.
+      if (live && claimBlast(io, live)) live.resume({});
+    }, BLAST_GRACE_MS),
+  };
+  pendingBlasts.set(blastId, pb);
+
+  for (const [responder, list] of byResponder) {
+    const payload = {
+      blastId, label: spec.label, throwerName: spec.throwerName, graceMs: BLAST_GRACE_MS,
+      canCover, candidates: list,
+    };
+    if (responder) io.to(userRoom(responder)).emit(S2C.BLAST_OFFER, payload);
+    else io.to(dmRoom(campaignId)).emit(S2C.BLAST_OFFER, payload);
+  }
   return true;
 }
 
@@ -1630,41 +1800,42 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let cookBlewUp = false;
     /** Damage the blast will actually roll — a hand detonation adds the raise die. */
     let blastDamage = action.amountExpr;
-    {
-      const row0 = rows(actor.sheet, 'attacks')[action.index];
-      const isNade = action.thrown === true || /thrown/i.test(str(row0 ?? {}, 'notes', ''));
-      if (actor.system === 'swade' && p.cook && isNade && action.source === 'attack') {
-        const br = roll(traitExpr(actor.sheet, dieSides(str(actor.sheet, 'smarts', 'd6'))));
-        // A SWADE Critical Failure: the trait die shows 1, and for a Wild Card
-        // the Wild Die does too.
-        const wildCard = actor.sheet.wildCard !== false;
-        const traitOne = br.dice.some((x) => !x.wild && x.value === 1);
-        const wildOne = br.dice.some((x) => x.wild && x.value === 1);
-        const critFail = traitOne && (!wildCard || wildOne);
-        cooked = !critFail && br.total >= 4;
-        let text: string;
-        if (critFail) {
-          // It detonates in hand. Re-centre the blast on the thrower BEFORE
-          // anyone rolls anything, so evasion and saves are judged against
-          // where it actually went off.
-          p.aimHex = { q: src.q, r: src.r };
-          text = `${actor.name} cooks ${action.label} — CRITICAL FAILURE: it goes off in their hand!`;
-        } else if (cooked) {
-          text = `${actor.name} cooks ${action.label} — Smarts success: the fuse is timed, no throwing it back and no diving clear.`;
-        } else {
-          text = `${actor.name} cooks ${action.label} — Smarts failure: the timing is off, so it can still be thrown back or evaded.`;
-        }
-        const msg = chat.add(d.campaignId, {
-          userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
-          text, roll: { ...br, outcome: critFail ? 'failure' as const : cooked ? 'success' as const : 'failure' as const },
-          recipients: null,
-        });
-        io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-        if (critFail) {
-          // Damage as if thrown with a raise, per the book.
-          blastDamage = usableAmount(action.amountExpr) ? `${action.amountExpr}+1d6!` : action.amountExpr;
-          cookBlewUp = true;
-        }
+    // What counts as a grenade — hoisted so cooking it, throwing it back and
+    // smothering it all agree. A thrown template flagged either by the action
+    // or by the attack row's own notes.
+    const isNade = action.thrown === true
+      || /thrown/i.test(str(rows(actor.sheet, 'attacks')[action.index] ?? {}, 'notes', ''));
+    if (actor.system === 'swade' && p.cook && isNade && action.source === 'attack') {
+      const br = roll(traitExpr(actor.sheet, dieSides(str(actor.sheet, 'smarts', 'd6'))));
+      // A SWADE Critical Failure: the trait die shows 1, and for a Wild Card
+      // the Wild Die does too.
+      const wildCard = actor.sheet.wildCard !== false;
+      const traitOne = br.dice.some((x) => !x.wild && x.value === 1);
+      const wildOne = br.dice.some((x) => x.wild && x.value === 1);
+      const critFail = traitOne && (!wildCard || wildOne);
+      cooked = !critFail && br.total >= 4;
+      let text: string;
+      if (critFail) {
+        // It detonates in hand. Re-centre the blast on the thrower BEFORE
+        // anyone rolls anything, so evasion and saves are judged against
+        // where it actually went off.
+        p.aimHex = { q: src.q, r: src.r };
+        text = `${actor.name} cooks ${action.label} — CRITICAL FAILURE: it goes off in their hand!`;
+      } else if (cooked) {
+        text = `${actor.name} cooks ${action.label} — Smarts success: the fuse is timed, no throwing it back and no diving clear.`;
+      } else {
+        text = `${actor.name} cooks ${action.label} — Smarts failure: the timing is off, so it can still be thrown back or evaded.`;
+      }
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
+        text, roll: { ...br, outcome: critFail ? 'failure' as const : cooked ? 'success' as const : 'failure' as const },
+        recipients: null,
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      if (critFail) {
+        // Damage as if thrown with a raise, per the book.
+        blastDamage = usableAmount(action.amountExpr) ? `${action.amountExpr}+1d6!` : action.amountExpr;
+        cookBlewUp = true;
       }
     }
 
@@ -1697,85 +1868,120 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: devMsg });
     }
 
-    const geometricHitIds = tokensInAoe(action.aoe, originHex, p.aimHex, map.grid, tokens.forMap(src.mapId));
-    const hitIds = geometricHitIds.filter((tid) => {
-      const t = tokens.byId(tid);
-      return !!t && !rayBlocked(srcPx, hexToPixel({ q: t.q, r: t.r }, map.grid), sightSegs);
-    });
-    if (hitIds.length === 0) { emitError(socket, `${action.label} caught no one in its area.`); return; }
-
-    // SWADE Evasion: a telegraphed template attack (grenade blast, cone of
-    // flame) can be dived away from — Agility at −2, success takes nothing.
-    // A properly cooked grenade goes off the instant it lands: no diving clear.
-    const evadeable = actor.system === 'swade' && action.source === 'attack'
-      && !action.suppressive && !action.saveId && usableAmount(action.amountExpr) && !cooked;
-    if (action.saveId || evadeable) {
-      // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
-      // rather than deriving one from the actor's spellcasting stat.
-      const casterDc = action.fixedDc || Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
-      runGroupSave(io, {
-        campaignId: d.campaignId, userId: d.userId, username: d.username,
-        tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
-        ...(evadeable ? { evasion: true } : {}),
-        damageExpr: blastDamage, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),
-        damageType: action.damageType, label: castLabel,
-        ...(action.appliesCondition ? {
-          appliesCondition: action.appliesCondition,
-          ...(action.concentration ? { concentrationCasterId: actor.id } : {}),
-        } : {}),
-        aoeVisual: {
-          mapId: src.mapId, shape: action.aoe.shape, sizeFt: action.aoe.sizeFt, sizeHexes: action.aoe.sizeHexes, widthFt: action.aoe.widthFt,
-          originHex, aimHex: p.aimHex,
-        },
+    // Everything from "who is standing in it" onward, as a closure. A SWADE
+    // grenade parks here for a beat first (see the Hot Potato / Covering
+    // offer below) and re-enters this with a possibly different centre,
+    // damage, and a coverer — so nothing downstream may be computed before
+    // the people in the blast have had their say.
+    const aoe = action.aoe;
+    const detonate = (mod: BlastMod): void => {
+      const centre = mod.aimHex ?? p.aimHex;
+      const damageExpr = mod.damageExpr ?? blastDamage;
+      // Reachability stays anchored on the thrower, exactly as it is for a
+      // throw that deviates: the wall test asks "could this have got to you",
+      // and the thrower is where it came from either way.
+      const geometricHitIds = tokensInAoe(aoe, originHex, centre, map.grid, tokens.forMap(src.mapId));
+      const hitIds = geometricHitIds.filter((tid) => {
+        const t = tokens.byId(tid);
+        return !!t && !rayBlocked(srcPx, hexToPixel({ q: t.q, r: t.r }, map.grid), sightSegs);
       });
-      return;
-    }
+      if (hitIds.length === 0) { emitError(socket, `${action.label} caught no one in its area.`); return; }
 
-    // No save (rare — every compendium AoE spell has one, but a homebrew
-    // action might not): everyone caught in the area takes the same roll.
-    const dmg = roll(action.amountExpr);
-    const base = Math.max(0, dmg.total);
-    const undo: UndoEntry[] = [];
-    // As above: figure out who takes what now, apply once this roll's own
-    // dice have settled.
-    const applications: Array<() => void> = [];
-    for (const tid of hitIds) {
-      const tok = tokens.byId(tid);
-      if (!tok) continue;
-      const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
-      let amt = base;
-      if (ch && action.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, action.damageType));
-      if (amt <= 0) continue;
-      undo.push(ch ? { t: 'hp', characterId: ch.id, delta: -amt } : { t: 'hp', tokenId: tok.id, delta: -amt });
-      applications.push(() => {
-        if (ch) {
-          const fresh = characters.byId(ch.id);
-          if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt, action.spellName ?? action.label);
-        } else {
-          const live = tokens.byId(tok.id);
-          if (live?.bar) {
-            const nh = Math.max(0, live.bar.hp - amt);
-            tokens.update(tok.id, { bar: { hp: nh, maxHp: live.bar.maxHp } });
-            io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
-          }
+      // SWADE Evasion: a telegraphed template attack (grenade blast, cone of
+      // flame) can be dived away from — Agility at −2, success takes nothing.
+      // A properly cooked grenade goes off the instant it lands: no diving clear.
+      const evadeable = actor.system === 'swade' && action.source === 'attack'
+        && !action.suppressive && !action.saveId && usableAmount(action.amountExpr) && !cooked;
+      if (action.saveId || evadeable) {
+        // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
+        // rather than deriving one from the actor's spellcasting stat.
+        const casterDc = action.fixedDc || Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
+        runGroupSave(io, {
+          campaignId: d.campaignId, userId: d.userId, username: d.username,
+          tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
+          ...(evadeable ? { evasion: true } : {}),
+          damageExpr, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),
+          damageType: action.damageType, label: castLabel,
+          ...(mod.cover ? { cover: mod.cover } : {}),
+          ...(action.appliesCondition ? {
+            appliesCondition: action.appliesCondition,
+            ...(action.concentration ? { concentrationCasterId: actor.id } : {}),
+          } : {}),
+          aoeVisual: {
+            mapId: src.mapId, shape: aoe.shape, sizeFt: aoe.sizeFt, sizeHexes: aoe.sizeHexes, widthFt: aoe.widthFt,
+            originHex, aimHex: centre,
+          },
+        });
+        return;
+      }
+
+      // No save (rare — every compendium AoE spell has one, but a homebrew
+      // action might not): everyone caught in the area takes the same roll.
+      const dmg = roll(damageExpr);
+      const base = Math.max(0, dmg.total);
+      const undo: UndoEntry[] = [];
+      // As above: figure out who takes what now, apply once this roll's own
+      // dice have settled.
+      const applications: Array<() => void> = [];
+      for (const tid of hitIds) {
+        const tok = tokens.byId(tid);
+        if (!tok) continue;
+        const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
+        let amt = base;
+        if (mod.cover) {
+          amt = coverAdjustedDamage(amt, { isCoverer: tok.id === mod.cover.tokenId, coverToughness: mod.cover.toughness });
         }
-        floatHp(io, d.campaignId, tok.mapId, tok.id, -amt, 'aoe', action.damageType);
-      });
+        if (ch && action.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, action.damageType));
+        if (amt <= 0) continue;
+        undo.push(ch ? { t: 'hp', characterId: ch.id, delta: -amt } : { t: 'hp', tokenId: tok.id, delta: -amt });
+        applications.push(() => {
+          if (ch) {
+            const fresh = characters.byId(ch.id);
+            if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt, action.spellName ?? action.label);
+          } else {
+            const live = tokens.byId(tok.id);
+            if (live?.bar) {
+              const nh = Math.max(0, live.bar.hp - amt);
+              tokens.update(tok.id, { bar: { hp: nh, maxHp: live.bar.maxHp } });
+              io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
+            }
+          }
+          floatHp(io, d.campaignId, tok.mapId, tok.id, -amt, 'aoe', action.damageType);
+        });
+      }
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
+      }, undo.length > 0 ? undo : undefined);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      const noSaveSettleMs = diceSettleDelayMs(dmg.dice);
+      setTimeout(() => {
+        for (const apply of applications) apply();
+        syncMapVision(io, d.campaignId, src.mapId);
+      }, noSaveSettleMs);
+      const noSaveFlightMs = aoe.shape === 'sphere' || aoe.shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
+      setTimeout(
+        () => emitAoeBurst(io, d.campaignId, src.mapId, aoe.shape, aoe.sizeFt, aoe.sizeHexes, aoe.widthFt, originHex, centre, action.damageType),
+        Math.max(0, noSaveSettleMs - noSaveFlightMs),
+      );
+    };
+
+    // A live grenade at your feet is a question, not a fact. Park the blast
+    // for a beat and ask everyone standing in it — one of them may snatch it
+    // up and throw it back (Hot Potato), or throw themselves onto it
+    // (Covering). A cooked grenade goes off the instant it lands, and one
+    // that already went off in the thrower's hand is long past asking.
+    const offerable = actor.system === 'swade' && action.source === 'attack'
+      && isNade && !action.suppressive && !cooked && !cookBlewUp;
+    // offerBlastChoice returns false when there was nobody in the blast who
+    // could answer for themselves — then it resolves as it always has.
+    if (!offerable || !offerBlastChoice({
+      io, campaignId: d.campaignId, label: castLabel,
+      throwerName: actor.name, throwerHex: { q: src.q, r: src.r },
+      aoe, originHex, aimHex: p.aimHex, map,
+      srcPx, sightSegs, damageExpr: blastDamage, resume: detonate,
+    })) {
+      detonate({});
     }
-    const msg = chat.add(d.campaignId, {
-      userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: `${actor.name} casts ${castLabel}`, roll: dmg, recipients: null,
-    }, undo.length > 0 ? undo : undefined);
-    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-    const noSaveSettleMs = diceSettleDelayMs(dmg.dice);
-    setTimeout(() => {
-      for (const apply of applications) apply();
-      syncMapVision(io, d.campaignId, src.mapId);
-    }, noSaveSettleMs);
-    const noSaveFlightMs = action.aoe.shape === 'sphere' || action.aoe.shape === 'cylinder' ? PROJECTILE_FLIGHT_MS : 0;
-    setTimeout(
-      () => emitAoeBurst(io, d.campaignId, src.mapId, action.aoe!.shape, action.aoe!.sizeFt, action.aoe!.sizeHexes, action.aoe!.widthFt, originHex, p.aimHex, action.damageType),
-      Math.max(0, noSaveSettleMs - noSaveFlightMs),
-    );
   }, 'CAST_AOE'));
 
   // Activate a psychic power that has no target (utility/self powers, e.g.
@@ -2161,6 +2367,79 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'SOAK_ROLL'));
+
+  /**
+   * Answer the live grenade at your feet. The blast is parked mid-resolution
+   * waiting on this, so every path through here MUST end in either a resumed
+   * blast or a still-running fuse — a return that does neither leaves the
+   * grenade hanging until the grace period bails it out.
+   */
+  socket.on(C2S.BLAST_RESPONSE, safe(socket, ({ blastId, characterId, choice }: BlastResponsePayload) => {
+    const d = requireCampaign(socket);
+    const pb = pendingBlasts.get(blastId);
+    // Already settled by someone faster, or the fuse ran out mid-click.
+    if (!pb || pb.settled || pb.campaignId !== d.campaignId) return;
+    const cand = [...pb.candidates.values()].find((c) => c.characterId === characterId);
+    if (!cand) { emitError(socket, 'That character is not standing in the blast.'); return; }
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only answer for your own character.');
+      return;
+    }
+
+    if (choice === 'none') {
+      // Standing fast is not a claim on the grenade — it only drops this one
+      // out of the queue. The blast waits for the others, or for the fuse.
+      pb.candidates.delete(cand.tokenId);
+      if (pb.candidates.size === 0 && claimBlast(io, pb)) pb.resume({});
+      return;
+    }
+
+    if (choice === 'cover') {
+      if (!claimBlast(io, pb)) return;
+      const toughness = Math.round(Number(systemFor(ch.system).derive(ch.sheet).toughness)) || 4;
+      // No roll to make — you either lie on it or you don't. runGroupSave
+      // posts the line, doubles their damage and shields everyone else.
+      pb.resume({ cover: { tokenId: cand.tokenId, name: cand.name, toughness } });
+      return;
+    }
+
+    // Hot Potato: snatch it up and hurl it back. One attempt for the whole
+    // blast — claiming it here is what makes it "one attempt only".
+    if (!claimBlast(io, pb)) return;
+    const br = roll(traitExpr(ch.sheet, skillDie(ch.sheet, 'Athletics'), cand.potatoMod));
+    const wildCard = ch.sheet.wildCard !== false;
+    const traitOne = br.dice.some((x) => !x.wild && x.value === 1);
+    const wildOne = br.dice.some((x) => x.wild && x.value === 1);
+    const critFail = traitOne && (!wildCard || wildOne);
+    const caught = !critFail && br.total >= 4;
+    const holdTag = cand.onHold ? ' on Hold' : '';
+
+    let mod: BlastMod = {};
+    let text: string;
+    if (critFail) {
+      // Fumbled the catch — it goes off in their hand, exactly as a botched
+      // cook does: re-centred on them, at damage as if thrown with a raise.
+      const tok = tokens.byId(cand.tokenId);
+      if (tok) mod = { aimHex: { q: tok.q, r: tok.r } };
+      // Damage as if thrown with a raise, the same as a botched cook.
+      mod.damageExpr = usableAmount(pb.damageExpr) ? `${pb.damageExpr}+1d6!` : pb.damageExpr;
+      text = `${cand.name} grabs at ${pb.label} (Athletics ${fmtMod(cand.potatoMod)}${holdTag}) — CRITICAL FAILURE: it goes off in their hand!`;
+    } else if (caught) {
+      mod = { aimHex: pb.throwerHex };
+      text = `🤾 ${cand.name} snatches ${pb.label} up and hurls it back (Athletics ${fmtMod(cand.potatoMod)}${holdTag}) — it lands back at ${pb.throwerName}'s feet!`;
+    } else {
+      text = `${cand.name} fumbles for ${pb.label} (Athletics ${fmtMod(cand.potatoMod)}${holdTag}) and can't get hold of it in time.`;
+    }
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
+      text, roll: { ...br, outcome: caught ? 'success' as const : 'failure' as const }, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    // Let the catch roll land on screen before the thing detonates.
+    setTimeout(() => pb.resume(mod), diceSettleDelayMs(br.dice));
+  }, 'BLAST_RESPONSE'));
 
   // A Shaken combatant answers the prompt: make the Spirit roll now.
   socket.on(C2S.SHAKEN_ROLL, safe(socket, ({ characterId }: ShakenRollPayload) => {

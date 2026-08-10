@@ -6,6 +6,7 @@ import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { mapPixelSize, useStage } from '../util/stage';
 import { worldDrag } from '../store/worldDrag';
+import { FlashHalo } from './FlashHalo';
 
 /** How much larger a token with custom art renders than a plain colour disc. */
 const ART_SCALE = 1.2;
@@ -101,6 +102,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const character = useGameStore((s) => s.characters.find((c) => c.id === token.characterId));
   const members = useGameStore((s) => s.members);
   const selected = useGameStore((s) => s.selectedTokenIds.includes(token.id));
+  const flashing = useGameStore((s) => s.worldHover?.kind === 'token' && s.worldHover.id === token.id);
   const tool = useGameStore((s) => s.tool);
   const targetEffect = useGameStore((s) => s.targeting?.action.effect ?? null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
@@ -297,6 +299,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       {targetState === 'valid' && (
         <circle className="target-ring" r={Math.max(halfW, halfH) + 6} fill="none" stroke={ringColor} strokeWidth={3} />
       )}
+      {flashing && <FlashHalo r={Math.max(halfW, halfH)} />}
       {selected && (
         <circle r={Math.max(halfW, halfH) + 4} fill="none" stroke="#e8d27b" strokeWidth={3} strokeDasharray="6 4" />
       )}

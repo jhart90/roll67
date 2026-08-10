@@ -4,11 +4,13 @@ import { hexDistance, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 import { openWindow } from '../store/windowManager';
+import { FlashHalo } from './FlashHalo';
 
 const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject }) {
   const map = useGameStore((s) => s.map)!;
   const isDm = useGameStore((s) => s.you?.role === 'dm');
   const selected = useGameStore((s) => s.selectedObjectId === obj.id);
+  const flashing = useGameStore((s) => s.worldHover?.kind === 'object' && s.worldHover.id === obj.id);
   const stage = useStage();
   // DM drag-to-relocate: live pixel position while dragging, committed to a
   // hex on release. A drag suppresses the click-to-open that release fires.
@@ -105,6 +107,7 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
       onPointerUp={onPointerUp}
       onContextMenu={onContextMenu}
     >
+      {flashing && <FlashHalo r={r} />}
       {/* The same gold dashed ring a selected token wears — a chest picked in
           the World pane should look picked here in exactly the same way. */}
       {selected && (

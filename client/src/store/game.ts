@@ -128,6 +128,11 @@ function resetChatQueue(): void {
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain' | 'text';
 export type DockTab = 'chat' | 'initiative' | 'world';
 
+/** A piece on the current map, named the way the World pane finds it: either a
+ *  token, or one of the chest/shop/prop objects. Null = this row has nothing
+ *  on the map. */
+export type MapTarget = { kind: 'token' | 'object'; id: string } | null;
+
 export type TerrainBrush = 'brush' | 'rect' | 'circle';
 
 export interface HpFloat { id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }
@@ -317,6 +322,11 @@ interface GameState {
    *  `inspectedObjectId`: selecting shows you which one, inspecting edits it. */
   selectedObjectId: string | null;
   selectObject(id: string | null): void;
+  /** The piece flashing on the map because the pointer is over its World-pane
+   *  row. Purely a pointer echo — it never survives the mouse leaving, and it
+   *  never touches selection. */
+  worldHover: MapTarget;
+  setWorldHover(t: MapTarget): void;
   /** Local-only: mute audio on this device without affecting others. */
   clientMuted: boolean;
   /** This device's own music volume (multiplies the DM's jukebox volume). */
@@ -574,6 +584,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   selectedTokenIds: [],
   worldSelectedKey: null,
   selectedObjectId: null,
+  worldHover: null,
   inspectorTokenId: null,
   openInspector(inspectorTokenId) { set({ inspectorTokenId }); },
   selectedLightId: null,
@@ -638,7 +649,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [],
       viewingAs: null, dragGhosts: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
-      worldSelectedKey: null, selectedObjectId: null,
+      worldSelectedKey: null, selectedObjectId: null, worldHover: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
       // Transient slices that used to leak into the NEXT campaign: a live
       // ruler from campaign A rendering over campaign B's map, a stale error
@@ -689,6 +700,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
   setWorldSelection(worldSelectedKey) { set({ worldSelectedKey }); },
+  setWorldHover(worldHover) {
+    // Bail on a no-op rather than churning a render for every mousemove that
+    // lands on the row you are already over.
+    const cur = get().worldHover;
+    if (cur?.id === worldHover?.id && cur?.kind === worldHover?.kind) return;
+    set({ worldHover });
+  },
   selectObject(selectedObjectId) {
     // A map object and a token are the same kind of "the thing I'm pointing
     // at", so picking one releases the other. The World pane follows along;
@@ -859,6 +877,7 @@ export function wireSocket(): void {
       selectedTokenIds: [],
       worldSelectedKey: null,
       selectedObjectId: null,
+      worldHover: null,
       inspectorTokenId: null,
       inspectedObjectId: null,
       lootPopupId: null,

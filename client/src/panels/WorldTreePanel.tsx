@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Character, Counter, DirectoryPayload, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
-import { intents, useGameStore } from '../store/game';
+import { intents, useGameStore, type MapTarget } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
 import { AnchoredMenu } from '../util/AnchoredMenu';
@@ -335,32 +335,40 @@ export function WorldTreePanel() {
   }
 
   /**
-   * Mark a row as the selection, and point at the same thing on the map when
-   * it has a piece there — a token, or the chest/shop/prop object standing in
-   * for it. Everything else (a handout, a folder of notes) selects in the tree
-   * alone; there is nothing on the map to ring.
+   * The piece on the CURRENT map that this row stands for, if any — a token,
+   * or the chest/shop/prop object representing a world entity. A handout or a
+   * folder of notes has nothing on the map and resolves to null.
+   *
+   * Shared by selection and hover so the two can never disagree about which
+   * piece a row means.
    */
-  function selectNode(node: TreeNode) {
+  function mapTargetFor(node: TreeNode): MapTarget {
     const s = useGameStore.getState();
     const onThisMap = (mapId: string | null | undefined) => !!mapId && mapId === currentMapId;
 
-    // Which token, if any, this row IS on the map.
     const tokenId = node.kind === 'token' && onThisMap(node.tokenMapId) ? node.id
       : node.kind === 'character' && onThisMap(node.tokenMapId)
         ? Object.values(s.tokens).find((t) => t.characterId === node.id && t.mapId === currentMapId)?.id ?? null
         : null;
-    // ...and which map object. A shop or a chest-folder is a world entity
-    // whose piece on the map is a separate object standing in for it.
-    const obj = tokenId ? null
-      : node.kind === 'mapobject' ? s.mapObjects[node.id]
-        : Object.values(s.mapObjects).find((o) =>
-          (node.kind === 'shop' && o.shopId === node.id)
-          || (node.kind === 'folder' && o.worldFolderId === node.id));
+    if (tokenId) return { kind: 'token', id: tokenId };
+
+    const obj = node.kind === 'mapobject'
+      ? s.mapObjects[node.id]
+      : Object.values(s.mapObjects).find((o) =>
+        (node.kind === 'shop' && o.shopId === node.id)
+        || (node.kind === 'folder' && o.worldFolderId === node.id));
+    return obj && obj.mapId === currentMapId ? { kind: 'object', id: obj.id } : null;
+  }
+
+  /** Mark a row as the selection, and ring its piece on the map if it has one. */
+  function selectNode(node: TreeNode) {
+    const s = useGameStore.getState();
+    const target = mapTargetFor(node);
 
     // Both map setters clear the tree key (they are also what a click on the
     // MAP goes through), so the row is claimed last and wins either way.
-    if (tokenId) s.selectToken(tokenId, false);
-    else if (obj && obj.mapId === currentMapId) s.selectObject(obj.id);
+    if (target?.kind === 'token') s.selectToken(target.id, false);
+    else if (target?.kind === 'object') s.selectObject(target.id);
     // Nothing on this map answers to this row — drop any stale ring rather
     // than leaving the map pointing at whatever was picked before.
     else { s.selectObject(null); s.selectToken(null); }
@@ -546,6 +554,11 @@ export function WorldTreePanel() {
             drop(node.id, e.clientY < rect.top + rect.height / 2 ? 'above' : 'into');
           } : undefined}
           onDragEnd={isDm ? () => { dragRef.current = null; setDropTarget(null); } : undefined}
+          // Mousing down the tree flashes each row's piece on the map in turn,
+          // so "where is this actually placed?" is answered by hovering rather
+          // than by clicking through everything.
+          onMouseEnter={() => useGameStore.getState().setWorldHover(mapTargetFor(node))}
+          onMouseLeave={() => useGameStore.getState().setWorldHover(null)}
           onClick={() => activate(node, kids.length > 0)}
           onDoubleClick={() => { open(node); selectNode(node); }}
           onContextMenu={(e) => {

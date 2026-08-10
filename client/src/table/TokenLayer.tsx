@@ -428,7 +428,11 @@ export function TokenLayer() {
   const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
   // SWADE range bands: the listed range is Short — shots reach 4x (Medium
   // −2 / Long −4), or 16x at −8 while Aiming. Mirror of the server's gate.
-  const bandMult = targeting && useGameStore.getState().campaign?.system === 'swade' && targeting.action.ranged
+  // hardRange opts out of the ladder entirely — its listed reach IS its
+  // maximum. Must match the server's own gate, or the ring promises shots the
+  // server then refuses.
+  const bandMult = targeting && useGameStore.getState().campaign?.system === 'swade'
+    && targeting.action.ranged && !targeting.action.hardRange
     ? (targeting.adv === 'adv' ? 16 : 4)
     : 1;
   const rangeHexes = targeting
@@ -460,7 +464,12 @@ export function TokenLayer() {
     const reach = rangeHexes + (t.size >= 3 ? 1 : 0);
     const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= reach;
     const selfBlocked = targeting.action.effect === 'damage' && t.id === src.id;
-    return inRange && !selfBlocked ? 'valid' : 'invalid';
+    // Wound-mending gear lists only the people who track Wounds. Every token
+    // reaching this client is one it has already discovered, so the visible
+    // set is exactly "Wild Cards I know about" — the player's own characters
+    // and whichever of the DM's are Wild Cards.
+    const wcBlocked = targeting.action.wildCardOnly === true && t.nameplate?.wildCard !== true;
+    return inRange && !selfBlocked && !wcBlocked ? 'valid' : 'invalid';
   }
 
   return (

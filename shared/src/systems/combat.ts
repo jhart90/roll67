@@ -74,6 +74,7 @@ export function combatActions(character: Character): CombatAction[] {
       ...(condition ? { appliesCondition: condition } : {}),
       ...(condition && !save && conditionSave && conditionDc > 0
         ? { conditionSaveId: conditionSave, conditionDc } : {}),
+      ...(atk.hardRange === true ? { hardRange: true } : {}),
     });
 
     // SWADE Suppressive Fire: any RoF 2+ ranged weapon can hose down a
@@ -295,6 +296,8 @@ export function combatActions(character: Character): CombatAction[] {
       source: 'item',
       index: i,
       ...(swadeHeal ? { fixedTn: 4, healsWounds: true as const, traitName: 'Healing' } : {}),
+      ...(it.hardRange === true ? { hardRange: true } : {}),
+      ...(it.wildCardOnly === true ? { wildCardOnly: true } : {}),
     });
   });
 

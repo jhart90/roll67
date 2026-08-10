@@ -914,8 +914,19 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const dist = hexDistance({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
     const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0);
     // SWADE range bands: the listed range is Short; Medium (−2) reaches 2×
-    // and Long (−4) reaches 4×. Other systems keep the hard single limit.
-    const swadeBands = actor.system === 'swade' && action.ranged && rangeHexes > 1;
+    // and Long (−4) reaches 4×. Other systems keep the hard single limit — and
+    // so does anything flagged hardRange, whose listed reach IS its maximum.
+    const swadeBands = actor.system === 'swade' && action.ranged && rangeHexes > 1 && !action.hardRange;
+
+    // Wound-mending gear is aimed at the people who track Wounds. Checked here
+    // and not only in the targeting ring, because the ring is the client's.
+    if (action.wildCardOnly) {
+      const tgtChar = tgt.characterId ? characters.byId(tgt.characterId) : undefined;
+      if (!tgtChar || tgtChar.sheet.wildCard === false) {
+        emitError(socket, `${tgt.name} is an Extra — ${action.label} only works on Wild Cards.`);
+        return;
+      }
+    }
     // One shared band model (swadeRange.ts) so the shooter's on-screen ruler
     // and this penalty can never disagree. A big target is a hex easier to
     // reach, so measure against a slightly shortened distance.

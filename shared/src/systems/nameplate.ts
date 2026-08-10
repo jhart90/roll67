@@ -27,6 +27,7 @@ export function nameplateFor(character: Character, tokenColor: string, tokenArtU
     color: tokenColor,
     lines: linesFor(character.system, sheet).filter((l) => l.text.length > 0),
     pills: pillsFor(character.system, sheet),
+    ...(character.system === 'swade' ? { wildCard: sheet.wildCard !== false } : {}),
   };
 }
 

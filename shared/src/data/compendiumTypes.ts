@@ -97,6 +97,15 @@ export interface GearData {
   strain?: number;
   /** SWN cyberware: initiative bonus (Boosted Reflexes). */
   initBonus?: number;
+  /** SWADE: a healing item that works at a distance rather than at arm's
+   *  length (a drone, a sprayer). Feet; absent means the default touch range. */
+  healRangeFt?: number;
+  /** SWADE: only Wild Cards are valid targets. Wound-mending gear that a
+   *  drone flies to a patient is aimed at people who track Wounds. */
+  wildCardOnly?: boolean;
+  /** SWADE: the listed range is a HARD maximum, not a Short band that Medium
+   *  and Long extend. A spray can does not reach four times as far for −4. */
+  hardRange?: boolean;
 }
 
 export interface ContentEntry {
@@ -302,6 +311,10 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       const blastHexes = blastMatch ? ({ small: 1, medium: 3, large: 5 } as Record<string, number>)[blastMatch[1].toLowerCase()] : 0;
       const coneTemplate = /cone template/i.test(propText);
       const stunRider = /vigor roll or stunned/i.test(propText);
+      // "max range" says the listed range is all there is — no Medium at −2,
+      // no Long at −4. For a spray can or a contact weapon the band ladder is
+      // nonsense: it cannot reach four times as far just for a penalty.
+      const hardRange = /\bmax range\b/i.test(propText);
       const thrown = propText.toLowerCase().includes('thrown');
       return {
         listId: 'attacks',
@@ -319,6 +332,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
           ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),
           ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
+          ...(hardRange ? { hardRange: true } : {}),
           ...(thrown ? { thrown: true } : {}),
           weight: weightFor(entry.name, 'weapon', entry.gear?.weight),
           notes: propText,
@@ -564,9 +578,12 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
     // rules would quietly stop the kits being usable at all.
     const swadeHeal = isSwade && /\bWound\b/i.test(`${entry.subtitle} ${entry.detail ?? ''}`)
       && /\bheal(ing)?\b/i.test(`${entry.subtitle} ${entry.detail ?? ''}`);
+    // A healing item normally works at arm's length; one that carries the
+    // treatment to the patient (a drone) states its own reach.
+    const healRange = entry.gear?.healRangeFt ?? 5;
     const usable = heal
-      ? { effect: 'heal', amount: heal, range: 5 }
-      : swadeHeal ? { effect: 'heal', amount: '', range: 5 } : {};
+      ? { effect: 'heal', amount: heal, range: healRange }
+      : swadeHeal ? { effect: 'heal', amount: '', range: healRange } : {};
     const bonus = entry.kind === 'magicitem' ? parseAcSaveBonus(entry.subtitle) : { ac: 0, save: 0 };
     const equip = { equipped: false, acBonus: bonus.ac, saveBonus: bonus.save };
     if (isSwade) {
@@ -579,6 +596,8 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           equipped: false,
           bonusSkill: tb?.trait ?? '', bonusAmt: tb?.amount ?? 0,
           ...(entry.gear?.caliber ? { caliber: entry.gear.caliber } : {}),
+          ...(entry.gear?.wildCardOnly ? { wildCardOnly: true } : {}),
+          ...(entry.gear?.hardRange ? { hardRange: true } : {}),
           notes: entry.subtitle,
         },
         label: `${entry.name} added to inventory`,

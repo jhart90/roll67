@@ -149,6 +149,14 @@ export interface CombatAction {
    *  Absent = the condition applies automatically on a hit (grapples). */
   conditionSaveId?: string;
   conditionDc?: number;
+  /** SWADE: `rangeFt` is a HARD maximum rather than the Short band. Suppresses
+   *  the Medium/Long/Extreme ladder on both the client's targeting ring and
+   *  the server's gate, which must agree or the ring lies. */
+  hardRange?: boolean;
+  /** SWADE: only Wild Cards may be targeted. Wound-mending aimed at the people
+   *  who actually track Wounds — every PC, and the NPCs the DM built as Wild
+   *  Cards. Enforced server-side; the targeting ring greys out the rest. */
+  wildCardOnly?: boolean;
 }
 
 export interface SystemSchema {

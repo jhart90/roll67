@@ -126,6 +126,9 @@ const WEAPONS: W[] = [
   ['Thompson M1928 SMG', 'Ranged', '2d6!', 'kinetic', 'ranged', ['range 60/120/240', 'AP 1', 'mag 30', 'RoF 3', 'era: 1960s — FBI armory, senior agents only', 'caliber: bullets-medium']],
   ['Lipstick Pistol (Single Shot)', 'Ranged', '2d4!', 'kinetic', 'ranged', ['range 6/12/24', 'mag 1', 'concealable anywhere, passes any search', 'era: 1960s — CIA gadget', 'caliber: bullets-small']],
   ['Blackjack (Sap)', 'Melee', '1d4!', 'bludgeoning', 'str', ['nonlethal', 'Vigor roll or Stunned', 'concealable', 'era: 1960s — FBI/CIA close work']],
+  // No damage at all — the whole attack IS the rider. 'max range' keeps it at
+  // arm's length rather than letting the band ladder spray it four tiles.
+  ['Pepper Spray', 'Ranged', '0', 'poison', 'ranged', ['range 10', 'max range', 'nonlethal', 'Vigor roll or Stunned', 'mag 3', 'concealable']],
 ];
 
 // [name, category, bonus, rangedArmor, notes] — category 'Shield' means the
@@ -257,9 +260,13 @@ const AMMUNITION: Ammo[] = [
   ['Sling Stones (20)', 'stones', 20, 'Smooth river stones'],
 ];
 
-// [name, subtitle, traitBonus?] — a trait bonus becomes a live "+N to trait"
-// on the sheet once the item is marked equipped.
-type G = [string, string, { trait: string; amount: number }?];
+// [name, subtitle, traitBonus?, mech?] — a trait bonus becomes a live "+N to
+// trait" on the sheet once the item is marked equipped. `mech` carries the
+// machine-usable bits for gear that becomes a real action: how far a healing
+// item reaches, whether its range is a hard cap, whether only Wild Cards can
+// be targeted, and how many charges it arrives with.
+type GearMech = { healRangeFt?: number; wildCardOnly?: boolean; hardRange?: boolean; qty?: number };
+type G = [string, string, { trait: string; amount: number }?, GearMech?];
 const GEAR: G[] = [
   ['Backpack', 'Standard load carrier'],
   ['Bedroll', 'Sleeping kit'],
@@ -280,6 +287,11 @@ const GEAR: G[] = [
   ['Climbing Gear', '+2 to Athletics (climbing)', { trait: 'Athletics', amount: 2 }],
   ['Whetstone', 'Weapon maintenance'],
   ['Healing Potion', 'Drink to treat a Wound: a Healing roll mends one on a success, two on a raise, and steadies the Shaken. Used up.'],
+  // Flies the treatment to the patient: the Healing roll is made at range
+  // rather than at arm's length. 40 tiles is a hard ceiling, not a Short band,
+  // and only Wild Cards — the people who track Wounds — can be treated.
+  ['Healing Drone', 'Single-use drone that carries a Healing roll to one Wild Card up to 40 tiles away. Treating a Wound is a Healing roll — a success mends one, a raise two, and either steadies the Shaken.',
+    undefined, { healRangeFt: 200, wildCardOnly: true, hardRange: true, qty: 1 }],
   ['Antitoxin', 'Shrugs off one poison. Used up.'],
   ['Bandages', 'Basic field dressing; +1 Healing while equipped', { trait: 'Healing', amount: 1 }],
   ['Surgical Kit', 'Full medical instruments; +2 Healing while equipped', { trait: 'Healing', amount: 2 }],
@@ -560,11 +572,11 @@ export const CONTENT_SWADE: ContentEntry[] = [
       ...(mech?.condition ? { condition: mech.condition } : {}),
     },
   })),
-  ...GEAR.map(([name, subtitle, traitBonus], i): ContentEntry => ({
+  ...GEAR.map(([name, subtitle, traitBonus, mech], i): ContentEntry => ({
     id: contentSlug('swade', 'gear', name),
     system: 'swade', kind: 'gear', name, category: 'Gear', order: i,
     subtitle,
-    gear: traitBonus ? { traitBonus } : {},
+    gear: { ...(traitBonus ? { traitBonus } : {}), ...(mech ?? {}) },
   })),
   ...AMMUNITION.map(([name, caliber, qty, subtitle], i): ContentEntry => ({
     id: contentSlug('swade', 'gear', name),

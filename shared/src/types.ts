@@ -328,6 +328,10 @@ export interface TokenNameplate {
   lines: NameplateLine[];
   /** Edges and Hindrances, for systems that have them. */
   pills: NameplatePill[];
+  /** SWADE: is this a Wild Card? Rides on the token so the client can grey out
+   *  Extras when aiming something that only Wild Cards can receive, without
+   *  ever being handed their sheet. Absent for systems with no such idea. */
+  wildCard?: boolean;
 }
 
 export type TokenView = Token & { nameplate?: TokenNameplate | null };

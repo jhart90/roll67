@@ -341,9 +341,21 @@ export function TokenInspector() {
           />
         </label>
         {token.light && (
-          <button className="link" onClick={() => intents.updateToken(token.id, { light: null })}>
-            turn off light
-          </button>
+          <>
+            <button className="link" onClick={() => intents.updateToken(token.id, { light: null })}>
+              turn off light
+            </button>
+            {/* Not the same as turning it off: this puts the light down where
+                the token is standing and leaves it burning there, which is what
+                you want for a dropped torch or a lantern set on a table. */}
+            <button
+              className="link"
+              title="Leave the light behind on the map at this token's position"
+              onClick={() => intents.unlinkLightFromToken(token.id, token.mapId)}
+            >
+              set it down here
+            </button>
+          </>
         )}
       </div>
     </div>

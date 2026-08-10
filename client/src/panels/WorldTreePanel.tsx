@@ -338,9 +338,18 @@ export function WorldTreePanel() {
     }
     if (node.kind === 'light') {
       if (!isDm || !node.lightMapId) return;
-      if (node.lightTokenId) return; // can't rename token-carried lights directly
-      const name = prompt('Light name', node.name);
-      if (name && name.trim()) intents.renameLight(node.id, node.lightMapId, name.trim());
+      // A light carried by a token is a property OF that token — its editor is
+      // the token inspector, which already has the radius controls and the
+      // unlink. Sending it anywhere else would be a second editor for one thing.
+      if (node.lightTokenId) {
+        useGameStore.getState().openInspector(node.lightTokenId);
+        return;
+      }
+      // A light lives on a map and is edited on that map, so bring the map up
+      // first — the inspector reads the light out of the CURRENT map's
+      // geometry and would otherwise find nothing to show.
+      if (node.lightMapId !== currentMapId) intents.viewMap(node.lightMapId);
+      useGameStore.getState().selectLight(node.id);
       return;
     }
     if (node.kind === 'mapobject') {
@@ -608,33 +617,10 @@ export function WorldTreePanel() {
           </span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
-          {/* Folders manage themselves from the details window (double/right-
-              click) — no inline delete button cluttering every row. */}
-          {isDm && node.kind === 'light' && !node.lightTokenId && node.lightMapId && (
-            <button
-              className="link danger"
-              title="Delete light"
-              onClick={(e) => {
-                e.stopPropagation();
-                intents.deleteLight(node.lightMapId!, node.id);
-              }}
-            >
-              ✕
-            </button>
-          )}
-          {isDm && node.kind === 'light' && node.lightTokenId && (
-            <button
-              className="link danger"
-              title="Unlink light from character"
-              onClick={(e) => {
-                e.stopPropagation();
-                const tok = allTokens[node.lightTokenId!];
-                if (tok) intents.unlinkLightFromToken(tok.id, tok.mapId);
-              }}
-            >
-              ⊘
-            </button>
-          )}
+          {/* No inline delete on any row. Destroying something is a decision
+              you make with its editor open and its properties in front of you,
+              not a red ✕ sitting a stray click away from every name in the
+              list. Folders, lights and everything else all work this way. */}
         </div>
         {isOpen && kids.map((k) => renderNode(k, depth + 1))}
       </div>

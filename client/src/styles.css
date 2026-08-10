@@ -2446,6 +2446,12 @@ th > .term { border-bottom-style: dotted; }
 .key-roster h5 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
 .key-holder { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin-bottom: 4px; }
 .key-pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid #7fa8d955; background: #7fa8d914; color: #b8d3f0; }
+
+/* Cook-the-grenade choice. */
+.cook-modal { max-width: 420px; }
+.cook-notes { margin: 4px 0 12px; padding-left: 18px; font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+.cook-notes b.good { color: #7ed28a; }
+.cook-notes b.bad { color: #e08a8a; }
 .benny-panel button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ================= retro lobby (pre-campaign screens only) =================

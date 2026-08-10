@@ -1623,10 +1623,56 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // SWADE thrown/fired templates can go wide: Athletics (thrown) or
     // Shooting vs 4 — on a failure the template deviates 1d6″ (thrown) or
     // 2d6″ (fired) in a random direction before it lands.
+    // COOKING a grenade (a free Smarts roll before the throw): time the fuse
+    // so it lands and goes off at once — nobody throws it back, nobody dives
+    // clear. Get it wrong badly enough and it goes off in your hand.
+    let cooked = false;
+    let cookBlewUp = false;
+    /** Damage the blast will actually roll — a hand detonation adds the raise die. */
+    let blastDamage = action.amountExpr;
+    {
+      const row0 = rows(actor.sheet, 'attacks')[action.index];
+      const isNade = action.thrown === true || /thrown/i.test(str(row0 ?? {}, 'notes', ''));
+      if (actor.system === 'swade' && p.cook && isNade && action.source === 'attack') {
+        const br = roll(traitExpr(actor.sheet, dieSides(str(actor.sheet, 'smarts', 'd6'))));
+        // A SWADE Critical Failure: the trait die shows 1, and for a Wild Card
+        // the Wild Die does too.
+        const wildCard = actor.sheet.wildCard !== false;
+        const traitOne = br.dice.some((x) => !x.wild && x.value === 1);
+        const wildOne = br.dice.some((x) => x.wild && x.value === 1);
+        const critFail = traitOne && (!wildCard || wildOne);
+        cooked = !critFail && br.total >= 4;
+        let text: string;
+        if (critFail) {
+          // It detonates in hand. Re-centre the blast on the thrower BEFORE
+          // anyone rolls anything, so evasion and saves are judged against
+          // where it actually went off.
+          p.aimHex = { q: src.q, r: src.r };
+          text = `${actor.name} cooks ${action.label} — CRITICAL FAILURE: it goes off in their hand!`;
+        } else if (cooked) {
+          text = `${actor.name} cooks ${action.label} — Smarts success: the fuse is timed, no throwing it back and no diving clear.`;
+        } else {
+          text = `${actor.name} cooks ${action.label} — Smarts failure: the timing is off, so it can still be thrown back or evaded.`;
+        }
+        const msg = chat.add(d.campaignId, {
+          userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
+          text, roll: { ...br, outcome: critFail ? 'failure' as const : cooked ? 'success' as const : 'failure' as const },
+          recipients: null,
+        });
+        io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+        if (critFail) {
+          // Damage as if thrown with a raise, per the book.
+          blastDamage = usableAmount(action.amountExpr) ? `${action.amountExpr}+1d6!` : action.amountExpr;
+          cookBlewUp = true;
+        }
+      }
+    }
+
     // Fires for EVERY thrown/fired template, not just damaging ones: a Stun
     // Grenade deals no damage, and its victims must not be made to roll Vigor
-    // for a grenade that was never landed in the first place.
-    if (actor.system === 'swade' && action.source === 'attack' && !action.suppressive) {
+    // for a grenade that was never landed in the first place. A grenade that
+    // already went off in the thrower's hand needs no throwing roll.
+    if (actor.system === 'swade' && action.source === 'attack' && !action.suppressive && !cookBlewUp) {
       const row = rows(actor.sheet, 'attacks')[action.index];
       const thrown = action.thrown === true || /thrown/i.test(str(row ?? {}, 'notes', ''));
       const skillName = thrown ? 'Athletics' : 'Shooting';
@@ -1660,8 +1706,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
 
     // SWADE Evasion: a telegraphed template attack (grenade blast, cone of
     // flame) can be dived away from — Agility at −2, success takes nothing.
+    // A properly cooked grenade goes off the instant it lands: no diving clear.
     const evadeable = actor.system === 'swade' && action.source === 'attack'
-      && !action.suppressive && !action.saveId && usableAmount(action.amountExpr);
+      && !action.suppressive && !action.saveId && usableAmount(action.amountExpr) && !cooked;
     if (action.saveId || evadeable) {
       // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
       // rather than deriving one from the actor's spellcasting stat.
@@ -1670,7 +1717,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         campaignId: d.campaignId, userId: d.userId, username: d.username,
         tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
         ...(evadeable ? { evasion: true } : {}),
-        damageExpr: action.amountExpr, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),
+        damageExpr: blastDamage, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),
         damageType: action.damageType, label: castLabel,
         ...(action.appliesCondition ? {
           appliesCondition: action.appliesCondition,

@@ -284,7 +284,9 @@ interface GameState {
   beginAoeTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
   updateAoeAim(hex: Hex): void;
   cancelAoeTargeting(): void;
-  confirmAoeTargeting(): void;
+  /** Pass true/false to answer the cook prompt; omit to be asked. */
+  confirmAoeTargeting(cook?: boolean): void;
+  cookPrompt: { label: string } | null;
   /** Pending spell cast awaiting a slot-level choice. */
   castPrompt: { characterId: string; rollableId: string; label: string; levels: number[] } | null;
   beginCast(characterId: string, rollableId: string, minLevel: number, label: string): void;
@@ -508,10 +510,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
     }
   },
-  confirmAoeTargeting() {
+  confirmAoeTargeting(cook?: boolean) {
     const t = get().aoeTargeting;
     if (!t) return;
-    set({ aoeTargeting: null });
+    // A grenade asks whether to cook it before it leaves the hand. The
+    // question is only worth asking once, so `cook` being undefined means
+    // "not asked yet" and anything defined means the player has answered.
+    if (cook === undefined && t.action.thrown === true && get().campaign?.system === 'swade') {
+      set({ cookPrompt: { label: t.action.label } });
+      return;
+    }
+    set({ aoeTargeting: null, cookPrompt: null });
     if (t.action.aoe) {
       socket.emit(C2S.AOE_PREVIEW, {
         sourceTokenId: t.sourceTokenId, shape: t.action.aoe.shape, sizeFt: t.action.aoe.sizeFt, widthFt: t.action.aoe.widthFt,
@@ -521,9 +530,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ dockTab: 'chat' });
     socket.emit(C2S.CAST_AOE, {
       characterId: t.characterId, actionId: t.action.id, sourceTokenId: t.sourceTokenId,
-      originHex: t.originHex, aimHex: t.aimHex, adv: t.adv,
+      originHex: t.originHex, aimHex: t.aimHex, adv: t.adv, cook: cook === true,
     });
   },
+  cookPrompt: null,
   castPrompt: null,
   beginCast(characterId, rollableId, minLevel, label) {
     const c = get().characters.find((x) => x.id === characterId);

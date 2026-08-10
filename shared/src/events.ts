@@ -488,6 +488,10 @@ export interface CastAoePayload {
   originHex: Hex;
   aimHex: Hex;
   adv?: 'adv' | 'dis' | null;
+  /** SWADE grenades: "cook" it first — a free Smarts roll that times the
+   *  fuse so nobody can throw it back or dive clear. A Critical Failure
+   *  means it goes off in your hand. */
+  cook?: boolean;
 }
 
 export interface ChatPayload { text: string }

@@ -633,6 +633,18 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
       }
       racialTraitRows.push(row);
     }
+  } else if (input.ancestryName === 'Human') {
+    // A Human's perk is an ancestry trait like any other and belongs on the
+    // sheet as one. The free Novice Edge itself arrives as an ordinary chosen
+    // Edge (freeEdgeSlots in the wizard grants the slot), so without this row
+    // nothing on the finished sheet records WHY they had a spare pick — the
+    // Edge just looks like one they paid for.
+    racialTraitRows.push({
+      name: 'Adaptable (Human)',
+      bonusSkill: '', bonusAmt: 0, parryBonus: 0, toughnessBonus: 0, paceBonus: 0,
+      notes: 'Player began with a Novice Edge of their choosing.',
+    });
+    ancestryTraitNotes.push('Adaptable (Human)');
   }
 
   sheet.ancestry = input.ancestryIsCustom ? (input.ancestryName.trim() || 'Custom Ancestry') : input.ancestryName;

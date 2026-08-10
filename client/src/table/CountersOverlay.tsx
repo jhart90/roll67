@@ -1,14 +1,37 @@
 import { useState } from 'react';
-import type { Counter } from 'shared';
+import type { Counter, CounterPosition } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { AnchoredMenu } from '../util/AnchoredMenu';
 
+/** The four docks, and what each is called in the move menu. */
+const SLOTS: Array<{ id: CounterPosition; label: string }> = [
+  { id: 'top', label: '⬆ Top' },
+  { id: 'bottom', label: '⬇ Bottom' },
+  { id: 'left', label: '⬅ Left' },
+  { id: 'right', label: '➡ Right' },
+];
+
 /**
- * DM counters: giant segmented banner bars spanning ~75% of the map pane,
- * pinned to its top or bottom edge (doom clocks, ritual progress, fortress
- * HP). Players see only the ones the DM has revealed; the DM gets −/+
- * increment buttons, drag between edges, and a right-click menu to show/
- * hide, edit, or delete. Multiple counters stack at either edge.
+ * Which dock a drag ended over. The side columns are narrow, so the horizontal
+ * bands that select them are measured against the MAP PANE's own edges (the
+ * overlay's bounding box) rather than the window — dropping "on the left" has
+ * to mean the left of the map, not the left of a screen whose tool rail and
+ * chat dock eat 360px between them.
+ */
+function slotForDrop(x: number, y: number, pane: DOMRect): CounterPosition {
+  const sideBand = Math.min(220, pane.width / 4);
+  if (x < pane.left + sideBand) return 'left';
+  if (x > pane.right - sideBand) return 'right';
+  return y < pane.top + pane.height / 2 ? 'top' : 'bottom';
+}
+
+/**
+ * DM counters: segmented bars docked to an edge of the map pane (doom clocks,
+ * ritual progress, fortress HP). Top and bottom are wide banners; left and
+ * right are narrow columns down the sides, held clear of the tool rail, the
+ * chat dock, and the bottom pill/Benny/Keyring row. Players see only the ones
+ * the DM has revealed; the DM gets −/+ buttons, drag between docks, and a
+ * right-click menu to show/hide, edit, move, or delete.
  */
 export function CountersOverlay() {
   const counters = useGameStore((s) => s.counters);
@@ -26,8 +49,12 @@ export function CountersOverlay() {
       onContextMenu={isDm ? (e) => { e.preventDefault(); setMenu({ id: c.id, x: e.clientX, y: e.clientY }); } : undefined}
       draggable={isDm}
       onDragEnd={isDm ? (e) => {
-        const half = window.innerHeight / 2;
-        const pos = e.clientY < half ? 'top' : 'bottom';
+        // Measure against the whole map pane, never the bar's own column: the
+        // side columns are ~230px wide, so a drop in the middle of the map
+        // read against one of them would land outside it and pick a side.
+        const pane = e.currentTarget.closest('.counters-root')?.getBoundingClientRect();
+        if (!pane) return;
+        const pos = slotForDrop(e.clientX, e.clientY, pane);
         if (pos !== c.position) intents.counterUpdate(c.id, { position: pos });
       } : undefined}
     >
@@ -54,11 +81,22 @@ export function CountersOverlay() {
   const menuCounter = menu ? counters.find((c) => c.id === menu.id) : null;
   return (
     <>
-      <div className="counters-edge counters-top">
-        {counters.filter((c) => c.position === 'top').map(renderBar)}
-      </div>
-      <div className="counters-edge counters-bottom">
-        {counters.filter((c) => c.position === 'bottom').map(renderBar)}
+      {/* One root spanning the map pane — it owns the insets that keep every
+          dock clear of the tool rail and the chat dock, and it is the rect a
+          drag measures against. */}
+      <div className="counters-root">
+        <div className="counters-edge counters-top">
+          {counters.filter((c) => c.position === 'top').map(renderBar)}
+        </div>
+        <div className="counters-edge counters-bottom">
+          {counters.filter((c) => c.position === 'bottom').map(renderBar)}
+        </div>
+        <div className="counters-side counters-left">
+          {counters.filter((c) => c.position === 'left').map(renderBar)}
+        </div>
+        <div className="counters-side counters-right">
+          {counters.filter((c) => c.position === 'right').map(renderBar)}
+        </div>
       </div>
 
       {menu && menuCounter && (
@@ -68,12 +106,21 @@ export function CountersOverlay() {
               {menuCounter.visible ? '🙈 Hide from players' : '👁 Show to players'}
             </button>
             <button onClick={() => { setEditing(menuCounter); setMenu(null); }}>✏️ Edit…</button>
-            <button onClick={() => {
-              intents.counterUpdate(menu.id, { position: menuCounter.position === 'top' ? 'bottom' : 'top' });
-              setMenu(null);
-            }}>
-              {menuCounter.position === 'top' ? '⬇ Move to bottom' : '⬆ Move to top'}
-            </button>
+            <hr />
+            <span className="wt-ctx-label">Move to…</span>
+            <div className="counter-slot-picker">
+              {SLOTS.map((s) => (
+                <button
+                  key={s.id}
+                  className={menuCounter.position === s.id ? 'active' : ''}
+                  disabled={menuCounter.position === s.id}
+                  onClick={() => { intents.counterUpdate(menu.id, { position: s.id }); setMenu(null); }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <hr />
             <button onClick={() => {
               const mapsMeta = useGameStore.getState().mapsMeta;
               const pick = prompt(['Send counter to which map? (enter a number)', ...mapsMeta.map((m, i) => `${i + 1}. ${m.name}`)].join('\n'));

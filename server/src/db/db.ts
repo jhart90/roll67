@@ -324,6 +324,37 @@ db.exec(`
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_counters_map ON counters(map_id)');
 
+// counters CHECK constraint: add the 'left'/'right' side slots (same pattern
+// as migrateMapObjectsShopKind). Safe as a plain rename-rebuild — counters
+// declares no REFERENCES and no other table references it, so there are no FK
+// clauses for ALTER TABLE RENAME to rewrite.
+function migrateCounterSideSlots(): void {
+  const table = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'counters'`).get() as
+    | { sql: string }
+    | undefined;
+  if (!table || table.sql.includes("'left'")) return;
+  const allCols = (db.prepare(`PRAGMA table_info(counters)`).all() as Array<{ name: string }>).map((c) => c.name).join(', ');
+  db.exec('ALTER TABLE counters RENAME TO counters_pre_sides');
+  db.exec(`
+    CREATE TABLE counters (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL,
+      map_id TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Counter',
+      color TEXT NOT NULL DEFAULT '#d92626',
+      max INTEGER NOT NULL DEFAULT 3,
+      value INTEGER NOT NULL DEFAULT 3,
+      visible INTEGER NOT NULL DEFAULT 0,
+      position TEXT NOT NULL DEFAULT 'top' CHECK (position IN ('top', 'bottom', 'left', 'right')),
+      created_at INTEGER NOT NULL
+    )
+  `);
+  db.exec(`INSERT INTO counters (${allCols}) SELECT ${allCols} FROM counters_pre_sides`);
+  db.exec('DROP TABLE counters_pre_sides');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_counters_map ON counters(map_id)');
+}
+migrateCounterSideSlots();
+
 // Manual world-tree ordering: rank per "kind:id" key, campaign-scoped.
 // Items without a rank sort after ranked ones, alphabetically.
 db.exec(`

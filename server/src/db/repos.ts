@@ -4,7 +4,7 @@ import type {
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   Counter, RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
-import { statEntriesFromDice, type DieRoll, type RollStatRow } from 'shared';
+import { isCounterPosition, statEntriesFromDice, type DieRoll, type RollStatRow } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
 /** SWADE's dice roles, and the column each one persists to. */
@@ -1285,7 +1285,10 @@ function toCounter(row: Record<string, unknown>): Counter {
     id: String(row.id), campaignId: String(row.campaign_id), mapId: String(row.map_id),
     name: String(row.name), color: String(row.color),
     max: Number(row.max), value: Number(row.value),
-    visible: row.visible === 1, position: (row.position === 'bottom' ? 'bottom' : 'top'),
+    visible: row.visible === 1,
+    // Any unrecognised value falls back to the top banner rather than
+    // vanishing into a dock that doesn't render.
+    position: isCounterPosition(row.position) ? row.position : 'top',
   };
 }
 

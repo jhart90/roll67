@@ -244,7 +244,17 @@ export interface Counter {
   /** Filled increments. */
   value: number;
   visible: boolean;
-  position: 'top' | 'bottom';
+  /** Which edge of the map pane it docks to. Top and bottom are full-width
+   *  banners; left and right are narrow columns down the sides, kept clear of
+   *  the tool rail, the chat dock, and the bottom pill/Benny/Keyring row. */
+  position: CounterPosition;
+}
+
+export const COUNTER_POSITIONS = ['top', 'bottom', 'left', 'right'] as const;
+export type CounterPosition = (typeof COUNTER_POSITIONS)[number];
+
+export function isCounterPosition(v: unknown): v is CounterPosition {
+  return typeof v === 'string' && (COUNTER_POSITIONS as readonly string[]).includes(v);
 }
 
 // ---------- Tokens ----------

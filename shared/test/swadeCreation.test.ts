@@ -120,6 +120,28 @@ describe('buildSwadeCharacterSheet — assembly', () => {
     expect(sheet.ancestry).toBe('Human');
   });
 
+  it('gives a Human the Adaptable ancestry trait', () => {
+    const sheet = buildSwadeCharacterSheet(baseInput());
+    const traits = (sheet.racialTraits ?? []) as Array<Record<string, unknown>>;
+    const adaptable = traits.find((t) => t.name === 'Adaptable (Human)');
+    expect(adaptable).toBeDefined();
+    expect(adaptable!.notes).toBe('Player began with a Novice Edge of their choosing.');
+    // It is a flavour/record trait — the free Edge itself is a real Edge pick,
+    // so this row must not also move Parry, Toughness or Pace.
+    expect(adaptable!.parryBonus).toBe(0);
+    expect(adaptable!.toughnessBonus).toBe(0);
+    expect(adaptable!.paceBonus).toBe(0);
+  });
+
+  it('gives Adaptable only to Humans, and never to a custom ancestry', () => {
+    const elf = buildSwadeCharacterSheet(baseInput({ ancestryName: 'Elf' }));
+    expect(((elf.racialTraits ?? []) as Array<Record<string, unknown>>).some((t) => t.name === 'Adaptable (Human)')).toBe(false);
+    // A custom race named "Human" is still a custom race — its traits are the
+    // ones the player actually bought.
+    const custom = buildSwadeCharacterSheet(baseInput({ ancestryName: 'Human', ancestryIsCustom: true }));
+    expect(((custom.racialTraits ?? []) as Array<Record<string, unknown>>).some((t) => t.name === 'Adaptable (Human)')).toBe(false);
+  });
+
   it('attribute steps land on the right die, starting from d4', () => {
     const sheet = buildSwadeCharacterSheet(baseInput({
       attributeSteps: { agility: 2, smarts: 1, spirit: 0, strength: 1, vigor: 1 },

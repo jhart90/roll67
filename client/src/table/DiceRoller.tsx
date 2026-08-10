@@ -2,7 +2,7 @@ import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { DieShape } from './DiceShapes';
 import { DICE_ROLE_DEFAULTS } from './dice3d';
-import { DICE_BOUNCE_PCT_DEFAULT, type DiceRole } from 'shared';
+import { ACE_STYLES, ACE_STYLE_DEFAULT, DICE_BOUNCE_PCT_DEFAULT, type AceStyle, type DiceRole } from 'shared';
 
 const DICE_TYPES = [2, 4, 6, 8, 10, 12, 20, 100];
 const COUNTS = [1, 2, 3, 4, 5, 6];
@@ -185,6 +185,45 @@ export function DiceBouncePicker() {
   );
 }
 
+/** What each ace style looks like, for the dropdown's own hint line. */
+const ACE_STYLE_LABELS: Record<AceStyle, string> = {
+  flash: 'Flash — a golden halo and sparks (the classic)',
+  explosion: 'Explosion — a shockwave ring and flying debris',
+  flames: 'Flames — tongues of fire and drifting embers',
+  disco: 'Disco — sweeping coloured beams and glitter',
+  rainbow: 'Rainbow — expanding bands right round the wheel',
+};
+
+/**
+ * How YOUR aced dice celebrate. Saved to the account and sent with presence
+ * like the colours and the bounce, so an ace looks the same on every screen at
+ * the table rather than however each watcher happens to like other people's.
+ */
+export function DiceAceStylePicker() {
+  const you = useGameStore((s) => s.you);
+  const members = useGameStore((s) => s.members);
+  const me = you ? members.find((m) => m.userId === you.userId) : undefined;
+  const current = me?.diceAceStyle ?? ACE_STYLE_DEFAULT;
+  return (
+    <div className="dice-color-row">
+      <span className="dim" style={{ fontSize: 11 }} title="Exploding dice — how yours announce themselves when they ace">
+        Aces:
+      </span>
+      <select
+        className="dice-ace-select"
+        value={current}
+        title={ACE_STYLE_LABELS[current]}
+        onChange={(e) => intents.setDiceAceStyle(e.target.value as AceStyle)}
+      >
+        {ACE_STYLES.map((s) => (
+          <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>
+        ))}
+      </select>
+      <span className="dim" style={{ fontSize: 11, flexBasis: '100%' }}>{ACE_STYLE_LABELS[current]}</span>
+    </div>
+  );
+}
+
 /** Quick-roll panel: click to roll 1-6 dice of any standard type. */
 export function DiceRoller({ onClose }: { onClose: () => void }) {
   const isSwade = useGameStore((s) => s.campaign?.system) === 'swade';
@@ -244,6 +283,7 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
         </>
       )}
       <DiceBouncePicker />
+      <DiceAceStylePicker />
       <p className="dim" style={{ fontSize: 11, margin: '6px 0 0' }}>
         Rolls go to chat for everyone. Use /r in chat for modifiers (e.g. /r 2d6+3).
       </p>

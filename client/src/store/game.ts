@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type BennyStatePayload, type BennyUseId, type BlastChoice, type BlastOfferClosedPayload, type BlastOfferPayload, type BleedPromptPayload, type StunPromptPayload, type IncapPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type AceStyle, type BennyStatePayload, type BennyUseId, type BlastChoice, type BlastOfferClosedPayload, type BlastOfferPayload, type BleedPromptPayload, type StunPromptPayload, type IncapPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -1442,6 +1442,8 @@ export const intents = {
   setPlayerColor: (color: string | null) => socket.emit(C2S.SET_PLAYER_COLOR, { color }),
   /** How often your dice carom off a wall (0-100, or null for the default). */
   setDiceBounce: (pct: number | null) => socket.emit(C2S.SET_DICE_BOUNCE, { pct }),
+  /** How your aced dice celebrate (null for the default flash). */
+  setDiceAceStyle: (style: AceStyle | null) => socket.emit(C2S.SET_DICE_ACE_STYLE, { style }),
   setUsername: (username: string) => socket.emit(C2S.SET_USERNAME, { username }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),

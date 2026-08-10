@@ -958,6 +958,20 @@ async function main() {
   await bounceCleared;
   ok(true, 'clearing it restores the default');
 
+  // Ace animation style rides the same rails: the roller's choice, not the
+  // watcher's, so an ace looks the same on every screen.
+  const aceSet = waitFor(dmSock, 'memberPresence', 5000,
+    (p) => p.members?.some((m) => m.userId === player.user.id && m.diceAceStyle === 'flames'));
+  playerSock.emit('setDiceAceStyle', { style: 'flames' });
+  await aceSet;
+  ok(true, "a player's ace style reaches everyone else via presence");
+
+  const aceRejected = waitFor(dmSock, 'memberPresence', 5000,
+    (p) => p.members?.some((m) => m.userId === player.user.id && m.diceAceStyle === null));
+  playerSock.emit('setDiceAceStyle', { style: 'fireworks-and-doves' });
+  await aceRejected;
+  ok(true, 'an unknown style is refused rather than stored');
+
   // Back to the party map (clear override), DM back to party too.
   const playerBack = waitFor(playerSock, 'mapState', 5000, (p) => p.map.id === mapId);
   dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: null });

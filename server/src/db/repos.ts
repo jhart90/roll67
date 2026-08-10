@@ -4,7 +4,7 @@ import type {
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   Counter, RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
-import { isCounterPosition, statEntriesFromDice, type DieRoll, type RollStatRow } from 'shared';
+import { isCounterPosition, statEntriesFromDice, type AceStyle, type DieRoll, type RollStatRow } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
 /** SWADE's dice roles, and the column each one persists to. */
@@ -27,6 +27,7 @@ export interface MemberRow {
   diceRaiseColor: string | null;
   playerColor: string | null;
   diceBouncePct: number | null;
+  diceAceStyle: AceStyle | null;
 }
 
 /**
@@ -81,6 +82,10 @@ export const users = {
     stmt('UPDATE users SET player_color = ? WHERE id = ?').run(color, userId);
   },
   /** Share of this account's dice that bounce off a wall; null = the default. */
+  /** How this account's aced dice celebrate; null = the default. */
+  setDiceAceStyle(userId: string, style: AceStyle | null): void {
+    stmt('UPDATE users SET dice_ace_style = ? WHERE id = ?').run(style, userId);
+  },
   setDiceBouncePct(userId: string, pct: number | null): void {
     stmt('UPDATE users SET dice_bounce_pct = ? WHERE id = ?').run(pct, userId);
   },
@@ -206,7 +211,7 @@ export const campaigns = {
               u.dice_color as diceColor, u.dice_text_color as diceTextColor,
               u.dice_trait_color as diceTraitColor, u.dice_wild_color as diceWildColor,
               u.dice_raise_color as diceRaiseColor, u.player_color as playerColor,
-              u.dice_bounce_pct as diceBouncePct
+              u.dice_bounce_pct as diceBouncePct, u.dice_ace_style as diceAceStyle
        FROM campaign_members m
        JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ?`,
     ).all(campaignId) as MemberRow[]);

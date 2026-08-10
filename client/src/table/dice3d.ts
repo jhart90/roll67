@@ -4,7 +4,7 @@
 // EXACTLY on the orientation that shows the rolled face (number upright),
 // bouncing on the "table" (the screen plane) as it settles near the middle.
 
-import type { DieRoll } from 'shared';
+import { ACE_STYLE_DEFAULT, type AceStyle, type DieRoll } from 'shared';
 
 // ---------- tiny vector / quaternion math ----------
 
@@ -326,6 +326,8 @@ interface DieSim {
   spinAxis: Vec3;
   spinTotal: number;
   bounceH: number;
+  /** How this die celebrates if it aced — the ROLLER's chosen style. */
+  aceStyle: AceStyle;
   /** Wall-bounce: the point on a wall this die caroms off on its way to
    *  `target`. Absent for a die that flies straight there. */
   via?: { x: number; y: number };
@@ -502,6 +504,8 @@ export function buildSims(
   palette: DicePalette | null = null, critFail = false, bounds: PlayBounds | null = null,
   /** Share of dice that carom off a wall, 0-100 — the ROLLER's own setting. */
   bouncePct = 0,
+  /** How aced dice celebrate — also the ROLLER's own setting. */
+  aceStyle: AceStyle = ACE_STYLE_DEFAULT,
 ): DieSim[] {
   const bounceChance = Math.max(0, Math.min(100, bouncePct)) / 100;
   const n = dice.length;
@@ -567,6 +571,7 @@ export function buildSims(
       spinAxis: norm(v3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)),
       spinTotal: (Math.PI * 2) * (2.2 + Math.random() * 1.6) * (fromLeft ? 1 : -1),
       bounceH: 170 + Math.random() * 90,
+      aceStyle,
     };
   });
 }
@@ -631,6 +636,165 @@ function drawPips(ctx: CanvasRenderingContext2D, value: number, color: string): 
   }
 }
 
+/**
+ * What an aced die does while the table waits for its bonus die. Every style
+ * gets the same contract: one call, a 0..1 phase, and the die's centre and
+ * size — so they stay interchangeable and none of them can outlive the pause
+ * before the next die is thrown.
+ *
+ * `phase` runs 0 → 1 across ACE_FLASH_MS. Fading out by the end is each
+ * style's own job; the caller restores alpha afterwards either way.
+ */
+function drawAceEffect(
+  ctx: CanvasRenderingContext2D, style: AceStyle, phase: number, cx: number, cy: number, size: number,
+): void {
+  const fade = 1 - phase;
+
+  if (style === 'explosion') {
+    // A shockwave ring that races outward and thins as it goes, with debris
+    // thrown clear of it — brief and violent rather than a steady pulse.
+    const ring = size * (0.5 + phase * 3.2);
+    ctx.globalAlpha = fade * fade * 0.9;
+    ctx.strokeStyle = 'rgba(255, 168, 64, 0.95)';
+    ctx.lineWidth = Math.max(0.6, size * 0.22 * fade);
+    ctx.beginPath();
+    ctx.arc(cx, cy, ring, 0, Math.PI * 2);
+    ctx.stroke();
+    // Hot core, gone almost at once.
+    const core = 1 - Math.min(1, phase * 3);
+    if (core > 0) {
+      ctx.globalAlpha = core * 0.85;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 1.6);
+      g.addColorStop(0, 'rgba(255, 250, 214, 1)');
+      g.addColorStop(0.4, 'rgba(255, 150, 40, 0.8)');
+      g.addColorStop(1, 'rgba(200, 40, 0, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, size * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = 'rgba(90, 60, 40, 0.9)';
+    for (let s = 0; s < 9; s++) {
+      const ang = (s / 9) * Math.PI * 2 + s * 0.7;
+      const d = size * (0.6 + phase * 3.6) * (0.7 + (s % 3) * 0.2);
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(ang) * d, cy + Math.sin(ang) * d - phase * size * 0.4, Math.max(0.5, size * 0.09 * fade), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (style === 'flames') {
+    // Tongues of fire licking upward off the die, each on its own flicker
+    // clock so the shape never looks like a repeating loop.
+    for (let f = 0; f < 7; f++) {
+      const sway = Math.sin(phase * 11 + f * 1.9) * size * 0.16;
+      const baseX = cx + (f / 6 - 0.5) * size * 1.15;
+      const lick = size * (0.9 + 0.55 * Math.sin(phase * 7 + f)) * (0.55 + fade * 0.75);
+      const g = ctx.createLinearGradient(baseX, cy + size * 0.3, baseX + sway, cy - lick);
+      g.addColorStop(0, 'rgba(255, 96, 16, 0)');
+      g.addColorStop(0.35, `rgba(255, 128, 24, ${0.75 * fade})`);
+      g.addColorStop(0.75, `rgba(255, 206, 86, ${0.9 * fade})`);
+      g.addColorStop(1, `rgba(255, 248, 214, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(baseX - size * 0.2, cy + size * 0.3);
+      ctx.quadraticCurveTo(baseX - size * 0.16 + sway, cy - lick * 0.5, baseX + sway, cy - lick);
+      ctx.quadraticCurveTo(baseX + size * 0.16 + sway, cy - lick * 0.5, baseX + size * 0.2, cy + size * 0.3);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Embers drifting up out of the fire.
+    ctx.globalAlpha = fade * 0.85;
+    ctx.fillStyle = 'rgba(255, 210, 130, 0.95)';
+    for (let e = 0; e < 5; e++) {
+      const t = (phase + e * 0.19) % 1;
+      ctx.beginPath();
+      ctx.arc(cx + Math.sin(t * 9 + e) * size * 0.5, cy - t * size * 2.3, Math.max(0.4, size * 0.06 * (1 - t)), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (style === 'disco') {
+    // A mirror-ball: coloured beams sweeping out of the die, plus a glitter
+    // of specks caught in them.
+    const spin = phase * Math.PI * 2.4;
+    ctx.globalAlpha = fade * 0.55;
+    for (let b = 0; b < 8; b++) {
+      const ang = spin + (b / 8) * Math.PI * 2;
+      const hue = (b * 45 + phase * 220) % 360;
+      const reach = size * 3.1;
+      const g = ctx.createLinearGradient(cx, cy, cx + Math.cos(ang) * reach, cy + Math.sin(ang) * reach);
+      g.addColorStop(0, `hsla(${hue}, 95%, 72%, 0.85)`);
+      g.addColorStop(1, `hsla(${hue}, 95%, 60%, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, reach, ang - 0.13, ang + 0.13);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = fade;
+    for (let s = 0; s < 10; s++) {
+      const ang = spin * 1.7 + (s / 10) * Math.PI * 2;
+      const d = size * (1 + ((s * 7) % 10) / 10 * 1.6);
+      ctx.fillStyle = `hsla(${(s * 36 + phase * 300) % 360}, 100%, 80%, 0.95)`;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(ang) * d, cy + Math.sin(ang) * d, Math.max(0.5, size * 0.07), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (style === 'rainbow') {
+    // Concentric bands rolling outward, each a step further round the wheel,
+    // so the die sits at the centre of an expanding spectrum.
+    for (let r = 0; r < 6; r++) {
+      const t = (phase + r / 6) % 1;
+      const radius = size * (0.5 + t * 2.8);
+      ctx.globalAlpha = (1 - t) * fade * 0.8;
+      ctx.strokeStyle = `hsla(${(r * 60 + phase * 260) % 360}, 100%, 62%, 1)`;
+      ctx.lineWidth = Math.max(0.8, size * 0.16 * (1 - t));
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = fade * 0.5;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 1.3);
+    g.addColorStop(0, `hsla(${(phase * 360) % 360}, 100%, 78%, 0.9)`);
+    g.addColorStop(1, `hsla(${(phase * 360 + 120) % 360}, 100%, 60%, 0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 1.3, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  // 'flash' — the original: a golden halo pulsing while the bonus die is
+  // readied, with a few sparks thrown off the die as it goes.
+  const pulse = Math.sin(phase * Math.PI * 3) * 0.5 + 0.5;
+  ctx.globalAlpha = (0.30 + 0.45 * pulse) * fade;
+  const glow = ctx.createRadialGradient(cx, cy, size * 0.4, cx, cy, size * (1.7 + 0.5 * pulse));
+  glow.addColorStop(0, 'rgba(255, 226, 138, 0.95)');
+  glow.addColorStop(0.55, 'rgba(255, 186, 60, 0.45)');
+  glow.addColorStop(1, 'rgba(255, 170, 40, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * (1.7 + 0.5 * pulse), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = fade * 0.9;
+  ctx.fillStyle = 'rgba(255, 236, 170, 0.95)';
+  for (let s = 0; s < 6; s++) {
+    const ang = (s / 6) * Math.PI * 2 + phase * 2.2;
+    const dist = size * (0.9 + phase * 1.5);
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist, Math.max(0.4, 2.6 * fade), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void {
   const te = Math.max(0, Math.min(1, (tMs - sim.delay) / sim.dur));
   if (tMs < sim.delay - 1) return;
@@ -676,31 +840,10 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
     ? sinceSettle / ACE_FLASH_MS
     : null;
   if (acePhase !== null) {
-    const pulse = Math.sin(acePhase * Math.PI * 3) * 0.5 + 0.5;
-    const fade = 1 - acePhase;
     ctx.save();
-    ctx.globalAlpha = (0.30 + 0.45 * pulse) * fade;
-    const glow = ctx.createRadialGradient(x, y - height * 0.85, size * 0.4, x, y - height * 0.85, size * (1.7 + 0.5 * pulse));
-    glow.addColorStop(0, 'rgba(255, 226, 138, 0.95)');
-    glow.addColorStop(0.55, 'rgba(255, 186, 60, 0.45)');
-    glow.addColorStop(1, 'rgba(255, 170, 40, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y - height * 0.85, size * (1.7 + 0.5 * pulse), 0, Math.PI * 2);
-    ctx.fill();
-    // A few sparks thrown off the die as it aces.
-    ctx.globalAlpha = fade * 0.9;
-    ctx.fillStyle = 'rgba(255, 236, 170, 0.95)';
-    for (let s = 0; s < 6; s++) {
-      const ang = (s / 6) * Math.PI * 2 + acePhase * 2.2;
-      const dist = size * (0.9 + acePhase * 1.5);
-      const sr = 2.6 * (1 - acePhase);
-      ctx.beginPath();
-      ctx.arc(x + Math.cos(ang) * dist, y - height * 0.85 + Math.sin(ang) * dist, Math.max(0.4, sr), 0, Math.PI * 2);
-      ctx.fill();
-    }
+    drawAceEffect(ctx, sim.aceStyle, acePhase, x, y - height * 0.85, size);
     ctx.restore();
-    ctx.globalAlpha = dieAlpha; // restore after the ace flash's own fades
+    ctx.globalAlpha = dieAlpha; // restore after the effect's own fades
   }
 
   // Ground shadow, tied to the table position (not the airborne die).

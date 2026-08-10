@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DICE_BOUNCE_PCT_DEFAULT, swadeSnakeEyes, type DieRoll } from 'shared';
+import { ACE_STYLE_DEFAULT, DICE_BOUNCE_PCT_DEFAULT, swadeSnakeEyes, type AceStyle, type DieRoll } from 'shared';
 import { diceAnimationFinished, overlayMounted, overlayUnmounted, useGameStore } from '../store/game';
 import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette, type PlayBounds } from './dice3d';
 
@@ -22,8 +22,8 @@ function playBounds(w: number, h: number): PlayBounds {
   };
 }
 
-function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette, ending, critFail, bouncePct }: {
-  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null; ending: boolean; critFail: boolean; bouncePct: number;
+function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette, ending, critFail, bouncePct, aceStyle }: {
+  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null; ending: boolean; critFail: boolean; bouncePct: number; aceStyle: AceStyle;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [settled, setSettled] = useState(false);
@@ -52,7 +52,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
     const audio = new Audio(clip);
     audio.volume = 0.6 * useGameStore.getState().localSfxVolume;
     audio.play().catch(() => undefined);
-    const sims = buildSims(dice, w, h, color, textColor, palette, critFail, playBounds(w, h), bouncePct);
+    const sims = buildSims(dice, w, h, color, textColor, palette, critFail, playBounds(w, h), bouncePct, aceStyle);
     const settleAt = simsSettleTime(sims);
     const t0 = performance.now();
     let raf = 0;
@@ -128,6 +128,7 @@ export function DiceOverlay() {
       // The ROLLER's setting, not the watcher's — same as their dice colours,
       // so a player's throw looks the same on every screen at the table.
       bouncePct={member?.diceBouncePct ?? DICE_BOUNCE_PCT_DEFAULT}
+      aceStyle={member?.diceAceStyle ?? ACE_STYLE_DEFAULT}
     />
   );
 }

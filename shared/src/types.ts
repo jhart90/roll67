@@ -44,10 +44,22 @@ export interface MemberInfo {
    *  Travels with the roller, not the watcher, so a player's dice throw the
    *  same way on every screen at the table. */
   diceBouncePct: number | null;
+  /** How this member's aced dice celebrate. Null = the default. Rides with the
+   *  roller for the same reason the colours and the bounce do. */
+  diceAceStyle: AceStyle | null;
 }
 
 /** Share of dice that bounce off a wall when a player hasn't chosen. */
 export const DICE_BOUNCE_PCT_DEFAULT = 33;
+
+/** How an exploding die announces itself when it aces. */
+export const ACE_STYLES = ['flash', 'explosion', 'flames', 'disco', 'rainbow'] as const;
+export type AceStyle = (typeof ACE_STYLES)[number];
+export const ACE_STYLE_DEFAULT: AceStyle = 'flash';
+
+export function isAceStyle(v: unknown): v is AceStyle {
+  return typeof v === 'string' && (ACE_STYLES as readonly string[]).includes(v);
+}
 
 /**
  * Visual flavor for the impact animation played over a token once a

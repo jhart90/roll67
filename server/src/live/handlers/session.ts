@@ -1,9 +1,9 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C,
+  C2S, S2C, isAceStyle,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
-  type SetDiceBouncePayload,
+  type SetDiceAceStylePayload, type SetDiceBouncePayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -139,6 +139,7 @@ export function broadcastPresence(io: Server, campaignId: string): void {
     diceRaiseColor: m.diceRaiseColor,
     playerColor: m.playerColor,
     diceBouncePct: m.diceBouncePct,
+    diceAceStyle: m.diceAceStyle,
   }));
   io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, { members });
 }
@@ -230,6 +231,17 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     users.setDiceBouncePct(d.userId, clean);
     broadcastPresence(io, d.campaignId);
   }, 'SET_DICE_BOUNCE'));
+
+  // How YOUR aced dice celebrate. Stored on the account and sent with presence
+  // for the same reason the colours and the bounce share are: an ace should
+  // look the same on every screen at the table, not however each watcher
+  // happens to like other people's dice.
+  socket.on(C2S.SET_DICE_ACE_STYLE, safe(socket, ({ style }: SetDiceAceStylePayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    users.setDiceAceStyle(d.userId, isAceStyle(style) ? style : null);
+    broadcastPresence(io, d.campaignId);
+  }, 'SET_DICE_ACE_STYLE'));
 
   // Your presence-dot color, and the color your player-controlled token
   // names get bolded in in chat (client/src/panels/ChatPanel.tsx).

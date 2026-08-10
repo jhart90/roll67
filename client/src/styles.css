@@ -2280,7 +2280,15 @@ th > .term { border-bottom-style: dotted; }
    to wrap; min-width: 0 keeps a flex item from insisting on its content width,
    which is what would push a panel back open. Only this element needs it —
    the swatches and the bounce slider have widths worth keeping. */
-.dice-ace-hint { flex-basis: 100%; min-width: 0; font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+/* Two short rows rather than one wrapping sentence — the second is the bit
+   people actually come back for. */
+.dice-hint { font-size: 11px; line-height: 1.45; margin: 6px 0 0; }
+/* Stats and IronDice sit in the panel's bottom corners: exits, not title
+   furniture. The divider separates them from the controls above. */
+.dice-footer {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border);
+}
 .dice-color-swatch {
   width: 20px;
   height: 20px;

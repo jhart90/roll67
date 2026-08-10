@@ -25,14 +25,6 @@ export function DiceColorPicker() {
   return (
     <div className="dice-color-row">
       <span className="dim" style={{ fontSize: 11 }}>Your dice:</span>
-      <button
-        className={`link ${current === null ? 'active' : ''}`}
-        style={{ fontSize: 11 }}
-        title="Use the per-die default colors"
-        onClick={() => intents.setDiceColor(null)}
-      >
-        default
-      </button>
       {DICE_PALETTE.map((c) => (
         <button
           key={c}
@@ -116,14 +108,6 @@ export function SwadeDicePalettePicker() {
         return (
           <div className="dice-color-row" key={role}>
             <span className="dim" style={{ fontSize: 11 }} title={hint}>{label} dice:</span>
-            <button
-              className={`link ${current === null ? 'active' : ''}`}
-              style={{ fontSize: 11 }}
-              title={`Use the default ${label.toLowerCase()} colour (${DICE_ROLE_DEFAULTS[role]})`}
-              onClick={() => intents.setDiceRoleColor(role, null)}
-            >
-              default
-            </button>
             {DICE_PALETTE.map((c) => (
               <button
                 key={c}
@@ -173,14 +157,6 @@ export function DiceBouncePicker() {
         onChange={(e) => intents.setDiceBounce(Number(e.target.value))}
       />
       <span className="dice-bounce-val">{pct}%</span>
-      <button
-        className={`link ${me?.diceBouncePct == null ? 'active' : ''}`}
-        style={{ fontSize: 11 }}
-        title={`Back to the default (${DICE_BOUNCE_PCT_DEFAULT}%)`}
-        onClick={() => intents.setDiceBounce(null)}
-      >
-        default
-      </button>
     </div>
   );
 }
@@ -221,7 +197,6 @@ export function DiceAceStylePicker() {
           <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>
         ))}
       </select>
-      <span className="dim dice-ace-hint">{ACE_STYLE_LABELS[current]}</span>
     </div>
   );
 }
@@ -233,21 +208,8 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
     <div className="dice-panel">
       <div className="dock-header">
         <h3>Roll dice</h3>
-        <button
-          className="link"
-          title="Lifetime roll statistics for everyone in this campaign"
-          onClick={() => openWindow('rollStats', 'main', {}, 'Roll Stats')}
-        >
-          📊 stats
-        </button>
-        <button
-          className="link iron-footer"
-          title="Provably-fair rolling: server-side, cryptographically random, verifiable"
-          onClick={() => openWindow('ironDice', 'main', {}, 'IronDice')}
-        >
-          🛡 IronDice
-        </button>
-        <button className="link" onClick={onClose}>close</button>
+        <span className="spacer" />
+        <button className="link" title="Close" onClick={onClose}>✕</button>
       </div>
       <table className="dice-grid">
         <tbody>
@@ -286,9 +248,29 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
       )}
       <DiceBouncePicker />
       <DiceAceStylePicker />
-      <p className="dim" style={{ fontSize: 11, margin: '6px 0 0' }}>
-        Rolls go to chat for everyone. Use /r in chat for modifiers (e.g. /r 2d6+3).
+      <p className="dim dice-hint">
+        Rolls go to chat for everyone to see.<br />
+        Use /r to roll manually in chat (e.g. /r 2d6 + 3)
       </p>
+      {/* The two side trips out of this panel, parked in its bottom corners
+          so they read as exits rather than as part of the title. */}
+      <div className="dice-footer">
+        <button
+          className="link"
+          title="Lifetime roll statistics for everyone in this campaign"
+          onClick={() => openWindow('rollStats', 'main', {}, 'Roll Stats')}
+        >
+          📊 stats
+        </button>
+        <span className="spacer" />
+        <button
+          className="link iron-footer"
+          title="Provably-fair rolling: server-side, cryptographically random, verifiable"
+          onClick={() => openWindow('ironDice', 'main', {}, 'IronDice')}
+        >
+          🔒 IronDice
+        </button>
+      </div>
     </div>
   );
 }

@@ -291,7 +291,9 @@ function targetOrientation(geom: DieGeometry, value: number): Quat {
 // hot yellows get dark ink and the deep blues get white.
 export const DEFAULT_DIE_COLORS: Record<number, string> = {
   2: '#ffc93c', 4: '#ff3d57', 6: '#0aa8ff', 8: '#2fe04a',
-  10: '#00e5d0', 12: '#b444ff', 20: '#ff8a00', 100: '#ffe234',
+  // d100 is white: its old yellow was a shade off the d2's, and two dice you
+  // cannot tell apart at a glance defeats the point of a per-size palette.
+  10: '#00e5d0', 12: '#b444ff', 20: '#ff8a00', 100: '#ffffff',
 };
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -743,34 +745,73 @@ function drawAceEffect(
   }
 
   if (style === 'flames') {
-    // Tongues of fire licking upward off the die, each on its own flicker
-    // clock so the shape never looks like a repeating loop.
-    for (let f = 0; f < 7; f++) {
-      const sway = Math.sin(phase * 11 + f * 1.9) * size * 0.16;
-      const baseX = cx + (f / 6 - 0.5) * size * 1.15;
-      const lick = size * (0.9 + 0.55 * Math.sin(phase * 7 + f)) * (0.55 + fade * 0.75);
-      const g = ctx.createLinearGradient(baseX, cy + size * 0.3, baseX + sway, cy - lick);
-      g.addColorStop(0, 'rgba(255, 96, 16, 0)');
-      g.addColorStop(0.35, `rgba(255, 128, 24, ${0.75 * fade})`);
-      g.addColorStop(0.75, `rgba(255, 206, 86, ${0.9 * fade})`);
-      g.addColorStop(1, `rgba(255, 248, 214, 0)`);
-      ctx.fillStyle = g;
+    // The die is engulfed, not merely singed. Three shells of fire radiating
+    // in EVERY direction, each with its own colour, reach, tongue count and
+    // clock — and each beating a third of a cycle behind the one outside it,
+    // so they rise and fall in succession rather than pulsing as one blob.
+    //
+    // Additive: where two tongues cross they run to white, which is how fire
+    // actually reads and what makes the core look hot rather than painted.
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter';
+    const LAYERS = [
+      // reach  tongues  width  flicker  spin   root colour        tip colour
+      { len: 2.20, n: 10, w: 0.34, flick: 5.0, spin: 1.30, hot: '255, 78, 8', tip: '255, 146, 34' },
+      { len: 1.55, n: 8, w: 0.42, flick: 6.8, spin: -1.05, hot: '255, 142, 20', tip: '255, 210, 92' },
+      { len: 0.95, n: 6, w: 0.54, flick: 8.6, spin: 1.75, hot: '255, 220, 130', tip: '255, 252, 228' },
+    ];
+    LAYERS.forEach((L, li) => {
+      // Each shell trails the last by a third of the beat — the successive
+      // rise and fall, rather than three shells breathing together.
+      const beat = 0.6 + 0.4 * Math.sin((phase * 2.2 - li / 3) * Math.PI * 2);
+      for (let f = 0; f < L.n; f++) {
+        const ang = (f / L.n) * Math.PI * 2 + phase * L.spin + li * 0.6;
+        const flick = 0.72 + 0.28 * Math.sin(phase * L.flick * Math.PI * 2 + f * 2.3 + li);
+        const len = size * L.len * beat * flick * (0.55 + fade * 0.65);
+        const w = size * L.w;
+        // Tongues curl off true rather than pointing dead outward.
+        const sway = Math.sin(phase * 9 + f * 1.7 + li * 2.1) * w * 0.55;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(ang);
+        const g = ctx.createLinearGradient(0, 0, len, 0);
+        g.addColorStop(0, `rgba(${L.hot}, 0)`);
+        g.addColorStop(0.28, `rgba(${L.hot}, ${0.8 * fade})`);
+        g.addColorStop(0.78, `rgba(${L.tip}, ${0.72 * fade})`);
+        g.addColorStop(1, 'rgba(255, 250, 236, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(0, -w * 0.5);
+        ctx.quadraticCurveTo(len * 0.55, -w * 0.7 + sway, len, sway * 0.45);
+        ctx.quadraticCurveTo(len * 0.55, w * 0.7 + sway, 0, w * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    });
+    // A hot core so the die sits inside the fire rather than in front of it.
+    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 1.15);
+    core.addColorStop(0, `rgba(255, 236, 190, ${0.5 * fade})`);
+    core.addColorStop(0.5, `rgba(255, 140, 36, ${0.32 * fade})`);
+    core.addColorStop(1, 'rgba(255, 90, 10, 0)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * 1.15, 0, Math.PI * 2);
+    ctx.fill();
+    // Embers thrown clear on every bearing, not just off the top. The golden
+    // angle keeps successive ones from lining up into visible spokes.
+    ctx.globalAlpha = fade * 0.9;
+    for (let e = 0; e < 14; e++) {
+      const t = (phase * 1.7 + e * 0.071) % 1;
+      const a = e * 2.399963 + phase * 1.4;
+      const d = size * (0.55 + t * 2.2);
+      ctx.fillStyle = t < 0.5 ? 'rgba(255, 232, 164, 0.95)' : 'rgba(255, 132, 48, 0.9)';
       ctx.beginPath();
-      ctx.moveTo(baseX - size * 0.2, cy + size * 0.3);
-      ctx.quadraticCurveTo(baseX - size * 0.16 + sway, cy - lick * 0.5, baseX + sway, cy - lick);
-      ctx.quadraticCurveTo(baseX + size * 0.16 + sway, cy - lick * 0.5, baseX + size * 0.2, cy + size * 0.3);
-      ctx.closePath();
+      // Drifting up as they cool, whichever way they were thrown.
+      ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d - t * t * size * 0.7, Math.max(0.4, size * 0.075 * (1 - t)), 0, Math.PI * 2);
       ctx.fill();
     }
-    // Embers drifting up out of the fire.
-    ctx.globalAlpha = fade * 0.85;
-    ctx.fillStyle = 'rgba(255, 210, 130, 0.95)';
-    for (let e = 0; e < 5; e++) {
-      const t = (phase + e * 0.19) % 1;
-      ctx.beginPath();
-      ctx.arc(cx + Math.sin(t * 9 + e) * size * 0.5, cy - t * size * 2.3, Math.max(0.4, size * 0.06 * (1 - t)), 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.globalCompositeOperation = prevOp;
     return;
   }
 

@@ -50,7 +50,7 @@ export function MapObjectInspector() {
       const { assetId } = await upload(file, campaign.id, 'token');
       intents.updateMapObject(obj.id, { artAssetId: assetId });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

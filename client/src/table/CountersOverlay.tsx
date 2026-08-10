@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { isCounterPosition, type Counter, type CounterPosition } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { AnchoredMenu } from '../util/AnchoredMenu';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 /**
  * Per-screen counter docks, by counter id. The DM's `position` is the table's
@@ -109,8 +110,11 @@ export function CountersOverlay() {
   const counters = useGameStore((s) => s.counters);
   const isDm = useGameStore((s) => s.you?.role) === 'dm';
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  // Second page of the context menu: which map to send this counter to.
+  const [sendingToMap, setSendingToMap] = useState(false);
   const [editing, setEditing] = useState<Counter | null>(null);
   const [docks, setDocks] = useState(loadDocks);
+  const mapsMeta = useGameStore((s) => s.mapsMeta);
   const bottomClearance = useBottomChrome();
 
   /** Where THIS screen shows a counter: their own choice, else the DM's. */
@@ -125,6 +129,9 @@ export function CountersOverlay() {
       return next;
     });
   }
+
+  /** Leaving the menu also leaves whatever page of it you were on. */
+  const closeMenu = () => { setMenu(null); setSendingToMap(false); };
 
   if (counters.length === 0) return null;
 
@@ -201,12 +208,12 @@ export function CountersOverlay() {
       </div>
 
       {menu && menuCounter && (
-        <div className="wt-ctx-backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
+        <div className="wt-ctx-backdrop" onClick={closeMenu} onContextMenu={(e) => { e.preventDefault(); closeMenu(); }}>
           <AnchoredMenu x={menu.x} y={menu.y} className="wt-ctx-menu" onClick={(e) => e.stopPropagation()}>
             {isDm && (
               <>
                 <SharePicker counter={menuCounter} />
-                <button onClick={() => { setEditing(menuCounter); setMenu(null); }}>✏️ Edit…</button>
+                <button onClick={() => { setEditing(menuCounter); closeMenu(); }}>✏️ Edit…</button>
                 <hr />
               </>
             )}
@@ -217,7 +224,7 @@ export function CountersOverlay() {
                   key={s.id}
                   className={dockOf(menuCounter) === s.id ? 'active' : ''}
                   disabled={dockOf(menuCounter) === s.id}
-                  onClick={() => { setDock(menu.id, s.id); setMenu(null); }}
+                  onClick={() => { setDock(menu.id, s.id); closeMenu(); }}
                 >
                   {s.label}
                 </button>
@@ -226,7 +233,7 @@ export function CountersOverlay() {
             {docks[menu.id] && (
               <button
                 title={`The table's default for this counter is ${menuCounter.position}`}
-                onClick={() => { setDock(menu.id, null); setMenu(null); }}
+                onClick={() => { setDock(menu.id, null); closeMenu(); }}
               >
                 ↩ Follow the table default
               </button>
@@ -234,7 +241,7 @@ export function CountersOverlay() {
             {isDm && dockOf(menuCounter) !== menuCounter.position && (
               <button
                 title="Move it here for everyone who has not chosen their own spot"
-                onClick={() => { intents.counterUpdate(menu.id, { position: dockOf(menuCounter) }); setDock(menu.id, null); setMenu(null); }}
+                onClick={() => { intents.counterUpdate(menu.id, { position: dockOf(menuCounter) }); setDock(menu.id, null); closeMenu(); }}
               >
                 📌 Make this the table default
               </button>
@@ -242,17 +249,36 @@ export function CountersOverlay() {
             {isDm && (
               <>
                 <hr />
-                <button onClick={() => {
-                  const mapsMeta = useGameStore.getState().mapsMeta;
-                  const pick = prompt(['Send counter to which map? (enter a number)', ...mapsMeta.map((m, i) => `${i + 1}. ${m.name}`)].join('\n'));
-                  const idx = Number(pick) - 1;
-                  if (mapsMeta[idx]) intents.counterUpdate(menu.id, { mapId: mapsMeta[idx].id });
-                  setMenu(null);
-                }}>🗺 Send to another map…</button>
+                {/* Second page of the menu rather than a browser prompt asking
+                    you to TYPE a number off a list of map names. */}
+                {sendingToMap ? (
+                  <>
+                    <span className="wt-ctx-label">Send to which map?</span>
+                    <div className="wt-ctx-pane">
+                      {mapsMeta.map((m) => (
+                        <button
+                          key={m.id}
+                          disabled={m.id === menuCounter.mapId}
+                          onClick={() => { intents.counterUpdate(menu.id, { mapId: m.id }); closeMenu(); }}
+                        >
+                          {m.name}{m.id === menuCounter.mapId ? ' · here now' : ''}
+                        </button>
+                      ))}
+                      {mapsMeta.length === 0 && <span className="wt-ctx-label">No other maps.</span>}
+                    </div>
+                    <button onClick={() => setSendingToMap(false)}>← back</button>
+                  </>
+                ) : (
+                  <button onClick={() => setSendingToMap(true)}>🗺 Send to another map…</button>
+                )}
                 <hr />
-                <button onClick={() => { if (confirm(`Delete counter "${menuCounter.name}"?`)) intents.counterDelete(menu.id); setMenu(null); }}>
+                <ConfirmButton
+                  className=""
+                  confirmLabel="🗑 Really delete?"
+                  onConfirm={() => { intents.counterDelete(menu.id); closeMenu(); }}
+                >
                   🗑 Delete
-                </button>
+                </ConfirmButton>
               </>
             )}
           </AnchoredMenu>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Character } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { NpcLibrary } from './NpcLibrary';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 const TOKEN_COLORS = ['#6c9bd2', '#d26c6c', '#7ed28a', '#d2a56c', '#b06cd2', '#6cd2c8', '#d2d26c', '#d26cb0'];
 let colorIdx = 0;
@@ -81,14 +82,13 @@ export function CharactersPanel() {
                 </button>
               )}
               {isDm && (
-                <button
-                  className="link danger"
-                  onClick={() => {
-                    if (confirm(`Delete character "${c.name}"?`)) intents.deleteCharacter(c.id);
-                  }}
+                <ConfirmButton
+                  title={`Delete character "${c.name}"`}
+                  confirmLabel="really delete?"
+                  onConfirm={() => intents.deleteCharacter(c.id)}
                 >
                   delete
-                </button>
+                </ConfirmButton>
               )}
             </div>
           </li>

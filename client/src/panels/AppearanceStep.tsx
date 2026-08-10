@@ -106,7 +106,7 @@ export function AppearanceStep({ value, onChange }: {
       const { assetId, url } = await upload(file, campaign.id, 'token', { title: file.name });
       onChange({ ...value, tokenImageAssetId: assetId, artPreviewUrl: url });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

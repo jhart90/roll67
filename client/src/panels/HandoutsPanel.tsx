@@ -3,6 +3,7 @@ import type { Handout } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 export function HandoutEditor({ handout, onDone }: { handout: Handout | null; onDone: () => void }) {
   const campaign = useGameStore((s) => s.campaign)!;
@@ -20,7 +21,7 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
       const res = await upload(file, campaign.id, 'handout');
       setAssetId(res.assetId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -80,7 +81,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
       const res = await upload(file, campaign.id, 'handout');
       setAssetId(res.assetId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -135,7 +136,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
         <div className="row" style={{ marginTop: 4 }}>
           <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
           {handout && (
-            <button className="link danger" onClick={() => { if (confirm(`Delete handout "${handout.title}"?`)) { intents.deleteHandout(handout.id); onClose(); } }}>delete</button>
+            <ConfirmButton confirmLabel="really delete?" onConfirm={() => { intents.deleteHandout(handout.id); onClose(); }}>delete</ConfirmButton>
           )}
         </div>
 
@@ -247,17 +248,12 @@ export function HandoutsSection() {
             <ShareControls handout={open} />
             <div className="row" style={{ marginTop: 8 }}>
               <button className="link" onClick={() => setEditing(open)}>edit</button>
-              <button
-                className="link danger"
-                onClick={() => {
-                  if (confirm(`Delete handout "${open.title}"?`)) {
-                    intents.deleteHandout(open.id);
-                    setOpenId(null);
-                  }
-                }}
+              <ConfirmButton
+                confirmLabel="really delete?"
+                onConfirm={() => { intents.deleteHandout(open.id); setOpenId(null); }}
               >
                 delete
-              </button>
+              </ConfirmButton>
             </div>
           </>
         )}

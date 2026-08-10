@@ -55,7 +55,7 @@ export function Soundboard() {
       const { assetId } = await upload(file, campaign.id, 'audio', { title: file.name });
       intents.setSoundboardSlot(slotIndex, assetId, label);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setBusy(false);
     }

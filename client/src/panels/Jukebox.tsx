@@ -35,7 +35,7 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
         intents.addAudio(assetId, f.name.replace(/\.[^.]+$/, ''));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';

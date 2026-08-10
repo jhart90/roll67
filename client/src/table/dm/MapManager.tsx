@@ -5,6 +5,7 @@ import { openWindow } from '../../store/windowManager';
 import { UploadProgressBar } from '../../util/UploadProgressBar';
 import { useUploadProgress } from '../../util/useUploadProgress';
 import { authHeaders } from '../../api';
+import { ConfirmButton } from '../../util/ConfirmButton';
 
 function GridField({
   label, value, onCommit, step = 1, min, max,
@@ -77,7 +78,7 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new' | 'n
       const { assetId } = await upload(file, campaign.id, 'map');
       intents.updateMap(loaded.id, { bgAssetId: assetId });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -214,7 +215,7 @@ async function exportMap(mapId: string, name: string): Promise<void> {
     a.click();
     URL.revokeObjectURL(url);
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'Export failed');
+    useGameStore.getState().toast(err instanceof Error ? err.message : 'Export failed');
   }
 }
 
@@ -239,7 +240,7 @@ export function MapManager({ onClose }: { onClose: () => void }) {
       if (!res.ok) throw new Error(data.error ?? 'Import failed');
       // The map list is pushed over the socket, so it refreshes on its own.
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Import failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setImporting(false);
     }
@@ -292,15 +293,13 @@ export function MapManager({ onClose }: { onClose: () => void }) {
             >
               ⭳
             </button>
-            <button
-              className="link danger"
-              title="Delete map"
-              onClick={() => {
-                if (confirm(`Delete map "${m.name}"? This removes its tokens and fog.`)) intents.deleteMap(m.id);
-              }}
+            <ConfirmButton
+              title={`Delete map "${m.name}" — this removes its tokens and fog`}
+              confirmLabel="✕?"
+              onConfirm={() => intents.deleteMap(m.id)}
             >
               ✕
-            </button>
+            </ConfirmButton>
           </li>
         ))}
       </ul>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ironMessage, ironRng, roll, type RollBreakdown } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 const shortHash = (h: string) => `${h.slice(0, 12)}…`;
 const fmtDate = (t: number) => new Date(t).toLocaleString();
@@ -86,16 +87,15 @@ export function IronDiceWindow() {
             </span>
           </div>
           {isDm && (
-            <button
+            <ConfirmButton
+              className=""
               style={{ width: 'auto' }}
-              onClick={() => {
-                if (confirm('Reveal the current seed (making all its rolls verifiable) and mint a fresh one?')) {
-                  intents.rotateIronDice();
-                }
-              }}
+              title="Reveal the current seed, making all its rolls verifiable, and mint a fresh one"
+              confirmLabel="Reveal it and mint a fresh one?"
+              onConfirm={() => intents.rotateIronDice()}
             >
               Rotate seed — reveal for verification
-            </button>
+            </ConfirmButton>
           )}
           {info.revealed.length > 0 && (
             <>

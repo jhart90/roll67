@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { LocationNode } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 const KINDS: LocationNode['kind'][] = ['region', 'settlement', 'district', 'building', 'poi'];
 const KIND_ICON: Record<string, string> = { region: '🗺️', settlement: '🏘️', district: '🏙️', building: '🏛️', poi: '📍' };
@@ -80,7 +81,7 @@ export function LocationEditor({ loc, onClose }: { loc: LocationNode; onClose: (
           <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
           <button onClick={onClose}>Cancel</button>
           <span className="spacer" />
-          <button className="link danger" onClick={() => { if (confirm(`Delete "${loc.name}"?`)) { intents.deleteLocation(loc.id); onClose(); } }}>delete</button>
+          <ConfirmButton confirmLabel="really delete?" onConfirm={() => { intents.deleteLocation(loc.id); onClose(); }}>delete</ConfirmButton>
         </div>
       </div>
   );

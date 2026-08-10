@@ -4,6 +4,7 @@ import { num, systemFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 const SHAPES: Array<{ id: TokenShape; label: string }> = [
   { id: 'circle', label: 'Circle' },
@@ -69,7 +70,7 @@ export function TokenInspector() {
       const { assetId } = await upload(file, campaign.id, 'token');
       intents.updateToken(token.id, { artAssetId: assetId });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -81,14 +82,13 @@ export function TokenInspector() {
       <div className="dock-header">
         <h3>{token.name}</h3>
         <span className="spacer" />
-        <button
-          className="link danger"
-          onClick={() => {
-            if (confirm(`Remove token "${token.name}" from the map?`)) intents.deleteToken(token.id);
-          }}
+        <ConfirmButton
+          title={`Remove token "${token.name}" from the map`}
+          confirmLabel="really remove?"
+          onConfirm={() => intents.deleteToken(token.id)}
         >
           remove
-        </button>
+        </ConfirmButton>
         <button className="link" onClick={() => useGameStore.getState().openInspector(null)}>close</button>
       </div>
       <div className="inspector-grid">

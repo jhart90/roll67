@@ -80,6 +80,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const viewingAs = useGameStore((s) => s.viewingAs);
   const targeting = useGameStore((s) => s.targeting);
   const errorToast = useGameStore((s) => s.errorToast);
+  const toastKind = useGameStore((s) => s.toastKind);
   const drawColor = useGameStore((s) => s.drawColor);
   const drawLayer = useGameStore((s) => s.drawLayer);
   const wallType = useGameStore((s) => s.wallType);
@@ -491,7 +492,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
       )}
 
       {errorToast && (
-        <div className="toast error-toast" onClick={() => useGameStore.getState().clearError()}>
+        <div className={`toast ${toastKind}-toast`} onClick={() => useGameStore.getState().clearError()}>
           {errorToast}
         </div>
       )}

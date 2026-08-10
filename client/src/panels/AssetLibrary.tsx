@@ -3,6 +3,7 @@ import type { AssetInfo } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 /** DM art asset manager: upload, organize into folders, use as map bg / token. */
 export function AssetLibrary({ onClose }: { onClose: () => void }) {
@@ -31,7 +32,7 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
       for (const f of files) await upload(f, campaign.id, 'token', { folderId });
       intents.requestAssets();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -63,7 +64,7 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
               <div key={f.id} className={`asset-folder-row ${folderId === f.id ? 'active' : ''}`}>
                 <button className="asset-folder" onClick={() => setFolderId(f.id)}>{f.name}</button>
                 <button className="link" title="Rename" onClick={() => { const n = prompt('Folder name', f.name); if (n) intents.renameFolder(f.id, n); }}>✎</button>
-                <button className="link danger" title="Delete folder" onClick={() => { if (confirm(`Delete folder "${f.name}"? Its images become unfiled.`)) intents.deleteFolder(f.id); }}>✕</button>
+                <ConfirmButton title="Delete folder — its images become unfiled" confirmLabel="✕?" onConfirm={() => intents.deleteFolder(f.id)}>✕</ConfirmButton>
               </div>
             ))}
             <button className="link" onClick={() => { const n = prompt('New folder name'); if (n) intents.createFolder(n, 'art'); }}>+ folder</button>
@@ -88,7 +89,7 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
                       {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                     </select>
                     <button className="link" onClick={() => { const t = prompt('Rename', a.title); if (t) intents.renameAsset(a.id, t); }}>✎</button>
-                    <button className="link danger" onClick={() => { if (confirm(`Delete "${a.title}"?`)) intents.deleteAsset(a.id); }}>✕</button>
+                    <ConfirmButton title={`Delete "${a.title}"`} confirmLabel="✕?" onConfirm={() => intents.deleteAsset(a.id)}>✕</ConfirmButton>
                   </div>
                 </div>
               ))}

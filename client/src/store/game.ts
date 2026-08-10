@@ -233,6 +233,13 @@ interface GameState {
   /** Everyone's in-progress single-target selections, keyed by caster's userId. */
   targetPreviews: Record<string, TargetPreviewShownPayload>;
   errorToast: string | null;
+  /** Whether the toast is bad news or just news. Errors are red; an 'info'
+   *  toast reports something that WORKED and should not look like a fault. */
+  toastKind: 'error' | 'info';
+  /** Say something to this user, in the app. Replaces alert(): a native dialog
+   *  blocks the whole page, cannot be styled, and on a second monitor can pop
+   *  somewhere they are not even looking. */
+  toast(message: string, kind?: 'error' | 'info'): void;
   /** Live 3D dice animation for the latest roll. */
   diceAnim: { id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string } | null;
   /** True once the settled dice have had their sit time and may fade out. */
@@ -449,6 +456,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aoePreviews: {},
   targetPreviews: {},
   errorToast: null,
+  toastKind: 'error',
   diceAnim: null,
   diceAnimEnding: false,
   soakOffer: null,
@@ -727,6 +735,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     openWindow('characterSheet', characterId, { characterId }, char?.name ?? 'Character');
   },
   clearError() { set({ errorToast: null }); },
+  toast(message, kind = 'error') {
+    set({ errorToast: message, toastKind: kind });
+    // Self-clearing, and only if nothing newer has replaced it — otherwise a
+    // stale timer wipes a message the user has not read yet.
+    setTimeout(() => {
+      if (get().errorToast === message) set({ errorToast: null });
+    }, kind === 'info' ? 3500 : 6000);
+  },
 
   isDm() { return get().you?.role === 'dm'; },
   effectiveVisible() {

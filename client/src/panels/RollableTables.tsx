@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RollableTable } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 export function TableEditor({ table, onClose }: { table: RollableTable; onClose: () => void }) {
   const [name, setName] = useState(table.name);
@@ -29,7 +30,7 @@ export function TableEditor({ table, onClose }: { table: RollableTable; onClose:
           <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
           <button onClick={onClose}>Cancel</button>
           <span className="spacer" />
-          <button className="link danger" onClick={() => { if (confirm(`Delete table "${table.name}"?`)) { intents.deleteTable(table.id); onClose(); } }}>delete</button>
+          <ConfirmButton confirmLabel="really delete?" onConfirm={() => { intents.deleteTable(table.id); onClose(); }}>delete</ConfirmButton>
         </div>
       </div>
   );

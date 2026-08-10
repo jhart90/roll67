@@ -3,6 +3,7 @@ import type { GameSystem, Shop, ShopItem } from 'shared';
 import { currenciesFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { StockList, type KeyedStock } from './StockEditor';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 /** A stock item plus a stable editor-local key. Rows used to be keyed by
  *  array index, so deleting one shifted every later row onto a component
@@ -56,7 +57,7 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
           <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
           <button onClick={onClose}>Cancel</button>
           <span className="spacer" />
-          <button className="btn btn-sm btn-danger" onClick={() => { if (confirm(`Delete shop "${shop.name}"?`)) { intents.deleteShop(shop.id); onClose(); } }}>Delete</button>
+          <ConfirmButton className="btn btn-sm btn-danger" confirmLabel="Really delete?" onConfirm={() => { intents.deleteShop(shop.id); onClose(); }}>Delete</ConfirmButton>
         </div>
       </div>
   );

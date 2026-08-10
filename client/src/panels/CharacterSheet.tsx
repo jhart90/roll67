@@ -12,6 +12,7 @@ import { CombatStatus } from './CombatStatus';
 import { SheetTerm } from '../util/Term';
 import { RollStatsTab } from './RollStats';
 import { NotesTab } from './NotesTab';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 /** The neutral token colour a sheet shows before anyone picks one. */
 const DEFAULT_TOKEN_COLOR = '#6c9bd2';
@@ -968,22 +969,19 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
                   className="btn btn-sm"
                   onClick={() => {
                     intents.saveToCompendium(character.id);
-                    alert(`"${character.name}" added to your compendium.`);
+                    useGameStore.getState().toast(`"${character.name}" added to your compendium.`, 'info');
                   }}
                 >
                   Add to Compendium
                 </button>
-                <button
+                <ConfirmButton
                   className="btn btn-sm btn-danger"
-                  onClick={() => {
-                    if (confirm(`Delete character "${character.name}"? This can't be undone.`)) {
-                      intents.deleteCharacter(character.id);
-                      onClose();
-                    }
-                  }}
+                  title="Delete this character — this can't be undone"
+                  confirmLabel="Really delete? This can't be undone"
+                  onConfirm={() => { intents.deleteCharacter(character.id); onClose(); }}
                 >
                   Delete character
-                </button>
+                </ConfirmButton>
               </div>
             )}
           </div>

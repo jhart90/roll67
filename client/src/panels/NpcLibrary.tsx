@@ -4,6 +4,7 @@ import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { npcAttackSummary, npcStatCols, type NpcStatCol } from './npcStatCols';
 import { useNpcPicker } from './useNpcPicker';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 export function NpcLibrary({ onClose }: { onClose: () => void }) {
   const campaign = useGameStore((s) => s.campaign);
@@ -165,14 +166,14 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
                       <button className="link" onClick={() => addCustom(c)}>
                         {added[c.id] ? 'added ✓' : '+ add'}
                       </button>
-                      <button
-                        className="link danger"
+                      <ConfirmButton
                         style={{ marginLeft: 6 }}
-                        onClick={() => { if (confirm(`Remove "${c.name}" from your compendium?`)) intents.deleteCustomNpc(c.id); }}
-                        title="Remove from compendium"
+                        onConfirm={() => intents.deleteCustomNpc(c.id)}
+                        title={`Remove "${c.name}" from your compendium`}
+                        confirmLabel="✕?"
                       >
                         ✕
-                      </button>
+                      </ConfirmButton>
                     </td>
                   </tr>
                 ))}

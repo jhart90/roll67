@@ -1,4 +1,5 @@
 import { intents, useGameStore } from '../store/game';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 /**
  * The one editor for a map light — reached by picking it with the light tool
@@ -86,16 +87,15 @@ export function LightInspector() {
       </p>
       {/* Deleting is a decision made here, with the light's properties in
           front of you — not from a ✕ beside its name in the World pane. */}
-      <button
-        className="link danger"
-        onClick={() => {
-          if (!confirm(`Delete "${light.name || 'Light'}"?`)) return;
-          intents.deleteLight(map.id, light.id);
+      <ConfirmButton
+        confirmLabel="🗑 Really delete this light?"
+        onConfirm={() => {
+          intents.deleteLight(map!.id, light!.id);
           useGameStore.getState().selectLight(null);
         }}
       >
         🗑 Delete light
-      </button>
+      </ConfirmButton>
     </div>
   );
 }

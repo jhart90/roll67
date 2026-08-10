@@ -4,6 +4,7 @@ import {
   CUSTOM_RACE_POINT_CAP, CUSTOM_RACE_POINT_FLOOR, CUSTOM_RACE_TRAITS, CUSTOM_RACE_TRAITS_BY_ID,
   FREE_SKILLS_SWADE, MAX_HINDRANCE_POINTS, canTakeHindrance, RACE_ENVIRONMENTS,
   RESISTIBLE_DAMAGE_TYPES, SKILL_ATTR_SWADE, SKILLS_SWADE, SKILL_POINTS, TRAIT_DICE,
+  CONCEPT_MAX_LEN,
   attributePointsSpent, buildSwadeCharacterSheet, dieStepIndex, finalAttributeDice, hindrancePoints,
   maxTakesOf, pickTier, raceTraitPointTotal, skillPointCost, stepDie, swadeParry, swadeToughness,
   termDesc, totalSkillPointsSpent,
@@ -248,7 +249,16 @@ export function SwadeCharacterCreator({ onClose }: { onClose: () => void }) {
             </label>
             <label className="lu-field">
               Concept (optional flavor)
-              <input value={concept} onChange={(e) => setConcept(e.target.value)} placeholder="e.g. Disgraced marshal chasing one last bounty" />
+              <input
+                value={concept}
+                maxLength={CONCEPT_MAX_LEN}
+                onChange={(e) => setConcept(e.target.value)}
+                placeholder="e.g. Disgraced marshal chasing one last bounty"
+              />
+              {/* The cap is the nameplate's: a Concept has three lines there. */}
+              <span className="dim" style={{ fontSize: 11 }}>
+                {concept.length}/{CONCEPT_MAX_LEN} — shown on your token's nameplate.
+              </span>
             </label>
             <p className="dim" style={{ fontSize: 12 }}>
               Every Savage Worlds hero is a <T>Wild Card</T> — you'll roll a <T>Wild Die</T> alongside your <T term="Trait">trait</T> rolls and start with 3 <T>Bennies</T> to reroll fate itself.

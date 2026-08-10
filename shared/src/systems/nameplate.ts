@@ -1,5 +1,6 @@
-import type { Character, GameSystem, NameplateLine, SheetData, TokenNameplate } from '../types.js';
-import { num, str } from './types.js';
+import type { Character, GameSystem, NameplateLine, NameplatePill, SheetData, TokenNameplate } from '../types.js';
+import { CONCEPT_MAX_LEN } from '../types.js';
+import { num, rows, str } from './types.js';
 import { rankForAdvances } from './swadeAdvancement.js';
 
 
@@ -25,7 +26,43 @@ export function nameplateFor(character: Character, tokenColor: string, tokenArtU
       || null,
     color: tokenColor,
     lines: linesFor(character.system, sheet).filter((l) => l.text.length > 0),
+    pills: pillsFor(character.system, sheet),
   };
+}
+
+/**
+ * Edges and Hindrances as pills. SWADE only, for the same reason the Wild Card
+ * badge is: it is the system whose characters are actually defined by them.
+ * 5e feats and SWN foci would be the obvious extension, but they are neither
+ * two-sided nor as load-bearing across the table, so they stay off the card.
+ *
+ * The name is public; the description rides along for the hover popover only.
+ */
+function pillsFor(system: GameSystem, sheet: SheetData): NameplatePill[] {
+  if (system !== 'swade') return [];
+  const pills: NameplatePill[] = [];
+  for (const row of rows(sheet, 'edges')) {
+    const name = str(row, 'name', '').trim();
+    if (name) pills.push({ name, desc: str(row, 'notes', '').trim(), kind: 'edge' });
+  }
+  for (const row of rows(sheet, 'hindrances')) {
+    const name = str(row, 'name', '').trim();
+    if (!name) continue;
+    // Major/Minor is half of what a Hindrance means, so it belongs on the
+    // face of the pill rather than buried in the hover text.
+    const severity = str(row, 'severity', '').trim();
+    pills.push({
+      name: severity ? `${name} (${severity})` : name,
+      desc: str(row, 'notes', '').trim(),
+      kind: 'hindrance',
+    });
+  }
+  return pills;
+}
+
+function clampConcept(text: string): string {
+  if (text.length <= CONCEPT_MAX_LEN) return text;
+  return `${text.slice(0, CONCEPT_MAX_LEN - 1).trimEnd()}…`;
 }
 
 function linesFor(system: GameSystem, sheet: SheetData): NameplateLine[] {
@@ -42,7 +79,10 @@ function linesFor(system: GameSystem, sheet: SheetData): NameplateLine[] {
       // combatant — three wounds and a Wild Die, or one hit and gone. Only
       // SWADE has the distinction, so only SWADE shows the badge.
       status(sheet.wildCard === false ? 'Extra' : 'Wild Card'),
-      concept(str(sheet, 'concept', '').trim()),
+      // Truncated here as well as capped at the input, so a sheet that
+      // acquired a longer concept by any other route still can't overrun the
+      // three lines the card gives it.
+      concept(clampConcept(str(sheet, 'concept', '').trim())),
       origin(str(sheet, 'ancestry', '').trim()),
     ];
   }

@@ -7,6 +7,7 @@
 // standard −1/level penalty into every trait roll.
 
 import type { Hex, SheetData, VisionStats } from '../types.js';
+import { CONCEPT_MAX_LEN } from '../types.js';
 import { hexDistance } from '../hex/coords.js';
 import {
   fmtMod, num, rows, str,
@@ -269,7 +270,7 @@ export function gangUpBonus(attackerHex: Hex, defenderHex: Hex, others: GangUpCo
 // ---------- Tab 1: Core ----------
 
 const identityFields: FieldDef[] = [
-  { id: 'concept', label: 'Concept', type: 'text', width: 'third' },
+  { id: 'concept', label: 'Concept', type: 'text', width: 'third', maxLength: CONCEPT_MAX_LEN },
   { id: 'ancestry', label: 'Ancestry', type: 'text', width: 'third', suggestions: ANCESTRIES_SWADE },
   { id: 'rank', label: 'Rank', type: 'select', width: 'third', options: RANKS_SWADE, default: 'Novice' },
   { id: 'advances', label: 'Advances', type: 'number', width: 'sixth', default: 0 },

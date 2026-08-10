@@ -305,11 +305,29 @@ export interface Token {
 export type NameplateLineKind = 'rank' | 'status' | 'concept' | 'origin';
 export interface NameplateLine { text: string; kind: NameplateLineKind }
 
+/** A named trait shown as a pill on the nameplate: the name is always on
+ *  show, the description only on hover. */
+export interface NameplatePill {
+  name: string;
+  /** Rules text for the hover popover. Empty when the row carried no note. */
+  desc: string;
+  kind: 'edge' | 'hindrance';
+}
+
+/** The longest a Concept may be. Sized so it cannot outrun three lines of the
+ *  nameplate's body column, which is what the card reserves for it — a longer
+ *  one used to push the origin line out of the card entirely. Enforced by the
+ *  sheet renderer and the creation wizards; the nameplate also line-clamps, so
+ *  characters written before the cap still render inside their box. */
+export const CONCEPT_MAX_LEN = 100;
+
 export interface TokenNameplate {
   name: string;
   portraitUrl: string | null;
   color: string;
   lines: NameplateLine[];
+  /** Edges and Hindrances, for systems that have them. */
+  pills: NameplatePill[];
 }
 
 export type TokenView = Token & { nameplate?: TokenNameplate | null };

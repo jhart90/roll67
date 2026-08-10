@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nameplateFor } from '../src/systems/nameplate.js';
-import type { Character, NameplateLine } from '../src/types.js';
+import { CONCEPT_MAX_LEN, type Character, type NameplateLine } from '../src/types.js';
 
 const text = (lines: NameplateLine[]) => lines.map((l) => l.text);
 
@@ -82,6 +82,46 @@ describe('nameplateFor', () => {
     // A sheet carrying the retired override must not resurrect it.
     const p = nameplateFor(ch('swade', { nameplateColor: '#ff0000' }), '#112233', null);
     expect(p.color).toBe('#112233');
+  });
+
+  it('lists SWADE Edges and Hindrances as pills, carrying their rules text', () => {
+    const p = nameplateFor(ch('swade', {
+      edges: [{ name: 'Quick', notes: 'Redraw action cards of 5 or less.' }],
+      hindrances: [{ name: 'Loyal', severity: 'Minor', notes: 'Risks himself for friends.' }],
+    }), '#000000', null);
+    const edge = p.pills.find((x) => x.kind === 'edge');
+    expect(edge).toEqual({ name: 'Quick', desc: 'Redraw action cards of 5 or less.', kind: 'edge' });
+    // Major/Minor is half of what a Hindrance means, so it rides on the face.
+    const hind = p.pills.find((x) => x.kind === 'hindrance');
+    expect(hind?.name).toBe('Loyal (Minor)');
+    expect(hind?.desc).toBe('Risks himself for friends.');
+  });
+
+  it('skips nameless trait rows and tolerates ones with no description', () => {
+    const p = nameplateFor(ch('swade', {
+      edges: [{ name: '', notes: 'orphan note' }, { name: 'Brawny' }],
+      hindrances: [{ name: '   ' }],
+    }), '#000000', null);
+    expect(p.pills).toEqual([{ name: 'Brawny', desc: '', kind: 'edge' }]);
+  });
+
+  it('carries no pills for systems without Edges and Hindrances', () => {
+    for (const sys of ['dnd5e', 'swn'] as const) {
+      const p = nameplateFor(ch(sys, { level: 3, edges: [{ name: 'Quick' }] }), '#000000', null);
+      expect(p.pills).toEqual([]);
+    }
+  });
+
+  it('clamps an over-long Concept so it cannot outrun the card', () => {
+    const long = 'A'.repeat(CONCEPT_MAX_LEN + 60);
+    const p = nameplateFor(ch('swade', { concept: long }), '#000000', null);
+    const line = p.lines.find((l) => l.kind === 'concept')!;
+    expect(line.text.length).toBe(CONCEPT_MAX_LEN);
+    expect(line.text.endsWith('…')).toBe(true);
+    // One at exactly the cap is left alone — no stray ellipsis.
+    const exact = 'B'.repeat(CONCEPT_MAX_LEN);
+    const p2 = nameplateFor(ch('swade', { concept: exact }), '#000000', null);
+    expect(p2.lines.find((l) => l.kind === 'concept')!.text).toBe(exact);
   });
 
   it('no longer surfaces the retired quip field', () => {

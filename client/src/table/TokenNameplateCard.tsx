@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useGameStore } from '../store/game';
 import { readableOn } from '../util/playerColor';
+import { Term } from '../util/Term';
 
 /** The chat dock owns the right edge of the screen, so 'lower right' means
  *  the lower right of the MAP, not of the window. */
@@ -96,6 +97,17 @@ export function TokenNameplateCard() {
         {plate.lines.filter((l) => l.kind !== 'rank' && l.kind !== 'status').map((line, i) => (
           <span key={i} className={`nameplate-line np-${line.kind}`}>{line.text}</span>
         ))}
+        {plate.pills.length > 0 && (
+          // Edges and Hindrances. Only the name shows — the rules text is a
+          // hover away, so a character with a dozen of them still fits.
+          <span className="nameplate-pills">
+            {plate.pills.map((p, i) => (
+              <Term key={i} desc={p.desc || null}>
+                <span className={`np-pill np-pill-${p.kind}`}>{p.name}</span>
+              </Term>
+            ))}
+          </span>
+        )}
       </div>
     </div>
   );

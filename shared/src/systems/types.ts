@@ -16,6 +16,10 @@ export interface FieldDef {
   /** Grid width hint for the renderer. */
   width?: 'full' | 'half' | 'third' | 'sixth';
   default?: unknown;
+  /** Hard cap for text/textarea fields, enforced by the sheet renderer.
+   *  Used where something downstream has a fixed amount of room for the value
+   *  (see CONCEPT_MAX_LEN and the nameplate). */
+  maxLength?: number;
 }
 
 export interface FieldsSection {

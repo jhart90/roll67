@@ -118,6 +118,7 @@ function FieldInput({
         <span><SheetTerm system={system} label={field.label} /></span>
         <textarea
           rows={8}
+          maxLength={field.maxLength}
           defaultValue={typeof value === 'string' ? value : ''}
           readOnly={readOnly}
           onBlur={(e) => {
@@ -138,6 +139,7 @@ function FieldInput({
         key={`${field.id}-${String(value)}`}
         defaultValue={value === undefined || value === null ? '' : String(value)}
         readOnly={readOnly}
+        maxLength={field.type === 'number' ? undefined : field.maxLength}
         list={listId}
         onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
         onBlur={(e) => {

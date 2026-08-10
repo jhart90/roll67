@@ -290,10 +290,17 @@ button.link:hover { text-decoration: underline; }
 
 /* ---------- quick dice roller ---------- */
 
+/* Fixed width, not shrink-to-fit. The panel used to size to its content, so
+   anything inside it that changed length — picking a different Ace style, and
+   with it a different hint line and a wider <select> — resized the whole
+   window under the cursor. 372px is the dice grid's own width (a 84px type
+   button plus six 34px count buttons and their 4px spacing) plus the padding,
+   so nothing below it can widen the panel and nothing above it is cramped. */
 .dice-panel {
   position: absolute;
   left: 60px;
   top: 8px;
+  width: 372px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2207,7 +2214,13 @@ th > .term { border-bottom-style: dotted; }
 /* Bounce share: sits in the same row rhythm as the colour pickers. */
 .dice-bounce-slider { flex: 1 1 90px; min-width: 80px; margin: 0; padding: 0; accent-color: var(--accent); }
 .dice-bounce-val { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
-.dice-ace-select { width: auto; margin: 0; padding: 3px 6px; font-size: 12px; }
+/* Fixed so the row doesn't jump as the option name changes length either. */
+.dice-ace-select { width: 108px; margin: 0; padding: 3px 6px; font-size: 12px; }
+/* The hint under it varies a lot in length. It gets its own line and is free
+   to wrap; min-width: 0 keeps a flex item from insisting on its content width,
+   which is what would push a panel back open. Only this element needs it —
+   the swatches and the bounce slider have widths worth keeping. */
+.dice-ace-hint { flex-basis: 100%; min-width: 0; font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
 .dice-color-swatch {
   width: 20px;
   height: 20px;

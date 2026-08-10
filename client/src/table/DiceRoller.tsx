@@ -221,7 +221,7 @@ export function DiceAceStylePicker() {
           <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>
         ))}
       </select>
-      <span className="dim" style={{ fontSize: 11, flexBasis: '100%' }}>{ACE_STYLE_LABELS[current]}</span>
+      <span className="dim dice-ace-hint">{ACE_STYLE_LABELS[current]}</span>
     </div>
   );
 }

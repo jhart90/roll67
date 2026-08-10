@@ -345,6 +345,8 @@ export interface UpdateShopPayload {
   currency?: string;
   playersCanBuy?: boolean;
   parentId?: string | null;
+  /** Briefing image shown to players above the stock. '' clears it. */
+  detailAssetId?: string | null;
   items?: Array<{
     name: string; price?: number; qty?: number; notes?: string;
     contentId?: string; effect?: 'heal' | 'damage'; amount?: string; range?: number;
@@ -645,6 +647,10 @@ export interface MapObject {
   /** Server-resolved URL for that asset. The id alone is not enough to build
    *  one — uploads are stored with their extension. */
   artUrl?: string | null;
+  /** A briefing image players see above the contents, like a handout. Its
+   *  text half is `description`, which the loot popup already shows. */
+  detailAssetId?: string | null;
+  detailUrl?: string | null;
   items: LootItem[];
   /** Links this map object to a world folder (chest-folder unification). */
   worldFolderId: string | null;
@@ -684,6 +690,8 @@ export interface UpdateMapObjectPayload {
     name?: string;
     description?: string;
     artAssetId?: string;
+    /** Briefing image shown to players above the contents. '' clears it. */
+    detailAssetId?: string;
     q?: number;
     r?: number;
     items?: LootItem[];

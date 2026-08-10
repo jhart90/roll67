@@ -29,6 +29,11 @@ export function ShopStorefront() {
           <button className="link" onClick={() => useGameStore.getState().closePresentedShop()}>close</button>
         </div>
 
+        {/* The DM's briefing, read before the stock: the shop front, the
+            merchant, a notice pinned to the door. */}
+        {shop.detailUrl && (
+          <div style={{ padding: '0 16px' }}><img className="detail-brief" src={shop.detailUrl} alt="" /></div>
+        )}
         {shop.description && <p className="dim" style={{ padding: '0 16px' }}>{shop.description}</p>}
 
         <div className="storefront-buyer">

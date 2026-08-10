@@ -366,6 +366,11 @@ migrateCounterSideSlots();
 // NULL is both "never set" and "everyone", which is what old counters want.
 ensureColumn('counters', 'shared_with', 'shared_with TEXT');
 
+// A briefing image shown to players above a chest's or a shop's contents —
+// the handout half of "here is what you are looking at".
+ensureColumn('map_objects', 'detail_asset_id', 'detail_asset_id TEXT');
+ensureColumn('shops', 'detail_asset_id', 'detail_asset_id TEXT');
+
 // Manual world-tree ordering: rank per "kind:id" key, campaign-scoped.
 // Items without a rank sort after ranked ones, alphabetically.
 db.exec(`

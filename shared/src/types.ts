@@ -691,6 +691,11 @@ export interface Shop {
   linkedCharacterId?: string | null;
   /** Custom art for the shop when placed on the map. */
   artAssetId?: string | null;
+  /** A briefing image players see above the stock, like a handout. Its text
+   *  half is `description`, which the storefront already shows. */
+  detailAssetId?: string | null;
+  /** Server-resolved URL for that asset (uploads carry an extension). */
+  detailUrl?: string | null;
 }
 
 // ---------- Locations ----------

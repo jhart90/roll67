@@ -11,6 +11,7 @@ export function MapObjectInspector() {
   const campaign = useGameStore((s) => s.campaign);
   const obj = useGameStore((s) => (s.inspectedObjectId ? s.mapObjects[s.inspectedObjectId] : null));
   const fileRef = useRef<HTMLInputElement>(null);
+  const detailRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
 
@@ -40,6 +41,23 @@ export function MapObjectInspector() {
         ...(row.contentId ? { contentId: row.contentId } : {}),
       })),
     });
+  }
+
+  /** The briefing image, uploaded as a handout rather than a token: it is read
+   *  at full size above the contents, not drawn at hex scale on the map. */
+  async function onDetail(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !obj || !campaign) return;
+    setUploading(true);
+    try {
+      const { assetId } = await upload(file, campaign.id, 'handout');
+      intents.updateMapObject(obj.id, { detailAssetId: assetId });
+    } catch (err) {
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (detailRef.current) detailRef.current.value = '';
+    }
   }
 
   async function onArt(e: React.ChangeEvent<HTMLInputElement>) {
@@ -95,6 +113,19 @@ export function MapObjectInspector() {
       {obj.artAssetId && (
         <button className="small" style={{ marginTop: 4 }} onClick={() => intents.updateMapObject(obj.id, { artAssetId: '' })}>
           Remove art
+        </button>
+      )}
+
+      {/* Separate from the map art above: that is the piece on the board, this
+          is what players READ when they open it. */}
+      <h4>Briefing image <span className="dim" style={{ fontWeight: 400, fontSize: 11 }}>— players see this above the contents</span></h4>
+      {obj.detailUrl && (
+        <img src={obj.detailUrl} alt="" className="detail-preview" />
+      )}
+      <input type="file" accept="image/*" ref={detailRef} onChange={onDetail} style={{ fontSize: 12 }} />
+      {obj.detailAssetId && (
+        <button className="small" style={{ marginTop: 4 }} onClick={() => intents.updateMapObject(obj.id, { detailAssetId: '' })}>
+          Remove briefing image
         </button>
       )}
 

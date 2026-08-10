@@ -351,6 +351,7 @@ interface ShopRow {
   id: string; name: string; description: string; currency: string;
   players_can_buy: number; items_json: string; parent_id: string | null;
   linked_character_id: string | null; art_asset_id: string | null;
+  detail_asset_id?: string | null;
 }
 function toShop(r: ShopRow): Shop {
   const items = (safeParse<Array<Partial<ShopItem>>>(r.items_json, [])).map((it) => ({
@@ -368,6 +369,8 @@ function toShop(r: ShopRow): Shop {
     playersCanBuy: !!r.players_can_buy, items, parentId: r.parent_id ?? null,
     linkedCharacterId: r.linked_character_id ?? null,
     artAssetId: r.art_asset_id ?? null,
+    detailAssetId: r.detail_asset_id ?? null,
+    detailUrl: assets.urlFor(r.detail_asset_id ?? null),
   };
 }
 
@@ -388,10 +391,10 @@ export const shops = {
     // something the party can already browse and buy from.
     return { id, name, description: '', currency, playersCanBuy: false, items: [] };
   },
-  update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[]; parentId?: string | null; linkedCharacterId?: string | null; artAssetId?: string | null }): void {
+  update(id: string, fields: { name?: string; description?: string; currency?: string; playersCanBuy?: boolean; items?: ShopItem[]; parentId?: string | null; linkedCharacterId?: string | null; artAssetId?: string | null; detailAssetId?: string | null }): void {
     const cur = stmt('SELECT * FROM shops WHERE id = ?').get(id) as ShopRow | undefined;
     if (!cur) return;
-    stmt('UPDATE shops SET name = ?, description = ?, currency = ?, players_can_buy = ?, items_json = ?, parent_id = ?, linked_character_id = ?, art_asset_id = ? WHERE id = ?').run(
+    stmt('UPDATE shops SET name = ?, description = ?, currency = ?, players_can_buy = ?, items_json = ?, parent_id = ?, linked_character_id = ?, art_asset_id = ?, detail_asset_id = ? WHERE id = ?').run(
       fields.name ?? cur.name,
       fields.description ?? cur.description,
       fields.currency ?? cur.currency,
@@ -400,6 +403,7 @@ export const shops = {
       fields.parentId !== undefined ? fields.parentId : cur.parent_id,
       fields.linkedCharacterId !== undefined ? fields.linkedCharacterId : (cur.linked_character_id ?? null),
       fields.artAssetId !== undefined ? fields.artAssetId : (cur.art_asset_id ?? null),
+      fields.detailAssetId !== undefined ? (fields.detailAssetId || null) : (cur.detail_asset_id ?? null),
       id,
     );
   },
@@ -1588,6 +1592,7 @@ interface MapObjectRow {
   world_folder_id: string | null;
   shop_id: string | null;
   interact_range: number;
+  detail_asset_id?: string | null;
   locked?: number;
   key_name?: string | null;
   linked_character_id?: string | null;
@@ -1608,6 +1613,8 @@ function toMapObject(row: MapObjectRow) {
     // `<id>.<ext>` and only the id is on this row, so `/uploads/${artAssetId}`
     // — which is what the client was building — is a 404 every time.
     artUrl: assets.urlFor(row.art_asset_id),
+    detailAssetId: row.detail_asset_id ?? null,
+    detailUrl: assets.urlFor(row.detail_asset_id ?? null),
     items: safeParse<LootItem[]>(row.items_json, []),
     worldFolderId: row.world_folder_id,
     shopId: row.shop_id,
@@ -1640,14 +1647,15 @@ export const mapObjects = {
     const range = opts?.interactRange ?? 1;
     stmt('INSERT INTO map_objects (id, map_id, name, description, kind, q, r, items_json, world_folder_id, shop_id, interact_range, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, mapId, name, description, kind, q, r, '[]', wfId, sId, range, now());
-    return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, items_json: '[]', world_folder_id: wfId, shop_id: sId, interact_range: range, created_at: now() });
+    return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, detail_asset_id: null, items_json: '[]', world_folder_id: wfId, shop_id: sId, interact_range: range, created_at: now() });
   },
-  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }): void {
+  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }): void {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (patch.name !== undefined) { sets.push('name = ?'); vals.push(patch.name); }
     if (patch.description !== undefined) { sets.push('description = ?'); vals.push(patch.description); }
     if (patch.artAssetId !== undefined) { sets.push('art_asset_id = ?'); vals.push(patch.artAssetId); }
+    if (patch.detailAssetId !== undefined) { sets.push('detail_asset_id = ?'); vals.push(patch.detailAssetId || null); }
     if (patch.q !== undefined) { sets.push('q = ?'); vals.push(patch.q); }
     if (patch.r !== undefined) { sets.push('r = ?'); vals.push(patch.r); }
     if (patch.items !== undefined) { sets.push('items_json = ?'); vals.push(JSON.stringify(patch.items)); }

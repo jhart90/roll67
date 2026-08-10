@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { GameSystem, Shop, ShopItem } from 'shared';
 import { currenciesFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { StockList, type KeyedStock } from './StockEditor';
 import { ConfirmButton } from '../util/ConfirmButton';
+import { UploadProgressBar } from '../util/UploadProgressBar';
+import { useUploadProgress } from '../util/useUploadProgress';
 
 /** A stock item plus a stable editor-local key. Rows used to be keyed by
  *  array index, so deleting one shifted every later row onto a component
@@ -21,6 +23,24 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
   const [currency, setCurrency] = useState(currencies.some((c) => c.id === shop.currency) ? shop.currency : currencies[currencies.length - 1].id);
   const [playersCanBuy, setPlayers] = useState(shop.playersCanBuy);
   const [items, setItems] = useState<KeyedStock[]>(() => withKeys(shop.items));
+  const campaign = useGameStore((s) => s.campaign);
+  const detailRef = useRef<HTMLInputElement>(null);
+  const { progress, upload } = useUploadProgress();
+
+  /** The briefing image commits on upload rather than waiting for Save, so the
+   *  preview below is the real stored one and not a local guess. */
+  async function onDetail(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !campaign) return;
+    try {
+      const { assetId } = await upload(file, campaign.id, 'handout');
+      intents.updateShop(shop.id, { detailAssetId: assetId });
+    } catch (err) {
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      if (detailRef.current) detailRef.current.value = '';
+    }
+  }
 
   function save() {
     intents.updateShop(shop.id, {
@@ -45,6 +65,21 @@ export function ShopEditor({ shop, onClose }: { shop: Shop; onClose: () => void 
           <input type="checkbox" checked={playersCanBuy} onChange={(e) => setPlayers(e.target.checked)} />
           Players can buy from this shop
         </label>
+
+        {/* Read by players above the stock, like a handout — the shop front,
+            the merchant's portrait, a notice board. */}
+        <label>Briefing image <span className="dim" style={{ fontSize: 11 }}>— players see this above the stock</span>
+          <input type="file" accept="image/*" ref={detailRef} onChange={onDetail} style={{ fontSize: 12 }} />
+        </label>
+        <UploadProgressBar progress={progress} />
+        {shop.detailUrl && (
+          <div>
+            <img src={shop.detailUrl} alt="" className="detail-preview" />
+            <button className="small" onClick={() => intents.updateShop(shop.id, { detailAssetId: '' })}>
+              Remove briefing image
+            </button>
+          </div>
+        )}
 
         <StockList
           items={items}

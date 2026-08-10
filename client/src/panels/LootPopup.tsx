@@ -12,6 +12,7 @@ export function LootPopup() {
       <div className="loot-popup-backdrop" onClick={close}>
         <div className="loot-popup" onClick={(e) => e.stopPropagation()}>
           <h3>{obj.name}</h3>
+          {obj.detailUrl && <img className="detail-brief" src={obj.detailUrl} alt="" />}
           {obj.description && <p className="loot-desc">{obj.description}</p>}
           <div className="loot-actions">
             <button onClick={() => { intents.takeMapItem(obj.id); close(); }}>Take</button>
@@ -26,6 +27,9 @@ export function LootPopup() {
     <div className="loot-popup-backdrop" onClick={close}>
       <div className="loot-popup chest-popup" onClick={(e) => e.stopPropagation()}>
         <h3>{obj.name}</h3>
+        {/* The DM's briefing, read before the contents: what this thing looks
+            like, or what is written on it. */}
+        {obj.detailUrl && <img className="detail-brief" src={obj.detailUrl} alt="" />}
         {obj.description && <p className="loot-desc">{obj.description}</p>}
         {obj.items.length === 0 ? (
           <p className="dim">This chest is empty.</p>

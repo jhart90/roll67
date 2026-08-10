@@ -3,6 +3,7 @@ import type { MapObject } from 'shared';
 import { hexDistance, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
+import { openWindow } from '../store/windowManager';
 
 const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject }) {
   const map = useGameStore((s) => s.map)!;
@@ -62,7 +63,17 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
   function onContextMenu(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (isDm) useGameStore.getState().openObjectInspector(obj.id);
+    if (!isDm) return;
+    // Right-clicking a piece on the map opens whatever the world tab opens for
+    // that same piece. A shop's real editor — stock, prices, currency, who may
+    // buy — is the shop window; the map object only ever carried its name, art
+    // and interact range, so the map was the one place a shop could be clicked
+    // and NOT edited.
+    if (obj.kind === 'shop' && obj.shopId) {
+      openWindow('shop', obj.shopId, {}, obj.name || 'Shop');
+      return;
+    }
+    useGameStore.getState().openObjectInspector(obj.id);
   }
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {

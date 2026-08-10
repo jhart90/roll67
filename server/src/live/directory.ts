@@ -1,7 +1,7 @@
 import type { Server } from 'socket.io';
 import { S2C, type DirectoryPayload, type WorldVisState } from 'shared';
 import { campaigns, characters, fog, maps, tokens, worldVis, type WorldVisKind } from '../db/repos.js';
-import { campaignSockets, sdata } from './hub.js';
+import { campaignSockets, sdata, viewerFor } from './hub.js';
 
 function distinct(values: string[]): string[] {
   return [...new Set(values.filter((v) => v && v.trim()))].sort((a, b) => a.localeCompare(b));
@@ -112,10 +112,10 @@ export function broadcastDirectory(io: Server, campaignId: string): void {
   const dmView = buildDirectory(campaignId, true);
   const perUser = new Map<string, DirectoryPayload>();
   for (const socket of campaignSockets(io, campaignId)) {
-    const d = sdata(socket);
-    if (d.role === 'dm') { socket.emit(S2C.DIRECTORY, dmView); continue; }
-    let view = perUser.get(d.userId);
-    if (!view) { view = buildDirectory(campaignId, false, d.userId); perUser.set(d.userId, view); }
+    const v = viewerFor(sdata(socket));
+    if (v.isDm) { socket.emit(S2C.DIRECTORY, dmView); continue; }
+    let view = perUser.get(v.userId);
+    if (!view) { view = buildDirectory(campaignId, false, v.userId); perUser.set(v.userId, view); }
     socket.emit(S2C.DIRECTORY, view);
   }
   // Whatever the players now know may have opened a folder to them.

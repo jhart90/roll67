@@ -15,6 +15,21 @@ export function sdata(socket: Socket): SocketData {
   return socket.data as SocketData;
 }
 
+/**
+ * Whose eyes this socket sees through.
+ *
+ * "View as" used to bend only the MAP — the DM previewing a player still got
+ * the omniscient world tree, so they saw hidden maps, unrevealed locations and
+ * closed shops the player has no idea exist, which is the opposite of what the
+ * preview is for. Every per-viewer payload resolves its audience through here
+ * instead of testing `role === 'dm'` itself, so the preview is honest
+ * everywhere at once and can't drift apart feature by feature.
+ */
+export function viewerFor(d: SocketData): { isDm: boolean; userId: string } {
+  if (d.role === 'dm' && d.viewingAs) return { isDm: false, userId: d.viewingAs };
+  return { isDm: d.role === 'dm', userId: d.userId };
+}
+
 export function campaignRoom(campaignId: string): string {
   return `campaign:${campaignId}`;
 }

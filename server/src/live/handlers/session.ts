@@ -11,7 +11,7 @@ import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings,
   handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders, worldSort, worldVis,
 } from '../../db/repos.js';
-import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom } from '../hub.js';
+import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom, viewerFor } from '../hub.js';
 import { buildMapState, dropVisionCache, mapObjectsVisibleTo } from '../visionService.js';
 import { emitCustomNpcs } from './characters.js';
 import { initiativeViewFor } from './combat.js';
@@ -26,6 +26,32 @@ function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   return all
     .filter((h) => h.sharedAll || h.sharedWith.includes(userId))
     .map((h) => ({ ...h, sharedWith: [] })); // players don't see the share list
+}
+
+/**
+ * Every per-viewer payload the world tab is assembled from, scoped through
+ * viewerFor so a DM previewing a player gets that player's tree rather than
+ * the omniscient one. Sent on join and again whenever the preview is switched,
+ * which is what makes "View as" honest beyond the map.
+ */
+export function sendWorldViewTo(socket: Socket): void {
+  const d = sdata(socket);
+  if (!d.campaignId || !d.role) return;
+  const campaignId = d.campaignId;
+  const v = viewerFor(d);
+  socket.emit(S2C.DIRECTORY, buildDirectory(campaignId, v.isDm, v.userId));
+  const allTables = rollableTables.forCampaign(campaignId);
+  socket.emit(S2C.TABLES, { tables: v.isDm ? allTables : allTables.filter((t) => t.playersCanRoll) });
+  socket.emit(S2C.SHOPS, { shops: shopsForUser(campaignId, v.userId, v.isDm) });
+  sendShopPresentationTo(socket);
+  const allLoc = locations.forCampaign(campaignId);
+  socket.emit(S2C.LOCATIONS, { locations: v.isDm ? allLoc : allLoc.filter((l) => l.visibleToPlayers) });
+  socket.emit(S2C.WORLD_FOLDERS, {
+    folders: v.isDm ? worldFolders.forCampaign(campaignId) : foldersVisibleTo(campaignId, v.userId),
+  });
+  socket.emit(S2C.HANDOUTS, { handouts: handoutsVisibleTo(campaignId, v.userId, v.isDm) });
+  socket.emit(S2C.WORLD_SORT, { orders: worldSort.forCampaign(campaignId) });
+  socket.emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(campaignId) });
 }
 
 export function buildCampaignState(campaignId: string, userId: string, username: string, isDm: boolean): CampaignStatePayload {
@@ -142,22 +168,9 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       });
     }
     socket.emit(S2C.CAMPAIGN_STATE, buildCampaignState(campaignId, d.userId, d.username, role === 'dm'));
-    socket.emit(S2C.DIRECTORY, buildDirectory(campaignId, role === 'dm', d.userId));
-    {
-      const all = rollableTables.forCampaign(campaignId);
-      socket.emit(S2C.TABLES, { tables: role === 'dm' ? all : all.filter((t) => t.playersCanRoll) });
-    }
     socket.emit(S2C.AUDIO_TRACKS, { tracks: audioTracks.forCampaign(campaignId) });
     socket.emit(S2C.AUDIO_STATE, { state: getAudioState(campaignId) });
-    {
-      socket.emit(S2C.SHOPS, { shops: shopsForUser(campaignId, d.userId, role === 'dm') });
-      sendShopPresentationTo(socket);
-      const allLoc = locations.forCampaign(campaignId);
-      socket.emit(S2C.LOCATIONS, { locations: role === 'dm' ? allLoc : allLoc.filter((l) => l.visibleToPlayers) });
-      socket.emit(S2C.WORLD_FOLDERS, { folders: role === 'dm' ? worldFolders.forCampaign(campaignId) : foldersVisibleTo(campaignId, d.userId) });
-      socket.emit(S2C.WORLD_SORT, { orders: worldSort.forCampaign(campaignId) });
-      socket.emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(campaignId) });
-    }
+    sendWorldViewTo(socket);
     if (role === 'dm') {
       socket.emit(S2C.ASSETS, { folders: assetFolders.forCampaign(campaignId), assets: assets.forCampaign(campaignId) });
       socket.emit(S2C.SOUNDBOARD, { slots: soundboard.forCampaign(campaignId) });
@@ -394,6 +407,10 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     }
     d.viewingAs = userId ?? undefined;
     sendMapState(socket);
+    // The preview is not just the map: re-send every per-viewer payload the
+    // world tab is built from, so switching to a player swaps the whole tree
+    // to their knowledge and switching back restores omniscience.
+    sendWorldViewTo(socket);
   }, 'DM_VIEW_AS'));
 
   socket.on('disconnect', () => {

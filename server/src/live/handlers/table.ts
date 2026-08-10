@@ -7,7 +7,7 @@ import {
   type ShareHandoutPayload, type TargetPreviewPayload, type UpdateHandoutPayload, type UpdateTablePayload,
 } from 'shared';
 import { campaigns, chat, drawings, handouts, maps, rollableTables, tokens } from '../../db/repos.js';
-import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata } from '../hub.js';
+import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, viewerFor } from '../hub.js';
 import { socketsSeeingToken } from '../visionService.js';
 
 function requireCampaign(socket: Socket) {
@@ -28,7 +28,7 @@ function colorFor(userId: string): string {
 export function broadcastTables(io: Server, campaignId: string): void {
   const all = rollableTables.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
-    const isDm = sdata(socket).role === 'dm';
+    const { isDm } = viewerFor(sdata(socket));
     socket.emit(S2C.TABLES, { tables: isDm ? all : all.filter((t) => t.playersCanRoll) });
   }
 }
@@ -37,10 +37,10 @@ export function broadcastTables(io: Server, campaignId: string): void {
 export function broadcastHandouts(io: Server, campaignId: string): void {
   const all = handouts.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
-    const d = sdata(socket);
-    const list = d.role === 'dm'
+    const v = viewerFor(sdata(socket));
+    const list = v.isDm
       ? all
-      : all.filter((h) => h.sharedAll || h.sharedWith.includes(d.userId)).map((h) => ({ ...h, sharedWith: [] }));
+      : all.filter((h) => h.sharedAll || h.sharedWith.includes(v.userId)).map((h) => ({ ...h, sharedWith: [] }));
     socket.emit(S2C.HANDOUTS, { handouts: list });
   }
 }

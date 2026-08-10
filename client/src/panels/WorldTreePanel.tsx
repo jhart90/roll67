@@ -46,6 +46,7 @@ const NO_LIGHTS: Light[] = [];
 const NO_DIR_CHARS: DirectoryPayload['characters'] = [];
 const NO_DIR_MAPS: DirectoryPayload['maps'] = [];
 const NO_DIR_TOKENS: DirectoryPayload['tokens'] = [];
+const NO_MAPS: MapMeta[] = [];
 
 /** One flat list of every world object, keyed for tree assembly. */
 function buildNodes(
@@ -201,13 +202,27 @@ export function WorldTreePanel() {
   const [dropTarget, setDropTarget] = useState<{ id: string; mode: 'into' | 'above' } | 'root' | null>(null);
   const worldSort = useGameStore((s) => s.worldSort);
 
+  // "View as" has to bend the world tree too, not just the map. The server
+  // already re-scopes every payload to the previewed player (viewerFor), but
+  // three sources are DM-only client state that no player payload can correct:
+  // the map LIST, every character sheet, and the lights. Standing in for them
+  // is what makes the preview honest rather than nearly-honest.
+  const viewingAs = useGameStore((s) => s.viewingAs);
+  const omniscient = isDm && !viewingAs;
+  // Exactly the sheets that player's own client would be holding.
+  const ownSheets = useMemo(
+    () => (viewingAs ? characters.filter((c) => c.ownerUserId === viewingAs) : characters),
+    [characters, viewingAs],
+  );
+  // Players never receive the map list; the maps they know come via directory.
+  const ownMaps = omniscient ? maps : NO_MAPS;
   const mapObjectList = useMemo(
-    () => (isDm ? Object.values(mapObjectsById) : []),
-    [isDm, mapObjectsById],
+    () => (omniscient ? Object.values(mapObjectsById) : []),
+    [omniscient, mapObjectsById],
   );
   const nodes = useMemo(
-    () => buildNodes(locations, characters, shops, tables, handouts, maps, folders, isDm ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters, directoryChars, directoryMaps, directoryTokens),
-    [locations, characters, shops, tables, handouts, maps, folders, isDm, dmLights, currentMapId, allTokens, mapObjectList, allCounters, directoryChars, directoryMaps, directoryTokens],
+    () => buildNodes(locations, ownSheets, shops, tables, handouts, ownMaps, folders, omniscient ? dmLights : [], currentMapId, allTokens, mapObjectList, allCounters, directoryChars, directoryMaps, directoryTokens),
+    [locations, ownSheets, shops, tables, handouts, ownMaps, folders, omniscient, dmLights, currentMapId, allTokens, mapObjectList, allCounters, directoryChars, directoryMaps, directoryTokens],
   );
   // Players only see a folder once something they can see lives under it —
   // an empty folder (or a chain of them) is DM scaffolding, not discovered

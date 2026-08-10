@@ -10,7 +10,7 @@ import {
 } from 'shared';
 import { campaigns, characters, chat, customItems, handouts, locations, mapObjects, maps, rollableTables, shops, tokens, worldFolders, worldSort, worldVis } from '../../db/repos.js';
 import { db } from '../../db/db.js';
-import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
+import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom, viewerFor } from '../hub.js';
 import { broadcastDirectory, setFolderBroadcaster } from '../directory.js';
 import { mapObjectsVisibleTo, socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { broadcastPresence, sendMapStateToUser } from './session.js';
@@ -53,15 +53,15 @@ export function shopsForUser(campaignId: string, userId: string, isDm: boolean):
 
 export function broadcastShops(io: Server, campaignId: string): void {
   for (const socket of campaignSockets(io, campaignId)) {
-    const d = sdata(socket);
-    socket.emit(S2C.SHOPS, { shops: shopsForUser(campaignId, d.userId, d.role === 'dm') });
+    const v = viewerFor(sdata(socket));
+    socket.emit(S2C.SHOPS, { shops: shopsForUser(campaignId, v.userId, v.isDm) });
   }
 }
 
 export function broadcastShopPresentation(io: Server, campaignId: string): void {
   for (const socket of campaignSockets(io, campaignId)) {
-    const d = sdata(socket);
-    socket.emit(S2C.SHOP_PRESENTATION, { shopId: presentedShopIdForUser(campaignId, d.userId, d.role === 'dm') });
+    const v = viewerFor(sdata(socket));
+    socket.emit(S2C.SHOP_PRESENTATION, { shopId: presentedShopIdForUser(campaignId, v.userId, v.isDm) });
   }
 }
 
@@ -69,13 +69,14 @@ export function broadcastShopPresentation(io: Server, campaignId: string): void 
 export function sendShopPresentationTo(socket: Socket): void {
   const d = sdata(socket);
   if (!d.campaignId || !d.role) return;
-  socket.emit(S2C.SHOP_PRESENTATION, { shopId: presentedShopIdForUser(d.campaignId, d.userId, d.role === 'dm') });
+  const v = viewerFor(d);
+  socket.emit(S2C.SHOP_PRESENTATION, { shopId: presentedShopIdForUser(d.campaignId, v.userId, v.isDm) });
 }
 
 export function broadcastLocations(io: Server, campaignId: string): void {
   const all = locations.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
-    const isDm = sdata(socket).role === 'dm';
+    const { isDm } = viewerFor(sdata(socket));
     socket.emit(S2C.LOCATIONS, { locations: isDm ? all : all.filter((l) => l.visibleToPlayers) });
   }
 }
@@ -131,9 +132,9 @@ export function foldersVisibleTo(campaignId: string, userId: string): ReturnType
 export function broadcastWorldFolders(io: Server, campaignId: string): void {
   const all = worldFolders.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
-    const d = sdata(socket);
+    const v = viewerFor(sdata(socket));
     socket.emit(S2C.WORLD_FOLDERS, {
-      folders: d.role === 'dm' ? all : foldersVisibleTo(campaignId, d.userId),
+      folders: v.isDm ? all : foldersVisibleTo(campaignId, v.userId),
     });
   }
 }

@@ -1326,6 +1326,45 @@ async function main() {
   dmSock.emit('updateLocation', { locationId: loc.id, visibleToPlayers: true, notes: 'A quiet town.', npcIds: [pc.id] });
   const pl = (await playerLoc).locations.find((l) => l.id === loc.id);
   ok(pl && pl.notes === 'A quiet town.' && pl.npcIds.includes(pc.id), 'revealed location reaches players with links');
+
+  // ---------- view-as scopes the world tab, not just the map ----------
+  // "View as" used to bend only the map, so the DM previewing a player still
+  // held the omniscient world tree — hidden locations, closed shops, every map.
+  // Every per-viewer payload now resolves its audience through viewerFor.
+  console.log('view as (world tab):');
+  // Its own closed shop — the earlier ones are deleted by now, and a filter
+  // against a shop that no longer exists passes for the wrong reason.
+  const secretShops = waitFor(dmSock, 'shops', 5000, (p) => p.shops.some((s) => s.name === 'Back Room'));
+  dmSock.emit('createShop', { name: 'Back Room' });
+  const secret = (await secretShops).shops.find((s) => s.name === 'Back Room');
+  ok(!!secret, 'DM created a shop closed to players');
+  dmSock.emit('updateShop', { shopId: secret.id, playersCanBuy: false, items: [] });
+  // Hide the location again so there is something the player must NOT see.
+  dmSock.emit('updateLocation', { locationId: loc.id, visibleToPlayers: false });
+  await waitFor(dmSock, 'locations', 5000, (p) => !p.locations.some((l) => l.id === loc.id && l.visibleToPlayers));
+
+  const asPlayerLocs = waitFor(dmSock, 'locations', 5000, (p) => !p.locations.some((l) => l.id === loc.id));
+  const asPlayerShops = waitFor(dmSock, 'shops', 5000, (p) => !p.shops.some((s) => s.id === secret.id));
+  dmSock.emit('dmViewAs', { userId: player.user.id });
+  await asPlayerLocs;
+  ok(true, "previewing a player hides locations they can't see from the DM");
+  await asPlayerShops;
+  ok(true, 'previewing a player hides shops that are closed to them');
+  const asPlayerDir = waitFor(dmSock, 'directory', 5000, () => true);
+  dmSock.emit('requestDirectory', {});
+  const dirAsPlayer = (await asPlayerDir).maps;
+  ok(Array.isArray(dirAsPlayer), 'directory arrives scoped to the previewed player');
+
+  // ...and switching back restores omniscience rather than leaving the DM
+  // stuck in the player's narrower world.
+  const backLocs = waitFor(dmSock, 'locations', 5000, (p) => p.locations.some((l) => l.id === loc.id));
+  const backShops = waitFor(dmSock, 'shops', 5000, (p) => p.shops.some((s) => s.id === secret.id));
+  dmSock.emit('dmViewAs', { userId: null });
+  await backLocs;
+  await backShops;
+  ok(true, 'leaving the preview restores the DM god-mode world tab');
+
+  dmSock.emit('deleteShop', { shopId: secret.id });
   dmSock.emit('deleteLocation', { locationId: loc.id });
 
   // ---------- group initiative ----------

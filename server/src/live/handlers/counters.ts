@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { C2S, S2C, isCounterPosition, type Counter, type CounterUpdatePayload } from 'shared';
 import { counters, maps, worldVis } from '../../db/repos.js';
-import { campaignSockets, emitError, safe, sdata } from '../hub.js';
+import { campaignSockets, emitError, safe, sdata, viewerFor } from '../hub.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -27,11 +27,10 @@ export function broadcastCounters(io: Server, campaignId: string, mapId: string)
   const all = counters.forMap(mapId);
   const every = counters.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
-    const d = sdata(socket);
-    const dm = d.role === 'dm';
-    socket.emit(S2C.COUNTERS, { mapId, counters: dm ? all : countersFor(campaignId, d.userId, all) });
+    const v = viewerFor(sdata(socket));
+    socket.emit(S2C.COUNTERS, { mapId, counters: v.isDm ? all : countersFor(campaignId, v.userId, all) });
     // The world tree lists counters under every map, so it needs them all.
-    socket.emit(S2C.COUNTERS_ALL, { counters: dm ? every : countersFor(campaignId, d.userId, every) });
+    socket.emit(S2C.COUNTERS_ALL, { counters: v.isDm ? every : countersFor(campaignId, v.userId, every) });
   }
 }
 

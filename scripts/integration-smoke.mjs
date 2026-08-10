@@ -324,7 +324,15 @@ async function main() {
   const dummyReady = waitFor(dmSock, 'tokenUpserted', 5000, (p) => p.token.name === 'Timing Dummy');
   dmSock.emit('createToken', { mapId, name: 'Timing Dummy', q: 7, r: 5, layer: 'token', bar: { hp: 20, maxHp: 20 } });
   const dummy = (await dummyReady).token;
-  const timingReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id);
+  // Filter on the VALUE, not just the id: every earlier updateCharacter also
+  // echoed a characterUpserted for this same pc to this same socket, and an
+  // id-only filter happily consumed one of those instead. The waiter resolved
+  // before the Timing Bow existed, the attack then referenced an actionId the
+  // character did not have, and the run died waiting for a chat card that was
+  // never going to come. (~2 failures in 8 runs.)
+  const timingReady = waitFor(dmSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id
+    && Array.isArray(p.character.sheet.attacks)
+    && p.character.sheet.attacks.some((a) => a.name === 'Timing Bow'));
   dmSock.emit('updateCharacter', { characterId: pc.id, patch: { attacks: [
     { name: 'Timing Bow', bonus: 5, damage: '1d8+3', range: 60 },
   ] } });
@@ -961,8 +969,8 @@ async function main() {
   // Ace animation style rides the same rails: the roller's choice, not the
   // watcher's, so an ace looks the same on every screen.
   const aceSet = waitFor(dmSock, 'memberPresence', 5000,
-    (p) => p.members?.some((m) => m.userId === player.user.id && m.diceAceStyle === 'flames'));
-  playerSock.emit('setDiceAceStyle', { style: 'flames' });
+    (p) => p.members?.some((m) => m.userId === player.user.id && m.diceAceStyle === 'water'));
+  playerSock.emit('setDiceAceStyle', { style: 'water' });
   await aceSet;
   ok(true, "a player's ace style reaches everyone else via presence");
 

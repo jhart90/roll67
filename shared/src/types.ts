@@ -53,7 +53,7 @@ export interface MemberInfo {
 export const DICE_BOUNCE_PCT_DEFAULT = 33;
 
 /** How an exploding die announces itself when it aces. */
-export const ACE_STYLES = ['flash', 'explosion', 'flames', 'disco', 'rainbow'] as const;
+export const ACE_STYLES = ['flash', 'explosion', 'flames', 'disco', 'rainbow', 'smoke', 'water'] as const;
 export type AceStyle = (typeof ACE_STYLES)[number];
 export const ACE_STYLE_DEFAULT: AceStyle = 'flash';
 

@@ -749,26 +749,115 @@ function drawAceEffect(
   }
 
   if (style === 'rainbow') {
-    // Concentric bands rolling outward, each a step further round the wheel,
-    // so the die sits at the centre of an expanding spectrum.
-    for (let r = 0; r < 6; r++) {
-      const t = (phase + r / 6) % 1;
-      const radius = size * (0.5 + t * 2.8);
-      ctx.globalAlpha = (1 - t) * fade * 0.8;
-      ctx.strokeStyle = `hsla(${(r * 60 + phase * 260) % 360}, 100%, 62%, 1)`;
-      ctx.lineWidth = Math.max(0.8, size * 0.16 * (1 - t));
+    // A real rainbow standing around the die: seven fixed bands, red on the
+    // outside through to violet on the inside, the way one actually appears.
+    // It draws itself on around the circle, holds, then fades — it does NOT
+    // travel outward, so the die stays inside its own arc rather than sitting
+    // at the centre of a ripple.
+    const BANDS = ['#ff2f2f', '#ff8b1f', '#ffe234', '#3fd24b', '#28b6ff', '#3a5bd9', '#8b3fd6'];
+    const band = Math.max(1.2, size * 0.13);
+    const inner = size * 1.15;
+    // Sweep on over the first third, hold, then fade over the last third.
+    const sweep = Math.min(1, phase / 0.34);
+    const hold = phase < 0.62 ? 1 : 1 - (phase - 0.62) / 0.38;
+    // Starts at the top and comes round clockwise, like an arc being painted.
+    const from = -Math.PI / 2;
+    ctx.lineCap = 'butt';
+    for (let b = 0; b < BANDS.length; b++) {
+      // Outermost band is red, so walk the radius DOWN through the list.
+      const radius = inner + (BANDS.length - 1 - b) * band;
+      ctx.globalAlpha = Math.max(0, hold) * 0.92;
+      ctx.strokeStyle = BANDS[b];
+      ctx.lineWidth = band;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.arc(cx, cy, radius, from, from + Math.PI * 2 * sweep);
       ctx.stroke();
     }
-    ctx.globalAlpha = fade * 0.5;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 1.3);
-    g.addColorStop(0, `hsla(${(phase * 360) % 360}, 100%, 78%, 0.9)`);
-    g.addColorStop(1, `hsla(${(phase * 360 + 120) % 360}, 100%, 60%, 0)`);
+    // A soft white bloom just inside the violet, so the ring reads as light
+    // rather than seven flat hoops.
+    ctx.globalAlpha = Math.max(0, hold) * 0.28;
+    const g = ctx.createRadialGradient(cx, cy, inner * 0.5, cx, cy, inner);
+    g.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    g.addColorStop(1, 'rgba(255, 255, 255, 0.85)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(cx, cy, size * 1.3, 0, Math.PI * 2);
+    ctx.arc(cx, cy, inner, 0, Math.PI * 2);
     ctx.fill();
+    return;
+  }
+
+  if (style === 'smoke') {
+    // Puffs billowing up off the die: each starts small and tight, then grows
+    // and thins as it climbs, so the column looks like it is dispersing rather
+    // than a circle being scaled.
+    for (let p = 0; p < 6; p++) {
+      const t = (phase * 1.15 + p * 0.17) % 1;
+      const rise = t * size * 2.6;
+      const drift = Math.sin(t * 3.4 + p * 2.1) * size * 0.55 * t;
+      const r = size * (0.34 + t * 1.15);
+      // Thickest in the middle of its life, gone by the end.
+      const puff = Math.sin(Math.min(1, t) * Math.PI) * fade;
+      ctx.globalAlpha = puff * 0.42;
+      const shade = 118 + ((p * 37) % 60);
+      const g = ctx.createRadialGradient(cx + drift, cy - rise, 0, cx + drift, cy - rise, r);
+      g.addColorStop(0, `rgba(${shade}, ${shade}, ${shade + 8}, 0.95)`);
+      g.addColorStop(0.6, `rgba(${shade - 20}, ${shade - 20}, ${shade - 12}, 0.5)`);
+      g.addColorStop(1, `rgba(90, 90, 96, 0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx + drift, cy - rise, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (style === 'water') {
+    // A splash: ripples spreading on the surface the die landed on, a short
+    // crown of water thrown up around it, and droplets arcing back down.
+    for (let r = 0; r < 3; r++) {
+      const t = (phase * 1.25 + r / 3) % 1;
+      ctx.globalAlpha = (1 - t) * fade * 0.75;
+      ctx.strokeStyle = 'rgba(120, 206, 255, 0.95)';
+      ctx.lineWidth = Math.max(0.7, size * 0.1 * (1 - t));
+      ctx.beginPath();
+      // Flattened, because a ripple is read on the ground plane, not facing us.
+      ctx.ellipse(cx, cy + size * 0.5, size * (0.6 + t * 2.5), size * (0.22 + t * 0.9), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // The crown — a ring of short sheets of water thrown up, collapsing fast.
+    const crown = 1 - Math.min(1, phase * 2.2);
+    if (crown > 0) {
+      ctx.globalAlpha = crown * 0.7;
+      ctx.fillStyle = 'rgba(150, 220, 255, 0.9)';
+      for (let s = 0; s < 10; s++) {
+        const ang = (s / 10) * Math.PI * 2;
+        const spread = size * (0.75 + (1 - crown) * 0.7);
+        const px = cx + Math.cos(ang) * spread;
+        const py = cy + size * 0.5 + Math.sin(ang) * spread * 0.36;
+        const hgt = size * 0.55 * crown;
+        ctx.beginPath();
+        ctx.moveTo(px - size * 0.07, py);
+        ctx.lineTo(px, py - hgt);
+        ctx.lineTo(px + size * 0.07, py);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // Droplets thrown clear, pulled back down by gravity as they go.
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = 'rgba(180, 232, 255, 0.95)';
+    for (let d = 0; d < 8; d++) {
+      const ang = (d / 8) * Math.PI * 2 + 0.4;
+      const out = size * (0.7 + phase * 2.4);
+      const gravity = size * 2.6 * phase * phase;
+      ctx.beginPath();
+      ctx.arc(
+        cx + Math.cos(ang) * out,
+        cy - size * 0.9 + Math.sin(ang) * out * 0.4 + gravity,
+        Math.max(0.5, size * 0.085 * fade), 0, Math.PI * 2,
+      );
+      ctx.fill();
+    }
     return;
   }
 

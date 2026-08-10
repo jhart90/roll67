@@ -191,7 +191,9 @@ const ACE_STYLE_LABELS: Record<AceStyle, string> = {
   explosion: 'Explosion — a shockwave ring and flying debris',
   flames: 'Flames — tongues of fire and drifting embers',
   disco: 'Disco — sweeping coloured beams and glitter',
-  rainbow: 'Rainbow — expanding bands right round the wheel',
+  rainbow: 'Rainbow — a seven-colour arc encircling the die',
+  smoke: 'Smoke — grey puffs billowing up and thinning out',
+  water: 'Water — a splash crown, spreading ripples and falling droplets',
 };
 
 /**

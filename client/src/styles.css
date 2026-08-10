@@ -2416,10 +2416,18 @@ th > .term { border-bottom-style: dotted; }
 /* DM counters: giant segmented banner bars over the map pane. */
 /* The root spans the usable map pane: clear of the 53px tool rail and the
    300px chat dock. Every dock positions inside it, so those insets live in one
-   place and a drag has a single rect to decide which dock it landed on. */
+   place and a drag has a single rect to decide which dock it landed on.
+
+   z-index 5 is deliberate and must stay the LOWEST of any floating UI: a
+   counter is scenery on the map, so every panel, popover and tool window
+   passes over it rather than under. The map's own layers carry no z-index, so
+   5 still floats the bars above the board. Everything else on this pane starts
+   at .toolbar's 16 and climbs from there (rail tool windows begin at 51, via
+   windowManager's topZ) — keep this below that floor. It sat at 40 and covered
+   the terrain paint strip (.draw-options, 20). */
 .counters-root {
   position: absolute; left: 61px; right: 308px; top: 0; bottom: 0;
-  z-index: 40; pointer-events: none;
+  z-index: 5; pointer-events: none;
 }
 .counters-edge {
   position: absolute; left: 0; right: 0;

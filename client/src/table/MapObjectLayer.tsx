@@ -6,6 +6,65 @@ import { mapPixelSize, useStage } from '../util/stage';
 import { openWindow } from '../store/windowManager';
 import { FlashHalo } from './FlashHalo';
 
+/**
+ * A treasure chest, drawn rather than glyphed. The old piece was a brown
+ * rectangle with the 📦 cardboard-carton emoji on it, which read as a parcel
+ * in a fantasy dungeon.
+ *
+ * Built as a domed lid over a banded body: two iron bands down the front, a
+ * lock plate with a keyhole, corner braces, and a highlight along the top of
+ * the dome so it reads as rounded at token size rather than as a flat shape.
+ * All geometry is a fraction of `r`, so it scales with the hex.
+ */
+function TreasureChest({ r }: { r: number }) {
+  const w = r * 1.55;          // full width
+  const hx = w / 2;
+  const lidTop = -r * 0.72;    // top of the dome
+  const seam = -r * 0.08;      // where lid meets body
+  const base = r * 0.66;       // bottom of the body
+  const wood = '#8a5a2b';
+  const woodDark = '#5e3a17';
+  const iron = '#4a4f57';
+  const ironLit = '#767d88';
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      {/* Body */}
+      <path
+        d={`M ${-hx} ${seam} L ${hx} ${seam} L ${hx} ${base - r * 0.12} Q ${hx} ${base} ${hx - r * 0.12} ${base} L ${-hx + r * 0.12} ${base} Q ${-hx} ${base} ${-hx} ${base - r * 0.12} Z`}
+        fill={wood} stroke={woodDark} strokeWidth={r * 0.07}
+      />
+      {/* Domed lid */}
+      <path
+        d={`M ${-hx} ${seam} L ${-hx} ${lidTop + r * 0.34} Q ${-hx} ${lidTop} ${-hx + r * 0.42} ${lidTop} L ${hx - r * 0.42} ${lidTop} Q ${hx} ${lidTop} ${hx} ${lidTop + r * 0.34} L ${hx} ${seam} Z`}
+        fill={wood} stroke={woodDark} strokeWidth={r * 0.07}
+      />
+      {/* Highlight along the crown of the dome — what makes it read as round */}
+      <path
+        d={`M ${-hx + r * 0.18} ${lidTop + r * 0.3} Q ${0} ${lidTop + r * 0.02} ${hx - r * 0.18} ${lidTop + r * 0.3}`}
+        fill="none" stroke="#c68b46" strokeWidth={r * 0.09} opacity={0.45}
+      />
+      {/* Iron bands, lid and body in one line each side */}
+      {[-0.52, 0.52].map((f) => (
+        <rect key={f} x={hx * f - r * 0.075} y={lidTop + r * 0.06} width={r * 0.15} height={base - lidTop - r * 0.06}
+          fill={iron} opacity={0.9} />
+      ))}
+      {/* Seam band across the whole front */}
+      <rect x={-hx} y={seam - r * 0.09} width={w} height={r * 0.18} fill={iron} />
+      <rect x={-hx} y={seam - r * 0.09} width={w} height={r * 0.06} fill={ironLit} opacity={0.55} />
+      {/* Lock plate + keyhole */}
+      <rect x={-r * 0.19} y={seam - r * 0.13} width={r * 0.38} height={r * 0.44} rx={r * 0.06}
+        fill="#e0b23c" stroke="#8a6a12" strokeWidth={r * 0.045} />
+      <circle cy={seam + r * 0.05} r={r * 0.07} fill="#3a2c08" />
+      <rect x={-r * 0.03} y={seam + r * 0.05} width={r * 0.06} height={r * 0.13} fill="#3a2c08" />
+      {/* Corner braces */}
+      {[[-hx, base], [hx - r * 0.2, base]].map(([x], i) => (
+        <rect key={i} x={i === 0 ? x : x} y={base - r * 0.2} width={r * 0.2} height={r * 0.2}
+          fill={iron} opacity={0.85} />
+      ))}
+    </g>
+  );
+}
+
 const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject }) {
   const map = useGameStore((s) => s.map)!;
   const isDm = useGameStore((s) => s.you?.role === 'dm');
@@ -19,7 +78,7 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
 
   const pos = hexToPixel({ q: obj.q, r: obj.r }, map.grid);
   const r = map.grid.hexSize * 0.5;
-  const artUrl = obj.artAssetId ? `/uploads/${obj.artAssetId}` : null;
+  const artUrl = obj.artUrl ?? null;
 
   function playerInRange(range: number): boolean {
     if (isDm) return true;
@@ -125,19 +184,24 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
               sword lying on the flagstones, not a crate you open to find a
               sword. It still behaves as a chest, lock and all. */}
           {obj.kind === 'chest' && obj.items.length === 1 ? (
-            <circle r={r * 0.5} fill="#d4af37" stroke="#8b7722" strokeWidth={1.5} />
+            <>
+              <circle r={r * 0.5} fill="#d4af37" stroke="#8b7722" strokeWidth={1.5} />
+              <text textAnchor="middle" dy="0.35em" fontSize={r * 0.7} fill="white" style={{ pointerEvents: 'none' }}>✦</text>
+            </>
           ) : obj.kind === 'chest' ? (
-            <rect x={-r * 0.7} y={-r * 0.5} width={r * 1.4} height={r} rx={3}
-              fill="#8B6914" stroke="#5c4a0e" strokeWidth={1.5} />
+            <TreasureChest r={r} />
           ) : obj.kind === 'shop' ? (
-            <rect x={-r * 0.6} y={-r * 0.6} width={r * 1.2} height={r * 1.2} rx={4}
-              fill="#2a6e3f" stroke="#1a4a2a" strokeWidth={1.5} />
+            <>
+              <rect x={-r * 0.6} y={-r * 0.6} width={r * 1.2} height={r * 1.2} rx={4}
+                fill="#2a6e3f" stroke="#1a4a2a" strokeWidth={1.5} />
+              <text textAnchor="middle" dy="0.35em" fontSize={r * 0.7} fill="white" style={{ pointerEvents: 'none' }}>🏪</text>
+            </>
           ) : (
-            <circle r={r * 0.5} fill="#d4af37" stroke="#8b7722" strokeWidth={1.5} />
+            <>
+              <circle r={r * 0.5} fill="#d4af37" stroke="#8b7722" strokeWidth={1.5} />
+              <text textAnchor="middle" dy="0.35em" fontSize={r * 0.7} fill="white" style={{ pointerEvents: 'none' }}>✦</text>
+            </>
           )}
-          <text textAnchor="middle" dy="0.35em" fontSize={r * 0.7} fill="white" style={{ pointerEvents: 'none' }}>
-            {obj.kind === 'chest' ? (obj.items.length === 1 ? '✦' : '📦') : obj.kind === 'shop' ? '🏪' : '✦'}
-          </text>
           {obj.locked && (
             <text textAnchor="middle" dy="0.35em" x={r * 0.6} y={-r * 0.6}
               fontSize={r * 0.5} style={{ pointerEvents: 'none' }}>🔒</text>

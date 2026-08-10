@@ -353,6 +353,8 @@ interface GameState {
   setDrawColor(c: string): void;
   setTextStyle(patch: Partial<GameState['textStyle']>): void;
   setDrawLayer(l: DrawingLayerName): void;
+  /** What the loot tool places. Only chests are offered now; 'item' remains
+   *  so map objects placed before that stay readable. */
   lootKind: 'item' | 'chest';
   setLootKind(k: 'item' | 'chest'): void;
   wallType: 'solid' | 'window' | 'oneway' | 'stainedglass';
@@ -622,7 +624,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setSelectedTextId(selectedTextId) { set({ selectedTextId }); },
   setTextStyle(patch) { set((st) => ({ textStyle: { ...st.textStyle, ...patch } })); },
   setDrawLayer(drawLayer) { set({ drawLayer }); },
-  lootKind: 'item',
+  lootKind: 'chest',
   setLootKind(lootKind) { set({ lootKind }); },
   wallType: 'solid',
   wallFlip: false,

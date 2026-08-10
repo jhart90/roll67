@@ -85,7 +85,7 @@ export function MapObjectInspector() {
       <h4>Art</h4>
       {obj.artAssetId && (
         <img
-          src={`/uploads/${obj.artAssetId}`}
+          src={obj.artUrl ?? ''}
           alt=""
           style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, marginBottom: 6 }}
         />

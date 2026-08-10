@@ -282,18 +282,11 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         {tool === 'loot' && map && isDm && (
           <div className="draw-options">
-            <span className="dim" style={{ fontSize: 12 }}>Place:</span>
-            {(['item', 'chest'] as const).map((k) => (
-              <button
-                key={k}
-                className={lootKind === k ? 'active' : ''}
-                style={{ fontSize: 12 }}
-                onClick={() => useGameStore.getState().setLootKind(k)}
-              >
-                {k === 'item' ? '✦ Item' : '📦 Chest'}
-              </button>
-            ))}
-            <span className="dim" style={{ fontSize: 11 }}>click map to place · right-click to edit</span>
+            {/* Only chests. A bare "item" was a chest that could hold one
+                thing, and a chest holding exactly one thing already draws AS
+                that thing — two ways to place the same object, one of which
+                could never grow a second item. */}
+            <span className="dim" style={{ fontSize: 12 }}>📦 Chest — click map to place · right-click to edit</span>
           </div>
         )}
 

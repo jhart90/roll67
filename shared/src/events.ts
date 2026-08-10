@@ -642,6 +642,9 @@ export interface MapObject {
   q: number;
   r: number;
   artAssetId: string | null;
+  /** Server-resolved URL for that asset. The id alone is not enough to build
+   *  one — uploads are stored with their extension. */
+  artUrl?: string | null;
   items: LootItem[];
   /** Links this map object to a world folder (chest-folder unification). */
   worldFolderId: string | null;

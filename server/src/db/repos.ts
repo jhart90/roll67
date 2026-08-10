@@ -1604,6 +1604,10 @@ function toMapObject(row: MapObjectRow) {
     q: row.q,
     r: row.r,
     artAssetId: row.art_asset_id,
+    // Resolved here, not guessed on the client. An upload is stored as
+    // `<id>.<ext>` and only the id is on this row, so `/uploads/${artAssetId}`
+    // — which is what the client was building — is a 404 every time.
+    artUrl: assets.urlFor(row.art_asset_id),
     items: safeParse<LootItem[]>(row.items_json, []),
     worldFolderId: row.world_folder_id,
     shopId: row.shop_id,

@@ -383,6 +383,69 @@ describe('SWADE gear tables', () => {
     expect(a.range, `${variant} range`).toBe(b.range);
   });
 
+  /**
+   * The special-weapons tables: [name, cost, weight, damage, AP, range ft,
+   * blast tiles]. Blast is the engine's tile sphere — the tables' Small,
+   * Medium and Large templates are 1, 3 and 5 — or 0 for a weapon with no
+   * template. Range 0 means the row prints none (mines are emplaced, and the
+   * cannon itself fires whatever shell is loaded).
+   */
+  const SPECIAL: Array<[string, number, number, string, number, number, number]> = [
+    // Cannons
+    ['Cannon (12 lb)', 10000, 1200, '0', 0, 5, 0],
+    ['Cannon Shell, Canister', 50, 0, '2d6!', 0, 120, 3],
+    ['Cannon Shell, Solid Shot', 50, 0, '3d6!+1', 4, 250, 0],
+    ['Cannon Shell, Shrapnel', 50, 0, '3d6!', 0, 250, 3],
+    // Catapults
+    ['Catapult', 10000, 0, '3d6!', 4, 120, 3],
+    ['Trebuchet', 50000, 0, '3d8!', 4, 150, 3],
+    // Flamethrower — a cone, so no sphere
+    ['Flamethrower', 300, 70, '3d6!', 0, 5, 0],
+    // Grenades
+    ['Mk II Grenade (WWII Pineapple)', 40, 1, '3d6!', 0, 20, 3],
+    ['Potato Masher (WWII)', 50, 2, '3d6!-2', 0, 25, 3],
+    ['Mk67 Grenade (Modern)', 50, 1, '3d6!', 0, 25, 3],
+    ['Smoke Grenade', 50, 1, '0', 0, 25, 5],
+    ['Stun Grenade', 50, 1, '0', 0, 25, 5],
+    // Mines
+    ['Anti-Personnel Mine', 100, 10, '2d6!+2', 0, 5, 1],
+    ['Anti-Tank Mine', 200, 20, '4d6!', 5, 5, 3],
+    ['Bouncing Betty', 125, 9, '3d6!', 0, 5, 1],
+    ['Claymore Mine', 75, 4, '3d6!', 0, 5, 0],
+    // Missiles
+    ['TOW Missile', 60000, 207, '5d10!', 34, 375, 3],
+    ['Hellfire Missile', 115000, 100, '5d10!', 44, 750, 3],
+    ['Sidewinder Missile', 600000, 188, '4d8!', 6, 500, 1],
+    ['Sparrow Missile', 125000, 617, '5d10!', 8, 750, 1],
+    // Rocket launchers & torpedoes
+    ['AT-4', 1500, 15, '4d8!+2', 24, 120, 3],
+    ['Bazooka', 500, 12, '4d8!', 8, 120, 3],
+    ['M203 40mm', 1500, 3, '4d8!', 0, 120, 3],
+    ['M72 LAW', 750, 5, '4d8!+2', 22, 120, 3],
+    ['Panzerschreck', 1000, 20, '4d8!', 12, 75, 3],
+    ['Torpedo', 500000, 3000, '8d10!', 22, 1500, 5],
+  ];
+
+  it.each(SPECIAL)('%s: $%i, %s lb, %s, AP %i, %i ft, blast %i', (name, cost, weight, damage, ap, range, blast) => {
+    const entry = byName.get(name);
+    expect(entry, `no swade entry named ${name}`).toBeDefined();
+    expect(entry!.gear?.cost).toBe(cost);
+    expect(entry!.gear?.weight).toBe(weight);
+    const row = applyEntry(entry!, swade.defaultSheet())!.row as SheetData;
+    expect(row.damage).toBe(damage);
+    expect(row.ap).toBe(ap);
+    expect(row.range).toBe(range);
+    expect(row.aoeHexes ?? 0).toBe(blast);
+    if (blast > 0) expect(row.aoeShape).toBe('sphere');
+  });
+
+  it('gives the flamethrower and the claymore a cone rather than a sphere', () => {
+    for (const name of ['Flamethrower', 'Claymore Mine']) {
+      const row = applyEntry(byName.get(name)!, swade.defaultSheet())!.row as SheetData;
+      expect(row.aoeShape, name).toBe('cone');
+    }
+  });
+
   it.each(BALLISTIC)('%s soaks 4 off a ranged hit, per its ballistic asterisk', (name) => {
     expect(byName.get(name)!.armor?.rangedArmor).toBe(4);
   });

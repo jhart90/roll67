@@ -72,13 +72,13 @@ const WEAPONS: W[] = [
   ['Heavy Machine Gun', 'Ranged', '2d10!', 'kinetic', 'ranged', ['range 60/120/240', 'mag 200', 'AP 4', 'RoF 4', 'snapfire', 'caliber: bullets-large']],
   ['Rocket Launcher', 'Ranged', '4d8!', 'fire', 'ranged', ['range 60/120/240', 'mag 1', 'AP 9', 'medium blast']],
   ['Grenade Launcher', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 60/120/240', 'mag 6', 'medium blast']],
-  ['Flamethrower', 'Ranged', '2d10!', 'fire', 'ranged', ['cone template', 'targets may catch fire']],
+  ['Flamethrower', 'Ranged', '3d6!', 'fire', 'ranged', ['cone template', 'mag 10', 'Heavy Weapon', 'flammable targets may catch fire', 'min Str d8'], 300, 70],
   ['Laser Pistol', 'Ranged', '2d6!', 'energy', 'ranged', ['range 75/150/300', 'mag 50', 'AP 2', 'no Recoil', 'min Str d4', 'caliber: battery-pistol'], 250, 2],
   ['Laser Rifle', 'Ranged', '3d6!', 'energy', 'ranged', ['range 150/300/600', 'mag 100', 'AP 2', 'RoF 3', 'no Recoil', 'min Str d6', 'caliber: battery-rifle'], 700, 8],
   ['Plasma Rifle', 'Ranged', '3d8!', 'energy', 'ranged', ['range 60/120/240', 'mag 20', 'AP 6', 'caliber: battery-rifle']],
   ['Gauss Rifle', 'Ranged', '2d10!', 'kinetic', 'ranged', ['range 60/120/240', 'mag 40', 'AP 6', 'RoF 3', 'caliber: bullets-large']],
-  ['Smoke Grenade', 'Ranged', '0', '', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'blocks line of sight']],
-  ['Stun Grenade', 'Ranged', '0', 'energy', 'ranged', ['range 25/50/100', 'thrown', 'medium blast', 'Vigor roll or Stunned']],
+  ['Smoke Grenade', 'Ranged', '0', '', 'ranged', ['range 25/50/100', 'thrown', 'large blast', 'obscures vision — −4 to see through it'], 50, 1],
+  ['Stun Grenade', 'Ranged', '0', 'energy', 'ranged', ['range 25/50/100', 'thrown', 'large blast', 'Vigor roll or Stunned'], 50, 1],
   ['Molotov Cocktail', 'Ranged', '2d10!', 'fire', 'ranged', ['range 25/50/100', 'thrown', 'small blast', 'may set fires']],
   // --- era parity variants ---
   // The same killing power expressed by different centuries: a master archer's
@@ -204,6 +204,43 @@ const WEAPONS: W[] = [
   // ---- Lasers (futuristic). Pistols, SMGs and rifles ignore Recoil. ----
   ['Laser SMG', 'Ranged', '2d6!', 'energy', 'ranged', ['range 75/150/300', 'AP 2', 'RoF 4', 'mag 200', 'no Recoil', 'min Str d4', 'caliber: battery-rifle'], 500, 4],
   ['Gatling Laser', 'Ranged', '3d6!+4', 'energy', 'ranged', ['range 250/500/1000', 'AP 2', 'RoF 4', 'mag 800', 'takes the Recoil penalty — usually tripod-mounted', 'min Str d8', 'caliber: battery-gatling'], 1000, 20],
+
+  // ---------------------------------------------------------------------
+  // Special weapons. Blast templates map to the engine's tile spheres:
+  // 'small blast' = 1, 'medium' = 3, 'large' = 5 (see applyEntry). A weight
+  // of 0 is the table's "—". Ranges follow the same inches x 5 rule as the
+  // personal weapons, so a 24" gun covers 24 tiles.
+  // ---------------------------------------------------------------------
+  // ---- Cannons. Fired by the crew leader; Reload 8, two crew. ----
+  ['Cannon (12 lb)', 'Heavy Weapon', '0', 'kinetic', 'ranged', ['the gun itself — add the shell being loaded for range and damage', 'Heavy Weapon', 'Reload 8', 'crew of 2'], 10000, 1200],
+  ['Cannon Shell, Canister', 'Heavy Weapon', '2d6!', 'kinetic', 'ranged', ['range 120/240/480', 'medium blast', 'a spray of packed balls down a 24″ path', 'Heavy Weapon'], 50, 0],
+  ['Cannon Shell, Solid Shot', 'Heavy Weapon', '3d6!+1', 'kinetic', 'ranged', ['range 250/500/1000', 'AP 4', 'bounces on: on an odd die it strikes a second victim within 6″', 'Heavy Weapon'], 50, 0],
+  ['Cannon Shell, Shrapnel', 'Heavy Weapon', '3d6!', 'kinetic', 'ranged', ['range 250/500/1000', 'medium blast', 'bursts in a shower of debris', 'Heavy Weapon'], 50, 0],
+  // ---- Catapults. Reload every 5 minutes with a crew of four. ----
+  ['Catapult', 'Heavy Weapon', '3d6!', 'kinetic', 'ranged', ['range 120/240/480', 'AP 4', 'medium blast', 'Heavy Weapon', 'reload every 5 minutes with a crew of 4'], 10000, 0],
+  ['Trebuchet', 'Heavy Weapon', '3d8!', 'kinetic', 'ranged', ['range 150/300/600', 'AP 4', 'medium blast', 'Heavy Weapon', 'reload every 5 minutes with a crew of 4'], 50000, 0],
+  // ---- Flamethrowers ----
+  // ---- Grenades ----
+  ['Mk II Grenade (WWII Pineapple)', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 20/40/80', 'thrown', 'medium blast'], 40, 1],
+  ['Potato Masher (WWII)', 'Ranged', '3d6!-2', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast'], 50, 2],
+  ['Mk67 Grenade (Modern)', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast'], 50, 1],
+  // ---- Mines. Emplaced rather than aimed; the range is reach to set one. ----
+  ['Anti-Personnel Mine', 'Heavy Weapon', '2d6!+2', 'kinetic', 'ranged', ['small blast', 'Heavy Weapon', 'buried; a Notice roll spots it before the step, then Repair to disarm'], 100, 10],
+  ['Anti-Tank Mine', 'Heavy Weapon', '4d6!', 'kinetic', 'ranged', ['medium blast', 'Heavy Weapon', 'AP 5, or half the vehicle’s Armor rounded up — whichever is better'], 200, 20],
+  ['Bouncing Betty', 'Heavy Weapon', '3d6!', 'kinetic', 'ranged', ['small blast', 'Heavy Weapon', 'leaps to head height before bursting; only full overhead cover protects'], 125, 9],
+  ['Claymore Mine', 'Heavy Weapon', '3d6!', 'kinetic', 'ranged', ['cone template', 'Heavy Weapon', 'a 60° frontal arc: everything within 12″ is hit automatically, and a die is rolled for anything out to 50″'], 75, 4],
+  // ---- Guided missiles ----
+  ['TOW Missile', 'Heavy Weapon', '5d10!', 'fire', 'ranged', ['range 375/750/1500', 'AP 34', 'medium blast', 'Heavy Weapon', 'wire-guided: a Shooting roll, no lock needed, and it cannot be jammed'], 60000, 207],
+  ['Hellfire Missile', 'Heavy Weapon', '5d10!', 'fire', 'ranged', ['range 750/1500/3000', 'AP 44', 'medium blast', 'Heavy Weapon', 'laser-guided, vehicle-launched'], 115000, 100],
+  ['Sidewinder Missile', 'Heavy Weapon', '4d8!', 'fire', 'ranged', ['range 500/1000/2000', 'AP 6', 'small blast', 'Heavy Weapon', 'short-range heat-seeker, aircraft-launched'], 600000, 188],
+  ['Sparrow Missile', 'Heavy Weapon', '5d10!', 'fire', 'ranged', ['range 750/1500/3000', 'AP 8', 'small blast', 'Heavy Weapon', 'medium-range radar-guided, aircraft-launched'], 125000, 617],
+  // ---- Rocket launchers & torpedoes ----
+  ['AT-4', 'Heavy Weapon', '4d8!+2', 'fire', 'ranged', ['range 120/240/480', 'AP 24', 'medium blast', 'Heavy Weapon', 'a modern American anti-tank weapon'], 1500, 15],
+  ['Bazooka', 'Heavy Weapon', '4d8!', 'fire', 'ranged', ['range 120/240/480', 'AP 8', 'medium blast', 'Heavy Weapon', 'snapfire', 'the American anti-tank weapon of the Second World War; spare warheads weigh 9 lbs and cost $50'], 500, 12],
+  ['M203 40mm', 'Heavy Weapon', '4d8!', 'kinetic', 'ranged', ['range 120/240/480', 'medium blast', 'Heavy Weapon', 'a grenade launcher slung under an assault rifle'], 1500, 3],
+  ['M72 LAW', 'Heavy Weapon', '4d8!+2', 'fire', 'ranged', ['range 120/240/480', 'AP 22', 'medium blast', 'Heavy Weapon', 'snapfire', 'the American anti-tank weapon of Vietnam'], 750, 5],
+  ['Panzerschreck', 'Heavy Weapon', '4d8!', 'fire', 'ranged', ['range 75/150/300', 'AP 12', 'medium blast', 'Heavy Weapon', 'snapfire', 'literally "tank terror" — German, Second World War'], 1000, 20],
+  ['Torpedo', 'Heavy Weapon', '8d10!', 'kinetic', 'ranged', ['range 1500/3000/6000', 'AP 22', 'large blast', 'Heavy Weapon'], 500000, 3000],
 ];
 
 // [name, category, bonus, rangedArmor, notes, cost?, weight?]

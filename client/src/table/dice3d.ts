@@ -326,7 +326,18 @@ interface DieSim {
   spinAxis: Vec3;
   spinTotal: number;
   bounceH: number;
+  /** Wall-bounce: the point on a wall this die caroms off on its way to
+   *  `target`. Absent for a die that flies straight there. */
+  via?: { x: number; y: number };
+  /** Where in the flight (0..1 of eased progress) it meets that wall. */
+  viaAt?: number;
 }
+
+/** The walls dice carom off: the playable map, not the whole window. */
+export interface PlayBounds { left: number; right: number; top: number; bottom: number }
+
+/** How often a die takes a wall on its way in. */
+const BOUNCE_CHANCE = 1 / 3;
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -450,9 +461,47 @@ function scatterTargets(n: number, w: number, h: number): Array<{ x: number; y: 
  *  a deep arterial red no player palette can be mistaken for. */
 export const CRIT_FAIL_DIE_COLOR = '#8d0f14';
 
+/**
+ * Pick the wall this die caroms off, and where on it. Only walls the die is
+ * already travelling toward are eligible — a die entering from the left edge
+ * cannot plausibly bounce off the left wall — except the floor, which a die
+ * thrown low can skip off on its way up to rest.
+ *
+ * Returns the contact point plus how far through the flight it happens, so
+ * both legs are covered at roughly one speed rather than the die crawling
+ * along the long one.
+ */
+function pickWallBounce(
+  start: { x: number; y: number }, target: { x: number; y: number },
+  b: PlayBounds, halfDie: number,
+): { via: { x: number; y: number }; viaAt: number } | null {
+  const lerp = (a: number, z: number, t: number) => a + (z - a) * t;
+  // Where along the free axis it strikes — biased past the midpoint so the
+  // deflection is visible rather than a tap right next to the resting spot.
+  const along = () => 0.55 + Math.random() * 0.35;
+  const walls: Array<{ x: number; y: number }> = [
+    // The side wall it is already heading for.
+    start.x < target.x
+      ? { x: b.right - halfDie, y: lerp(start.y, target.y, along()) }
+      : { x: b.left + halfDie, y: lerp(start.y, target.y, along()) },
+    // Dice always travel upward from their entry, so the ceiling is always on.
+    { x: lerp(start.x, target.x, along()), y: b.top + halfDie },
+    // ...and the floor is reachable by dipping first, which reads as a skip.
+    { x: lerp(start.x, target.x, along()), y: b.bottom - halfDie },
+  ].filter((p) => p.x > b.left && p.x < b.right && p.y > b.top && p.y < b.bottom);
+  if (walls.length === 0) return null;
+  const via = walls[Math.floor(Math.random() * walls.length)];
+  const legA = Math.hypot(via.x - start.x, via.y - start.y);
+  const legB = Math.hypot(target.x - via.x, target.y - via.y);
+  if (legA + legB <= 0) return null;
+  // Clamped so neither leg collapses to a jump.
+  const viaAt = Math.max(0.18, Math.min(0.82, legA / (legA + legB)));
+  return { via, viaAt };
+}
+
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
-  palette: DicePalette | null = null, critFail = false,
+  palette: DicePalette | null = null, critFail = false, bounds: PlayBounds | null = null,
 ): DieSim[] {
   const n = dice.length;
   const cx = w / 2, cy = h / 2;
@@ -497,12 +546,19 @@ export function buildSims(
       : (customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3'));
     // Pips have to stay legible against whatever colour the player picked.
     const contrasting = luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb';
+    const size = die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41;
+    // Every die takes its own chance, so a handful scatters off different
+    // walls rather than the whole throw behaving as one.
+    const wall = Math.random() < BOUNCE_CHANCE
+      ? pickWallBounce(start, target, bounds ?? { left: 0, right: w, top: 0, bottom: h }, size / 2)
+      : null;
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
       textColor: die.raise ? '#ffffff' : palette ? contrasting : (customTextColor ?? contrasting),
-      size: die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41,
+      size,
       start, target,
+      ...(wall ? { via: wall.via, viaAt: wall.viaAt } : {}),
       delay: timing[i].delay,
       dur: timing[i].dur,
       fadeAt: fade[i],
@@ -578,8 +634,25 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
   const te = Math.max(0, Math.min(1, (tMs - sim.delay) / sim.dur));
   if (tMs < sim.delay - 1) return;
   const ease = easeOutCubic(te);
-  const x = sim.start.x + (sim.target.x - sim.start.x) * ease;
-  const y = sim.start.y + (sim.target.y - sim.start.y) * ease;
+  // A die that takes a wall travels start → contact → rest as two straight
+  // legs; one that doesn't goes straight there, exactly as before.
+  let x: number;
+  let y: number;
+  if (sim.via && sim.viaAt !== undefined) {
+    const k = sim.viaAt;
+    if (ease <= k) {
+      const u = ease / k;
+      x = sim.start.x + (sim.via.x - sim.start.x) * u;
+      y = sim.start.y + (sim.via.y - sim.start.y) * u;
+    } else {
+      const u = (ease - k) / (1 - k);
+      x = sim.via.x + (sim.target.x - sim.via.x) * u;
+      y = sim.via.y + (sim.target.y - sim.via.y) * u;
+    }
+  } else {
+    x = sim.start.x + (sim.target.x - sim.start.x) * ease;
+    y = sim.start.y + (sim.target.y - sim.start.y) * ease;
+  }
   const height = te >= 1 ? 0 : sim.bounceH * Math.abs(Math.cos(te * Math.PI * 2.3)) * Math.pow(1 - te, 1.6);
   const q = qMul(sim.qTarget, qAxisAngle(sim.spinAxis, sim.spinTotal * (1 - ease)));
 

@@ -1,7 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { swadeSnakeEyes, type DieRoll } from 'shared';
 import { diceAnimationFinished, overlayMounted, overlayUnmounted, useGameStore } from '../store/game';
-import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette } from './dice3d';
+import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette, type PlayBounds } from './dice3d';
+
+/**
+ * The walls dice bounce off: the playable map, not the browser window. Read
+ * from the live layout rather than hardcoded, so the rail and the chat dock
+ * can change width without dice starting to carom off thin air. Falls back to
+ * the full canvas if the table isn't mounted the way we expect.
+ */
+function playBounds(w: number, h: number): PlayBounds {
+  const rect = (sel: string) => document.querySelector(sel)?.getBoundingClientRect();
+  const main = rect('.table-main');
+  const rail = rect('.tool-rail');
+  const dock = rect('.dock');
+  return {
+    left: rail?.right ?? 0,
+    right: dock?.left ?? w,
+    top: main?.top ?? 0,
+    bottom: main?.bottom ?? h,
+  };
+}
 
 function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette, ending, critFail }: {
   animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null; ending: boolean; critFail: boolean;
@@ -33,7 +52,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
     const audio = new Audio(clip);
     audio.volume = 0.6 * useGameStore.getState().localSfxVolume;
     audio.play().catch(() => undefined);
-    const sims = buildSims(dice, w, h, color, textColor, palette, critFail);
+    const sims = buildSims(dice, w, h, color, textColor, palette, critFail, playBounds(w, h));
     const settleAt = simsSettleTime(sims);
     const t0 = performance.now();
     let raf = 0;

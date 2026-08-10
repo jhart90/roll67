@@ -2293,13 +2293,16 @@ th > .term { border-bottom-style: dotted; }
 .chat-from-player { font-weight: 400; opacity: 0.75; font-size: 0.9em; }
 
 /* ---- Token nameplate: the public face of someone else's token ---- */
-/* Wider and taller than it was, to carry the Edge/Hindrance pills. Height
-   grows with the pills rather than being fixed, but is capped so a character
-   with two dozen of them can't grow a card taller than the map — past the cap
-   the body scrolls. */
+/* ONE fixed size for every nameplate, so cards never jump about as you click
+   from token to token. Sized for the fullest card the content rules allow:
+   two rows of badges (rank + Wild Card), three lines of Concept (the cap in
+   CONCEPT_MAX_LEN), the ancestry line, and three rows of Edge/Hindrance
+   pills. Anything beyond that scrolls in the body rather than resizing. */
 .nameplate-card {
   position: fixed; z-index: 60; display: flex; align-items: stretch;
-  width: 340px; min-height: 116px; max-height: 300px;
+  /* 192px is what that content measures; the extra few are slack so sub-pixel
+     rounding can't tip it into showing a scrollbar. */
+  width: 340px; height: 196px;
   border-radius: 10px; overflow: hidden; cursor: grab;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(0, 0, 0, 0.35); user-select: none;
@@ -2327,14 +2330,18 @@ th > .term { border-bottom-style: dotted; }
 /* Edges and Hindrances. Solid, self-contained chips rather than washes of the
    card colour: a green tint over a green token is no colour at all, and these
    have to stay green-means-good / red-means-bad on every card. */
-.nameplate-pills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.nameplate-pills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+/* Small and muted: a character can carry a lot of these, and at full
+   saturation a dozen of them shouted over the name. Still solid rather than a
+   tint of the card — a green wash over a green token is no colour at all —
+   just dialled well back, with the ink lifted off pure white to match. */
 .np-pill {
-  display: inline-block; font-size: 10px; font-weight: 600; line-height: 1.45;
-  padding: 0 7px; border-radius: 999px; white-space: nowrap;
-  border: 1px solid rgba(0, 0, 0, 0.3); color: #fff;
+  display: inline-block; font-size: 9px; font-weight: 500; line-height: 1.5;
+  padding: 0 6px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.22);
 }
-.np-pill-edge { background: #2e7d4f; }
-.np-pill-hindrance { background: #b3413b; }
+.np-pill-edge { background: #35604a; color: #cfe7da; }
+.np-pill-hindrance { background: #6f403e; color: #eed6d5; }
 /* The pill already reads as its own object — no dotted underline on top. */
 .term:has(> .np-pill) { border-bottom: none; display: inline-flex; }
 

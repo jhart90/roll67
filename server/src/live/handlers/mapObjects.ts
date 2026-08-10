@@ -6,7 +6,7 @@ import {
   type TakeMapItemPayload, type UpdateMapObjectPayload,
 } from 'shared';
 import { campaigns, characters, chat, handouts, mapObjects, maps, tokens, worldFolders } from '../../db/repos.js';
-import { rows, str } from 'shared';
+import { sheetOpens, type LockTarget } from 'shared';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { centerHex, hashStr, tokenLookFor, TOKEN_COLORS } from './tokens.js';
@@ -42,18 +42,19 @@ function postTake(io: Server, campaignId: string, playerName: string, itemName: 
  * Same rule as a locked door: holding the key is enough, it is not consumed,
  * and a "Key" by default means the generic one.
  */
-function hasKeyItem(userId: string, campaignId: string, keyName: string): boolean {
-  const wanted = (keyName || 'Key').trim().toLowerCase();
-  return characters.forCampaign(campaignId).some((c) =>
-    c.ownerUserId === userId
-    && rows(c.sheet, 'inventory').some((i) => str(i, 'name', '').trim().toLowerCase() === wanted));
-}
-
-/** A locked chest refuses everyone but the DM and whoever holds its key. */
-function lockBlocks(role: string, userId: string, campaignId: string, obj: { locked?: boolean; keyName?: string | null }): string | null {
+/** A locked chest refuses everyone but the DM and whoever holds a key that
+ *  fits — a named key, one cut for this chest, one for every chest on the
+ *  map, or a master. */
+function lockBlocks(
+  role: string, userId: string, campaignId: string,
+  obj: { id: string; mapId: string; locked?: boolean; keyName?: string | null },
+): string | null {
   if (role === 'dm' || !obj.locked) return null;
   const key = obj.keyName?.trim() || 'Key';
-  if (hasKeyItem(userId, campaignId, key)) return null;
+  const target: LockTarget = { kind: 'chest', id: obj.id, mapId: obj.mapId, keyName: key };
+  const opens = characters.forCampaign(campaignId)
+    .some((c) => c.ownerUserId === userId && sheetOpens(c.sheet, target));
+  if (opens) return null;
   return `It's locked. You need ${/^a |^an |^the /i.test(key) ? key : `a ${key}`} to open it.`;
 }
 

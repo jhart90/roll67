@@ -2417,6 +2417,35 @@ th > .term { border-bottom-style: dotted; }
 }
 .benny-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .benny-panel button { width: 100%; text-align: left; }
+
+/* Keyring / Key Manager — same clothes as the Benny chip, one shelf left. */
+.keyring-menu.raised { bottom: 136px; }
+.keyring-menu {
+  position: fixed; right: 404px; bottom: 16px; z-index: 69;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
+.keyring-chip {
+  width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
+  background: var(--panel); border: 2px solid #7fa8d9; color: var(--text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: pointer;
+}
+.keyring-panel {
+  display: flex; flex-direction: column; gap: 6px; width: 250px;
+  padding: 10px 12px; border-radius: 10px; max-height: 60vh; overflow-y: auto;
+  background: var(--panel); border: 2px solid #7fa8d9;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+.keyring-panel.wide { width: 300px; }
+.key-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.key-row:last-child { border-bottom: none; }
+.key-name { font-weight: 600; }
+.key-what, .key-who { font-size: 11px; }
+.key-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); }
+.key-field input, .key-field select { font-size: 12px; }
+.key-roster { margin-top: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
+.key-roster h5 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+.key-holder { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin-bottom: 4px; }
+.key-pill { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid #7fa8d955; background: #7fa8d914; color: #b8d3f0; }
 .benny-panel button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ================= retro lobby (pre-campaign screens only) =================

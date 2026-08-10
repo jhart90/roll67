@@ -23,6 +23,7 @@ import { CardDrawOverlay } from '../table/CardDrawOverlay';
 import { InitiativeRollPrompt } from '../table/InitiativeRollPrompt';
 import { SoakPrompt } from '../table/SoakPrompt';
 import { BennyMenu } from '../table/BennyMenu';
+import { KeyringMenu } from '../table/KeyringMenu';
 import { BleedPrompt } from '../table/BleedPrompt';
 import { ShakenPrompt } from '../table/ShakenPrompt';
 import { StunPrompt } from '../table/StunPrompt';
@@ -456,6 +457,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <IncapPrompt />
         <RunPrompt />
         <BennyMenu />
+        <KeyringMenu />
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />

@@ -8,6 +8,7 @@ export * from './hex/pack.js';
 export * from './hex/aoe.js';
 export * from './hex/framing.js';
 export * from './systems/swadeRange.js';
+export * from './systems/keys.js';
 export * from './vision/raycast.js';
 export * from './vision/fov.js';
 export * from './vision/visibilityPolygon.js';

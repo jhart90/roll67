@@ -9,6 +9,7 @@ import {
   type SetGridConfigPayload, type SetSpawnPayload, type SetTerrainPayload,
   type ToggleDoorPayload, type UpdateMapPayload,
   type UpsertDoorPayload, type UpsertLightPayload, type UpsertWallPayload,
+  sheetOpens, type LockTarget,
 } from 'shared';
 import { assets, campaigns, characters, doorMemory, fog, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -21,12 +22,9 @@ import { detectWalls } from '../../autoTrace.js';
 /** Does any character this user owns in the campaign carry an inventory item
  *  named `keyName` (case-insensitive)? Possession alone unlocks -- the item
  *  isn't consumed. */
-function hasKeyItem(userId: string, campaignId: string, keyName: string): boolean {
-  const wanted = keyName.trim().toLowerCase();
-  return characters.forCampaign(campaignId).some((c) => {
-    if (c.ownerUserId !== userId) return false;
-    return rows(c.sheet, 'inventory').some((item) => str(item, 'name', '').trim().toLowerCase() === wanted);
-  });
+function hasKeyItem(userId: string, campaignId: string, target: LockTarget): boolean {
+  return characters.forCampaign(campaignId).some((c) =>
+    c.ownerUserId === userId && sheetOpens(c.sheet, target));
 }
 
 /** Project point p onto segment a→b; returns whether p is on the segment
@@ -263,7 +261,8 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
       if (!canReachDoor(d.userId, map, door)) {
         throw new Error('You need a token within 2 hexes to use that door.');
       }
-      if (!door.open && door.locked && !hasKeyItem(d.userId, d.campaignId, door.keyName || 'Key')) {
+      const lock: LockTarget = { kind: 'door', id: door.id, mapId, keyName: door.keyName || 'Key' };
+      if (!door.open && door.locked && !hasKeyItem(d.userId, d.campaignId, lock)) {
         throw new Error(`This ${door.type === 'gate' ? 'gate' : 'door'} is locked. You need a "${door.keyName || 'Key'}".`);
       }
     }

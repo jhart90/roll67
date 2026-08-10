@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DieRoll } from 'shared';
+import { swadeSnakeEyes, type DieRoll } from 'shared';
 import { diceAnimationFinished, overlayMounted, overlayUnmounted, useGameStore } from '../store/game';
 import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette } from './dice3d';
 
-function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette, ending }: {
-  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null; ending: boolean;
+function DiceCanvas({ animId, dice, byName, total, expression, color, textColor, palette, ending, critFail }: {
+  animId: number; dice: DieRoll[]; byName: string; total: number; expression: string; color: string | null; textColor: string | null; palette: DicePalette | null; ending: boolean; critFail: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [settled, setSettled] = useState(false);
@@ -33,7 +33,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
     const audio = new Audio(clip);
     audio.volume = 0.6 * useGameStore.getState().localSfxVolume;
     audio.play().catch(() => undefined);
-    const sims = buildSims(dice, w, h, color, textColor, palette);
+    const sims = buildSims(dice, w, h, color, textColor, palette, critFail);
     const settleAt = simsSettleTime(sims);
     const t0 = performance.now();
     let raf = 0;
@@ -60,9 +60,13 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The verdict waits for the dice, exactly as the total does — announcing
+  // snake eyes over dice still in the air would spoil the throw.
+  const showCrit = critFail && settled;
   return (
-    <div className={`dice-overlay ${ending ? 'ending' : ''}`}>
+    <div className={`dice-overlay ${ending ? 'ending' : ''} ${showCrit ? 'critfail' : ''}`}>
       <canvas ref={canvasRef} className="dice3d-canvas" />
+      {showCrit && <div className="dice-critfail-banner">💀 SNAKE EYES</div>}
       <div className="dice-roller-name">
         {byName} rolls {expression}{settled ? <span className="dice-total"> = {total}</span> : '…'}
       </div>
@@ -101,6 +105,7 @@ export function DiceOverlay() {
       textColor={textColor}
       palette={palette}
       ending={ending}
+      critFail={system === 'swade' && swadeSnakeEyes(anim.dice)}
     />
   );
 }

@@ -11,7 +11,7 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
-  swadeWoundsHealed, swadeRangeBand,
+  swadeWoundsHealed, swadeRangeBand, swadeCritFail,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -1819,11 +1819,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (actor.system === 'swade' && p.cook && isNade && action.source === 'attack') {
       const br = roll(traitExpr(actor.sheet, dieSides(str(actor.sheet, 'smarts', 'd6'))));
       // A SWADE Critical Failure: the trait die shows 1, and for a Wild Card
-      // the Wild Die does too.
-      const wildCard = actor.sheet.wildCard !== false;
-      const traitOne = br.dice.some((x) => !x.wild && x.value === 1);
-      const wildOne = br.dice.some((x) => x.wild && x.value === 1);
-      const critFail = traitOne && (!wildCard || wildOne);
+      // the Wild Die does too. One shared rule, so the mechanical outcome here
+      // and the snake-eyes flare the client draws can never disagree.
+      const critFail = swadeCritFail(br.dice, actor.sheet.wildCard !== false);
       cooked = !critFail && br.total >= 4;
       let text: string;
       if (critFail) {
@@ -2420,10 +2418,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // blast — claiming it here is what makes it "one attempt only".
     if (!claimBlast(io, pb)) return;
     const br = roll(traitExpr(ch.sheet, skillDie(ch.sheet, 'Athletics'), cand.potatoMod));
-    const wildCard = ch.sheet.wildCard !== false;
-    const traitOne = br.dice.some((x) => !x.wild && x.value === 1);
-    const wildOne = br.dice.some((x) => x.wild && x.value === 1);
-    const critFail = traitOne && (!wildCard || wildOne);
+    const critFail = swadeCritFail(br.dice, ch.sheet.wildCard !== false);
     const caught = !critFail && br.total >= 4;
     const holdTag = cand.onHold ? ' on Hold' : '';
 

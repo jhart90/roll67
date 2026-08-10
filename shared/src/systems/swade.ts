@@ -6,7 +6,7 @@
 // for the wound track — Wounds/Fatigue are tracked on the sheet and feed the
 // standard −1/level penalty into every trait roll.
 
-import type { Hex, SheetData, VisionStats } from '../types.js';
+import type { DieRoll, Hex, SheetData, VisionStats } from '../types.js';
 import { CONCEPT_MAX_LEN } from '../types.js';
 import { hexDistance } from '../hex/coords.js';
 import {
@@ -244,6 +244,30 @@ function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number;
     }),
     { parry: 0, toughness: 0, pace: 0 },
   );
+}
+
+/**
+ * Snake eyes: the trait die AND the Wild Die both showing a natural 1. This is
+ * SWADE's Critical Failure for a Wild Card, and the whole rule is readable from
+ * the dice alone — which is what lets the client light it up without ever being
+ * handed the roller's sheet.
+ *
+ * A raise die is excluded because it is a reward: you only earn one by beating
+ * the target number, so it can never be part of a failure.
+ */
+export function swadeSnakeEyes(dice: DieRoll[]): boolean {
+  const traitOne = dice.some((d) => !d.wild && !d.raise && d.value === 1);
+  const wildOne = dice.some((d) => d.wild && d.value === 1);
+  return traitOne && wildOne;
+}
+
+/**
+ * The full Critical Failure rule. An Extra rolls no Wild Die, so a natural 1 on
+ * the trait die alone damns them; a Wild Card needs both to come up 1.
+ */
+export function swadeCritFail(dice: DieRoll[], wildCard: boolean): boolean {
+  if (wildCard) return swadeSnakeEyes(dice);
+  return dice.some((d) => !d.wild && !d.raise && d.value === 1);
 }
 
 /** Pace after Edge/Hindrance modifiers (Fleet-Footed +2, Slow −2). */

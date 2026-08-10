@@ -33,6 +33,7 @@ export {
   TRAIT_DICE, dieSides, traitExpr, traitModWhy, woundPenalty, swadeParry, swadeToughness,
   swadeRangedArmor, swadeArcaneExpr, gearTraitBonus, swadePace, gangUpBonus, skillDie, type GangUpCombatant,
   FREE_SKILLS_SWADE, SKILL_ATTR_SWADE, dieStepIndex, stepDie,
+  swadeSnakeEyes, swadeCritFail,
 } from './swade.js';
 export * from './swadeCreation.js';
 export * from './swnCreation.js';

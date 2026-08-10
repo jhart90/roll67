@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, ChatMessage, DieRoll, MemberInfo, TokenView } from 'shared';
-import { contentForSystem } from 'shared';
+import { contentForSystem, swadeSnakeEyes } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
 import { DIE_COLORS, DieShape } from '../table/DiceShapes';
@@ -213,12 +213,18 @@ function DiceEquation({ r, why, fromUserId }: {
 
 function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
   const r = msg.roll!;
+  const system = useGameStore((s) => s.campaign?.system);
   // A pass/fail roll (e.g. a saving throw) reuses the crit/fumble green/red
   // theme so it reads at a glance without inventing a separate color scheme.
   const isCrit = r.outcome === 'success' || r.dice.some((d) => d.sides === 20 && d.kept && d.value === 20);
   const isFumble = r.outcome === 'failure' || r.dice.some((d) => d.sides === 20 && d.kept && d.value === 1);
+  // SWADE snake eyes — trait die AND Wild Die both showing 1. Read straight off
+  // the dice, so it lights up for every roll from every source (attacks, saves,
+  // trait rolls, a cooked grenade) without the server tagging each one.
+  const snakeEyes = system === 'swade' && swadeSnakeEyes(r.dice);
   return (
-    <div className={`roll-card ${isCrit ? 'crit' : ''} ${isFumble ? 'fumble' : ''}`}>
+    <div className={`roll-card ${isCrit ? 'crit' : ''} ${isFumble || snakeEyes ? 'fumble' : ''} ${snakeEyes ? 'critfail' : ''}`}>
+      {snakeEyes && <div className="critfail-banner">💀 Snake Eyes — Critical Failure</div>}
       {msg.text && (
         <div className="roll-label">
           <Highlighted text={msg.text} hl={hl} />

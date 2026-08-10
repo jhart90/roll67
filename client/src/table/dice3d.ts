@@ -446,9 +446,13 @@ function scatterTargets(n: number, w: number, h: number): Array<{ x: number; y: 
   return placed;
 }
 
+/** The two 1s of a Critical Failure wear this instead of their role colour —
+ *  a deep arterial red no player palette can be mistaken for. */
+export const CRIT_FAIL_DIE_COLOR = '#8d0f14';
+
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
-  palette: DicePalette | null = null,
+  palette: DicePalette | null = null, critFail = false,
 ): DieSim[] {
   const n = dice.length;
   const cx = w / 2, cy = h / 2;
@@ -484,7 +488,11 @@ export function buildSims(
     // would announce the result of dice that have not been thrown yet.
     // Without a palette, every other system keeps the by-size colours and the
     // player's own single-colour override.
-    const rgb = hexToRgb(palette
+    // On a Critical Failure the guilty dice — the 1s themselves — go blood
+    // red, so the reason is legible on the felt rather than only in the
+    // banner. Every other die in the roll keeps its own colour.
+    const damning = critFail && die.value === 1 && !die.raise;
+    const rgb = hexToRgb(damning ? CRIT_FAIL_DIE_COLOR : palette
       ? (die.raise ? palette.raise : die.wild ? palette.wild : palette.trait)
       : (customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3'));
     // Pips have to stay legible against whatever colour the player picked.

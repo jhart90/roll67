@@ -896,6 +896,25 @@ button.link:hover { text-decoration: underline; }
 }
 .roll-card.crit { border-color: var(--ok); }
 .roll-card.fumble { border-color: var(--danger); }
+
+/* SWADE snake eyes: an ordinary failure is a red border, but a Critical
+   Failure is the worst thing the dice can say, so it gets its own weight —
+   a heavier bleeding border and a banner naming it. */
+.roll-card.critfail {
+  border: 2px solid #d13b3b;
+  background: linear-gradient(180deg, rgba(209, 59, 59, 0.16), rgba(209, 59, 59, 0.04));
+  box-shadow: 0 0 0 1px rgba(209, 59, 59, 0.28), 0 4px 16px rgba(141, 15, 20, 0.35);
+}
+.critfail-banner {
+  display: flex; align-items: center; gap: 6px;
+  margin: -2px -4px 5px; padding: 3px 8px;
+  border-radius: 4px;
+  background: #8d0f14;
+  color: #ffe9e9;
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.roll-card.critfail .roll-total { color: #ff8080; }
 .roll-label { font-size: 12px; color: var(--text-dim); margin-bottom: 2px; }
 .roll-main { display: flex; justify-content: space-between; align-items: center; }
 .roll-expr { font-family: monospace; font-size: 13px; color: var(--accent-2); }
@@ -2104,6 +2123,50 @@ th > .term { border-bottom-style: dotted; }
 }
 .dice-overlay.ending { opacity: 0; }
 @keyframes dice-overlay-in { from { opacity: 0; } }
+
+/* Snake eyes on the felt. The class only lands once the dice have SETTLED
+   (see DiceOverlay), so none of this fires while they are still in the air and
+   spoils the throw. A red vignette closes in from the edges and the whole
+   overlay takes one short shudder — the room reacting, not the dice moving. */
+.dice-overlay.critfail::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 38%, rgba(141, 15, 20, 0.42) 100%);
+  animation: critfail-vignette 0.45s ease-out;
+}
+.dice-overlay.critfail { animation: critfail-shudder 0.4s ease-out; }
+@keyframes critfail-vignette { from { opacity: 0; } to { opacity: 1; } }
+@keyframes critfail-shudder {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-5px, 3px); }
+  40% { transform: translate(5px, -3px); }
+  60% { transform: translate(-3px, -2px); }
+  80% { transform: translate(3px, 2px); }
+}
+.dice-critfail-banner {
+  position: absolute; left: 50%; top: 16%;
+  transform: translateX(-50%);
+  padding: 8px 26px; border-radius: 8px;
+  background: rgba(141, 15, 20, 0.92);
+  border: 2px solid #ff6b6b;
+  color: #ffe9e9;
+  font-size: 30px; font-weight: 900;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 8px 34px rgba(141, 15, 20, 0.6);
+  white-space: nowrap;
+  animation: critfail-stamp 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+/* Stamped down onto the table rather than faded in. */
+@keyframes critfail-stamp {
+  from { opacity: 0; transform: translateX(-50%) scale(1.5); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+/* Someone who has asked not to be moved gets the colour without the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .dice-overlay.critfail { animation: none; }
+  .dice-critfail-banner { animation: none; }
+}
 
 .dice3d-canvas {
   position: absolute;

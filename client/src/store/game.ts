@@ -1440,6 +1440,8 @@ export const intents = {
   setDiceRoleColor: (role: DiceRole, color: string | null) => socket.emit(C2S.SET_DICE_ROLE_COLOR, { role, color }),
   setDiceTextColor: (color: string | null) => socket.emit(C2S.SET_DICE_TEXT_COLOR, { color }),
   setPlayerColor: (color: string | null) => socket.emit(C2S.SET_PLAYER_COLOR, { color }),
+  /** How often your dice carom off a wall (0-100, or null for the default). */
+  setDiceBounce: (pct: number | null) => socket.emit(C2S.SET_DICE_BOUNCE, { pct }),
   setUsername: (username: string) => socket.emit(C2S.SET_USERNAME, { username }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),

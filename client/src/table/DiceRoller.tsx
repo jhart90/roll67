@@ -2,7 +2,7 @@ import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { DieShape } from './DiceShapes';
 import { DICE_ROLE_DEFAULTS } from './dice3d';
-import type { DiceRole } from 'shared';
+import { DICE_BOUNCE_PCT_DEFAULT, type DiceRole } from 'shared';
 
 const DICE_TYPES = [2, 4, 6, 8, 10, 12, 20, 100];
 const COUNTS = [1, 2, 3, 4, 5, 6];
@@ -147,6 +147,44 @@ export function SwadeDicePalettePicker() {
   );
 }
 
+/**
+ * How often YOUR dice carom off a wall on their way in. Saved to the account
+ * and sent with presence, so it follows your rolls to every screen at the
+ * table rather than being how you happen to like watching other people's.
+ */
+export function DiceBouncePicker() {
+  const you = useGameStore((s) => s.you);
+  const members = useGameStore((s) => s.members);
+  const me = you ? members.find((m) => m.userId === you.userId) : undefined;
+  const pct = me?.diceBouncePct ?? DICE_BOUNCE_PCT_DEFAULT;
+  return (
+    <div className="dice-color-row">
+      <span className="dim" style={{ fontSize: 11 }} title="Share of your dice that ricochet off the edge of the map before settling">
+        Bounce:
+      </span>
+      <input
+        type="range"
+        className="dice-bounce-slider"
+        min={0}
+        max={100}
+        step={1}
+        value={pct}
+        title={`${pct}% of your dice bounce off a wall`}
+        onChange={(e) => intents.setDiceBounce(Number(e.target.value))}
+      />
+      <span className="dice-bounce-val">{pct}%</span>
+      <button
+        className={`link ${me?.diceBouncePct == null ? 'active' : ''}`}
+        style={{ fontSize: 11 }}
+        title={`Back to the default (${DICE_BOUNCE_PCT_DEFAULT}%)`}
+        onClick={() => intents.setDiceBounce(null)}
+      >
+        default
+      </button>
+    </div>
+  );
+}
+
 /** Quick-roll panel: click to roll 1-6 dice of any standard type. */
 export function DiceRoller({ onClose }: { onClose: () => void }) {
   const isSwade = useGameStore((s) => s.campaign?.system) === 'swade';
@@ -205,6 +243,7 @@ export function DiceRoller({ onClose }: { onClose: () => void }) {
           <DiceTextColorPicker />
         </>
       )}
+      <DiceBouncePicker />
       <p className="dim" style={{ fontSize: 11, margin: '6px 0 0' }}>
         Rolls go to chat for everyone. Use /r in chat for modifiers (e.g. /r 2d6+3).
       </p>

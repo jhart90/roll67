@@ -100,6 +100,8 @@ ensureColumn('users', 'dice_trait_color', 'dice_trait_color TEXT');
 ensureColumn('users', 'dice_wild_color', 'dice_wild_color TEXT');
 ensureColumn('users', 'dice_raise_color', 'dice_raise_color TEXT');
 ensureColumn('users', 'player_color', 'player_color TEXT');
+// Share of this account's dice that carom off a wall (0-100); NULL = default.
+ensureColumn('users', 'dice_bounce_pct', 'dice_bounce_pct INTEGER');
 // Per-account audio mix (0..1), so a player's levels follow them to any
 // device instead of living only in one browser's localStorage.
 ensureColumn('users', 'music_volume', 'music_volume REAL');

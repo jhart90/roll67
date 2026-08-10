@@ -336,8 +336,6 @@ interface DieSim {
 /** The walls dice carom off: the playable map, not the whole window. */
 export interface PlayBounds { left: number; right: number; top: number; bottom: number }
 
-/** How often a die takes a wall on its way in. */
-const BOUNCE_CHANCE = 1 / 3;
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -502,7 +500,10 @@ function pickWallBounce(
 export function buildSims(
   dice: DieRoll[], w: number, h: number, customColor: string | null, customTextColor: string | null = null,
   palette: DicePalette | null = null, critFail = false, bounds: PlayBounds | null = null,
+  /** Share of dice that carom off a wall, 0-100 — the ROLLER's own setting. */
+  bouncePct = 0,
 ): DieSim[] {
+  const bounceChance = Math.max(0, Math.min(100, bouncePct)) / 100;
   const n = dice.length;
   const cx = w / 2, cy = h / 2;
   const targets = scatterTargets(n, w, h);
@@ -549,7 +550,7 @@ export function buildSims(
     const size = die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41;
     // Every die takes its own chance, so a handful scatters off different
     // walls rather than the whole throw behaving as one.
-    const wall = Math.random() < BOUNCE_CHANCE
+    const wall = Math.random() < bounceChance
       ? pickWallBounce(start, target, bounds ?? { left: 0, right: w, top: 0, bottom: h }, size / 2)
       : null;
     return {

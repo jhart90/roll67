@@ -92,6 +92,8 @@ export const C2S = {
   SET_DICE_COLOR: 'setDiceColor',
   SET_DICE_TEXT_COLOR: 'setDiceTextColor',
   SET_DICE_ROLE_COLOR: 'setDiceRoleColor',
+  /** How often your dice carom off a wall on their way in (0-100). */
+  SET_DICE_BOUNCE: 'setDiceBounce',
   SET_PLAYER_COLOR: 'setPlayerColor',
   SET_USERNAME: 'setUsername',
   /** Save this account's audio mix (music + effects), so it follows the player. */
@@ -1009,6 +1011,7 @@ export interface MemberPresencePayload {
     userId: string; username: string; role: 'dm' | 'player'; online: boolean; mapId: string | null;
     diceColor: string | null; diceTextColor: string | null; playerColor: string | null;
     diceTraitColor: string | null; diceWildColor: string | null; diceRaiseColor: string | null;
+    diceBouncePct: number | null;
   }>;
 }
 /** Set your own 3D-dice color ("#rrggbb", or null for the defaults). */
@@ -1017,6 +1020,8 @@ export interface SetDiceColorPayload { color: string | null }
 export type DiceRole = 'trait' | 'wild' | 'raise';
 /** Set one slot of your SWADE dice palette ("#rrggbb", or null for its default). */
 export interface SetDiceRoleColorPayload { role: DiceRole; color: string | null }
+/** How often your dice carom off a wall, 0-100 (null restores the default). */
+export interface SetDiceBouncePayload { pct: number | null }
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }
 export interface SoakOfferPayload { characterId: string; name: string; wounds: number; bennies: number }

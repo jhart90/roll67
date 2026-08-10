@@ -3,6 +3,7 @@ import {
   C2S, S2C,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
+  type SetDiceBouncePayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -137,6 +138,7 @@ export function broadcastPresence(io: Server, campaignId: string): void {
     diceWildColor: m.diceWildColor,
     diceRaiseColor: m.diceRaiseColor,
     playerColor: m.playerColor,
+    diceBouncePct: m.diceBouncePct,
   }));
   io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, { members });
 }
@@ -215,6 +217,19 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     users.setDiceRoleColor(d.userId, role, clean);
     broadcastPresence(io, d.campaignId);
   }, 'SET_DICE_ROLE_COLOR'));
+
+  // How often YOUR dice carom off a wall. Stored on the account and sent with
+  // presence, so a player's dice throw the same way on every screen at the
+  // table rather than each watcher seeing their own preference applied.
+  socket.on(C2S.SET_DICE_BOUNCE, safe(socket, ({ pct }: SetDiceBouncePayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    const clean = pct === null || !Number.isFinite(pct)
+      ? null
+      : Math.max(0, Math.min(100, Math.round(pct)));
+    users.setDiceBouncePct(d.userId, clean);
+    broadcastPresence(io, d.campaignId);
+  }, 'SET_DICE_BOUNCE'));
 
   // Your presence-dot color, and the color your player-controlled token
   // names get bolded in in chat (client/src/panels/ChatPanel.tsx).

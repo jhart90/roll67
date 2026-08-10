@@ -40,7 +40,14 @@ export interface MemberInfo {
   /** Custom color for this member's presence dot + their player-controlled
    *  token names in chat ("#rrggbb"); null = a deterministic per-user default. */
   playerColor: string | null;
+  /** How often this member's dice carom off a wall, 0-100. Null = the default.
+   *  Travels with the roller, not the watcher, so a player's dice throw the
+   *  same way on every screen at the table. */
+  diceBouncePct: number | null;
 }
+
+/** Share of dice that bounce off a wall when a player hasn't chosen. */
+export const DICE_BOUNCE_PCT_DEFAULT = 33;
 
 /**
  * Visual flavor for the impact animation played over a token once a

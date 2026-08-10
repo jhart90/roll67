@@ -26,6 +26,7 @@ export interface MemberRow {
   diceWildColor: string | null;
   diceRaiseColor: string | null;
   playerColor: string | null;
+  diceBouncePct: number | null;
 }
 
 /**
@@ -78,6 +79,10 @@ export const users = {
   },
   setPlayerColor(userId: string, color: string | null): void {
     stmt('UPDATE users SET player_color = ? WHERE id = ?').run(color, userId);
+  },
+  /** Share of this account's dice that bounce off a wall; null = the default. */
+  setDiceBouncePct(userId: string, pct: number | null): void {
+    stmt('UPDATE users SET dice_bounce_pct = ? WHERE id = ?').run(pct, userId);
   },
   /** This account's saved audio mix; null means "never set" (use full volume). */
   volumes(userId: string): { music: number | null; sfx: number | null } {
@@ -200,7 +205,8 @@ export const campaigns = {
       `SELECT m.user_id as userId, u.username, m.role, m.map_id as mapId,
               u.dice_color as diceColor, u.dice_text_color as diceTextColor,
               u.dice_trait_color as diceTraitColor, u.dice_wild_color as diceWildColor,
-              u.dice_raise_color as diceRaiseColor, u.player_color as playerColor
+              u.dice_raise_color as diceRaiseColor, u.player_color as playerColor,
+              u.dice_bounce_pct as diceBouncePct
        FROM campaign_members m
        JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ?`,
     ).all(campaignId) as MemberRow[]);

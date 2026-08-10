@@ -935,6 +935,29 @@ async function main() {
   ok(presence?.members?.some((m) => m.userId === dm.user.id),
     'and the roster lists every member, not just the one that changed');
 
+  // ---------- per-player dice bounce ----------
+  // The share of a player's dice that carom off a wall rides on presence like
+  // their dice colours do, so it follows THEIR rolls to every screen rather
+  // than being how each watcher likes to see other people's dice.
+  console.log('dice bounce preference:');
+  const bounceSet = waitFor(dmSock, 'memberPresence', 5000,
+    (p) => p.members?.some((m) => m.userId === player.user.id && m.diceBouncePct === 80));
+  playerSock.emit('setDiceBounce', { pct: 80 });
+  await bounceSet;
+  ok(true, "a player's bounce % reaches everyone else via presence");
+
+  const bounceClamped = waitFor(dmSock, 'memberPresence', 5000,
+    (p) => p.members?.some((m) => m.userId === player.user.id && m.diceBouncePct === 100));
+  playerSock.emit('setDiceBounce', { pct: 999 });
+  await bounceClamped;
+  ok(true, 'out-of-range values are clamped to 0-100 server-side');
+
+  const bounceCleared = waitFor(dmSock, 'memberPresence', 5000,
+    (p) => p.members?.some((m) => m.userId === player.user.id && m.diceBouncePct === null));
+  playerSock.emit('setDiceBounce', { pct: null });
+  await bounceCleared;
+  ok(true, 'clearing it restores the default');
+
   // Back to the party map (clear override), DM back to party too.
   const playerBack = waitFor(playerSock, 'mapState', 5000, (p) => p.map.id === mapId);
   dmSock.emit('assignPlayerMap', { userId: player.user.id, mapId: null });

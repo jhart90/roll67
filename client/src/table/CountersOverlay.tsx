@@ -1,7 +1,29 @@
 import { useEffect, useState } from 'react';
-import type { Counter, CounterPosition } from 'shared';
+import { isCounterPosition, type Counter, type CounterPosition } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { AnchoredMenu } from '../util/AnchoredMenu';
+
+/**
+ * Per-screen counter docks, by counter id. The DM's `position` is the table's
+ * default; anyone who drags a counter somewhere else is overriding it for
+ * themselves only. Local rather than server state on purpose — where a bar
+ * sits on your monitor is a property of your monitor, and one player tidying
+ * their sidebar should not rearrange everyone else's map.
+ */
+const DOCK_KEY = 'roll67.counterDocks';
+
+function loadDocks(): Record<string, CounterPosition> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DOCK_KEY) ?? '{}');
+    if (!raw || typeof raw !== 'object') return {};
+    const out: Record<string, CounterPosition> = {};
+    // Drop anything unrecognised rather than trusting the blob: a stale or
+    // hand-edited key would otherwise land a counter in a dock that does not
+    // render, and the bar would just vanish with no way to get it back.
+    for (const [id, pos] of Object.entries(raw)) if (isCounterPosition(pos)) out[id] = pos;
+    return out;
+  } catch { return {}; }
+}
 
 /** Gap left between a counter and the chrome beneath it. */
 const BOTTOM_GAP = 12;
@@ -88,7 +110,21 @@ export function CountersOverlay() {
   const isDm = useGameStore((s) => s.you?.role) === 'dm';
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editing, setEditing] = useState<Counter | null>(null);
+  const [docks, setDocks] = useState(loadDocks);
   const bottomClearance = useBottomChrome();
+
+  /** Where THIS screen shows a counter: their own choice, else the DM's. */
+  const dockOf = (c: Counter): CounterPosition => docks[c.id] ?? c.position;
+
+  /** Park a counter on this screen only. `null` goes back to the DM's dock. */
+  function setDock(id: string, pos: CounterPosition | null) {
+    setDocks((cur) => {
+      const next = { ...cur };
+      if (pos) next[id] = pos; else delete next[id];
+      try { localStorage.setItem(DOCK_KEY, JSON.stringify(next)); } catch { /* storage disabled */ }
+      return next;
+    });
+  }
 
   if (counters.length === 0) return null;
 
@@ -97,17 +133,21 @@ export function CountersOverlay() {
       key={c.id}
       className={`counter-bar ${!c.visible ? 'counter-hidden' : ''}`}
       title={isDm && !c.visible ? `${c.name} — hidden from players (right-click to reveal)` : c.name}
-      onContextMenu={isDm ? (e) => { e.preventDefault(); setMenu({ id: c.id, x: e.clientX, y: e.clientY }); } : undefined}
-      draggable={isDm}
-      onDragEnd={isDm ? (e) => {
+      // Everyone can rearrange their own screen, so everyone gets the menu.
+      onContextMenu={(e) => { e.preventDefault(); setMenu({ id: c.id, x: e.clientX, y: e.clientY }); }}
+      draggable
+      onDragEnd={(e) => {
         // Measure against the whole map pane, never the bar's own column: the
         // side columns are ~230px wide, so a drop in the middle of the map
         // read against one of them would land outside it and pick a side.
         const pane = e.currentTarget.closest('.counters-root')?.getBoundingClientRect();
         if (!pane) return;
         const pos = slotForDrop(e.clientX, e.clientY, pane);
-        if (pos !== c.position) intents.counterUpdate(c.id, { position: pos });
-      } : undefined}
+        // A drag moves it for YOU. The DM pushes a dock to the whole table
+        // from the menu instead, so nobody's arrangement is yanked about by
+        // someone else tidying their own screen.
+        if (pos !== dockOf(c)) setDock(c.id, pos);
+      }}
     >
       {/* Wrapper so a side counter can stand the title alongside the track as
           a Y-axis label. It is `display: contents` in the top/bottom docks, so
@@ -142,54 +182,78 @@ export function CountersOverlay() {
           drag measures against. */}
       <div className="counters-root">
         <div className="counters-edge counters-top">
-          {counters.filter((c) => c.position === 'top').map(renderBar)}
+          {counters.filter((c) => dockOf(c) === 'top').map(renderBar)}
         </div>
         <div className="counters-edge counters-bottom" style={{ bottom: bottomClearance }}>
-          {counters.filter((c) => c.position === 'bottom').map(renderBar)}
+          {counters.filter((c) => dockOf(c) === 'bottom').map(renderBar)}
         </div>
         {/* The side docks run the full height of the pane, stopping at the
             same measured floor the bottom dock uses. */}
         <div className="counters-side counters-left" style={{ bottom: bottomClearance }}>
-          {counters.filter((c) => c.position === 'left').map(renderBar)}
+          {counters.filter((c) => dockOf(c) === 'left').map(renderBar)}
         </div>
         <div className="counters-side counters-right" style={{ bottom: bottomClearance }}>
-          {counters.filter((c) => c.position === 'right').map(renderBar)}
+          {counters.filter((c) => dockOf(c) === 'right').map(renderBar)}
         </div>
       </div>
 
       {menu && menuCounter && (
         <div className="wt-ctx-backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
           <AnchoredMenu x={menu.x} y={menu.y} className="wt-ctx-menu" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => { intents.counterUpdate(menu.id, { visible: !menuCounter.visible }); setMenu(null); }}>
-              {menuCounter.visible ? '🙈 Hide from players' : '👁 Show to players'}
-            </button>
-            <button onClick={() => { setEditing(menuCounter); setMenu(null); }}>✏️ Edit…</button>
-            <hr />
-            <span className="wt-ctx-label">Move to…</span>
+            {isDm && (
+              <>
+                <button onClick={() => { intents.counterUpdate(menu.id, { visible: !menuCounter.visible }); setMenu(null); }}>
+                  {menuCounter.visible ? '🙈 Hide from players' : '👁 Show to players'}
+                </button>
+                <button onClick={() => { setEditing(menuCounter); setMenu(null); }}>✏️ Edit…</button>
+                <hr />
+              </>
+            )}
+            <span className="wt-ctx-label">Move on your screen…</span>
             <div className="counter-slot-picker">
               {SLOTS.map((s) => (
                 <button
                   key={s.id}
-                  className={menuCounter.position === s.id ? 'active' : ''}
-                  disabled={menuCounter.position === s.id}
-                  onClick={() => { intents.counterUpdate(menu.id, { position: s.id }); setMenu(null); }}
+                  className={dockOf(menuCounter) === s.id ? 'active' : ''}
+                  disabled={dockOf(menuCounter) === s.id}
+                  onClick={() => { setDock(menu.id, s.id); setMenu(null); }}
                 >
                   {s.label}
                 </button>
               ))}
             </div>
-            <hr />
-            <button onClick={() => {
-              const mapsMeta = useGameStore.getState().mapsMeta;
-              const pick = prompt(['Send counter to which map? (enter a number)', ...mapsMeta.map((m, i) => `${i + 1}. ${m.name}`)].join('\n'));
-              const idx = Number(pick) - 1;
-              if (mapsMeta[idx]) intents.counterUpdate(menu.id, { mapId: mapsMeta[idx].id });
-              setMenu(null);
-            }}>🗺 Send to another map…</button>
-            <hr />
-            <button onClick={() => { if (confirm(`Delete counter "${menuCounter.name}"?`)) intents.counterDelete(menu.id); setMenu(null); }}>
-              🗑 Delete
-            </button>
+            {docks[menu.id] && (
+              <button
+                title={`The table's default for this counter is ${menuCounter.position}`}
+                onClick={() => { setDock(menu.id, null); setMenu(null); }}
+              >
+                ↩ Follow the table default
+              </button>
+            )}
+            {isDm && dockOf(menuCounter) !== menuCounter.position && (
+              <button
+                title="Move it here for everyone who has not chosen their own spot"
+                onClick={() => { intents.counterUpdate(menu.id, { position: dockOf(menuCounter) }); setDock(menu.id, null); setMenu(null); }}
+              >
+                📌 Make this the table default
+              </button>
+            )}
+            {isDm && (
+              <>
+                <hr />
+                <button onClick={() => {
+                  const mapsMeta = useGameStore.getState().mapsMeta;
+                  const pick = prompt(['Send counter to which map? (enter a number)', ...mapsMeta.map((m, i) => `${i + 1}. ${m.name}`)].join('\n'));
+                  const idx = Number(pick) - 1;
+                  if (mapsMeta[idx]) intents.counterUpdate(menu.id, { mapId: mapsMeta[idx].id });
+                  setMenu(null);
+                }}>🗺 Send to another map…</button>
+                <hr />
+                <button onClick={() => { if (confirm(`Delete counter "${menuCounter.name}"?`)) intents.counterDelete(menu.id); setMenu(null); }}>
+                  🗑 Delete
+                </button>
+              </>
+            )}
           </AnchoredMenu>
         </div>
       )}

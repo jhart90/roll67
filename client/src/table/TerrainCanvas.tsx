@@ -8,7 +8,12 @@ export function TerrainCanvas({ grid }: { grid: GridConfig }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const map = useGameStore((s) => s.map)!;
   const terrain = map.terrain;
-  const blocked = map.blocked;
+  // Inaccessible ground is authoring information, not scenery. Once the DM
+  // leaves the terrain tool it stops being drawn for anyone — at the table its
+  // only tell is that the hex grid stops there (see BackgroundCanvas), which
+  // reads as "not part of the map" without a slab of overlay on the art.
+  const painting = useGameStore((s) => s.tool === 'terrain' && s.you?.role === 'dm');
+  const blocked = painting ? map.blocked : null;
   const { width, height } = mapPixelSize(map);
 
   useEffect(() => {

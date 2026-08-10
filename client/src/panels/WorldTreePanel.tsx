@@ -528,6 +528,11 @@ export function WorldTreePanel() {
           } : undefined}
           onDragOver={isDm ? (e) => {
             e.preventDefault();
+            // Without this the tree container's own dragover runs straight
+            // after this one and overwrites the target with 'root' on every
+            // tick, so the only thing that ever showed was the big dashed
+            // outline round the whole pane.
+            e.stopPropagation();
             e.dataTransfer.dropEffect = 'move';
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
             const mode = e.clientY < rect.top + rect.height / 2 ? 'above' as const : 'into' as const;

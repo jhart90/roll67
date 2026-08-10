@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Character, Counter, DirectoryPayload, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
+import { str } from 'shared';
 import { intents, useGameStore, type MapTarget } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
 import { AnchoredMenu } from '../util/AnchoredMenu';
+import { inkOnDark } from '../util/playerColor';
 
 // 'mapobject' nodes (loot/chests placed on the current map) live only in
 // this tree — they are not draggable, so the kind is not part of WorldDragKind.
@@ -30,6 +32,9 @@ interface TreeNode {
   tokenCharacterId?: string | null;
   /** A player runs this one — light-blue silhouette rather than DM grey. */
   playerRun?: boolean;
+  /** The token colour this character/token wears on the map, when it has one.
+   *  Paints the silhouette, so the tree matches the pieces at a glance. */
+  color?: string;
   /** For map nodes: a scene, and whether a details preview exists. */
   isScene?: boolean;
   hasPreview?: boolean;
@@ -76,6 +81,14 @@ function buildNodes(
   // token a second node would list everyone twice, once in the DM's folder
   // and once under the map.
   const tokenHome = new Map<string, { mapId: string; playerRun: boolean }>();
+  // The colour each character's piece actually wears. Read off the TOKEN, not
+  // the sheet: the sheet's colour field is blank for most PCs and the real
+  // colour is inherited from the player, which the server has already resolved
+  // onto the token. A character with pieces on several maps takes the first.
+  const colorOfCharacter = new Map<string, string>();
+  for (const t of Object.values(allTokens)) {
+    if (t.characterId && t.color && !colorOfCharacter.has(t.characterId)) colorOfCharacter.set(t.characterId, t.color);
+  }
   for (const t of directoryTokens) {
     if (!t.mapId || !mapIds.has(t.mapId)) continue;
     if (t.characterId) {
@@ -88,6 +101,7 @@ function buildNodes(
       kind: 'token', id: t.id, name: t.name || 'Token', parentId: t.mapId,
       sub: t.gm ? 'GM layer' : '',
       tokenMapId: t.mapId, tokenCharacterId: null, playerRun: t.playerRun === true,
+      color: allTokens[t.id]?.color,
     });
   }
   for (const l of locations) out.push({ kind: 'location', id: l.id, name: l.name || 'Location', parentId: l.parentId ?? null, sub: l.kind });
@@ -104,6 +118,9 @@ function buildNodes(
       playerRun: c.ownerUserId != null,
       tokenMapId: tokenHome.get(c.id)?.mapId,
       tokenCharacterId: c.id,
+      // The sheet's own colour field is the fallback when no piece of theirs
+      // is on the table yet; it is blank for most PCs, hence the `undefined`.
+      color: colorOfCharacter.get(c.id) ?? (str(c.sheet, 'color', '') || undefined),
     });
   }
   // A player only ever receives the SHEETS they own, so everyone else's
@@ -122,6 +139,8 @@ function buildNodes(
       playerRun: c.ownerUserId != null,
       tokenMapId: tokenHome.get(c.id)?.mapId,
       tokenCharacterId: c.id,
+      // No sheet reaches this viewer, so the token is the only source.
+      color: colorOfCharacter.get(c.id),
     });
   }
   for (const s of shops) out.push({ kind: 'shop', id: s.id, name: s.name || 'Shop', parentId: s.parentId ?? null, sub: `${s.items.length} items` });
@@ -577,6 +596,12 @@ export function WorldTreePanel() {
           </span>
           <span
             className={`wt-icon${node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? ' wt-tok-player' : ' wt-tok-dm') : ''}`}
+            // The silhouette wears the piece's own colour, so scanning the tree
+            // and scanning the map are the same act. Lifted off pure black
+            // first: a colour picked to read as a filled shape on a lit map can
+            // be invisible as a glyph on dark chrome. Without one the class
+            // above still says party-blue or DM-grey.
+            style={node.color ? { color: inkOnDark(node.color) } : undefined}
             title={node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? 'Run by a player' : 'Run by the DM') : undefined}
           >
             {(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦' : ICON[node.kind]}

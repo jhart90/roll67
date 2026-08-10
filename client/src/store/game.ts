@@ -858,6 +858,13 @@ export function wireSocket(): void {
       ...(p.bgHeight !== undefined ? { bgHeight: p.bgHeight } : {}),
       ...(p.spawn !== undefined ? { spawn: p.spawn } : {}),
       ...(p.terrain !== undefined ? { terrain: p.terrain } : {}),
+      // Inaccessible terrain arrives on the same broadcast as rough terrain
+      // and was the one field this reducer dropped on the floor. The server
+      // stored and broadcast every painted hex correctly; the client threw
+      // them away, so painting looked dead until a reload — and erasing was
+      // dead for real, since the brush diffs against the map's own blocked
+      // set and it never stopped being stale.
+      ...(p.blocked !== undefined ? { blocked: p.blocked } : {}),
     };
     const dmGeometry = s.dmGeometry
       ? {

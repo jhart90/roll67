@@ -423,6 +423,38 @@ async function main() {
   await barFromSheetP;
   ok(true, 'a sheet HP edit mirrors onto the token bar');
 
+  // ---------- painted terrain ----------
+  // Both painted sets ride the SAME mapEdited broadcast, and the client keys
+  // off whichever field is present. 'blocked' once reached the client and was
+  // dropped by the map reducer, so painting inaccessible terrain looked dead
+  // until a reload — these pin that both fields actually make the trip.
+  console.log('terrain paint:');
+  const roughEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => Array.isArray(p.terrain));
+  dmSock.emit('setTerrain', { mapId, terrain: [1, 2, 3] });
+  ok((await roughEdit).terrain.length === 3, 'painting difficult terrain broadcasts the hexes');
+
+  const blockedEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => Array.isArray(p.blocked));
+  dmSock.emit('setTerrain', { mapId, blocked: [4, 5] });
+  ok((await blockedEdit).blocked.length === 2, 'painting inaccessible terrain broadcasts the hexes');
+
+  // Erasing is the same call with the survivors — the brush diffs client-side,
+  // so an empty set has to round-trip as cleanly as a full one.
+  const blockedErased = waitFor(dmSock, 'mapEdited', 5000, (p) => Array.isArray(p.blocked) && p.blocked.length === 0);
+  dmSock.emit('setTerrain', { mapId, blocked: [] });
+  await blockedErased;
+  ok(true, 'erasing inaccessible terrain clears it');
+  // Painting one set must not disturb the other.
+  const stillRough = waitFor(dmSock, 'mapEdited', 5000, (p) => Array.isArray(p.blocked));
+  dmSock.emit('setTerrain', { mapId, blocked: [7] });
+  await stillRough;
+  const bothMap = waitFor(dmSock, 'mapState', 5000, (p) => p.map.id === mapId);
+  dmSock.emit('viewMap', { mapId });
+  const painted = (await bothMap).map;
+  ok(painted.terrain.length === 3 && painted.blocked.length === 1,
+    `the two painted sets are independent (rough ${painted.terrain.length}, blocked ${painted.blocked.length})`);
+  dmSock.emit('setTerrain', { mapId, terrain: [], blocked: [] });
+  await new Promise((r) => setTimeout(r, 200));
+
   // Drop a long wall between player and monster.
   const wallGone = waitFor(playerSock, 'visionUpdate', 5000, (p) => !p.tokens.some((t) => t.id === beast.id));
   const wallEdit = waitFor(dmSock, 'mapEdited', 5000, (p) => !!p.walls);

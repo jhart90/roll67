@@ -233,9 +233,14 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
       )}
       <div className="roll-main">
         <ExprWithWhy r={r} text={msg.text} />
+      </div>
+      {/* The total rides with the DICE, not with the expression above them —
+          it is the answer to the faces you can see, so it should sit level
+          with them. The equation wraps to keep clear of it. */}
+      <div className="roll-eq-row">
+        <DiceEquation r={r} why={msg.text} fromUserId={msg.fromUserId} />
         <span className="roll-total">{r.total}</span>
       </div>
-      <DiceEquation r={r} why={msg.text} fromUserId={msg.fromUserId} />
       <div className="roll-detail">
         {r.detail}
         {r.iron && (

@@ -938,10 +938,14 @@ button.link:hover { text-decoration: underline; }
 /* pre-line, not pre: damage cards arrive as several short rows joined by
    newlines, and a long one still has to wrap inside the chat dock. */
 .roll-label { font-size: 12px; color: var(--text-dim); margin-bottom: 2px; white-space: pre-line; }
-/* The gap and the shrinkable expression are what stop a long expression from
-   running into the total now that the total is big enough to matter. */
-.roll-main { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+/* Just the expression now — the total moved down to sit with the dice. */
+.roll-main { display: flex; align-items: center; gap: 10px; }
 .roll-expr { font-family: monospace; font-size: 13px; color: var(--accent-2); min-width: 0; overflow-wrap: anywhere; }
+/* Dice on the left, total on the right, level with each other. */
+.roll-eq-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* Takes the space that is left and wraps within it, so a long chain of dice
+   stacks into more rows rather than reaching the total. */
+.roll-eq-row .roll-dice { flex: 1 1 auto; min-width: 0; }
 /* The one number everyone at the table is actually looking for. Never shrinks,
    never wraps, and keeps a margin off the card's right edge so it doesn't read
    as jammed against the chat dock. */

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { KeyItem, SheetData } from 'shared';
-import { keyCount, keyScopeLabel, keysOnSheet } from 'shared';
+import type { ContentEntry, KeyItem } from 'shared';
+import { contentSlug, keyCount, keyScopeLabel, keysOnSheet } from 'shared';
 import { intents, useGameStore } from '../store/game';
 
 /**
@@ -9,8 +9,8 @@ import { intents, useGameStore } from '../store/game';
  *
  * A player's ring counts the keys they carry and lists what each one opens.
  * The DM's manager cuts new keys — generic, for one door or chest, for every
- * door or chest on a map, or a master — hands them to a character, and shows
- * at a glance who is carrying what.
+ * door or chest on a map, or a master — into the campaign's compendium, and
+ * shows at a glance who is carrying what.
  */
 export function KeyringMenu() {
   const you = useGameStore((s) => s.you);
@@ -19,6 +19,7 @@ export function KeyringMenu() {
   const mapObjects = useGameStore((s) => s.mapObjects);
   const doors = useGameStore((s) => s.dmGeometry?.doors);
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
+  const system = useGameStore((s) => s.campaign?.system ?? 'dnd5e');
   const [open, setOpen] = useState(false);
   // The door editor can send the DM straight here to cut the key it needs.
   const summoned = useGameStore((s) => s.keyManagerOpen);
@@ -77,31 +78,39 @@ export function KeyringMenu() {
     const [name, setName] = useState('Brass Key');
     const [scope, setScope] = useState<KeyItem['scope']>('generic');
     const [target, setTarget] = useState('');
-    const [holder, setHolder] = useState('');
     const chests = Object.values(mapObjects).filter((o) => o.kind === 'chest');
     const doorList = doors ?? [];
 
+    /**
+     * Cutting a key files it in the campaign's compendium rather than pushing
+     * it onto one character. From there it can be stocked into a chest, put on
+     * a shop's shelf, or added to any sheet — all the things a key is actually
+     * for, none of which "give it to Kira right now" could do.
+     */
     const cut = () => {
-      const to = characters.find((c) => c.id === holder);
-      if (!to) return;
-      const row: SheetData = {
-        name: name.trim() || 'Key', qty: 1, weight: 0, isKey: true, keyScope: scope,
-        ...(scope === 'door' || scope === 'chest' ? { keyTargetId: target } : {}),
-        ...(scope === 'allDoors' || scope === 'allChests' ? { keyMapId: mapId ?? '' } : {}),
-        notes: keyScopeLabel({ name, scope, qty: 1, targetId: target, mapId: mapId ?? undefined }, mapName(mapId ?? undefined)),
+      const keyName = name.trim() || 'Key';
+      const subtitle = keyScopeLabel(
+        { name: keyName, scope, qty: 1, targetId: target, mapId: mapId ?? undefined },
+        mapName(mapId ?? undefined),
+      );
+      const entry: ContentEntry = {
+        // Scope and target are in the id, so two keys that open different
+        // things never collide — and re-cutting the same key is idempotent.
+        id: contentSlug(system, 'key', `${keyName} ${scope} ${target || mapId || ''}`),
+        system, kind: 'key', name: keyName, category: 'Keys', order: 1,
+        subtitle,
+        key: {
+          scope,
+          ...(scope === 'door' || scope === 'chest' ? { targetId: target } : {}),
+          ...(scope === 'allDoors' || scope === 'allChests' ? { mapId: mapId ?? '' } : {}),
+        },
       };
-      const inv = Array.isArray(to.sheet.inventory) ? [...(to.sheet.inventory as SheetData[])] : [];
-      // A second copy of an identical key stacks rather than cluttering.
-      const same = inv.findIndex((r) => r.isKey === true && r.name === row.name
-        && r.keyScope === row.keyScope && (r.keyTargetId ?? '') === (row.keyTargetId ?? '')
-        && (r.keyMapId ?? '') === (row.keyMapId ?? ''));
-      if (same >= 0) inv[same] = { ...inv[same], qty: Number(inv[same].qty ?? 1) + 1 };
-      else inv.push(row);
-      intents.updateCharacter(to.id, { inventory: inv });
+      intents.createCustomItem(JSON.stringify(entry));
+      useGameStore.getState().toast(`🔑 ${keyName} is in the Compendium under Keys.`, 'info');
     };
 
     const needsTarget = scope === 'door' || scope === 'chest';
-    const ready = !!holder && (!needsTarget || !!target);
+    const ready = !needsTarget || !!target;
 
     return (
       <div className="keyring-panel wide">
@@ -139,13 +148,11 @@ export function KeyringMenu() {
             </select>
           </label>
         )}
-        <label className="key-field">Give to
-          <select value={holder} onChange={(e) => setHolder(e.target.value)}>
-            <option value="">— pick a character —</option>
-            {characters.map((c) => <option key={c.id} value={c.id}>{c.name}{c.ownerUserId ? '' : ' (NPC)'}</option>)}
-          </select>
-        </label>
         <button className="primary" disabled={!ready} onClick={cut}>Cut key</button>
+        <p className="dim" style={{ fontSize: 11, margin: '4px 0 0' }}>
+          Cut keys go to the Compendium under <strong>Keys</strong> — stock one into a
+          chest, put it on a shop's shelf, or add it to a sheet from there.
+        </p>
 
         <div className="key-roster">
           <h5>Who holds what</h5>

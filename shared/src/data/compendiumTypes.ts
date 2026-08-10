@@ -2,7 +2,7 @@ import type { AoeShape, GameSystem, SheetData } from '../types.js';
 
 import { weightFor } from './weights.js';
 
-export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power' | 'edge' | 'hindrance' | 'racialTrait';
+export type ContentKind = 'weapon' | 'armor' | 'gear' | 'magicitem' | 'spell' | 'power' | 'edge' | 'hindrance' | 'racialTrait' | 'key';
 
 /** SWADE Edges and Hindrances: a character trait with live sheet modifiers. */
 export interface TraitData {
@@ -83,6 +83,22 @@ export interface PowerData {
   condition?: string;
 }
 
+/**
+ * A key the DM has cut. Every key lands in the campaign's compendium so it can
+ * be stocked into a chest, put on a shop's shelf, or added to a sheet the same
+ * way any other item is — rather than existing only as a row the DM pushed
+ * straight onto one character.
+ */
+export interface KeyData {
+  /** What it opens. Mirrors KeyScope in systems/keys.ts; typed loosely here to
+   *  keep the data layer from depending on the rules layer. */
+  scope: 'generic' | 'door' | 'chest' | 'allDoors' | 'allChests' | 'master';
+  /** The door or chest id, for the single-target scopes. */
+  targetId?: string;
+  /** The map, for the all-on-this-map scopes. */
+  mapId?: string;
+}
+
 export interface GearData {
   weight?: number;
   /** List price in the setting's currency. Drives what a shop charges for it
@@ -130,6 +146,7 @@ export interface ContentEntry {
   power?: PowerData;
   gear?: GearData;
   trait?: TraitData;
+  key?: KeyData;
 }
 
 export function contentSlug(system: string, kind: string, name: string): string {
@@ -250,6 +267,9 @@ const KIND_PRICE: Record<ContentKind, number> = {
   weapon: 25, armor: 75, gear: 10, magicitem: 150, spell: 25, power: 0,
   // Edges, Hindrances, and racial abilities are character traits, never stock.
   edge: 0, hindrance: 0, racialTrait: 0,
+  // A key is worth whatever the DM says the door behind it is worth, which is
+  // never a list price. Stocked at zero and priced by hand.
+  key: 0,
 };
 
 /**
@@ -575,6 +595,23 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
 
   // gear + magic items -> inventory. Healing consumables become usable; magic
   // items with a flat numeric AC/save bonus become equippable for it.
+  if (entry.kind === 'key' && entry.key) {
+    const k = entry.key;
+    return {
+      listId: 'inventory',
+      row: {
+        name: entry.name, qty: 1, weight: 0,
+        // These four fields are what keyFromRow reads; without them the row is
+        // just an item called "Brass Key" that opens nothing.
+        isKey: true, keyScope: k.scope,
+        ...(k.targetId ? { keyTargetId: k.targetId } : {}),
+        ...(k.mapId ? { keyMapId: k.mapId } : {}),
+        notes: entry.subtitle,
+      },
+      label: `${entry.name} added to inventory`,
+    };
+  }
+
   if (entry.kind === 'gear' || entry.kind === 'magicitem') {
     const heal = healAmountFrom(`${entry.subtitle} ${entry.detail ?? ''}`);
     // SWADE healing has no amount to parse — the Healing roll's margin IS the

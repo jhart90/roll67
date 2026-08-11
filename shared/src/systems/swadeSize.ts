@@ -72,3 +72,24 @@ export function sizeAttackTag(attackerSize: number, targetSize: number): string 
   const to = scaleLabel(targetSize);
   return `${mod > 0 ? '+' : '−'}${Math.abs(mod)} Scale (${from} vs ${to})`;
 }
+
+/**
+ * How many Wounds a creature carries before it goes down.
+ *
+ * Base is the book's three for a Wild Card and none for an Extra — an Extra
+ * drops at its first Wound. Size adds on top: Large +1, Huge +2, Gargantuan
+ * +3, which is what lets a Huge Extra soak two Wounds before dropping.
+ *
+ * A sheet may override the whole thing with `maxWoundsOverride`, so a DM can
+ * hand a boss five Wounds without pretending it is Gargantuan. Zero or blank
+ * means "no override" rather than "no Wounds", because a blank number field
+ * reads as 0 and nobody means "dies instantly" by leaving a box empty.
+ */
+export function swadeWoundCap(opts: {
+  wildCard: boolean;
+  size: number;
+  override?: number;
+}): number {
+  if (opts.override && opts.override > 0) return Math.floor(opts.override);
+  return (opts.wildCard ? 3 : 0) + extraWoundsFor(opts.size);
+}

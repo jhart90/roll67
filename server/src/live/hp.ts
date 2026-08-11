@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, conditionsOf, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, conditionsOf, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -353,6 +353,11 @@ function applySwadeDamage(
     alreadyShaken: conditionsOf(character.sheet).includes('shaken'),
     wildCard,
     currentWounds: num(character.sheet, 'wounds', 0),
+    maxWounds: swadeWoundCap({
+      wildCard,
+      size: num(character.sheet, 'size', 0),
+      override: num(character.sheet, 'maxWoundsOverride', 0),
+    }),
   });
   if (!out.shaken) return { character, note: ` — ${out.summary}` };
 
@@ -510,7 +515,12 @@ export function applySwadeWoundHeal(
   if (woundsHealed > 0) patch.wounds = woundsAfter;
   if (wasShaken) patch.conditions = conditionsOf(cur.sheet).filter((c) => c !== 'shaken');
   // Healing below the incapacitation line stands a Wild Card back up.
-  if (woundsHealed > 0 && woundsAfter <= MAX_WOUNDS && conditionsOf(cur.sheet).includes('incapacitated')) {
+  const healCap = swadeWoundCap({
+    wildCard: cur.sheet.wildCard !== false,
+    size: num(cur.sheet, 'size', 0),
+    override: num(cur.sheet, 'maxWoundsOverride', 0),
+  });
+  if (woundsHealed > 0 && woundsAfter <= healCap && conditionsOf(cur.sheet).includes('incapacitated')) {
     patch.conditions = (Array.isArray(patch.conditions) ? patch.conditions as string[] : conditionsOf(cur.sheet))
       .filter((c) => c !== 'incapacitated' && c !== 'shaken' && c !== 'bleeding');
   }

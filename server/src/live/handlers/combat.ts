@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, swadeWoundCap, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
@@ -1514,6 +1514,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
               alreadyShaken: conditionsOf(targetChar.sheet).includes('shaken'),
               wildCard: targetChar.sheet.wildCard !== false,
               currentWounds: num(targetChar.sheet, 'wounds', 0),
+              maxWounds: swadeWoundCap({
+                wildCard: targetChar.sheet.wildCard !== false,
+                size: num(targetChar.sheet, 'size', 0),
+                override: num(targetChar.sheet, 'maxWoundsOverride', 0),
+              }),
             });
             defenseTag = ` (Toughness ${toughness})`;
             verdictRow = `${out.verdict} (${-delta} vs. Toughness ${toughness})`;
@@ -2445,7 +2450,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (removed > 0) patch.wounds = woundsAfter;
     let conds = conditionsOf(ch.sheet);
     if (removed === offer.wounds && removed > 0) conds = conds.filter((c) => c !== 'shaken');
-    if (woundsAfter <= MAX_WOUNDS) conds = conds.filter((c) => c !== 'incapacitated' && c !== 'bleeding');
+    // Soaking back under the cap stands you up again — the cap, not a flat 3,
+    // or a Huge creature would stay down at 4 Wounds it can actually carry.
+    const soakCap = swadeWoundCap({
+      wildCard: ch.sheet.wildCard !== false,
+      size: num(ch.sheet, 'size', 0),
+      override: num(ch.sheet, 'maxWoundsOverride', 0),
+    });
+    if (woundsAfter <= soakCap) conds = conds.filter((c) => c !== 'incapacitated' && c !== 'bleeding');
     patch.conditions = conds;
     persistSheet(io, d.campaignId, ch, patch);
     const text = removed > 0

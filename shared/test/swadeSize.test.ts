@@ -85,3 +85,35 @@ describe('bestiary sizes', () => {
     expect(sizeAttackMod(0, huge)).toBe(4);
   });
 });
+
+import { swadeWoundCap } from '../src/systems/swadeSize.js';
+import { swadeDamageOutcome } from '../src/systems/swadeDamage.js';
+
+describe('wound cap from Size', () => {
+  it('is the book three for a normal Wild Card, none for an Extra', () => {
+    expect(swadeWoundCap({ wildCard: true, size: 0 })).toBe(3);
+    expect(swadeWoundCap({ wildCard: false, size: 0 })).toBe(0);
+  });
+
+  it('adds the band bonus on top', () => {
+    expect(swadeWoundCap({ wildCard: true, size: 5 })).toBe(4);   // Large
+    expect(swadeWoundCap({ wildCard: true, size: 9 })).toBe(5);   // Huge
+    expect(swadeWoundCap({ wildCard: false, size: 9 })).toBe(2);  // Huge Extra
+    expect(swadeWoundCap({ wildCard: true, size: 14 })).toBe(6);  // Gargantuan
+  });
+
+  it('lets an override win outright', () => {
+    expect(swadeWoundCap({ wildCard: false, size: 0, override: 5 })).toBe(5);
+  });
+
+  // A blank number field reads as 0, and nobody means "dies instantly" by it.
+  it('treats a blank override as no override', () => {
+    expect(swadeWoundCap({ wildCard: true, size: 0, override: 0 })).toBe(3);
+  });
+
+  it('keeps a Huge Extra standing through wounds that would drop a normal one', () => {
+    const opts = { alreadyShaken: false, wildCard: false, currentWounds: 1 };
+    expect(swadeDamageOutcome(9, 5, opts).incapacitated).toBe(true);
+    expect(swadeDamageOutcome(9, 5, { ...opts, maxWounds: 2 }).incapacitated).toBe(false);
+  });
+});

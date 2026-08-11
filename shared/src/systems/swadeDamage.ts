@@ -20,7 +20,7 @@ export interface SwadeHitResult {
   shaken: boolean;
   /** Wounds dealt by THIS hit (raises, plus the double-Shaken wound). */
   woundsDealt: number;
-  /** Total wounds on the target after the hit, capped at MAX_WOUNDS + 1. */
+  /** Total wounds on the target after the hit, capped one past the cap. */
   woundsAfter: number;
   incapacitated: boolean;
   /** Chat-ready description of what the hit did. */
@@ -37,8 +37,19 @@ export interface SwadeHitResult {
 export function swadeDamageOutcome(
   damageTotal: number,
   toughness: number,
-  opts: { alreadyShaken: boolean; wildCard: boolean; currentWounds: number },
+  opts: {
+    alreadyShaken: boolean;
+    wildCard: boolean;
+    currentWounds: number;
+    /** How many Wounds this creature can carry before it goes down. Defaults
+     *  to the book's 3 for a Wild Card and 0 for an Extra (any Wound drops
+     *  them). Size raises it — see swadeWoundCap. */
+    maxWounds?: number;
+  },
 ): SwadeHitResult {
+  // An Extra's cap is 0: the first Wound takes them out. A Huge Extra's is 2,
+  // which is the whole point of threading this through.
+  const cap = opts.maxWounds ?? (opts.wildCard ? MAX_WOUNDS : 0);
   const margin = damageTotal - toughness;
   if (margin < 0) {
     return {
@@ -51,8 +62,8 @@ export function swadeDamageOutcome(
   // A success with no raise Shakes — and re-Shaking someone already Shaken
   // with damage upgrades to a Wound.
   const woundsDealt = raises > 0 ? raises : (opts.alreadyShaken ? 1 : 0);
-  const woundsAfter = Math.min(opts.currentWounds + woundsDealt, MAX_WOUNDS + 1);
-  const incapacitated = opts.wildCard ? woundsAfter > MAX_WOUNDS : woundsDealt > 0;
+  const woundsAfter = Math.min(opts.currentWounds + woundsDealt, cap + 1);
+  const incapacitated = woundsAfter > cap;
 
   const verdict = woundsDealt > 0
     ? `${woundsDealt} Wound${woundsDealt === 1 ? '' : 's'}`

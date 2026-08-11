@@ -13,7 +13,7 @@ import {
   fmtMod, num, rows, str,
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
-import { scaleBand } from './swadeSize.js';
+import { scaleBand, swadeWoundCap } from './swadeSize.js';
 import { conditionsOf, DAMAGE_TYPES } from './effects.js';
 
 export const ATTRIBUTES_SWADE = [
@@ -355,6 +355,8 @@ const identityFields: FieldDef[] = [
   // Toughness bonus, it decides the Scale band that modifies attacks either
   // way, and past Size 4 it adds Wounds. 0 is an adult human.
   { id: 'size', label: 'Size', type: 'number', width: 'sixth', default: 0 },
+  // Blank/0 = derive from Wild Card status and Size. Set it to override.
+  { id: 'maxWoundsOverride', label: 'Wound cap', type: 'number', width: 'sixth', default: 0 },
 ];
 
 const attributeFields: FieldDef[] = ATTRIBUTES_SWADE.map((a) => ({
@@ -615,6 +617,9 @@ export const swade: SystemSchema = {
     const band = scaleBand(size);
     out.size = `${band.label} · Scale ${band.scale >= 0 ? '+' : '−'}${Math.abs(band.scale)}`
       + (band.extraWounds ? ` · +${band.extraWounds} Wound${band.extraWounds === 1 ? '' : 's'}` : '');
+    out.maxWoundsOverride = `carries ${swadeWoundCap({
+      wildCard: sheet.wildCard !== false, size, override: num(sheet, 'maxWoundsOverride', 0),
+    })} Wound(s)`;
     out.parry = swadeParry(sheet);
     out.toughness = swadeToughness(sheet);
     out.toughnessRanged = swadeToughness(sheet) + swadeRangedArmor(sheet);

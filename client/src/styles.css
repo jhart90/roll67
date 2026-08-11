@@ -930,6 +930,20 @@ button.link:hover { text-decoration: underline; }
 .chat-time { font-size: 10px; color: var(--text-dim); margin-left: auto; }
 .chat-text { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
 
+/* A sheet card posted into the log. It reuses .sheet-card wholesale, so it
+   stays in step with the sheet by construction rather than by a second copy
+   of the same rules. Only the differences live here: the chat column is
+   narrower than the sheet's card grid, and a posted card is inert — no
+   controls, so no hover affordance. */
+.chat-card {
+  margin-top: 3px;
+  background: var(--panel);
+  cursor: default;
+}
+.chat-card .sc-title { font-size: 12.5px; }
+.chat-card .sc-chips { gap: 3px; }
+.chat-card .sc-notes { font-size: 10.5px; }
+
 .roll-card {
   background: var(--panel-2);
   border: 1px solid var(--border);

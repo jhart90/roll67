@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
   AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
-  type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
+  type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef, type SheetCard,
 } from 'shared';
 import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
 import { intents, useGameStore, CALLED_SHOT_PENDING } from '../store/game';
@@ -346,7 +346,7 @@ function ListEditor({
   onEquipChange?: (itemName: string, verbLabel: string, on: boolean) => void;
   /** Put this card in the chat log — its name, its chips, and its notes.
    *  Absent for sections where a card has nothing worth reading out. */
-  onPostCard?: (name: string, chips: string[], notes: string[]) => void;
+  onPostCard?: (card: SheetCard) => void;
 }) {
   const rows = Array.isArray(sheet[section.id]) ? (sheet[section.id] as SheetData[]) : [];
   // Index of the card whose pencil is open (full editor), or null.
@@ -561,7 +561,13 @@ function ListEditor({
                   <button
                     className="link sc-post"
                     title="Show this card in chat, so the table can see what it is"
-                    onClick={() => onPostCard(String(row.name || nameFallback), chips.map((c) => c.text), notes)}
+                    onClick={() => onPostCard({
+                      name: String(row.name || nameFallback),
+                      chips: chips.map((c) => ({ text: c.text, tone: c.tone })),
+                      notes,
+                      // Equipped kit reads green on the sheet; keep that in chat.
+                      ...(isEquipped ? { theme: 'card-good' } : SECTION_THEME[section.id] ? { theme: SECTION_THEME[section.id] } : {}),
+                    })}
                   >
                     🗨
                   </button>
@@ -636,7 +642,7 @@ function Section({
   onEditImage?: (fieldId: string) => void;
   inheritedColor?: string;
   onEquipChange?: (itemName: string, verbLabel: string, on: boolean) => void;
-  onPostCard?: (name: string, chips: string[], notes: string[]) => void;
+  onPostCard?: (card: SheetCard) => void;
 }) {
   return (
     <section className="sheet-section">
@@ -1022,10 +1028,9 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
    * chat line. What the card already shows, in the one place everybody is
    * looking — rather than the owner describing their own gear from memory.
    */
-  function postCard(name: string, chips: string[], notes: string[]) {
+  function postCard(card: SheetCard) {
     if (!character) return;
-    const detail = [...chips, ...notes].map((t) => t.trim()).filter(Boolean).join(' · ');
-    intents.chat(`🗨 ${character.name} — ${name}${detail ? `: ${detail}` : ''}`);
+    intents.postSheetCard(character.id, card);
   }
 
   function announceEquip(itemName: string, verbLabel: string, on: boolean) {

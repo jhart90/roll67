@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, blastSoundClip, blastSoundVolume,
+  type FearSource, type SheetCard, blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
@@ -1599,6 +1599,10 @@ export const intents = {
   requestSave: (p: { tokenIds: string[]; saveId: string; dc: number; damageExpr?: string; onSave: 'half' | 'negate'; damageType?: string; label?: string }) => {
     jumpToChat();
     socket.emit(C2S.REQUEST_SAVE, p);
+  },
+  postSheetCard: (characterId: string, card: SheetCard) => {
+    jumpToChat();
+    socket.emit(C2S.POST_SHEET_CARD, { characterId, card });
   },
   requestFear: (p: { tokenIds: string[]; fearPenalty: number; source: FearSource; label?: string }) => {
     jumpToChat();

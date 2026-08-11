@@ -4,7 +4,7 @@ import {
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
   type ModerateMessagePayload, type ReorderMacrosPayload, type RollStatRow, type RollStatsGetPayload,
   type RollStatsUserBlock, type SaveMacroPayload,
-  type SheetData, type SheetRollPayload, type UndoEntry,
+  sanitizeCard, type SheetData, type SheetRollPayload, type UndoEntry, type PostSheetCardPayload,
 } from 'shared';
 import { campaigns, characters, chat, macros, redactChat, rollStats, tokens } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
@@ -54,6 +54,38 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     handleChatText(io, socket, d.campaignId, d.userId, d.username, d.role, String(text ?? '').trim(), 0);
   }, 'CHAT'));
+
+  /**
+   * Show a sheet card in the log. The card travels structured so the chat
+   * renders the card itself; `text` carries the same facts flattened, as the
+   * fallback for search and for any client that can't draw one.
+   *
+   * Everything is re-derived or clamped here rather than trusted: the card is
+   * a client-authored object, and it lands in a log everyone reads.
+   */
+  socket.on(C2S.POST_SHEET_CARD, safe(socket, ({ characterId, card }: PostSheetCardPayload) => {
+    const d = requireCampaign(socket);
+    const character = characters.byId(characterId);
+    if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
+    if (d.role !== 'dm' && character.ownerUserId !== d.userId) {
+      emitError(socket, 'You can only post cards from your own sheet.');
+      return;
+    }
+    const clean = sanitizeCard(card);
+    if (!clean) { emitError(socket, 'Nothing to post.'); return; }
+    const flat = [...clean.chips.map((c) => c.text), ...clean.notes].join(' · ');
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId,
+      fromName: d.username,
+      fromCharacter: character.name, characterId: character.id,
+      kind: 'say',
+      text: `🗨 ${clean.name}${flat ? `: ${flat}` : ''}`,
+      card: clean,
+      roll: null,
+      recipients: null,
+    });
+    deliver(io, d.campaignId, msg);
+  }, 'POST_SHEET_CARD'));
 
   socket.on(C2S.SHEET_ROLL, safe(socket, ({ characterId, rollableId, adv }: SheetRollPayload) => {
     const d = requireCampaign(socket);

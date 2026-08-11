@@ -2,7 +2,7 @@ import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
-  Counter, RollableTable, RollBreakdown, Role, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
+  Counter, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
 import { isCounterPosition, statEntriesFromDice, type AceStyle, type DieRoll, type RollStatRow } from 'shared';
 import { db, newId, now, stmt } from './db.js';
@@ -1148,12 +1148,13 @@ export const rollableTables = {
 interface ChatRow {
   id: number; user_id: string | null; from_name: string; from_character: string | null; action_name: string | null; outcome_note: string | null; kind: ChatKind; text: string;
   roll_json: string | null; recipients_json: string | null; hidden: number; created_at: number;
+  card_json: string | null;
 }
 
 /** Redact a hidden message for non-DM recipients (DM sees the original). */
 export function redactChat(msg: ChatMessage, isDm: boolean): ChatMessage {
   if (!msg.hidden || isDm) return msg;
-  return { ...msg, text: 'The DM has hidden this message.', roll: null, recipients: null };
+  return { ...msg, text: 'The DM has hidden this message.', roll: null, recipients: null, card: null };
 }
 
 function toChatMsg(r: ChatRow): ChatMessage {
@@ -1170,6 +1171,7 @@ function toChatMsg(r: ChatRow): ChatMessage {
     recipients: r.recipients_json ? safeParse<string[] | null>(r.recipients_json, null) : null,
     at: r.created_at,
     hidden: r.hidden === 1,
+    ...(r.card_json ? { card: safeParse<ChatMessage['card']>(r.card_json, null) } : {}),
   };
 }
 
@@ -1390,6 +1392,8 @@ export const chat = {
     /** Stats-only override for whose ACCOUNT made the roll — for cards posted
      *  by one user but rolled by another's character (a target's save). */
     statsUserId?: string | null;
+    /** A sheet card to render in place of `text`. */
+    card?: SheetCard | null;
   }, undo?: unknown): ChatMessage {
     const at = now();
     // Every roll that lands in chat feeds the lifetime stats, credited to
@@ -1405,14 +1409,15 @@ export const chat = {
       rollStats.record(campaignId, uid, chId, msg.roll.dice);
     }
     const info = stmt(
-      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
     ).run(
       campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null,
       msg.actionName ?? null, msg.outcomeNote ?? null, msg.kind, msg.text,
       msg.roll ? JSON.stringify(msg.roll) : null,
       msg.recipients ? JSON.stringify(msg.recipients) : null,
       undo ? JSON.stringify(undo) : null,
+      msg.card ? JSON.stringify(msg.card) : null,
       at,
     );
     // Read the row back rather than hand-building the return value. The

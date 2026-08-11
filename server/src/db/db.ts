@@ -94,6 +94,8 @@ ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 ensureColumn('chat_messages', 'from_character', 'from_character TEXT');
 ensureColumn('chat_messages', 'action_name', 'action_name TEXT');
 ensureColumn('chat_messages', 'outcome_note', 'outcome_note TEXT');
+// A sheet card posted into the log, rendered as the card rather than a sentence.
+ensureColumn('chat_messages', 'card_json', 'card_json TEXT');
 // SWADE colours dice by their role in the roll rather than by die size, so it
 // gets its own three-slot palette. Null in any slot falls back to the default.
 ensureColumn('users', 'dice_trait_color', 'dice_trait_color TEXT');

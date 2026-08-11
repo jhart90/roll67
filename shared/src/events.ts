@@ -66,6 +66,7 @@ export const C2S = {
   DEATH_SAVE: 'deathSave',
   REQUEST_SAVE: 'requestSave',
   REQUEST_FEAR: 'requestFear',
+  POST_SHEET_CARD: 'postSheetCard',
   AOE_PREVIEW: 'aoePreview',
   CAST_AOE: 'castAoe',
   TARGET_PREVIEW: 'targetPreview',
@@ -470,6 +471,12 @@ export interface RequestSavePayload {
   onSave: 'half' | 'negate';
   damageType?: string;
   label?: string;
+}
+
+/** Show a character-sheet card in the chat log, as the card itself. */
+export interface PostSheetCardPayload {
+  characterId: string;
+  card: import('./types.js').SheetCard;
 }
 
 /** DM calls for a SWADE Fear check: a Spirit roll at the creature's Fear

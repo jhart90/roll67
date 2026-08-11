@@ -426,6 +426,28 @@ export interface RollBreakdown {
   iron?: { idx: number; commit: string };
 }
 
+/**
+ * A character-sheet card posted into the chat log.
+ *
+ * Carried structured rather than flattened into a sentence: a weapon's stats
+ * are a dozen short facts, and "Shooting · 2d6!+1 · kinetic · Range ft 60 · …"
+ * is a wall of text that nobody reads mid-fight. The chat log renders this
+ * with the card's own styling, minus the controls — there is nothing on a
+ * posted card to tick, edit or reorder.
+ */
+export interface SheetCard {
+  /** The item's name — the card's title. */
+  name: string;
+  /** Chips in the order the card shows them, each with the tone that
+   *  colours it (see ChipTone in the sheet renderer). */
+  chips: { text: string; tone: string }[];
+  /** Free-text lines below the chips. */
+  notes: string[];
+  /** Card theme: 'card-good' (edges), 'card-bad' (hindrances),
+   *  'card-info' (racial traits). Absent for a plain card. */
+  theme?: string;
+}
+
 export interface ChatMessage {
   id: number;
   kind: ChatKind;
@@ -446,6 +468,9 @@ export interface ChatMessage {
   at: number;
   /** DM hid this roll: players see a placeholder; the DM sees the original. */
   hidden?: boolean;
+  /** A sheet card shown in the log instead of `text` (which stays as the
+   *  plain-text fallback for search and for anything that can't render it). */
+  card?: SheetCard | null;
 }
 
 export interface Macro {

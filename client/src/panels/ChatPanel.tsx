@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Character, ChatMessage, DieRoll, MemberInfo, TokenView } from 'shared';
+import type { Character, ChatMessage, DieRoll, MemberInfo, SheetCard, TokenView } from 'shared';
 import { contentForSystem, num, swadeSnakeEyes } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
@@ -378,7 +378,30 @@ function Message({ msg, isDm, hl, onMenu }: {
       </div>
       {playerHidden
         ? <div className="chat-text hidden-text">The DM has hidden this message.</div>
-        : msg.roll ? <RollCard msg={msg} hl={hl} /> : <div className="chat-text"><Highlighted text={msg.text} hl={hl} /></div>}
+        : msg.card ? <PostedCard card={msg.card} />
+          : msg.roll ? <RollCard msg={msg} hl={hl} /> : <div className="chat-text"><Highlighted text={msg.text} hl={hl} /></div>}
+    </div>
+  );
+}
+
+/**
+ * A sheet card as it appears in the log: the same title, chips and notes the
+ * card shows, drawn with the card's own styling and none of its controls.
+ * There is nothing here to tick, edit, reorder or post — a posted card is a
+ * statement about what someone is carrying, not a copy of their sheet.
+ */
+function PostedCard({ card }: { card: SheetCard }) {
+  return (
+    <div className={`sheet-card chat-card${card.theme ? ` ${card.theme}` : ''}`}>
+      <div className="sheet-card-head">
+        <span className="sc-title">{card.name}</span>
+      </div>
+      {card.chips.length > 0 && (
+        <div className="sc-chips">
+          {card.chips.map((c, i) => <span key={i} className={`sc-chip tone-${c.tone}`}>{c.text}</span>)}
+        </div>
+      )}
+      {card.notes.map((n, i) => <div key={i} className="sc-notes">{n}</div>)}
     </div>
   );
 }

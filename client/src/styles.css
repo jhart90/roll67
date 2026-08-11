@@ -3046,3 +3046,8 @@ th > .term { border-bottom-style: dotted; }
   filter: none; opacity: 1;
   background: var(--accent); border-color: var(--accent);
 }
+
+/* "Show this card in chat", sitting just left of the card's pencil. Quiet
+   until hovered, like the pencil — neither should compete with the card. */
+.sc-post { opacity: 0.5; padding: 0 4px; font-size: 13px; }
+.sc-post:hover { opacity: 1; text-decoration: none; }

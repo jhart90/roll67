@@ -180,6 +180,17 @@ function attackHasRider(row: SheetData): boolean {
   return Boolean(str(row, 'save', '') || str(row, 'condition', '') || str(row, 'aoeShape', ''));
 }
 
+/**
+ * Card sections that get a "show this in chat" button: the kit and the
+ * character traits — the things a table asks each other about mid-session.
+ * Spells and powers are left out; those already have their own roll buttons,
+ * which post far more than a description.
+ */
+const POSTABLE_SECTIONS = new Set([
+  'attacks', 'armor', 'inventory', 'cyberware',
+  'edges', 'hindrances', 'racialTraits', 'features', 'foci',
+]);
+
 /** Sections that stay a compact table: skill lists are die ratings the table
  *  flips through constantly mid-session — cards would slow that down. */
 const TABLE_SECTIONS = new Set(['skills']);
@@ -314,7 +325,7 @@ function riderSummary(row: SheetData): string {
 const RIDER_BTN_TITLE = 'Save / condition / AoE — rider effects this attack forces on its target (e.g. Vigor roll or be Stunned, a cone template)';
 
 function ListEditor({
-  section, system, sheet, readOnly, onPatch, onEquipChange,
+  section, system, sheet, readOnly, onPatch, onEquipChange, onPostCard,
 }: {
   section: ListSection;
   system: GameSystem;
@@ -323,6 +334,9 @@ function ListEditor({
   onPatch: (patch: SheetData) => void;
   /** Announce a kit change at the table (equipping is public information). */
   onEquipChange?: (itemName: string, verbLabel: string, on: boolean) => void;
+  /** Put this card in the chat log — its name, its chips, and its notes.
+   *  Absent for sections where a card has nothing worth reading out. */
+  onPostCard?: (name: string, chips: string[], notes: string[]) => void;
 }) {
   const rows = Array.isArray(sheet[section.id]) ? (sheet[section.id] as SheetData[]) : [];
   // Index of the card whose pencil is open (full editor), or null.
@@ -493,6 +507,15 @@ function ListEditor({
                 {hasDetail && attackHasRider(row) && (
                   <span className="sc-chip sc-rider" title={RIDER_BTN_TITLE}>⚡</span>
                 )}
+                {onPostCard && (
+                  <button
+                    className="link sc-post"
+                    title="Show this card in chat, so the table can see what it is"
+                    onClick={() => onPostCard(String(row.name || nameFallback), chips.map((c) => c.text), notes)}
+                  >
+                    🗨
+                  </button>
+                )}
                 {!readOnly && (
                   <button className="link sc-pencil" title="Edit all details" onClick={() => setEditIdx(i)}>✎</button>
                 )}
@@ -551,7 +574,7 @@ function DerivedBlocks({
 }
 
 function Section({
-  section, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor, onEquipChange,
+  section, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor, onEquipChange, onPostCard,
 }: {
   section: SectionDef;
   system: GameSystem;
@@ -562,6 +585,7 @@ function Section({
   onEditImage?: (fieldId: string) => void;
   inheritedColor?: string;
   onEquipChange?: (itemName: string, verbLabel: string, on: boolean) => void;
+  onPostCard?: (name: string, chips: string[], notes: string[]) => void;
 }) {
   return (
     <section className="sheet-section">
@@ -574,7 +598,11 @@ function Section({
         </div>
       )}
       {section.kind === 'list' && (
-        <ListEditor section={section} system={system} sheet={sheet} readOnly={readOnly} onPatch={onPatch} onEquipChange={onEquipChange} />
+        <ListEditor
+          section={section} system={system} sheet={sheet} readOnly={readOnly} onPatch={onPatch}
+          onEquipChange={onEquipChange}
+          onPostCard={POSTABLE_SECTIONS.has(section.id) ? onPostCard : undefined}
+        />
       )}
       {section.kind === 'derived' && <DerivedBlocks section={section} system={system} derived={derived} />}
     </section>
@@ -893,6 +921,17 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
 
   /** Kit changes are table-visible: say so in chat, in the item's own words
    *  ("Wielded" for a weapon, "Worn" for armour, "Equipped" for gear). */
+  /**
+   * Read a card out to the table: its name, its chips, and its notes, on one
+   * chat line. What the card already shows, in the one place everybody is
+   * looking — rather than the owner describing their own gear from memory.
+   */
+  function postCard(name: string, chips: string[], notes: string[]) {
+    if (!character) return;
+    const detail = [...chips, ...notes].map((t) => t.trim()).filter(Boolean).join(' · ');
+    intents.chat(`🗨 ${character.name} — ${name}${detail ? `: ${detail}` : ''}`);
+  }
+
   function announceEquip(itemName: string, verbLabel: string, on: boolean) {
     if (!character) return;
     const verb = on ? verbLabel.toLowerCase() : `un${verbLabel.toLowerCase()}`;
@@ -978,6 +1017,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
                   fieldId === 'tokenImage' ? `Token image — ${character.name}` : `Portrait — ${character.name}`)}
                 inheritedColor={inheritedColor}
                 onEquipChange={announceEquip}
+                onPostCard={postCard}
               />
             ))}
 

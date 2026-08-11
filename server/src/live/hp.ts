@@ -18,8 +18,8 @@ function concEffectsOf(sheet: SheetData): ConcEffect[] {
   return Array.isArray(v) ? (v as ConcEffect[]) : [];
 }
 
-export function postStatusLine(io: Server, campaignId: string, text: string): void {
-  const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'system', text, roll: null, recipients: null });
+export function postStatusLine(io: Server, campaignId: string, text: string, threadId?: number): void {
+  const msg = chat.add(campaignId, { userId: null, fromName: 'System', kind: 'system', text, roll: null, recipients: null, threadId });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 

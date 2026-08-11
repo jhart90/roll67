@@ -242,7 +242,11 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') { emitError(socket, 'Only the DM can moderate the chat.'); return; }
     const existing = chat.byId(messageId);
     if (!existing) return;
-    chat.setHidden(messageId, action !== 'unhide');
+    // A cast card owns a whole resolution — the activation roll, every save,
+    // the damage, every impact line. Hiding it hides all of them, because
+    // hiding the announcement and leaving its consequences on screen tells a
+    // story that no longer happened.
+    const touched = chat.setThreadHidden(messageId, action !== 'unhide');
     if (action === 'hideUndo') {
       const entries = chat.undoFor(messageId) as UndoEntry[] | null;
       if (Array.isArray(entries) && entries.length > 0) {
@@ -250,9 +254,12 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
         chat.clearUndo(messageId);
       }
     }
-    const updated = chat.byId(messageId)!;
-    for (const s of campaignSockets(io, d.campaignId)) {
-      s.emit(S2C.CHAT_UPDATED, { msg: redactChat(updated, sdata(s).role === 'dm') });
+    for (const id of touched) {
+      const updated = chat.byId(id);
+      if (!updated) continue;
+      for (const s of campaignSockets(io, d.campaignId)) {
+        s.emit(S2C.CHAT_UPDATED, { msg: redactChat(updated, sdata(s).role === 'dm') });
+      }
     }
   }, 'MODERATE_MESSAGE'));
 

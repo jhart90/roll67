@@ -652,7 +652,7 @@ interface GroupSaveSpec {
  */
 function activatePower(
   io: Server, campaignId: string, userId: string, username: string, socket: Socket,
-  actor: Character, action: CombatAction, undo: UndoEntry[],
+  actor: Character, action: CombatAction, undo: UndoEntry[], threadId?: number,
 ): { actor: Character; raise: boolean } | null {
   const cost = Math.max(0, action.ppCost ?? 0);
   const blocked = castingBlocker(conditionsOf(actor.sheet));
@@ -700,11 +700,12 @@ function activatePower(
     outcomeNote: `${out.summary} ${out.ppSpent} PP spent.`,
     roll: { ...br, outcome: out.activated ? 'success' as const : 'failure' as const },
     recipients: null,
+    threadId,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 
   if (out.backlash) {
-    postStatusLine(io, campaignId, `${actor.name} suffers Backlash — a level of Fatigue, and every power they had running ends.`);
+    postStatusLine(io, campaignId, `${actor.name} suffers Backlash — a level of Fatigue, and every power they had running ends.`, threadId);
   }
   return out.activated ? { actor: updated, raise: out.verdict === 'raise' } : null;
 }
@@ -826,7 +827,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
             // "X is Incapacitated" with nothing saying why.
             const { note } = applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw');
             const said = note.replace(/^\s*—\s*/, '').trim();
-            if (said) postStatusLine(io, spec.campaignId, `${fresh.name}: ${said}`);
+            if (said) postStatusLine(io, spec.campaignId, `${fresh.name}: ${said}`, spec.leadMessageId);
           }
         } else {
           const live = tokens.byId(tok.id);
@@ -846,6 +847,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
       text: `${spec.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
+      threadId: spec.leadMessageId,
     }, !spec.leadMessageId && undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
     const settleMs = diceSettleDelayMs(dmg.dice);
@@ -898,6 +900,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       // The save is the TARGET's roll — their stats, not the caster's.
       characterId: ch?.id ?? null, statsUserId: ch?.ownerUserId ?? null,
       roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
+      threadId: spec.leadMessageId,
     });
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
 
@@ -2246,11 +2249,23 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // caster paying for a power the log says never happened. They ride on the
     // cast card below, with everything the resolution goes on to do.
     const costUndo: UndoEntry[] = [];
+    // The cast card leads. It has to be posted BEFORE the activation roll,
+    // not after: it is the announcement the roll belongs to, and a log that
+    // shows the roll first reads backwards. It also has to exist before the
+    // roll so a FAILED activation is still something the DM can undo.
+    let leadMessageId: number | undefined;
     if (action.source === 'power' && actor.system === 'swade') {
+      leadMessageId = postCastCard(
+        io, d.campaignId, d.userId, d.username, actor, action, action.label, action.ppCost ?? 0,
+      );
       // Same gate as a single-target power: the template does not get dropped
       // until the caster has rolled their arcane skill and made TN 4.
-      const act = activatePower(io, d.campaignId, d.userId, d.username, socket, actor, action, costUndo);
-      if (!act) return;
+      const act = activatePower(io, d.campaignId, d.userId, d.username, socket, actor, action, costUndo, leadMessageId);
+      if (!act) {
+        // It fizzled, but a Power Point (and possibly Backlash) still landed.
+        if (costUndo.length > 0) chat.appendUndo(leadMessageId, costUndo);
+        return;
+      }
       actor = act.actor;
     } else if (action.source === 'power' && action.ppCost) {
       const pp = num(actor.sheet, 'pp', 0);
@@ -2387,17 +2402,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
         // rather than deriving one from the actor's spellcasting stat.
         const casterDc = action.fixedDc || Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
-        // Lead with the card, then resolve. It goes out before any roll so
-        // the log reads in the order things happen, and it inherits the cost
-        // already spent (Power Points, a spell slot) so undoing it refunds
-        // them along with everything the resolution goes on to do.
-        const leadMessageId = postCastCard(
+        // A power already posted its card above, before rolling to activate.
+        // Anything else (a breath weapon, a thrown template) gets one here —
+        // it still needs something for the DM to rewind.
+        const lead = leadMessageId ?? postCastCard(
           io, d.campaignId, d.userId, d.username, actor, action, castLabel, action.ppCost ?? 0,
         );
-        if (costUndo.length > 0) chat.appendUndo(leadMessageId, costUndo);
+        if (costUndo.length > 0) chat.appendUndo(lead, costUndo);
         runGroupSave(io, {
           campaignId: d.campaignId, userId: d.userId, username: d.username,
-          leadMessageId,
+          leadMessageId: lead,
           tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
           ...(evadeable ? { evasion: true } : {}),
           damageExpr, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),

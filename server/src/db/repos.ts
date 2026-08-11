@@ -1159,7 +1159,7 @@ export const rollableTables = {
 interface ChatRow {
   id: number; user_id: string | null; from_name: string; from_character: string | null; action_name: string | null; outcome_note: string | null; kind: ChatKind; text: string;
   roll_json: string | null; recipients_json: string | null; hidden: number; created_at: number;
-  card_json: string | null;
+  card_json: string | null; thread_id: number | null;
 }
 
 /** Redact a hidden message for non-DM recipients (DM sees the original). */
@@ -1405,6 +1405,8 @@ export const chat = {
     statsUserId?: string | null;
     /** A sheet card to render in place of `text`. */
     card?: SheetCard | null;
+    /** The cast card this message belongs to (see thread_id). */
+    threadId?: number | null;
   }, undo?: unknown): ChatMessage {
     const at = now();
     // Every roll that lands in chat feeds the lifetime stats, credited to
@@ -1420,8 +1422,8 @@ export const chat = {
       rollStats.record(campaignId, uid, chId, msg.roll.dice);
     }
     const info = stmt(
-      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, thread_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
     ).run(
       campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null,
       msg.actionName ?? null, msg.outcomeNote ?? null, msg.kind, msg.text,
@@ -1429,6 +1431,7 @@ export const chat = {
       msg.recipients ? JSON.stringify(msg.recipients) : null,
       undo ? JSON.stringify(undo) : null,
       msg.card ? JSON.stringify(msg.card) : null,
+      msg.threadId ?? null,
       at,
     );
     // Read the row back rather than hand-building the return value. The
@@ -1451,6 +1454,14 @@ export const chat = {
   undoFor(id: number): unknown {
     const r = stmt('SELECT undo_json FROM chat_messages WHERE id = ?').get(id) as { undo_json: string | null } | undefined;
     return r?.undo_json ? safeParse(r.undo_json, null) : null;
+  },
+  /** Hide (or unhide) every message belonging to one cast card, the card
+   *  itself included. Returns the ids touched so they can be rebroadcast. */
+  setThreadHidden(threadId: number, hidden: boolean): number[] {
+    stmt('UPDATE chat_messages SET hidden = ? WHERE id = ? OR thread_id = ?')
+      .run(hidden ? 1 : 0, threadId, threadId);
+    return (stmt('SELECT id FROM chat_messages WHERE id = ? OR thread_id = ?')
+      .all(threadId, threadId) as { id: number }[]).map((r) => r.id);
   },
   clearUndo(id: number): void {
     stmt('UPDATE chat_messages SET undo_json = NULL WHERE id = ?').run(id);

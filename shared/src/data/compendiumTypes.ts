@@ -81,6 +81,10 @@ export interface PowerData {
   aoe?: { shape: AoeShape; sizeFt?: number; sizeHexes?: number; widthFt?: number };
   /** SWADE: status condition the power inflicts (effects.ts CONDITIONS id). */
   condition?: string;
+  /** SWADE: the book's DUR column verbatim — "5", "Instant", "10m", "1H",
+   *  "Special". Round counts are clocked against initiative; the rest are
+   *  carried as text (see systems/swadeDuration.ts). */
+  duration?: string;
 }
 
 /**
@@ -458,6 +462,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           onSave: p.onSave ?? 'negate',
           ...(p.aoe ? { aoeShape: p.aoe.shape, aoeSize: p.aoe.sizeFt ?? 0, aoeHexes: p.aoe.sizeHexes ?? 0 } : { aoeShape: '', aoeSize: 0 }),
           condition: p.condition ?? '',
+          duration: p.duration ?? '',
         },
         label: `${entry.name} added to powers`,
       };

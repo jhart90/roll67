@@ -13,6 +13,7 @@ import {
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan,
+  durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -123,11 +124,70 @@ function combatantChar(state: InitiativeState, idx: number): Character | undefin
   return tok?.characterId ? characters.byId(tok.characterId) : undefined;
 }
 
+/** The powers currently running on a sheet, as the rules layer wants them. */
+function activePowersOf(sheet: SheetData): ActivePower[] {
+  return rows(sheet, 'activePowers')
+    .map((r) => ({ name: str(r, 'name', ''), rounds: num(r, 'rounds', 0), upkeep: num(r, 'upkeep', 0) }))
+    .filter((p) => p.name !== '' && p.rounds > 0);
+}
+
+/**
+ * Casting a power whose duration is a count of rounds starts the clock. Only
+ * round-based durations are filed here — 10 minutes or an hour is the table's
+ * business, not the initiative loop's. Recasting a power already running
+ * refreshes it rather than stacking a second copy, which is what the book's
+ * "starting a new one ends the old" amounts to for a single power.
+ */
+function startPowerDuration(
+  io: Server, campaignId: string, actor: Character,
+  action: { label: string; duration?: string; ppCost?: number }, undo: UndoEntry[],
+): Character {
+  const total = durationRounds(action.duration);
+  if (total === undefined) return actor;
+  const name = action.label.trim();
+  undo.push({ t: 'field', characterId: actor.id, key: 'activePowers', value: rows(actor.sheet, 'activePowers') });
+
+  const kept = activePowersOf(actor.sheet).filter((p) => p.name.toLowerCase() !== name.toLowerCase());
+  const next = [...kept, { name, rounds: total, upkeep: action.ppCost ?? 1 }];
+  const patch: SheetData = { activePowers: next };
+  const toggle = toggleFor(name);
+  if (toggle) {
+    undo.push({ t: 'field', characterId: actor.id, key: toggle, value: actor.sheet[toggle] ?? false });
+    patch[toggle] = true;
+  }
+
+  const out = persistSheet(io, campaignId, actor, patch);
+  postStatusLine(io, campaignId, `${actor.name} holds ${name} — ${durationLabel(action.duration)}.`);
+  return out;
+}
+
+/**
+ * End of the caster's turn: every running power loses a round, and the ones
+ * that hit zero drop off — clearing any sheet toggle they were driving so a
+ * lapsed Armor stops quietly adding Toughness.
+ */
+function expirePowerDurations(io: Server, campaignId: string, ch: Character): Character {
+  const active = activePowersOf(ch.sheet);
+  if (active.length === 0) return ch;
+  const { running, expired } = tickPowers(active);
+  if (expired.length === 0 && running.length === active.length) return ch;
+
+  const patch: SheetData = { activePowers: running };
+  for (const p of expired) {
+    const toggle = toggleFor(p.name);
+    if (toggle) patch[toggle] = false;
+  }
+  const out = persistSheet(io, campaignId, ch, patch);
+  for (const p of expired) postStatusLine(io, campaignId, `${ch.name}: ${p.name} runs out.`);
+  return out;
+}
+
 /**
  * End of a SWADE combatant's turn: Vulnerable and Distracted expire — unless
  * a condition that inflicts them (Stunned, Bound, Entangled) is still active.
  */
 function expireTurnConditions(io: Server, campaignId: string, ch: Character): void {
+  ch = expirePowerDurations(io, campaignId, ch);
   let conds = conditionsOf(ch.sheet);
   // An aim held all the way through the follow-up turn is lost — the bonus
   // had to ride the FIRST action ('fresh' means the aim was taken THIS turn
@@ -1109,6 +1169,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }
       undo.push({ t: 'field', characterId: actor.id, key: 'pp', value: pp });
       actor = persistSheet(io, d.campaignId, actor, { pp: pp - action.ppCost });
+      actor = startPowerDuration(io, d.campaignId, actor, action, undo);
     }
 
     // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;

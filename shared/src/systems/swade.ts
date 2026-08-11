@@ -542,10 +542,11 @@ const powersTab: SheetTab = {
       ],
     },
     {
-      // Self-buff powers with an ongoing stat effect: toggle while maintained
-      // (spend/track the PP by hand — durations aren't clocked). The effects
-      // are live: Armor/Protection raise Toughness, Deflection raises Parry,
-      // Smite adds +2 to wielded weapon damage.
+      // Self-buff powers with an ongoing stat effect. Casting one ticks its
+      // box and files it under Powers Running; the box clears itself when the
+      // duration lapses. Toggle by hand for anything the engine didn't cast.
+      // The effects are live: Armor/Protection raise Toughness, Deflection
+      // raises Parry, Smite adds +2 to wielded weapon damage.
       kind: 'fields', id: 'maintainedPowers', title: 'Maintained Powers (toggle while active; PP by hand)',
       fields: [
         { id: 'armorActive', label: 'Armor (+2 Toughness)', type: 'checkbox', width: 'sixth', default: false },
@@ -568,7 +569,23 @@ const powersTab: SheetTab = {
         { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', 'sphere', 'cone', 'line', 'cube'] },
         { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
         { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', 'shaken', 'distracted', 'vulnerable', 'entangled', 'bound', 'stunned', 'frightened', 'blinded', 'invisible', 'prone', 'unconscious'] },
+        // The book's DUR column. A bare number is a count of rounds and gets
+        // clocked when the power is cast; 10m / 1H / Instant / Special don't.
+        { id: 'duration', label: 'Duration', type: 'text', width: 'sixth' },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
+      ],
+    },
+    {
+      // Powers running right now, counting down. Casting a power whose
+      // duration is a round count files it here automatically; the count
+      // drops at the end of each of the caster's turns and the row clears
+      // itself when it runs out. Editable, so the DM can extend, cut short,
+      // or add something the engine didn't put here.
+      kind: 'list', id: 'activePowers', title: 'Powers Running (rounds left)',
+      columns: [
+        { id: 'name', label: 'Power', type: 'text', width: 'third' },
+        { id: 'rounds', label: 'Rounds left', type: 'number', width: 'sixth', default: 5 },
+        { id: 'upkeep', label: 'PP/round', type: 'number', width: 'sixth', default: 1 },
       ],
     },
     {

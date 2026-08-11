@@ -198,6 +198,7 @@ export function combatActions(character: Character): CombatAction[] {
         source: 'power',
         index: i,
         ppCost: Math.max(0, num(pw, 'cost', 1)),
+        ...(str(pw, 'duration', '') ? { duration: str(pw, 'duration', '') } : {}),
         ...(attackExpr ? { fixedTn: 4 } : {}),
         ...(healRoll ? { healsWounds: true as const } : {}),
         ...(save && effect === 'damage' ? { saveId: save, onSave } : {}),

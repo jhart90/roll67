@@ -247,6 +247,9 @@ const SWADE_SHEET: Record<string, string> = {
   'Protection (+2 Toughness)': 'The Protection power: while maintained, it grants +2 Toughness. Toggle it on for the duration.',
   'Deflection (+2 Parry)': 'The Deflection power: attacks against you suffer −2, tracked here as +2 Parry while maintained.',
   'Smite (+2 wielded dmg)': 'The Smite power: your wielded weapon deals +2 damage while maintained.',
+  Duration: 'How long the power lasts. A bare number is a count of rounds and gets clocked automatically when you cast it; 10m, 1H, Instant and Special are left to the table.',
+  'Rounds left': 'Rounds this power has still to run, counting the current one. It drops at the end of each of your turns and the power falls off at zero.',
+  'PP/round': 'Power Points to hold the power open for another round. Deducted by hand — the countdown is automatic, the upkeep is yours to pay.',
 };
 
 // ---------- D&D 5e ----------

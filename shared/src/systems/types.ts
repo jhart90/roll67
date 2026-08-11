@@ -109,6 +109,9 @@ export interface CombatAction {
   disciplineId?: string;
   /** SWADE: spends this many Power Points on use. */
   ppCost?: number;
+  /** SWADE: the power's DUR column. A round count starts a countdown on the
+   *  caster's sheet; anything else is left to the table. */
+  duration?: string;
   /** SWADE: armor piercing — reduces the target's ranged-armor soak. */
   ap?: number;
   /** SWADE: lobbed rather than fired (a grenade). Thrown weapons have no

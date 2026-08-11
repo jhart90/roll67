@@ -663,6 +663,18 @@ button.link:hover { text-decoration: underline; }
 }
 .sc-pencil { font-size: 13px; padding: 0 2px; opacity: 0.55; flex: none; }
 .sheet-card:hover .sc-pencil { opacity: 1; }
+
+/* Reorder grip. Stacked tight so the pair reads as one control and costs the
+   card head almost no width — the order of these cards is the order of the
+   actions in the right-hand pane, so it earns a permanent spot. */
+.sc-move { display: flex; flex-direction: column; gap: 0; flex: none; align-self: center; margin-right: 2px; }
+.sc-move button {
+  font-size: 8px; line-height: 8px; padding: 1px 3px; opacity: 0.35;
+  text-decoration: none; flex: none;
+}
+.sheet-card:hover .sc-move button { opacity: 0.75; }
+.sc-move button:hover:not(:disabled) { opacity: 1; text-decoration: none; }
+.sc-move button:disabled { opacity: 0.12; cursor: default; }
 .sc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .sc-chip {
   font-size: 11px; line-height: 1.4;

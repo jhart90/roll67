@@ -462,6 +462,45 @@ function ListEditor({
     setRows(rows.filter((_, j) => j !== i));
   }
 
+  /**
+   * Swap a card with its neighbour. The order of these rows is the order the
+   * right-hand action pane lists them in, so moving a weapon up here promotes
+   * its attack there — which is the whole point of being able to do it.
+   */
+  function moveRow(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= rows.length) return;
+    const next = rows.slice();
+    [next[i], next[j]] = [next[j]!, next[i]!];
+    // Keep the pencil on the card the user was editing, not on the slot.
+    if (editIdx === i) setEditIdx(j);
+    else if (editIdx === j) setEditIdx(i);
+    setRows(next);
+  }
+
+  /** The ▲▼ grip shown on every card when there is something to reorder. */
+  function moveGrip(i: number) {
+    if (readOnly || rows.length < 2) return null;
+    return (
+      <span className="sc-move">
+        <button
+          className="link" disabled={i === 0}
+          title="Move up — also moves it up the action list"
+          onClick={() => moveRow(i, -1)}
+        >
+          ▲
+        </button>
+        <button
+          className="link" disabled={i === rows.length - 1}
+          title="Move down — also moves it down the action list"
+          onClick={() => moveRow(i, 1)}
+        >
+          ▼
+        </button>
+      </span>
+    );
+  }
+
   const nameFallback = mainCols[0]?.label ?? 'Item';
 
   return (
@@ -473,6 +512,7 @@ function ListEditor({
             return (
               <div key={i} className="sheet-card sheet-card-edit">
                 <div className="sheet-card-head">
+                  {moveGrip(i)}
                   <span className="sc-title">✎ {String(row.name || nameFallback)}</span>
                   <span className="spacer" />
                   <button className="link" onClick={() => setEditIdx(null)}>done</button>
@@ -512,6 +552,7 @@ function ListEditor({
           return (
             <div key={i} className={`sheet-card${isEquipped ? ' card-good' : ''}${SECTION_THEME[section.id] ? ' ' + SECTION_THEME[section.id] : ''}`}>
               <div className="sheet-card-head">
+                {moveGrip(i)}
                 <span className="sc-title">{String(row.name || nameFallback)}</span>
                 <span className="spacer" />
                 {hasDetail && attackHasRider(row) && (

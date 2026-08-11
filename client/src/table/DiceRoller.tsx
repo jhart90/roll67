@@ -170,6 +170,7 @@ const ACE_STYLE_LABELS: Record<AceStyle, string> = {
   rainbow: 'Rainbow — a seven-colour arc encircling the die',
   smoke: 'Smoke — grey puffs billowing up and thinning out',
   water: 'Water — a splash crown, spreading ripples and falling droplets',
+  confetti: 'Confetti — a burst of coloured paper that flutters off the bottom of the screen',
 };
 
 /**

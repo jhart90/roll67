@@ -356,6 +356,17 @@ export const ACE_FLASH_MS = 750;
 export const ACE_READ_PAUSE_MS = 500;
 /** Total gap between one chained die landing and the next being thrown. */
 export const ACE_GAP_MS = ACE_FLASH_MS + ACE_READ_PAUSE_MS;
+
+/**
+ * How long a style's visual gets to finish, which is NOT the same as how long
+ * the table waits. Pacing is ACE_GAP_MS for every style; this only decides
+ * when to stop drawing. Confetti has to cross the whole screen to land, so it
+ * keeps fluttering while the next die is already in the air — which is what
+ * real confetti does.
+ */
+function aceEffectMs(style: AceStyle): number {
+  return style === 'confetti' ? 2800 : ACE_FLASH_MS;
+}
 /** Stagger between dice thrown in the same wave. */
 const WAVE_STAGGER_MS = 110;
 /**
@@ -917,6 +928,73 @@ function drawAceEffect(
     return;
   }
 
+  if (style === 'confetti') {
+    // A party popper going off inside the die: every piece is fired outward on
+    // its own heading, then gravity takes it and it flutters all the way down
+    // and off the bottom of the screen. Three things sell it as paper rather
+    // than as sparks — the outward push dies fast, each piece tumbles about
+    // its own axis (drawn as a rectangle squashed by the cosine of its spin,
+    // so it presents edge-on and flat by turns), and the fall is a slow sway
+    // rather than a straight drop.
+    const COLORS = [
+      '#ff4d6d', '#ffd166', '#06d6a0', '#4cc9f0', '#b388ff',
+      '#ff8fab', '#ffe66d', '#43e97b', '#5bc0eb', '#f72585',
+    ];
+    const PIECES = 74;
+    // How far down the piece still has to travel. Measured from the die to
+    // past the bottom edge, so they leave the screen rather than piling up on
+    // an invisible floor.
+    const fallDist = Math.max(ctx.canvas.height - cy, ctx.canvas.height * 0.5) + size * 6;
+
+    // The push outward is over almost at once; everything after it is falling.
+    const burst = easeOutCubic(Math.min(1, phase / 0.13));
+    const fallT = Math.max(0, (phase - 0.08) / 0.92);
+    // Starts from rest and settles to a near-constant drift, the way a light
+    // sheet of paper reaches terminal velocity within a few feet.
+    const fall = fallDist * (fallT * fallT * 0.34 + fallT * 0.66);
+
+    ctx.lineCap = 'butt';
+    for (let p = 0; p < PIECES; p++) {
+      // Deterministic per-piece jitter: same die, same confetti, every frame.
+      const a = (p / PIECES) * Math.PI * 2 + ((p * 37) % 13) * 0.11;
+      const spread = 0.55 + ((p * 17) % 9) / 9 * 0.9;
+      const reach = size * (1.6 + spread * 3.4);
+
+      // Sideways drift keeps going long after the burst, and each piece sways
+      // on its own clock — that scatter is what stops it reading as a fan.
+      const swayRate = 3.4 + ((p * 7) % 5) * 0.9;
+      const swayPhase = ((p * 23) % 17) * 0.37;
+      const sway = Math.sin(phase * swayRate * Math.PI + swayPhase) * size * (0.5 + ((p * 3) % 4) * 0.22);
+
+      const px = cx + Math.cos(a) * reach * burst + sway + Math.cos(a) * fall * 0.09;
+      // Pieces fired upward get to rise before gravity wins, so the cloud
+      // opens up before it comes down.
+      const py = cy + Math.sin(a) * reach * burst * 0.85 + fall;
+      if (py > ctx.canvas.height + size * 2) continue;   // already gone
+
+      // Tumble. cos() of the spin squashes the rectangle to nothing twice a
+      // turn, which is the whole trick: it looks like a flat sheet turning
+      // edge-on rather than a spinning brick.
+      const spin = phase * (5.5 + ((p * 11) % 6) * 1.7) * Math.PI + p;
+      const w = size * 0.30;
+      const h = size * 0.19;
+      const flat = Math.cos(spin);
+      // Only fade at the very end, and only for stragglers still on screen —
+      // confetti leaves by falling out of frame, not by dissolving.
+      ctx.globalAlpha = Math.min(1, (1 - phase) * 4) * (0.85 + 0.15 * Math.abs(flat));
+
+      ctx.save();
+      ctx.translate(px, py);
+      // Lean into the direction of travel so it flutters rather than slides.
+      ctx.rotate(Math.sin(spin * 0.5) * 0.9 + a * 0.15);
+      ctx.fillStyle = COLORS[p % COLORS.length];
+      ctx.fillRect(-w / 2, (-h / 2) * flat, w, Math.max(0.7, h * Math.abs(flat)));
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
   if (style === 'smoke') {
     // A dense bank of smoke bursting off the die in every direction, not a
     // wisp rising off the top. Three passes, back to front: a wide base cloud
@@ -1097,8 +1175,9 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number, onAce?
   // An aced die announces itself the moment it lands: a bright halo that
   // pulses while the bonus die is being readied, so the table can see
   // exactly which die exploded and why another is about to be thrown.
-  const acePhase = sim.die.ace && sinceSettle > 0 && sinceSettle < ACE_FLASH_MS
-    ? sinceSettle / ACE_FLASH_MS
+  const aceMs = aceEffectMs(sim.aceStyle);
+  const acePhase = sim.die.ace && sinceSettle > 0 && sinceSettle < aceMs
+    ? sinceSettle / aceMs
     : null;
   if (acePhase !== null) {
     // Announce the ace once, on the first frame of its effect — the caller

@@ -229,6 +229,21 @@ export function swadeStowed(atk: SheetData): boolean {
   return !/natural weapon/i.test(str(atk, 'notes', ''));
 }
 
+/**
+ * Does this rollable belong to a weapon that isn't in hand?
+ *
+ * The Attacks group in the rolls column is built straight off the same rows
+ * as the action pane — ids are `attack_N` / `damage_N` for row N — so the two
+ * lists have to agree about what can be rolled. Anything that isn't one of
+ * those ids is not a weapon roll and is never stowed.
+ */
+export function swadeStowedRollable(sheet: SheetData, rollableId: string): boolean {
+  const m = /^(?:attack|damage)_(\d+)$/.exec(rollableId);
+  if (!m) return false;
+  const row = rows(sheet, 'attacks')[Number(m[1])];
+  return !!row && swadeStowed(row);
+}
+
 /** Parry modifier from wielded weapons (a Rapier's +1, a Great Sword's −1). */
 function wieldedWeaponParry(sheet: SheetData): number {
   return rows(sheet, 'attacks')

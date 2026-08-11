@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { Character, Macro } from 'shared';
-import { castableLevels, combatActions, systemFor } from 'shared';
+import { castableLevels, combatActions, swadeStowedRollable, systemFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { readableOn } from '../util/playerColor';
 import { WHEEL_COLORS, WHEEL_NEUTRALS } from '../util/palette';
@@ -22,6 +22,9 @@ function pillDisabled(m: Macro, characters: Character[]): { disabled: boolean; r
     const r = systemFor(char.system).rollables(char.sheet).find((x) => x.id === m.rollableId);
     if (r?.slotLevel && castableLevels(char.sheet, r.slotLevel).length === 0) {
       return { disabled: true, reason: `No level-${r.slotLevel}+ spell slot` };
+    }
+    if (char.system === 'swade' && swadeStowedRollable(char.sheet, m.rollableId)) {
+      return { disabled: true, reason: `${r?.label ?? 'That weapon'} isn't in hand — tick Wielded on its card` };
     }
   }
   return { disabled: false };

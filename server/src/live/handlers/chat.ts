@@ -4,7 +4,7 @@ import {
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
   type ModerateMessagePayload, type ReorderMacrosPayload, type RollStatRow, type RollStatsGetPayload,
   type RollStatsUserBlock, type SaveMacroPayload,
-  sanitizeCard, type SheetData, type SheetRollPayload, type UndoEntry, type PostSheetCardPayload,
+  sanitizeCard, swadeStowedRollable, type SheetData, type SheetRollPayload, type UndoEntry, type PostSheetCardPayload,
 } from 'shared';
 import { campaigns, characters, chat, macros, redactChat, rollStats, tokens } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
@@ -97,6 +97,13 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     }
     const rollable = systemFor(character.system).rollables(character.sheet).find((r) => r.id === rollableId);
     if (!rollable) throw new Error('Unknown roll.');
+    // A weapon that isn't in hand can't be swung or fired, from the rolls
+    // column any more than from the action pane. Re-derived from the live
+    // sheet so a pinned macro can't reach past the greyed-out button.
+    if (character.system === 'swade' && swadeStowedRollable(character.sheet, rollableId)) {
+      emitError(socket, `${rollable.label} isn't in hand — tick Wielded on its card first.`);
+      return;
+    }
     const expr = applyAdv(rollable.expr, rollable.d20 ? adv : null);
     const breakdown = roll(expr);
     if (character.system === 'swade') breakdown.modWhy = traitModWhy(character.sheet);

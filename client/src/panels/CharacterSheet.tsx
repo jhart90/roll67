@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
-  AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swadeStowedRollable, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef, type SheetCard,
 } from 'shared';
 import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
@@ -874,12 +874,17 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             // Leveled spells spend a slot: disable when none is available.
             const options = r.slotLevel ? castableLevels(character.sheet, r.slotLevel) : null;
             const noSlots = options !== null && options.length === 0;
+            // The Attacks group is built off the same rows as the action pane,
+            // so a weapon that isn't in hand greys out in both or the two lists
+            // disagree about what you can do with it.
+            const stowed = character.system === 'swade' && swadeStowedRollable(character.sheet, r.id);
             return (
               <div key={r.id} className="roll-row">
                 <button
-                  className="roll-btn"
-                  disabled={!canRoll || noSlots}
-                  title={noSlots ? `No level-${r.slotLevel}+ spell slot available` : r.expr}
+                  className={`roll-btn${stowed ? ' action-stowed' : ''}`}
+                  disabled={!canRoll || noSlots || stowed}
+                  title={stowed ? `${r.label} isn't in hand — tick Wielded on its card to use it`
+                    : noSlots ? `No level-${r.slotLevel}+ spell slot available` : r.expr}
                   onClick={() => r.slotLevel
                     ? useGameStore.getState().beginCast(character.id, r.id, r.slotLevel, r.label)
                     : intents.sheetRoll(character.id, r.id, r.d20 ? wireAdv(adv) : null)}

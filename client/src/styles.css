@@ -1880,7 +1880,11 @@ button.link:hover { text-decoration: underline; }
 .action-btn.damage { border-left-color: var(--danger); }
 /* Not in hand: still listed so a forgotten tick box doesn't read as a missing
    weapon, but drained of colour so it never competes with what you can
-   actually do. The dimming beats the :disabled default, hence the override. */
+   actually do. Applies to both lists built off the attacks rows — the action
+   pane (.action-btn) and the Attacks group in the rolls column (.roll-btn) —
+   which must look the same or they disagree about what you're holding. The
+   dimming beats the :disabled default, hence the override. */
+.roll-btn.action-stowed:disabled,
 .action-btn.action-stowed:disabled {
   opacity: 0.4; filter: grayscale(1);
   border-left-color: var(--border); font-style: italic;

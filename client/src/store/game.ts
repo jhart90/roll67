@@ -232,6 +232,15 @@ interface GameState {
   setCharacterCreatorPrompted(prompted: boolean): void;
   viewingAs: string | null;
   dragGhosts: Record<string, { x: number; y: number }>;
+  /**
+   * Where a token is because YOU just moved it, before the server has said
+   * so. Every move used to wait a full round trip before the token budged,
+   * which on a slow connection reads as the app ignoring you. The prediction
+   * is authoritative on screen only until the echo arrives — the server
+   * always wins, and a move it refuses (a wall, not your turn) snaps back
+   * when the guard below expires.
+   */
+  predictedMoves: Record<string, { q: number; r: number }>;
   pings: Array<PingShownPayload & { id: number }>;
   measures: Record<string, MeasureShownPayload>;
   /** Everyone's currently-aimed AoE templates, keyed by caster's userId. */
@@ -495,6 +504,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setCharacterCreatorPrompted(characterCreatorPrompted) { set({ characterCreatorPrompted }); },
   viewingAs: null,
   dragGhosts: {},
+  predictedMoves: {},
   pings: [],
   measures: {},
   aoePreviews: {},
@@ -707,7 +717,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [],
-      viewingAs: null, dragGhosts: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
+      viewingAs: null, dragGhosts: {}, predictedMoves: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
       worldSelectedKey: null, selectedObjectId: null, worldHover: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
       // Transient slices that used to leak into the NEXT campaign: a live
@@ -1060,7 +1070,11 @@ export function wireSocket(): void {
     const s = useGameStore.getState();
     if (s.viewingAs) return; // preview mode: vision updates drive tokens
     if (s.map?.id !== token.mapId) return;
-    useGameStore.setState({ tokens: { ...s.tokens, [token.id]: token } });
+    // The server has spoken: whatever we guessed for this token is now moot,
+    // whether it agreed with us or not.
+    const predictedMoves = { ...s.predictedMoves };
+    delete predictedMoves[token.id];
+    useGameStore.setState({ tokens: { ...s.tokens, [token.id]: token }, predictedMoves });
   });
 
   socket.on(S2C.TOKEN_REMOVED, ({ tokenId }: { tokenId: string }) => {
@@ -1482,7 +1496,12 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.ERROR_MSG, ({ message }: { message: string }) => {
-    useGameStore.setState({ errorToast: message });
+    // Something was refused. We can't tell WHICH move from the message, but a
+    // refusal is exactly the case a predicted position must not survive — so
+    // every outstanding guess snaps back to where the server has the token.
+    // Waiting out the guard here would leave a token standing in a wall with
+    // the reason why sitting on screen beside it.
+    useGameStore.setState({ errorToast: message, predictedMoves: {} });
     setTimeout(() => {
       if (useGameStore.getState().errorToast === message) {
         useGameStore.setState({ errorToast: null });
@@ -1503,6 +1522,49 @@ function jumpToChat(): void {
 const CHAT_ROLL_PREFIX = /^\/(r|roll|gr)\b/i;
 function isRollCommand(text: string): boolean {
   return CHAT_ROLL_PREFIX.test(text.trim());
+}
+
+/**
+ * How long a predicted position stands on its own.
+ *
+ * A move the server ACCEPTS is corrected the moment its echo arrives, so this
+ * only governs the other case: a move it silently refuses (walked into a
+ * wall, not your turn, out of Pace) sends nothing back, and the guess has to
+ * expire or the token would sit somewhere it never went. Long enough to cover
+ * a bad connection, short enough that a refusal still reads as a refusal.
+ */
+const PREDICTION_TTL_MS = 2500;
+const predictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Put the token where the mover just asked for it, now, without waiting for
+ * the round trip. Replaced by the server's own answer as soon as it lands.
+ */
+function predictMove(tokenId: string, q: number, r: number): void {
+  const s = useGameStore.getState();
+  // Nothing to predict if it is already there — and predicting during a
+  // preview would fight the vision feed that drives tokens in that mode.
+  if (s.viewingAs) return;
+  const tok = s.tokens[tokenId];
+  if (!tok) return;
+  useGameStore.setState({ predictedMoves: { ...s.predictedMoves, [tokenId]: { q, r } } });
+
+  clearTimeout(predictionTimers.get(tokenId));
+  predictionTimers.set(tokenId, setTimeout(() => {
+    predictionTimers.delete(tokenId);
+    const cur = useGameStore.getState();
+    if (!cur.predictedMoves[tokenId]) return;
+    const next = { ...cur.predictedMoves };
+    delete next[tokenId];
+    useGameStore.setState({ predictedMoves: next });
+  }, PREDICTION_TTL_MS));
+}
+
+/** Where a token should be drawn: your own guess if you have one, else the
+ *  server's position. One place, so every caller agrees. */
+export function tokenHexFor(token: { id: string; q: number; r: number }): { q: number; r: number } {
+  const p = useGameStore.getState().predictedMoves[token.id];
+  return p ?? { q: token.q, r: token.r };
 }
 
 export const intents = {
@@ -1553,8 +1615,10 @@ export const intents = {
   updateToken: (tokenId: string, patch: Record<string, unknown>) => socket.emit(C2S.UPDATE_TOKEN, { tokenId, patch }),
   /** `drag` marks a deliberate drag-and-drop; keyboard steps leave it off so
    *  they always collide with walls. */
-  moveToken: (tokenId: string, q: number, r: number, drag = false) =>
-    socket.emit(C2S.MOVE_TOKEN, { tokenId, q, r, drag }),
+  moveToken: (tokenId: string, q: number, r: number, drag = false) => {
+    predictMove(tokenId, q, r);
+    socket.emit(C2S.MOVE_TOKEN, { tokenId, q, r, drag });
+  },
   dragToken: (tokenId: string, x: number, y: number, done = false) =>
     socket.emit(C2S.DRAG_TOKEN, { tokenId, x, y, done }),
 

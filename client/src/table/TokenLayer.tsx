@@ -112,8 +112,14 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const movable = !!you && tool === 'select' && targetState === 'off' &&
     canMoveToken(you.role, you.userId, token, character);
 
+  // Where YOU last asked this token to be, if the server hasn't answered yet.
+  // Subscribed (not read once) so the token slides to the predicted hex on the
+  // very next frame and back again if the move is refused.
+  const predicted = useGameStore((s) => s.predictedMoves[token.id]);
   const home = hexToPixel({ q: token.q, r: token.r }, map.grid);
-  const pos = dragPos ?? home;
+  // The hex the token is drawn at: the prediction wins until it is resolved.
+  const shown = predicted ? hexToPixel(predicted, map.grid) : home;
+  const pos = dragPos ?? shown;
   const radius = map.grid.hexSize * 0.72 * token.size;
   // Token art reads better with a little more presence than the flat colour
   // discs, so it renders 20% larger than the hex-derived radius. Everything
@@ -158,7 +164,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     const p = stage.toMap(e.clientX, e.clientY);
     const dx = p.x - dragOrigin.current.x;
     const dy = p.y - dragOrigin.current.y;
-    setDragPos({ x: home.x + dx, y: home.y + dy });
+    setDragPos({ x: shown.x + dx, y: shown.y + dy });
     const now = Date.now();
     if (now - lastSent.current > DRAG_THROTTLE_MS) {
       lastSent.current = now;
@@ -171,7 +177,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
           intents.dragToken(id, th.x + dx, th.y + dy);
         }
       } else {
-        intents.dragToken(token.id, home.x + dx, home.y + dy);
+        intents.dragToken(token.id, shown.x + dx, shown.y + dy);
       }
     }
   }
@@ -184,8 +190,8 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       return;
     }
     (e.currentTarget as SVGGElement).releasePointerCapture(e.pointerId);
-    const dx = dragPos.x - home.x;
-    const dy = dragPos.y - home.y;
+    const dx = dragPos.x - shown.x;
+    const dy = dragPos.y - shown.y;
     setDragPos(null);
 
     const s = useGameStore.getState();

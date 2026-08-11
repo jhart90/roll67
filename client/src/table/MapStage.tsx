@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { canMoveToken, hexToPixel, pixelToHex, sceneFrameScale } from 'shared';
-import { intents, useGameStore } from '../store/game';
+import { intents, tokenHexFor, useGameStore } from '../store/game';
 import { worldDrag } from '../store/worldDrag';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
 import { AoeTemplateLayer } from './AoeTemplateLayer';
@@ -159,10 +159,15 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
               const dn = (t.r & 1) === 0 ? { q: 0, r: 1 } : { q: -1, r: 1 };
               tDir.q = dn.q; tDir.r = dn.r;
             }
-            intents.moveToken(id, t.q + tDir.q, t.r + tDir.r);
+            const from = tokenHexFor(t);
+            intents.moveToken(id, from.q + tDir.q, from.r + tDir.r);
           }
         } else {
-          intents.moveToken(token.id, token.q + dir.q, token.r + dir.r);
+          // Step from where the token is SHOWN, not from the last hex the
+          // server confirmed — otherwise holding a key sends the same
+          // destination over and over until the first echo catches up.
+          const from = tokenHexFor(token);
+          intents.moveToken(token.id, from.q + dir.q, from.r + dir.r);
         }
         return;
       }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, ChatMessage, DieRoll, MemberInfo, TokenView } from 'shared';
-import { contentForSystem, swadeSnakeEyes } from 'shared';
+import { contentForSystem, num, swadeSnakeEyes } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
 import { DIE_COLORS, DieShape } from '../table/DiceShapes';
@@ -298,6 +298,60 @@ function ChatFrom({ msg, playerHidden }: { msg: ChatMessage; playerHidden: boole
   );
 }
 
+/**
+ * "Spend a Benny on this roll", offered on the roll card itself.
+ *
+ * The reroll already existed in the Benny menu, but you had to leave the roll
+ * you were looking at, find the character, and trust that "your last trait
+ * test" meant the one on screen. Here the card you right-clicked IS the
+ * subject.
+ *
+ * Eligibility is the server's: it tracks the most recent rerollable trait and
+ * damage roll per character (they lapse after five minutes, and a Critical
+ * Failure cannot be rerolled). This only offers what that state already says
+ * is available, so the menu can never promise something the server refuses.
+ */
+function BennyRerollItems({ msg, onDone }: { msg: ChatMessage; onDone: () => void }) {
+  const you = useGameStore((s) => s.you);
+  const asUser = useGameStore((s) => s.asUserId());
+  const characters = useGameStore((s) => s.characters);
+  const bennyState = useGameStore((s) => s.bennyState);
+  const system = useGameStore((s) => s.campaign?.system);
+
+  if (system !== 'swade' || !you || msg.kind !== 'roll' || !msg.fromCharacter) return null;
+  // The card carries the character's NAME, not its id — so match by name among
+  // the characters you actually control. A collision would have to be two of
+  // your own characters sharing a name, and the server re-checks ownership and
+  // eligibility on the id we send regardless.
+  const ch = characters.find((c) => c.ownerUserId === asUser && c.name === msg.fromCharacter);
+  if (!ch) return null;
+  if (num(ch.sheet, 'bennies', 0) < 1) return null;
+  const st = bennyState[ch.id];
+  if (!st?.canRerollTrait && !st?.canRerollDamage) return null;
+
+  return (
+    <>
+      {st.canRerollTrait && (
+        <button
+          title="Reroll the whole trait test — wild die included — and keep whichever set you prefer."
+          onClick={() => { intents.bennyUse(ch.id, 'reroll-trait'); onDone(); }}
+        >
+          🪙 Use Benny to re-roll a Trait test
+        </button>
+      )}
+      {st.canRerollDamage && (
+        <button
+          title="Reroll the damage from scratch and keep whichever total you prefer."
+          onClick={() => { intents.bennyUse(ch.id, 'reroll-damage'); onDone(); }}
+        >
+          🪙 Use Benny to re-roll damage
+        </button>
+      )}
+      <hr />
+    </>
+  );
+}
+
 function Message({ msg, isDm, hl, onMenu }: {
   msg: ChatMessage; isDm: boolean; hl: NameHighlights; onMenu: (id: number, x: number, y: number) => void;
 }) {
@@ -308,7 +362,9 @@ function Message({ msg, isDm, hl, onMenu }: {
   return (
     <div
       className={`chat-msg ${msg.kind} ${msg.hidden ? 'hidden' : ''}`}
-      onContextMenu={isDm ? (e) => { e.preventDefault(); onMenu(msg.id, e.clientX, e.clientY); } : undefined}
+      // Not DM-only any more: a player right-clicks their own roll to spend a
+      // Benny on it. The menu decides what (if anything) to offer.
+      onContextMenu={(e) => { e.preventDefault(); onMenu(msg.id, e.clientX, e.clientY); }}
     >
       <div className="chat-meta">
         <ChatFrom msg={msg} playerHidden={!!playerHidden} />
@@ -366,7 +422,8 @@ export function ChatPanel() {
 
       {menu && menuMsg && (
         <AnchoredMenu x={menu.x} y={menu.y} className="chat-context-menu" onClick={(e) => e.stopPropagation()}>
-          {menuMsg.hidden ? (
+          <BennyRerollItems msg={menuMsg} onDone={() => setMenu(null)} />
+          {isDm && (menuMsg.hidden ? (
             <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>
           ) : (
             <>
@@ -375,7 +432,7 @@ export function ChatPanel() {
                 <button onClick={() => { intents.moderateMessage(menu.id, 'hideUndo'); setMenu(null); }}>Hide &amp; undo effects</button>
               )}
             </>
-          )}
+          ))}
         </AnchoredMenu>
       )}
 

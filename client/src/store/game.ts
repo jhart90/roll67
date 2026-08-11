@@ -1527,13 +1527,12 @@ function isRollCommand(text: string): boolean {
 /**
  * How long a predicted position stands on its own.
  *
- * A move the server ACCEPTS is corrected the moment its echo arrives, so this
- * only governs the other case: a move it silently refuses (walked into a
- * wall, not your turn, out of Pace) sends nothing back, and the guess has to
- * expire or the token would sit somewhere it never went. Long enough to cover
- * a bad connection, short enough that a refusal still reads as a refusal.
+ * Every refusal the server knows how to give now answers — a wall bump echoes
+ * the token back unchanged, and the rest report an error — so this is only a
+ * backstop for a message that goes missing entirely. Kept short: a token
+ * standing somewhere it never reached is worse than a brief stutter.
  */
-const PREDICTION_TTL_MS = 2500;
+const PREDICTION_TTL_MS = 1200;
 const predictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**

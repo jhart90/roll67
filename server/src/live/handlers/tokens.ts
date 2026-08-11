@@ -304,7 +304,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
           { q, r },
           { grid: map.grid, walls: map.walls, doors: map.doors },
         );
-        if (stop.q === token.q && stop.r === token.r) return; // held up — no move
+        if (stop.q === token.q && stop.r === token.r) {
+          // Held up against a wall. This used to return in silence, which was
+          // fine while the client waited for permission before moving — it
+          // now moves first and waits to be corrected, so silence left the
+          // token standing inside the wall until its guard expired. Echo the
+          // token back unchanged: no toast for a bump anyone can see, but the
+          // client learns at once that nothing happened.
+          socket.emit(S2C.TOKEN_UPSERTED, { token });
+          return;
+        }
         dest = stop;
       }
     }
@@ -329,6 +338,10 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
           if (rec.runBonus === null) {
             // Past Pace with no running die spent: ask, never auto-roll —
             // running costs −2 on everything else this turn.
+            // Nothing has happened yet — the move waits on the answer. Put
+            // the token back where it really is while the player decides,
+            // rather than leaving it standing at a hex it may not reach.
+            socket.emit(S2C.TOKEN_UPSERTED, { token });
             socket.emit(S2C.RUN_PROMPT, { tokenId, name: character.name, pace, moved: rec.moved });
             return;
           }

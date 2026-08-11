@@ -266,11 +266,30 @@ const ROWS: Row[] = [
   { name: 'Joseph', category: 'Nazareth (Scenario)', tier: 1, wild: true, attrs: ['d6', 'd6', 'd8', 'd8', 'd8'], skills: [['Repair', 'd8'], ['Notice', 'd6'], ['Fighting', 'd6'], ['Persuasion', 'd4']], attacks: [['Carpenter’s Tools', 'Fighting', '1d8!+1d4!', 'bludgeoning', 5]], hp: 6, pace: 6, note: 'Wild Card, capable but no warrior. Repair d8 is his carpentry. Edges: Steady Hands. Hindrances: Code of Honor; Loyal. Workshop in the village centre by day; kept from Mary by the memory fog and engineered “urgent” errands. Secrets: vivid unsettling dreams; beginning to suspect something unnatural. Protects Mary above almost anything else — reach him with evidence of the interference.' },
 ];
 
+/**
+ * A bestiary row's Size, read off what the row already states.
+ *
+ * Entries declare it in prose — a "Size +5" racial trait, or "Size +8" in the
+ * notes — so it is parsed rather than duplicated into a third place that could
+ * disagree with the other two. Anything that never says is Size 0: a person,
+ * a wolf, a goblin, which is what most of the book is.
+ */
+function sizeFor(r: Row): number {
+  const stated = [
+    ...(r.traits ?? []).map(([name]) => name),
+    r.note ?? '',
+  ].join(' ');
+  const m = stated.match(/\bSize\s*([+\u2212-]?\d+)/i);
+  if (!m) return 0;
+  return Number(m[1].replace('\u2212', '-'));
+}
+
 function sheetFor(r: Row): SheetData {
   const sheet = swade.defaultSheet();
   const [agility, smarts, spirit, strength, vigor] = r.attrs;
   Object.assign(sheet, {
     concept: r.name, wildCard: r.wild, agility, smarts, spirit, strength, vigor,
+    size: sizeFor(r),
     hp: r.hp, maxHp: r.hp, pace: r.pace ?? 6, bennies: r.wild ? 2 : 0,
     skills: r.skills.map(([name, die]) => ({ name, die, notes: '' })),
     attacks: r.attacks.map(([name, skill, damage, dtype, range, meta]) => ({

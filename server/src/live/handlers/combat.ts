@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
@@ -1239,6 +1239,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           });
           const gang = gangUpBonus({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r }, others);
           if (gang > 0) { mod += gang; tags.push(`+${gang} Gang Up`); }
+        }
+        // Scale: the smaller creature adds the difference, the larger
+        // subtracts it. A fly swatting at a dragon is easy; the dragon
+        // swatting back at the fly is not.
+        const scaleMod = sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
+        if (scaleMod) {
+          mod += scaleMod;
+          tags.push(sizeAttackTag(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0))!);
         }
         if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
         else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }

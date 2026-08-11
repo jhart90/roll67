@@ -19,6 +19,7 @@ export * from './dice/iron.js';
 export * from './systems/nameplate.js';
 export * from './systems/swadeDamage.js';
 export * from './systems/swadeInitiative.js';
+export * from './systems/swadeSize.js';
 export * from './systems/acquire.js';
 export * from './systems/rollStats.js';
 export * from './systems/playerColor.js';

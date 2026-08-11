@@ -68,6 +68,7 @@ const SWADE_ANCESTRIES: Record<string, string> = {
 };
 
 const SWADE_CONCEPTS: Record<string, string> = {
+  Size: 'How big it is, and the whole Size Table in one number. Size IS the Toughness bonus. It also sets the Scale band — Tiny −6, Very Small −4, Small −2, Normal 0, Large +2, Huge +4, Gargantuan +6 — and when two different Scales fight, the smaller adds the difference to its attacks and the larger subtracts it. Large and up carry extra Wounds. 0 is an adult human.',
   'Wild Card': 'A hero or major character: rolls a d6 Wild Die alongside every Trait roll (keep the better), takes three Wounds before going down, and holds Bennies.',
   'Wild Die': 'The extra d6 Wild Cards roll with every Trait roll — keep the higher of the two dice. Both dice can ace (explode).',
   Benny: 'A fate chip. Spend one to re-roll a Trait roll, Soak damage, recover from Shaken, or draw a new Action Card. You start each session with three.',

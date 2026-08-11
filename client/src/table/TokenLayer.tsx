@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
 import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, pointInAoe, pxPerFoot } from 'shared';
-import { intents, useGameStore } from '../store/game';
+import { clampToKnownWalls, intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { mapPixelSize, useStage } from '../util/stage';
 import { worldDrag } from '../store/worldDrag';
@@ -53,6 +53,23 @@ function useImageAspect(url: string | null): number | null {
 }
 
 const DRAG_THROTTLE_MS = 100;
+
+/**
+ * Where the dragged token is drawn: under the pointer while it is somewhere
+ * reachable, pinned to the last reachable tile's centre once it is not.
+ *
+ * Pinning to the centre rather than freezing wherever the pointer happened to
+ * cross keeps the token on the grid, so what you see is the hex it will land
+ * on.
+ */
+function clampedDragPos(
+  wanted: { x: number; y: number }, stop: { q: number; r: number }, grid: Parameters<typeof hexToPixel>[1],
+): { x: number; y: number } {
+  const at = pixelToHex(wanted, grid);
+  if (at.q === stop.q && at.r === stop.r) return wanted;
+  return hexToPixel(stop, grid);
+}
+
 
 type TargetState = 'off' | 'valid' | 'invalid';
 
@@ -164,7 +181,14 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     const p = stage.toMap(e.clientX, e.clientY);
     const dx = p.x - dragOrigin.current.x;
     const dy = p.y - dragOrigin.current.y;
-    setDragPos({ x: shown.x + dx, y: shown.y + dy });
+    // Drag against a wall the same way walking into one does: the token
+    // follows the pointer only as far as it could actually get, then stops
+    // dead at the last reachable tile while the pointer carries on. Letting
+    // it trail the cursor into a wall and then jump back on release is the
+    // same twitch, just triggered by the mouse.
+    const wanted = { x: shown.x + dx, y: shown.y + dy };
+    const stop = clampToKnownWalls(token.id, pixelToHex(wanted, map.grid), true);
+    setDragPos(stop ? clampedDragPos(wanted, stop, map.grid) : shown);
     const now = Date.now();
     if (now - lastSent.current > DRAG_THROTTLE_MS) {
       lastSent.current = now;

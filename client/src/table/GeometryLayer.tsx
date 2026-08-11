@@ -249,6 +249,7 @@ export function GeometryLayer() {
   const editing = isDm && (tool === 'wall' || tool === 'door' || tool === 'light' || tool === 'erase' || tool === 'spawn' || tool === 'text');
 
   const walls = isDm ? dmGeometry?.walls ?? [] : [];
+  const knownWalls = useGameStore((s) => s.knownWalls);
   const doors = isDm ? dmGeometry?.doors ?? [] : knownDoors;
   const lights = isDm ? dmGeometry?.lights ?? [] : [];
   const wallType = useGameStore((s) => s.wallType);
@@ -608,6 +609,18 @@ export function GeometryLayer() {
       {/* walls (DM only) — colored + dashed by type */}
       {walls.map((w) => (
         <WallPiece key={w.id} wall={w} selected={w.id === selectedWallId} interactive={isDm && tool === 'select'} />
+      ))}
+
+      {/* Walls a PLAYER has discovered, clipped by the server to the ground
+          they have actually explored. Drawn thin and dim: they are there to
+          say "you cannot walk through this", not to compete with the map. */}
+      {!isDm && knownWalls.map((seg, i) => (
+        <line
+          key={`kw-${i}`}
+          x1={seg.a.x} y1={seg.a.y} x2={seg.b.x} y2={seg.b.y}
+          stroke="#d8574f" strokeWidth={2} strokeLinecap="round" opacity={0.55}
+          pointerEvents="none"
+        />
       ))}
 
       {/* doors (DM: all; players: known) */}

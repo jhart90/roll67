@@ -11,7 +11,8 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, blastSoundClip, blastSoundVolume,
+  type FearSource, type SheetCard, type RollCalloutPayload, type KnownWallSegment, reachableAlong, packHex,
+  blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
@@ -209,6 +210,13 @@ interface GameState {
    *  (fresh reference) only on map switch/join — FogCanvas's full-rebuild cue. */
   exploredLog: number[] | null;
   knownDoors: Door[];
+  /**
+   * The parts of walls this player has discovered, clipped to explored ground
+   * by the server. Never the whole map's geometry — a client holding that
+   * could read the unexplored dungeon out of its own memory. Enough, though,
+   * to stop your own token at a wall you already know about.
+   */
+  knownWalls: KnownWallSegment[];
   mapObjects: Record<string, MapObject>;
   /** Map object whose popup/inspector is open (click on item/chest). */
   lootPopupId: string | null;
@@ -490,6 +498,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   explored: null,
   exploredLog: null,
   knownDoors: [],
+  knownWalls: [],
   mapObjects: {},
   lootPopupId: null,
   inspectedObjectId: null,
@@ -716,7 +725,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       you: null, campaign: null, members: [], characters: [], mapsMeta: [],
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
-      visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [],
+      visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [], knownWalls: [],
       viewingAs: null, dragGhosts: {}, predictedMoves: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
       worldSelectedKey: null, selectedObjectId: null, worldHover: null,
       targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
@@ -967,6 +976,7 @@ export function wireSocket(): void {
       explored: p.explored ? new Set(p.explored) : null,
       exploredLog: p.explored ? [...p.explored] : null,
       knownDoors: p.knownDoors,
+      knownWalls: p.knownWalls ?? [],
       viewingAs: p.viewingAs,
       dragGhosts: {},
       selectedTokenId: null,
@@ -1056,6 +1066,7 @@ export function wireSocket(): void {
       exploredLog,
       tokens: tokensByIdReusing(s.tokens, p.tokens),
       knownDoors: p.knownDoors,
+      knownWalls: p.knownWalls ?? [],
       // Loot on this map is authoritative per update: chests appear as the
       // party explores toward them and drop away when they can't be seen.
       mapObjects: {
@@ -1525,6 +1536,40 @@ function isRollCommand(text: string): boolean {
 }
 
 /**
+ * Where a move can actually get to, judged against the walls this client
+ * knows about. Returns null when the token cannot move at all — the caller
+ * then does nothing whatsoever, which is the point: a step into a wall you
+ * can see should be a no-op, not a round trip and a snap back.
+ *
+ * The DM is never clamped here; they hold the real geometry and their own
+ * moves are unrestricted by design. And a player who knows about no walls
+ * yet is not clamped either — an empty list means "nothing discovered", not
+ * "nowhere is blocked", so the server stays the only authority in the dark.
+ */
+export function clampToKnownWalls(tokenId: string, to: Hex, drag = false): Hex | null {
+  const s = useGameStore.getState();
+  const from = s.tokens[tokenId];
+  if (!from || !s.map) return to;
+  if (s.isDm() && !s.viewingAs) return to;
+  if (s.knownWalls.length === 0) return to;
+  // The server lets a player DRAG straight onto ground they personally
+  // remember when no initiative is running — crossing a wall to a room they
+  // have already explored is not scouting, it is saving them a walk. Mirror
+  // that here, or the clamp would quietly take the feature away.
+  if (drag && !s.initiativeState.active && s.explored?.has(packHex(to))) return to;
+
+  // Each fragment is its own two-point wall; reachableAlong only cares about
+  // the segments, not which polyline they came from.
+  const walls = s.knownWalls.map((seg, i) => ({
+    id: `known-${i}`, points: [seg.a, seg.b], type: 'solid' as const,
+  }));
+  const start = tokenHexFor(from);
+  const stop = reachableAlong(start, to, { grid: s.map.grid, walls, doors: s.knownDoors });
+  if (stop.q === start.q && stop.r === start.r) return null;   // held up
+  return stop;
+}
+
+/**
  * How long a predicted position stands on its own.
  *
  * Every refusal the server knows how to give now answers — a wall bump echoes
@@ -1615,8 +1660,15 @@ export const intents = {
   /** `drag` marks a deliberate drag-and-drop; keyboard steps leave it off so
    *  they always collide with walls. */
   moveToken: (tokenId: string, q: number, r: number, drag = false) => {
-    predictMove(tokenId, q, r);
-    socket.emit(C2S.MOVE_TOKEN, { tokenId, q, r, drag });
+    // Stop at the first wall we already know about, before anything is sent.
+    // The server enforces this too — it has the whole map and we only have the
+    // parts we've explored — but doing it here is what removes the twitch:
+    // walking into a known wall now does nothing at all, rather than moving
+    // and being pushed back when the answer comes.
+    const dest = clampToKnownWalls(tokenId, { q, r }, drag);
+    if (!dest) return;
+    predictMove(tokenId, dest.q, dest.r);
+    socket.emit(C2S.MOVE_TOKEN, { tokenId, q: dest.q, r: dest.r, drag });
   },
   dragToken: (tokenId: string, x: number, y: number, done = false) =>
     socket.emit(C2S.DRAG_TOKEN, { tokenId, x, y, done }),

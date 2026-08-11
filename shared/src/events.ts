@@ -9,6 +9,7 @@ import type {
   Counter, NameplateLine, RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
+import type { KnownWallSegment } from './vision/wallMemory.js';
 import type { PlayingCard } from './systems/cards.js';
 
 // ---------- Client -> server intents ----------
@@ -899,6 +900,9 @@ export interface MapStatePayload {
   fadeLitMask: VisibilityLitMask | null;
   /** Doors within the viewer's explored region (players only). */
   knownDoors: Door[];
+  /** Wall fragments on explored ground (players only) — see the field of the
+   *  same name on VisionUpdatePayload. */
+  knownWalls: KnownWallSegment[];
   /** Loot objects on this map (items and chests). */
   mapObjects: MapObject[];
   /** Non-null when this payload is a DM "view as" preview. */
@@ -937,6 +941,11 @@ export interface VisionUpdatePayload {
   mapObjects: MapObject[];
   /** Doors inside the viewer's explored region (full list). */
   knownDoors: Door[];
+  /** The parts of walls that lie on ground this viewer has discovered —
+   *  clipped, never whole walls, so a wall running off into the dark cannot
+   *  report how far it goes. Lets their own client stop a move at a wall
+   *  without asking the server first. */
+  knownWalls: KnownWallSegment[];
   /** Non-null when this update belongs to a DM view-as preview. */
   viewingAs: string | null;
 }

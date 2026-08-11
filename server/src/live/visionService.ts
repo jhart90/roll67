@@ -1,10 +1,17 @@
 // Per-player vision: the server-side secret boundary. Players only ever
-// receive tokens/doors inside their computed field of view; walls, lights
-// and gm-layer objects never leave the server except to the DM.
+// receive tokens/doors inside their computed field of view; lights and
+// gm-layer objects never leave the server except to the DM.
+//
+// Walls are the one thing sent in PART: a player gets the fragments lying on
+// ground they have already discovered, clipped so a wall running off into the
+// dark cannot report its length (see shared/vision/wallMemory). That is what
+// lets their own client stop a move at a wall they know about, instead of
+// walking into it and being pushed back a round trip later.
 
 import type { Server, Socket } from 'socket.io';
 import {
-  computeLightPolygonsWithColor, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, litHexes,
+  computeLightPolygonsWithColor, computeUnionFovBands, computeUnionVisibilityPolygons, hexDistance, hexToPixel, knownWallSegments, litHexes,
+  type KnownWallSegment, type MapDef,
   type LightPolygonResult,
   MAX_VISION_RADIUS, packHex, pixelToHex, sightSegments, systemFor,
   S2C, type Door, type FovInput, type Hex, type Light, type MapObject, type MapStatePayload, type Point, type Segment, type Token,
@@ -215,6 +222,24 @@ function visibleTokens(userId: string, mapTokens: Token[], visible: Set<number>)
  * after the player walks back out of sight of it. Mutates `memory` in
  * place; returns whether it changed (so the caller knows to persist it).
  */
+/**
+ * The wall fragments this viewer has earned, cached on their vision state.
+ *
+ * Clipping walks every wall segment sample by sample, so it is far too costly
+ * to redo on each sync — but it only ever CHANGES when the explored set grows.
+ * Recompute on a discovery, hand back the last answer otherwise.
+ */
+function knownWallsFor(
+  cache: { explored: Set<number>; wallMemory?: KnownWallSegment[] },
+  map: MapDef,
+  discovered: boolean,
+): KnownWallSegment[] {
+  if (!discovered && cache.wallMemory) return cache.wallMemory;
+  const built = knownWallSegments(map.walls, map.grid, (h: Hex) => cache.explored.has(packHex(h)));
+  cache.wallMemory = built;
+  return built;
+}
+
 function knownDoors(
   map: MapRecord, explored: Set<number>, visible: Set<number>, viewerHexes: Hex[], memory: Map<string, Door>,
 ): { doors: Door[]; changed: boolean } {
@@ -253,6 +278,7 @@ export interface UserMapView {
   explored: Set<number>;
   tokens: TokenView[];
   knownDoors: Door[];
+  knownWalls: KnownWallSegment[];
 }
 
 /**
@@ -357,6 +383,10 @@ function computeUserMapViewInner(
     explored: cache.explored,
     tokens: visibleTokens(userId, allTokens, seen),
     knownDoors: doors.doors,
+    // Walls, clipped to explored ground. Recomputed only when the explored
+    // set actually grew: this runs on every vision sync, and a player who has
+    // stopped discovering new ground has nothing new to learn about walls.
+    knownWalls: knownWallsFor(cache, map, newlyExplored.length > 0),
   };
 }
 
@@ -403,6 +433,7 @@ export function buildMapState(
       fadeLitMask: null,
       explored: null,
       knownDoors: [],
+      knownWalls: [],
       mapObjects: allObjs,
       viewingAs: null,
     };
@@ -432,6 +463,7 @@ export function buildMapState(
       fadeLitMask: null,
       explored: null,
       knownDoors: [],
+      knownWalls: [],
       mapObjects: allObjs,
       viewingAs: viewer.viewingAs ?? null,
     };
@@ -462,6 +494,7 @@ export function buildMapState(
     fadeLitMask: view.fadeLitMask,
     explored: [...view.explored],
     knownDoors: view.knownDoors,
+      knownWalls: view.knownWalls,
     // Filter with the view just computed above: on a fresh join no FOV pass
     // has populated the cache yet, so a cache lookup here would hide every
     // chest the party is standing next to.
@@ -542,6 +575,7 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
           newlyExplored: view.newlyExplored,
           tokens: view.tokens,
           knownDoors: view.knownDoors,
+      knownWalls: view.knownWalls,
           viewingAs: d.viewingAs,
         };
         socket.emit(S2C.VISION_UPDATE, payload);
@@ -567,6 +601,7 @@ function syncMapVisionInner(io: Server, campaignId: string, mapId: string, hint?
       newlyExplored: view.newlyExplored,
       tokens: view.tokens,
       knownDoors: view.knownDoors,
+      knownWalls: view.knownWalls,
       viewingAs: null,
     };
     io.to(userRoom(d.userId)).emit(S2C.VISION_UPDATE, payload);

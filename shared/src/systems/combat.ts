@@ -172,7 +172,12 @@ export function combatActions(character: Character): CombatAction[] {
       const hasAmount = !!amount && usableAmount(amount);
       // Like condition-only spells (Hold Person): a power that inflicts a
       // state still becomes a targeted action even with no damage roll.
-      if (!hasAmount && !condition) return;
+      //
+      // And in SWADE, so does a power that does neither. EVERY power is cast
+      // by making an arcane skill roll against TN 4, so Smite, Puppet and
+      // Deflection need an action to roll from just as much as Bolt does —
+      // without one they could not be cast at all, and cost nothing.
+      if (!hasAmount && !condition && character.system !== 'swade') return;
       const name = str(pw, 'name', '').trim() || `Power ${i + 1}`;
       const effect = str(pw, 'effect', 'damage') === 'heal' ? 'heal' as const : 'damage' as const;
       const save = str(pw, 'save', '');
@@ -188,7 +193,11 @@ export function combatActions(character: Character): CombatAction[] {
       // Wound, two on a raise — the book's rule, not a damage roll in
       // reverse.
       const healRoll = effect === 'heal' && !isAoe && arcane;
-      const attackExpr = healRoll ? arcane : (effect === 'damage' && !save && !isAoe && arcane ? arcane : null);
+      // The activation roll is the SAME roll for every power: arcane skill vs
+      // TN 4. An area power used to skip it (the template just landed) and a
+      // resisted power used to go straight to the defender's roll — both
+      // skipped the caster's own roll the book asks for first.
+      const attackExpr = arcane ?? null;
       out.push({
         id: `power:${i}`,
         label: name,

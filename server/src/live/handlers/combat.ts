@@ -13,6 +13,7 @@ import {
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
+  activationOutcome, backlashPatch, castingBlocker, swadeArcaneExpr, ACTIVATION_TN, FAILED_ACTIVATION_PP,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
   fearCheckFailure, fearCheckMod, fearTableRow, fearTableTotal, PANICKED_OUTCOME, type RequestFearPayload,
 } from 'shared';
@@ -637,6 +638,77 @@ interface GroupSaveSpec {
  * the undo for the whole resolution, which is why it has to exist even when
  * the power is dull to look at: the DM needs one thing to right-click.
  */
+/**
+ * The arcane skill roll every SWADE power is cast with.
+ *
+ * The book gives one procedure for all of them: pick a target in Range, roll
+ * the arcane skill, and under 4 the power does not activate. Two paths reach
+ * this — a single-target power and an area template — and both used to skip
+ * it: the area one simply dropped its template, and a resisted one went
+ * straight to the defender's roll. Neither asked the caster to do anything.
+ *
+ * Returns null when the power does not go off, having already posted the card
+ * and taken the one Power Point a failure costs. The caller stops there.
+ */
+function activatePower(
+  io: Server, campaignId: string, userId: string, username: string, socket: Socket,
+  actor: Character, action: CombatAction, undo: UndoEntry[],
+): { actor: Character; raise: boolean } | null {
+  const cost = Math.max(0, action.ppCost ?? 0);
+  const blocked = castingBlocker(conditionsOf(actor.sheet));
+  if (blocked) { emitError(socket, `${actor.name}: ${blocked}`); return null; }
+
+  const pp = num(actor.sheet, 'pp', 0);
+  if (pp < Math.min(cost, FAILED_ACTIVATION_PP) || (cost > 0 && pp < FAILED_ACTIVATION_PP)) {
+    emitError(socket, `Not enough Power Points (${pp} left).`);
+    return null;
+  }
+  // Shorting is not offered by the UI yet, so a cast always pays in full —
+  // but the outcome maths already handles a short cast, so wiring a chooser
+  // in later needs nothing here to change.
+  const paid = Math.min(pp, cost);
+  if (cost > 0 && paid < cost && paid < FAILED_ACTIVATION_PP) {
+    emitError(socket, `Not enough Power Points (${pp} left, ${action.label} costs ${cost}).`);
+    return null;
+  }
+
+  const expr = swadeArcaneExpr(actor.sheet);
+  if (!expr) { emitError(socket, `${actor.name} has no arcane skill set.`); return null; }
+  const br = roll(expr);
+  const out = activationOutcome({
+    total: br.total, dice: br.dice, wildCard: actor.sheet.wildCard !== false, cost, paid,
+  });
+
+  undo.push({ t: 'field', characterId: actor.id, key: 'pp', value: pp });
+  const patch: SheetData = { pp: Math.max(0, pp - out.ppSpent) };
+  if (out.backlash) {
+    // Backlash takes a level of Fatigue AND drops every power already running,
+    // so both of those have to be recoverable too.
+    undo.push(
+      { t: 'field', characterId: actor.id, key: 'fatigue', value: num(actor.sheet, 'fatigue', 0) },
+      { t: 'field', characterId: actor.id, key: 'activePowers', value: rows(actor.sheet, 'activePowers') },
+    );
+    Object.assign(patch, backlashPatch(actor.sheet));
+  }
+  const updated = persistSheet(io, campaignId, actor, patch);
+
+  const msg = chat.add(campaignId, {
+    userId, fromName: username,
+    fromCharacter: actor.name, characterId: actor.id,
+    kind: 'roll',
+    text: `${actor.name} — ${action.label}: ${out.activated ? (out.verdict === 'raise' ? 'Activated with a raise' : 'Activated') : out.verdict === 'backlash' ? 'BACKLASH' : 'Failed to activate'} (TN ${ACTIVATION_TN})`,
+    outcomeNote: `${out.summary} ${out.ppSpent} PP spent.`,
+    roll: { ...br, outcome: out.activated ? 'success' as const : 'failure' as const },
+    recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+
+  if (out.backlash) {
+    postStatusLine(io, campaignId, `${actor.name} suffers Backlash — a level of Fatigue, and every power they had running ends.`);
+  }
+  return out.activated ? { actor: updated, raise: out.verdict === 'raise' } : null;
+}
+
 function postCastCard(
   io: Server, campaignId: string, userId: string, username: string,
   actor: Character, action: CombatAction, label: string, ppSpent: number,
@@ -1375,6 +1447,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (!result) return;
       actor = result.actor;
       undo.push(result.undo);
+    } else if (action.source === 'power' && actor.system === 'swade') {
+      // Roll to activate BEFORE anything else happens. A failure ends the
+      // action here, having cost the one Power Point the book charges for it.
+      const act = activatePower(io, d.campaignId, d.userId, d.username, socket, actor, action, undo);
+      if (!act) return;
+      actor = startPowerDuration(io, d.campaignId, act.actor, action, undo);
     } else if (action.source === 'power' && action.ppCost) {
       const pp = num(actor.sheet, 'pp', 0);
       if (pp < action.ppCost) {
@@ -1383,7 +1461,6 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }
       undo.push({ t: 'field', characterId: actor.id, key: 'pp', value: pp });
       actor = persistSheet(io, d.campaignId, actor, { pp: pp - action.ppCost });
-      actor = startPowerDuration(io, d.campaignId, actor, action, undo);
     }
 
     // To-hit (weapons/spell attacks). Nat 20 always hits, nat 1 always misses;
@@ -2169,7 +2246,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // caster paying for a power the log says never happened. They ride on the
     // cast card below, with everything the resolution goes on to do.
     const costUndo: UndoEntry[] = [];
-    if (action.source === 'power' && action.ppCost) {
+    if (action.source === 'power' && actor.system === 'swade') {
+      // Same gate as a single-target power: the template does not get dropped
+      // until the caster has rolled their arcane skill and made TN 4.
+      const act = activatePower(io, d.campaignId, d.userId, d.username, socket, actor, action, costUndo);
+      if (!act) return;
+      actor = act.actor;
+    } else if (action.source === 'power' && action.ppCost) {
       const pp = num(actor.sheet, 'pp', 0);
       if (pp < action.ppCost) {
         emitError(socket, `Not enough Power Points (${pp} left, ${action.label} costs ${action.ppCost}).`);

@@ -291,8 +291,11 @@ describe('SWADE library & compendium', () => {
     const action = combatActions(character).find((a) => a.id === 'power:0')!;
     expect(action.aoe).toEqual({ shape: 'cone', sizeFt: 54 });
     expect(action.saveId).toBeUndefined();
-    expect(action.attackExpr).toBeNull();
     expect(action.ppCost).toBe(2);
+    // The caster still rolls: every power activates on an arcane skill roll
+    // vs TN 4. Area powers used to skip it and simply drop their template.
+    expect(action.attackExpr).toBe('best(1d8!, 1d6!)');
+    expect(action.fixedTn).toBe(4);
   });
 
   it('leaves no area power asking for an Agility dodge', () => {

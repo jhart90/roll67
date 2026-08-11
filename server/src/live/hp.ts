@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, conditionsOf, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -342,6 +342,31 @@ export function breakAim(io: Server, campaignId: string, ch: Character, reason: 
   if (reason) postStatusLine(io, campaignId, `🎯 ${ch.name} ${reason}`);
 }
 
+/**
+ * A Smarts roll to hold your powers together after taking a knock. Failure
+ * ends all of them at once.
+ *
+ * Arcane Devices are the exception the book names — the USER rolls to keep a
+ * device working, so it is still a roll, just not the caster's problem.
+ */
+function rollDisruption(io: Server, campaignId: string, ch: Character, sourceLabel: string): void {
+  if (ch.system !== 'swade' || !hasActivePowers(ch.sheet)) return;
+  const br = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.smarts ?? 'd4'))));
+  const held = br.total >= 4;
+  const what = usesArcaneDevice(ch.sheet) ? 'keeps the device working' : 'keeps concentration';
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System',
+    fromCharacter: ch.name, characterId: ch.id,
+    kind: 'roll',
+    text: `${ch.name} — Disruption (Smarts): ${held ? 'Holds' : 'Fails'} (TN 4)`,
+    outcomeNote: held ? `${ch.name} ${what}.` : `Every power ${ch.name} had running ends.`,
+    roll: { ...br, outcome: held ? 'success' as const : 'failure' as const },
+    recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  if (!held) persistSheet(io, campaignId, ch, disruptionPatch());
+}
+
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
@@ -362,6 +387,13 @@ function applySwadeDamage(
   if (!out.shaken) return { character, note: ` — ${out.summary}` };
 
   let cur = character;
+  // Disruption: a knock threatens every power this caster has running. Rolled
+  // here, where Shaken and Wounds are both already decided, so one hit can't
+  // ask for two rolls. It follows the CASTER, not the target of the power —
+  // a mage whose enchantments sit on his allies still loses them when HE is
+  // hurt (the book's own example).
+  rollDisruption(io, campaignId, cur, sourceLabel ?? 'damage');
+  cur = characters.byId(cur.id) ?? cur;
   if (out.woundsDealt > 0) cur = persistSheet(io, campaignId, cur, { wounds: out.woundsAfter });
   applyConditionTo(io, campaignId, cur, 'shaken', sourceLabel ?? 'damage');
   cur = characters.byId(cur.id) ?? cur;

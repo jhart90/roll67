@@ -4,6 +4,7 @@ import {
   AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
+import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
 import { intents, useGameStore, CALLED_SHOT_PENDING } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { ClassFeatures } from './ClassFeatures';
@@ -673,6 +674,26 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
 
   return (
     <div className="rolls-column">
+      {/* Cover lives with the attack controls rather than down in the sheet
+          body: it is a thing you change mid-fight, in the same breath as
+          picking wild attack or a called shot. */}
+      {character.system === 'swade' && (
+        <label className="cover-row">
+          <span className="dim">Cover</span>
+          <select
+            value={str(character.sheet, 'cover', 'none')}
+            title="Cover the map cannot see — furniture, a crowd, a raised shield. Attacks use whichever is deeper, this or what the walls give."
+            onChange={(e) => intents.updateCharacter(character.id, { cover: e.target.value })}
+          >
+            {COVER_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {COVER_LABEL[c as CoverGrade]}
+                {COVER_PENALTY[c as CoverGrade] ? ` (${COVER_PENALTY[c as CoverGrade]})` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="adv-toggle">
         {(character.system === 'swade'
           ? [null, 'adv', 'dis', 'called']

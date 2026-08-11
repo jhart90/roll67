@@ -3067,3 +3067,8 @@ th > .term { border-bottom-style: dotted; }
 .cs-dmg { font-size: 11px; color: var(--ok); }
 .cs-custom { width: 56px; margin: 0; padding: 2px 4px; font-size: 12px; }
 .cs-summary { font-size: 13px; margin: 6px 0; padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.28); }
+
+/* Cover sits above the attack-mode toggle: a mid-fight control, not a
+   sheet field. Full width so the grade names are never clipped. */
+.cover-row { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 11px; }
+.cover-row select { flex: 1; margin: 0; padding: 3px 6px; font-size: 12px; }

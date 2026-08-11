@@ -357,7 +357,12 @@ const POWERS: P[] = [
   ['Boost/Lower Trait', 2, 'Novice', 'Raise or lower a target trait one die type', { duration: '5' }],
   ['Burrow', 2, 'Novice', 'Meld into and move through earth', { duration: '5' }],
   // Cone Template ≈ 54 ft long; Evasion (Agility) avoids it entirely.
-  ['Burst', 2, 'Novice', 'Cone template of damage', { damage: '2d6!', save: 'agility', onSave: 'negate', aoe: { shape: 'cone', sizeFt: 54 }, duration: 'Instant' }],
+  // No save. Nothing in the Powers chapter lets a target dodge an area
+  // power — evasion belongs to thrown and fired templates (grenades, a
+  // flamethrower), which the engine reaches by a different door: only an
+  // ATTACK is evadable, never a power. Blast is already built this way;
+  // Burst carrying an Agility save made the two behave differently.
+  ['Burst', 2, 'Novice', 'Cone template of damage', { damage: '2d6!', aoe: { shape: 'cone', sizeFt: 54 }, duration: 'Instant' }],
   ['Confusion', 1, 'Novice', 'Target must make a Smarts roll or be Distracted', { rangeFt: 72, save: 'smarts', onSave: 'negate', condition: 'distracted', duration: 'Instant' }],
   ['Deflection', 3, 'Novice', 'Attacks against you suffer −2 — toggle "Deflection" on the sheet while maintained', { duration: '5' }],
   ['Detect/Conceal Arcana', 2, 'Novice', 'Sense or hide the supernatural', { duration: '5 / 1H' }],

@@ -221,6 +221,7 @@ const SECTION_THEME: Record<string, string> = {
   edges: 'card-good',        // green — an advantage you have
   hindrances: 'card-bad',    // red — something working against you
   racialTraits: 'card-info', // blue — what you were born with
+  powers: 'card-info',       // blue — the same 'what you can do' family
 };
 
 const EQUIP_COL: Record<string, string> = {

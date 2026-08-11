@@ -1061,6 +1061,17 @@ export const macros = {
     ).all(userId, campaignId) as MacroRow[];
     return rows.map(toMacro);
   },
+  /** Every macro bound to this character, across all users — a DM and a
+   *  player can both have pinned the same weapon. */
+  forCharacter(characterId: string): { id: string; userId: string; actionId: string | null; rollableId: string | null }[] {
+    return stmt(
+      'SELECT id, user_id AS userId, action_id AS actionId, rollable_id AS rollableId FROM macros WHERE character_id = ?',
+    ).all(characterId) as { id: string; userId: string; actionId: string | null; rollableId: string | null }[];
+  },
+  /** Repoint one macro's bindings without touching its name, colour or owner. */
+  setBinding(id: string, actionId: string | null, rollableId: string | null): void {
+    stmt('UPDATE macros SET action_id = ?, rollable_id = ? WHERE id = ?').run(actionId, rollableId, id);
+  },
   byId(id: string): Macro | undefined {
     const r = stmt('SELECT id, name, command, sort_order, color, character_id, rollable_id, action_id FROM macros WHERE id = ?')
       .get(id) as MacroRow | undefined;

@@ -278,17 +278,28 @@ describe('SWADE library & compendium', () => {
     expect(action.aoe).toBeUndefined();
   });
 
-  it('Burst becomes a cone-template action with an Agility (Evasion) save', () => {
+  // Nothing in the Powers chapter lets a target dodge an area power. Evasion
+  // is for thrown and fired templates — a grenade, a flamethrower — which the
+  // engine reaches only through an ATTACK, never a power. This test used to
+  // pin the opposite, which is why Burst was rolling Agility saves that Blast,
+  // its own twin, never asked for.
+  it('Burst is a cone template nobody gets to dodge', () => {
     const burst = contentForSystem('swade').find((c) => c.name === 'Burst')!;
     const sheet = { ...swade.defaultSheet(), arcaneSkill: 'Spellcasting', skills: [{ name: 'Spellcasting', die: 'd8' }] };
     const applied = applyEntry(burst, sheet)!;
     const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet: { ...sheet, powers: [applied.row] } } as unknown as Character;
     const action = combatActions(character).find((a) => a.id === 'power:0')!;
     expect(action.aoe).toEqual({ shape: 'cone', sizeFt: 54 });
-    expect(action.saveId).toBe('agility');
-    expect(action.onSave).toBe('negate');
+    expect(action.saveId).toBeUndefined();
     expect(action.attackExpr).toBeNull();
     expect(action.ppCost).toBe(2);
+  });
+
+  it('leaves no area power asking for an Agility dodge', () => {
+    const bad = contentForSystem('swade')
+      .filter((c) => c.kind === 'power' && c.power?.aoe && c.power?.save === 'agility')
+      .map((c) => c.name);
+    expect(bad).toEqual([]);
   });
 
   it('Blast is a no-save sphere template; Stun is a save-or-condition action', () => {

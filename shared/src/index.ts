@@ -24,6 +24,7 @@ export * from './systems/swadeCover.js';
 export * from './systems/swadeDuration.js';
 export * from './systems/swadeFear.js';
 export * from './systems/sheetCard.js';
+export * from './systems/macroRemap.js';
 export * from './systems/blastSound.js';
 export * from './systems/swadeCalledShot.js';
 export * from './systems/acquire.js';

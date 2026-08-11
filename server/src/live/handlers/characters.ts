@@ -6,8 +6,8 @@ import {
   type SaveToCompendiumPayload, type SheetData, type UndoEntry, type UpdateCharacterPayload,
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PrivateNotesGetPayload, PrivateNotesSetPayload, PublicSheetGetPayload, PublicSheetPayload, WorldOverridePayload } from 'shared';
-import { generateNpc, generateNpcFromModel, nameplateFor, npcById } from 'shared';
-import { campaigns, characters, chat, customNpcs, dmNotes, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
+import { generateNpc, generateNpcFromModel, nameplateFor, npcById, remapMacro, reorderMapsFor } from 'shared';
+import { campaigns, characters, chat, customNpcs, dmNotes, macros, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
@@ -370,6 +370,27 @@ export function emitCustomNpcs(socket: Socket, userId: string, system: string): 
 }
 
 /** Persist a sheet patch, mirror HP/art to tokens, resync vision + directory. */
+/**
+ * Move every pinned pill that pointed at a reordered row to that row's new
+ * position, for every user who pinned it — a DM and a player can both have
+ * the same weapon on their toolbar. Each affected user gets their list back
+ * so the change is live, not something they discover by firing the wrong gun.
+ */
+function followReorder(
+  io: Server, campaignId: string, characterId: string, reorders: Record<string, Map<number, number>>,
+): void {
+  const touchedUsers = new Set<string>();
+  for (const m of macros.forCharacter(characterId)) {
+    const next = remapMacro({ actionId: m.actionId, rollableId: m.rollableId }, reorders);
+    if (!next) continue;
+    macros.setBinding(m.id, next.actionId ?? null, next.rollableId ?? null);
+    if (m.userId) touchedUsers.add(m.userId);
+  }
+  for (const userId of touchedUsers) {
+    io.to(userRoom(userId)).emit(S2C.MACROS, { macros: macros.forUser(userId, campaignId) });
+  }
+}
+
 function applyCharacterPatch(
   io: Server, campaignId: string, character: Character, patch: SheetData, name?: string, actorName?: string,
 ): void {
@@ -384,10 +405,15 @@ function applyCharacterPatch(
   // both drops concentration AND ticks a condition checkbox in the same
   // patch doesn't double-post the conditions concentration already lifted.
   const beforeConditions = conditionsOf(character.sheet);
+  // Pinned pills bind to a row's INDEX, so reordering cards would silently
+  // repoint them — the knife's pill firing the rifle. Worked out against the
+  // sheet as it stands, before the patch lands.
+  const reorders = reorderMapsFor(character.sheet, patch);
   const sheet = { ...character.sheet, ...scrubNonFinite(patch) };
   characters.update(character.id, name, sheet);
   const updated = characters.byId(character.id)!;
   emitCharacter(io, campaignId, updated);
+  if (Object.keys(reorders).length > 0) followReorder(io, campaignId, character.id, reorders);
 
   if (Array.isArray(patch.conditions) && actorName) {
     postConditionDiff(io, campaignId, updated.name, beforeConditions, conditionsOf(updated.sheet), actorName);

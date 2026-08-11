@@ -22,6 +22,8 @@ export * from './systems/swadeInitiative.js';
 export * from './systems/swadeSize.js';
 export * from './systems/swadeCover.js';
 export * from './systems/swadeDuration.js';
+export * from './systems/swadeFear.js';
+export * from './systems/blastSound.js';
 export * from './systems/swadeCalledShot.js';
 export * from './systems/acquire.js';
 export * from './systems/rollStats.js';

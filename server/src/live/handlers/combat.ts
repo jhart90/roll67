@@ -14,6 +14,7 @@ import {
   swadeWoundsHealed, swadeRangeBand, swadeCritFail,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
+  fearCheckFailure, fearCheckMod, fearTableRow, fearTableTotal, PANICKED_OUTCOME, type RequestFearPayload,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -758,6 +759,128 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
 
   postSave(0);
   return true;
+}
+
+// ---------- Fear checks and the Fear Table ----------
+
+interface GroupFearSpec extends RequestFearPayload {
+  campaignId: string;
+  userId: string;
+  username: string;
+}
+
+/**
+ * DM "call for a Fear check": every listed token makes a Spirit roll at the
+ * creature's Fear penalty, one at a time, each posting its own chat card and
+ * waiting for the dice to settle before the next. A failure costs whatever
+ * the source calls for, and the ones the book sends to the Fear Table roll a
+ * d20 there — a second card, with the row's own text and its conditions
+ * applied.
+ *
+ * Two rows are deliberately left for the table to finish: the Adrenaline
+ * Surge's Joker (initiative is already dealt) and the Heart Attack's Vigor
+ * roll, which branches into dying in 2d6 rounds. Both post what the book says
+ * and leave the call to the DM rather than guessing.
+ */
+function runGroupFear(io: Server, spec: GroupFearSpec): boolean {
+  const targets: { tok: Token; ch: Character }[] = [];
+  for (const tid of spec.tokenIds) {
+    const tok = tokens.byId(tid);
+    const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+    // Fear lands on a mind. A bare token has no Spirit to roll and no sheet to
+    // carry what a failure does, so it is skipped rather than faked.
+    if (tok && ch && ch.system === 'swade') targets.push({ tok, ch });
+  }
+  if (targets.length === 0) return false;
+
+  const what = spec.label?.trim() || 'Fear';
+  const post = (text: string, br: ReturnType<typeof roll> | null, ch: Character, outcome?: 'success' | 'failure') => {
+    const msg = chat.add(spec.campaignId, {
+      userId: spec.userId, fromName: spec.username, kind: br ? 'roll' : 'system', text,
+      characterId: ch.id, statsUserId: ch.ownerUserId ?? null,
+      roll: br ? { ...br, ...(outcome ? { outcome } : {}) } : null, recipients: null,
+    });
+    io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
+  };
+
+  /** Roll the d20, post the row, and apply what it carries. */
+  const rollTable = (ch: Character, criticalFailure: boolean, then: () => void): void => {
+    const d20 = roll('1d20');
+    const total = fearTableTotal(d20.total, spec.fearPenalty, spec.source, criticalFailure);
+    let row = fearTableRow(total);
+    const fresh0 = characters.byId(ch.id) ?? ch;
+    // "If he already has it, he's Panicked instead."
+    if (row.id === 'frightened' && hasHindrance(fresh0.sheet, 'Hesitant')) row = PANICKED_OUTCOME;
+
+    const bonus = total - d20.total;
+    const bonusText = bonus > 0 ? ` (${d20.total} +${bonus})` : '';
+    post(`${ch.name} — Fear Table ${total}${bonusText}: ${row.label}`, d20, ch);
+
+    setTimeout(() => {
+      const fresh = characters.byId(ch.id);
+      if (fresh) {
+        for (const c of row.conditions ?? []) applyConditionTo(io, spec.campaignId, fresh, c, what);
+        if (row.hindrance) addFearHindrance(io, spec.campaignId, row.hindrance, row.id);
+      }
+      postStatusLine(io, spec.campaignId, `${ch.name}: ${row.label} — ${row.effect}`);
+      then();
+    }, diceSettleDelayMs(1));
+  };
+
+  const step = (i: number): void => {
+    if (i >= targets.length) return;
+    const next = () => { if (i + 1 < targets.length) setTimeout(() => step(i + 1), SAVE_STEP_DELAY_MS); };
+    const { ch } = targets[i]!;
+    const wildCard = ch.sheet.wildCard !== false;
+    // Spirit is an attribute, not a skill — same roll the Shaken recovery makes.
+    const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4')), fearCheckMod(spec.fearPenalty));
+    const br = roll(expr);
+    const passed = br.total >= 4;
+    const critFail = swadeCritFail(br.dice, wildCard);
+
+    post(
+      `${ch.name} — ${what} check (Spirit${fmtMod(fearCheckMod(spec.fearPenalty))}): ${passed ? 'Success' : critFail ? 'Critical Failure' : 'Failure'}`,
+      br, ch, passed ? 'success' : 'failure',
+    );
+
+    if (passed) { next(); return; }
+
+    const fail = fearCheckFailure(spec.source, critFail, wildCard);
+    setTimeout(() => {
+      const fresh = characters.byId(ch.id);
+      if (fresh) {
+        for (const c of fail.conditions) applyConditionTo(io, spec.campaignId, fresh, c, what);
+        if (fail.fatigue > 0) {
+          const live = characters.byId(ch.id)!;
+          persistSheet(io, spec.campaignId, live, { fatigue: Math.min(2, num(live.sheet, 'fatigue', 0) + fail.fatigue) });
+        }
+      }
+      postStatusLine(io, spec.campaignId, `${ch.name} fails the ${what} check — ${fail.summary}`);
+      if (fail.rollsTable) rollTable(ch, critFail, next);
+      else next();
+    }, diceSettleDelayMs(1));
+  };
+
+  step(0);
+  return true;
+}
+
+/** Does the sheet already carry this Hindrance? */
+function hasHindrance(sheet: SheetData, name: string): boolean {
+  return rows(sheet, 'hindrances').some((r) => str(r, 'name', '').trim().toLowerCase() === name.toLowerCase());
+}
+
+/**
+ * The Fear Table's Hindrances are handed to the DM as a chat line rather than
+ * written onto the sheet. Frightened's Hesitant lasts only "the remainder of
+ * the encounter", and a Phobia has to be *about* something — neither is the
+ * engine's to decide.
+ */
+function addFearHindrance(io: Server, campaignId: string, hindrance: string, rowId: string): void {
+  const why = rowId === 'frightened'
+    ? 'for the remainder of the encounter'
+    : 'permanently — name the trauma it attaches to';
+  postStatusLine(io, campaignId, `DM: add the ${hindrance} Hindrance ${why}.`);
 }
 
 // ---------- Grenades: the parked blast ----------
@@ -2372,6 +2495,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'No valid targets for the save.');
     }
   }, 'REQUEST_SAVE'));
+
+  // DM "call for a Fear check": the SWADE Spirit roll, with failures routed
+  // through the Fear Table. Same shape as a group save — one roll at a time,
+  // each waiting for the previous card's dice to settle.
+  socket.on(C2S.REQUEST_FEAR, safe(socket, (p: RequestFearPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM calls for Fear checks.'); return; }
+    if (!runGroupFear(io, { campaignId: d.campaignId, userId: d.userId, username: d.username, ...p })) {
+      emitError(socket, 'No valid targets — a Fear check needs a SWADE character sheet.');
+    }
+  }, 'REQUEST_FEAR'));
 
   socket.on(C2S.INIT_ADD, safe(socket, (payload: InitAddPayload) => {
     const d = requireCampaign(socket);

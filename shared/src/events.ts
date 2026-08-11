@@ -65,6 +65,7 @@ export const C2S = {
   RELOAD_WEAPON: 'reloadWeapon',
   DEATH_SAVE: 'deathSave',
   REQUEST_SAVE: 'requestSave',
+  REQUEST_FEAR: 'requestFear',
   AOE_PREVIEW: 'aoePreview',
   CAST_AOE: 'castAoe',
   TARGET_PREVIEW: 'targetPreview',
@@ -468,6 +469,16 @@ export interface RequestSavePayload {
   damageExpr?: string;
   onSave: 'half' | 'negate';
   damageType?: string;
+  label?: string;
+}
+
+/** DM calls for a SWADE Fear check: a Spirit roll at the creature's Fear
+ *  penalty, with failures routed through the Fear Table. */
+export interface RequestFearPayload {
+  tokenIds: string[];
+  /** The creature's Fear penalty, e.g. 2 for "Fear −2". 0 for a plain check. */
+  fearPenalty: number;
+  source: import('./systems/swadeFear.js').FearSource;
   label?: string;
 }
 

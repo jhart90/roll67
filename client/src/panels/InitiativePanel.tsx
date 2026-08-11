@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { intents, useGameStore } from '../store/game';
 import { CardChip } from '../util/PlayingCardView';
 import { SavePrompt } from './SavePrompt';
+import { FearPrompt } from './FearPrompt';
 
 export function InitiativePanel() {
   const you = useGameStore((s) => s.you);
@@ -10,6 +11,7 @@ export function InitiativePanel() {
   const map = useGameStore((s) => s.map);
   const campaign = useGameStore((s) => s.campaign);
   const [saving, setSaving] = useState(false);
+  const [fearing, setFearing] = useState(false);
 
   const isDm = useGameStore((s) => s.isDm());
   if (!you) return null;
@@ -115,9 +117,11 @@ export function InitiativePanel() {
             </>
           )}
           <button onClick={() => setSaving(true)}>⚑ Call for save</button>
+          {swade && <button title="Spirit roll against something horrific, with the Fear Table for failures" onClick={() => setFearing(true)}>😱 Call for Fear</button>}
         </div>
       )}
       {saving && <SavePrompt onClose={() => setSaving(false)} />}
+      {fearing && <FearPrompt onClose={() => setFearing(false)} />}
 
       {isDm && state.entries.length > 0 && (
         <div className="row init-controls">

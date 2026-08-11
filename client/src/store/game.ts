@@ -11,6 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
+  type FearSource, blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
@@ -417,6 +418,21 @@ interface GameState {
 }
 
 let pingCounter = 0;
+
+/**
+ * The sound a blast template makes when its shockwave lands. Every client
+ * fires its own clip off the broadcast burst, exactly as the dice Ace sounds
+ * do — no extra event, and the volume follows the same local SFX slider and
+ * mute as everything else.
+ */
+function playBlastSound(sizeHexes: number | undefined, damageType: string | undefined): void {
+  const clip = blastSoundClip(sizeHexes, damageType, Math.random());
+  const audio = new Audio(`/sounds/${clip}.mp3`);
+  const s = useGameStore.getState();
+  audio.volume = blastSoundVolume(sizeHexes) * s.localSfxVolume * (s.clientMuted ? 0 : 1);
+  // Autoplay may be blocked before the user's first interaction — ignore.
+  audio.play().catch(() => undefined);
+}
 
 // How long an AoE burst/ripple's own expansion-and-fade plays once it starts
 // (after any projectile flight for sphere/cylinder shapes) -- see
@@ -1141,6 +1157,8 @@ export function wireSocket(): void {
         damageType: p.damageType, flightMs: p.flightMs,
       }],
     });
+    // The bang lands with the shockwave, not with the throw.
+    setTimeout(() => playBlastSound(p.sizeHexes, p.damageType), p.flightMs);
     setTimeout(() => {
       const cur = useGameStore.getState();
       useGameStore.setState({ aoeBursts: cur.aoeBursts.filter((x) => x.id !== id) });
@@ -1581,6 +1599,10 @@ export const intents = {
   requestSave: (p: { tokenIds: string[]; saveId: string; dc: number; damageExpr?: string; onSave: 'half' | 'negate'; damageType?: string; label?: string }) => {
     jumpToChat();
     socket.emit(C2S.REQUEST_SAVE, p);
+  },
+  requestFear: (p: { tokenIds: string[]; fearPenalty: number; source: FearSource; label?: string }) => {
+    jumpToChat();
+    socket.emit(C2S.REQUEST_FEAR, p);
   },
   moderateMessage: (messageId: number, action: 'hide' | 'unhide' | 'hideUndo') =>
     socket.emit(C2S.MODERATE_MESSAGE, { messageId, action }),

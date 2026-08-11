@@ -14,6 +14,7 @@ import {
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
 import { scaleBand, swadeWoundCap } from './swadeSize.js';
+import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, isCoverGrade } from './swadeCover.js';
 import { conditionsOf, DAMAGE_TYPES } from './effects.js';
 
 export const ATTRIBUTES_SWADE = [
@@ -357,6 +358,9 @@ const identityFields: FieldDef[] = [
   { id: 'size', label: 'Size', type: 'number', width: 'sixth', default: 0 },
   // Blank/0 = derive from Wild Card status and Size. Set it to override.
   { id: 'maxWoundsOverride', label: 'Wound cap', type: 'number', width: 'sixth', default: 0 },
+  // Cover the MAP cannot see: furniture, a crowd, a raised shield. The
+  // geometry keeps computing its own; attacks use whichever is deeper.
+  { id: 'cover', label: 'Cover', type: 'select', width: 'third', options: COVER_OPTIONS, optionLabels: COVER_LABEL, default: 'none' },
 ];
 
 const attributeFields: FieldDef[] = ATTRIBUTES_SWADE.map((a) => ({
@@ -620,6 +624,10 @@ export const swade: SystemSchema = {
     out.maxWoundsOverride = `carries ${swadeWoundCap({
       wildCard: sheet.wildCard !== false, size, override: num(sheet, 'maxWoundsOverride', 0),
     })} Wound(s)`;
+    const cov = str(sheet, 'cover', 'none');
+    out.cover = isCoverGrade(cov) && cov !== 'none'
+      ? `${COVER_PENALTY[cov]} to attacks against them`
+      : 'none claimed on the sheet';
     out.parry = swadeParry(sheet);
     out.toughness = swadeToughness(sheet);
     out.toughnessRanged = swadeToughness(sheet) + swadeRangedArmor(sheet);

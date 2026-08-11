@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, swadeWoundCap, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
@@ -1009,6 +1009,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
 
     const targetChar = tgt.characterId ? characters.byId(tgt.characterId) : undefined;
+    // The map and the sheet can BOTH be right about cover, and neither
+    // corrects the other: the map sees walls, the sheet knows about the bar
+    // he is crouched behind. The target keeps whichever protects them more.
+    let coverSource: 'map' | 'sheet' | 'both' = 'map';
+    let coverGrade = coverGradeFor(coverPenalty);
+    if (actor.system === 'swade' && targetChar) {
+      const eff = effectiveCover(coverPenalty, targetChar.sheet);
+      coverPenalty = eff.penalty;
+      coverGrade = eff.grade;
+      coverSource = eff.source;
+    }
 
     // Conditions gate the action and shift advantage.
     const attackerConditions = conditionsOf(actor.sheet);
@@ -1152,7 +1163,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           mod += 2; dmgBonus += 2; wildAttack = true; tags.push('+2 Wild Attack');
         } else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
         if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${reading?.label ?? 'range'}`); }
-        if (coverPenalty) { mod += coverPenalty; tags.push(`${coverPenalty} Cover (armor +${-coverPenalty})`); }
+        if (coverPenalty) {
+          mod += coverPenalty;
+          const via = coverSource === 'both' ? '' : coverSource === 'sheet' ? ', on their sheet' : ', from the map';
+          tags.push(`${coverPenalty} ${COVER_LABEL[coverGrade]}${via} (armor +${-coverPenalty})`);
+        }
         // Illumination: Dim −2, Dark −4 — unless the target stands in light
         // (a map light's or a carried torch's bright radius washes it out;
         // a dim radius still leaves −2).

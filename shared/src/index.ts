@@ -13,6 +13,7 @@ export * from './vision/raycast.js';
 export * from './vision/fov.js';
 export * from './vision/visibilityPolygon.js';
 export * from './vision/movement.js';
+export * from './vision/wallMemory.js';
 export * from './dice/parser.js';
 export * from './dice/roller.js';
 export * from './dice/iron.js';

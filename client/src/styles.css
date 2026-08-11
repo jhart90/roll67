@@ -672,11 +672,10 @@ button.link:hover { text-decoration: underline; }
 /* Reorder grip. Stacked tight so the pair reads as one control and costs the
    card head almost no width — the order of these cards is the order of the
    actions in the right-hand pane, so it earns a permanent spot. */
-/* Anchored to the top, not centred: a title that wraps to two lines would
-   otherwise drop the grip below the ✎ and 🗨 on the right, which stay on the
-   first line. All three controls belong on the same line as the first line
-   of the name. */
-.sc-move { display: flex; flex-direction: column; gap: 0; flex: none; align-self: flex-start; margin-right: 2px; }
+/* Last in the header's control cluster, anchored to the top so it stays on
+   the first line of a name that wraps — same line as the ✎ and 🗨 it sits
+   beside. */
+.sc-move { display: flex; flex-direction: column; gap: 0; flex: none; align-self: flex-start; margin-left: 2px; }
 .sc-move button {
   font-size: 8px; line-height: 8px; padding: 1px 3px; opacity: 0.35;
   text-decoration: none; flex: none;

@@ -512,10 +512,10 @@ function ListEditor({
             return (
               <div key={i} className="sheet-card sheet-card-edit">
                 <div className="sheet-card-head">
-                  {moveGrip(i)}
                   <span className="sc-title">✎ {String(row.name || nameFallback)}</span>
                   <span className="spacer" />
                   <button className="link" onClick={() => setEditIdx(null)}>done</button>
+                  {moveGrip(i)}
                 </div>
                 <div className="sc-fields">
                   {mainCols.map((col) => (
@@ -552,7 +552,6 @@ function ListEditor({
           return (
             <div key={i} className={`sheet-card${isEquipped ? ' card-good' : ''}${SECTION_THEME[section.id] ? ' ' + SECTION_THEME[section.id] : ''}`}>
               <div className="sheet-card-head">
-                {moveGrip(i)}
                 <span className="sc-title">{String(row.name || nameFallback)}</span>
                 <span className="spacer" />
                 {hasDetail && attackHasRider(row) && (
@@ -570,6 +569,7 @@ function ListEditor({
                 {!readOnly && (
                   <button className="link sc-pencil" title="Edit all details" onClick={() => setEditIdx(i)}>✎</button>
                 )}
+                {moveGrip(i)}
               </div>
               {(chips.length > 0 || rider) && (
                 <div className="sc-chips">

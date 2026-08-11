@@ -15,8 +15,68 @@ export function pxPerFoot(grid: Pick<GridConfig, 'hexSize' | 'feetPerHex'>): num
   return (grid.hexSize * SQRT3) / feetPerHex;
 }
 
-/** Half-angle of a cone template (a 60°-total cone is a common VTT simplification of 5e's rule). */
-const CONE_HALF_ANGLE = Math.PI / 6;
+/**
+ * The Cone Template's shape.
+ *
+ * The book prints it as a teardrop: a narrow point at the caster that opens
+ * out into a big rounded end, not the 60° pie wedge a VTT usually reaches
+ * for. Geometrically it is the convex hull of the caster's point and a circle
+ * at the far end — which is what the two tangent lines down its sides are.
+ *
+ * CONE_END_RADIUS is that circle's radius as a fraction of the template's
+ * length, read off the printed template's proportions (its widest part is
+ * about half its length). The length itself is unchanged, so every power and
+ * weapon keeps the reach it had.
+ */
+const CONE_END_RADIUS = 0.25;
+
+/** Where the end circle's centre sits, as a fraction of the length. */
+const CONE_END_CENTRE = 1 - CONE_END_RADIUS;
+
+/** Half-angle of the tangent sides — asin(r / d) for a circle at distance d. */
+const CONE_HALF_ANGLE = Math.asin(CONE_END_RADIUS / CONE_END_CENTRE);
+
+/**
+ * Is a point inside a teardrop cone of length `len`, given its distance along
+ * the aim axis and its perpendicular offset? Both in the same units.
+ *
+ * Two regions, which together are exactly the hull: the tangent wedge up to
+ * the end circle's centre, and the circle itself beyond it.
+ */
+export function pointInConeTemplate(along: number, offset: number, len: number): boolean {
+  if (len <= 0 || along <= 0) return false;          // behind the caster, or no cone
+  const r = CONE_END_RADIUS * len;
+  const c = CONE_END_CENTRE * len;
+  const s = Math.abs(offset);
+  if (along <= c) return s <= along * Math.tan(CONE_HALF_ANGLE);
+  const dx = along - c;
+  return dx * dx + s * s <= r * r;
+}
+
+/**
+ * The Cone Template as an SVG path, so the shape drawn on the map and the
+ * shape `pointInConeTemplate` tests are built from the same two constants and
+ * cannot drift apart.
+ *
+ * Apex, out along one tangent, the long way round the end circle, back down
+ * the other tangent. The arc is the major one (it wraps the far tip), and it
+ * sweeps anticlockwise on screen because SVG's y axis points down.
+ */
+export function coneTemplatePath(ox: number, oy: number, ux: number, uy: number, len: number): string {
+  const r = CONE_END_RADIUS * len;
+  const c = CONE_END_CENTRE * len;
+  // Where the tangent from the apex actually touches the circle.
+  const d = Math.sqrt(Math.max(0, c * c - r * r));
+  const along = d * Math.cos(CONE_HALF_ANGLE);
+  const off = d * Math.sin(CONE_HALF_ANGLE);
+  const px = -uy;
+  const py = ux;
+  const lx = ox + ux * along + px * off;
+  const ly = oy + uy * along + py * off;
+  const rx = ox + ux * along - px * off;
+  const ry = oy + uy * along - py * off;
+  return `M ${ox},${oy} L ${lx},${ly} A ${r},${r} 0 1 0 ${rx},${ry} Z`;
+}
 
 export interface AoeGeometry {
   /** Where the shape originates — the caster, for cone/line/cube. Unused for sphere/cylinder. */
@@ -48,9 +108,12 @@ export function pointInAoe(point: Point, spec: AoeSpec, geo: AoeGeometry, pxPerF
     // PHB 204: "A cone's point of origin is not included in the cone's area
     // of effect" — i.e. the caster doesn't hit themself with their own cone.
     if (dist <= 1e-6) return false;
-    if (dist > sizePx || dirLen <= 1e-6) return false;
-    const cos = (px * dirX + py * dirY) / (dirLen * dist);
-    return Math.acos(Math.max(-1, Math.min(1, cos))) <= CONE_HALF_ANGLE;
+    if (dirLen <= 1e-6) return false;
+    // Resolve into "how far along the aim" and "how far off to the side",
+    // which is what the teardrop is defined in terms of.
+    const ux = dirX / dirLen;
+    const uy = dirY / dirLen;
+    return pointInConeTemplate(px * ux + py * uy, px * uy - py * ux, sizePx);
   }
 
   // line and cube: a rectangle from the origin toward the aim direction.

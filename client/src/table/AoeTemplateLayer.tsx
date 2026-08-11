@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AoeShape, Hex, Point } from 'shared';
-import { hexToPixel, pixelToHex } from 'shared';
+import { coneTemplatePath, hexToPixel, pixelToHex } from 'shared';
 import { useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
@@ -19,12 +19,14 @@ function shapeNode(shape: AoeShape, originPx: Point, aimPx: Point, sizePx: numbe
   const uy = dirY / len;
 
   if (shape === 'cone') {
-    const half = Math.PI / 6; // matches CONE_HALF_ANGLE in hex/aoe.ts
-    const cos = Math.cos(half);
-    const sin = Math.sin(half);
-    const left = { x: originPx.x + sizePx * (ux * cos - uy * sin), y: originPx.y + sizePx * (ux * sin + uy * cos) };
-    const right = { x: originPx.x + sizePx * (ux * cos + uy * sin), y: originPx.y + sizePx * (-ux * sin + uy * cos) };
-    return <polygon points={`${originPx.x},${originPx.y} ${left.x},${left.y} ${right.x},${right.y}`} fill={fill} stroke={color} strokeWidth={2.5} />;
+    // The book's teardrop, not a wedge — built by the same helper the hit
+    // test uses, so what you aim is exactly what catches.
+    return (
+      <path
+        d={coneTemplatePath(originPx.x, originPx.y, ux, uy, sizePx)}
+        fill={fill} stroke={color} strokeWidth={2.5}
+      />
+    );
   }
 
   // line and cube: a rectangle from the origin toward the aim direction.

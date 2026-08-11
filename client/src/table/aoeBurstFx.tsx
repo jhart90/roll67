@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { GridConfig, Hex } from 'shared';
-import { hexToPixel } from 'shared';
+import { coneTemplatePath, hexToPixel } from 'shared';
 import { Projectile, impactColor, projectileShape } from './impactFx';
 
 export interface AoeBurstState {
@@ -37,16 +37,17 @@ function BurstSphere({ radiusPx, color, delayMs }: { radiusPx: number; color: st
  *  cone half of an AoE burst. Always plays immediately (no projectile phase;
  *  a cone always originates at the caster). */
 function BurstCone({ lengthPx, aimDx, aimDy, color }: { lengthPx: number; aimDx: number; aimDy: number; color: string }) {
-  const half = Math.PI / 6; // matches CONE_HALF_ANGLE in shared/src/hex/aoe.ts
-  const cos = Math.cos(half);
-  const sin = Math.sin(half);
   const len = Math.hypot(aimDx, aimDy) || 1;
   const ux = aimDx / len;
   const uy = aimDy / len;
-  const left = { x: lengthPx * (ux * cos - uy * sin), y: lengthPx * (ux * sin + uy * cos) };
-  const right = { x: lengthPx * (ux * cos + uy * sin), y: lengthPx * (-ux * sin + uy * cos) };
   const style = { ['--burst-color' as unknown as string]: color } as CSSProperties;
-  return <polygon className="aoe-burst aoe-burst-cone" style={style} points={`0,0 ${left.x},${left.y} ${right.x},${right.y}`} />;
+  return (
+    <path
+      className="aoe-burst aoe-burst-cone"
+      style={style}
+      d={coneTemplatePath(0, 0, ux, uy, lengthPx)}
+    />
+  );
 }
 
 /**

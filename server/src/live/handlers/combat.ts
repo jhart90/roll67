@@ -12,6 +12,7 @@ import {
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail,
+  cardDrawPlan, chooseCard, quickRedraws, type DrawPlan,
 } from 'shared';
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
@@ -418,6 +419,49 @@ function finishTurnTransition(io: Server, campaignId: string, state: InitiativeS
  * rounds and reshuffles only after a round in which a Joker was dealt.
  * Held combatants keep holding and draw no card.
  */
+/**
+ * One combatant's Action Card, with their Edges and Hindrances applied.
+ *
+ * Quick, Level Headed, Improved Level Headed and Hesitant all change the deal
+ * rather than the card, so this is the single place that knows how: draw the
+ * plan's worth of cards, let Quick throw back anything at or under a 5, act on
+ * the best or worst as the plan says, and slide everything unused back under
+ * the deck. Used by both the initial deal and the per-round redeal, because
+ * SWADE redeals every round and the Edge has to fire every round with it.
+ */
+function drawActionCard(
+  state: InitiativeState,
+  sheet: SheetData | null,
+): { card: PlayingCard; discarded: PlayingCard[]; plan: DrawPlan } {
+  const plan = sheet ? cardDrawPlan(sheet) : { draw: 1, keep: 'best' as const, redrawAtOrBelow: 0, reasons: [] };
+  const next = (): PlayingCard => {
+    if (!state.deck || state.deck.length === 0) state.deck = shuffleDeck(buildDeck());
+    return state.deck.shift()!;
+  };
+  const drawn: PlayingCard[] = [];
+  for (let i = 0; i < plan.draw; i++) drawn.push(next());
+  const discarded: PlayingCard[] = [];
+  for (let i = 0; i < drawn.length; i++) {
+    // Bounded: a pathological deck must not spin here forever.
+    let guard = 0;
+    while (quickRedraws(drawn[i], plan.redrawAtOrBelow) && guard++ < 20) {
+      discarded.push(drawn[i]);
+      drawn[i] = next();
+    }
+  }
+  const card = chooseCard(drawn, plan.keep);
+  for (const c of [...discarded, ...drawn]) if (c !== card) state.deck!.push(c);
+  return { card, discarded, plan };
+}
+
+/** The sheet behind a token, when there is one. */
+function sheetForToken(tokenId: string | null): SheetData | null {
+  if (!tokenId) return null;
+  const tok = tokens.byId(tokenId);
+  const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+  return ch ? ch.sheet : null;
+}
+
 function redealRoundCards(io: Server, campaignId: string, state: InitiativeState): void {
   if (!state.active || !state.cardMode || state.entries.length === 0) return;
   if (state.jokerDealt) {
@@ -428,8 +472,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
   const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean }> = [];
   for (const entry of state.entries) {
     if (entry.held) continue;
-    if (!state.deck || state.deck.length === 0) state.deck = shuffleDeck(buildDeck());
-    const card = state.deck.shift()!;
+    const { card } = drawActionCard(state, sheetForToken(entry.tokenId));
     if (card.rank === 15) state.jokerDealt = true;
     state.drawCounter = (state.drawCounter ?? 0) + 1;
     entry.card = card;
@@ -2973,7 +3016,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     }
-    const card = state.deck.shift()!;
+    const { card, discarded, plan } = drawActionCard(state, sheetForToken(pending.tokenId));
     if (card.rank === 15) state.jokerDealt = true;
     state.drawCounter = (state.drawCounter ?? 0) + 1;
     state.pendingDraws!.splice(idx, 1);
@@ -2992,7 +3035,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const room = pending.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId);
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, kind: 'system',
-      text: `🂠 ${pending.name} draws the ${cardName(card)} ${cardShort(card)}${card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''}`,
+      text: `🂠 ${pending.name} draws the ${cardName(card)} ${cardShort(card)}`
+        + (plan.reasons.length ? ` [${plan.reasons.join('; ')}]` : '')
+        + (discarded.length ? ` — discarded ${discarded.map((c) => cardShort(c)).join(' ')}` : '')
+        + (card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''),
       roll: null, recipients: null,
     });
     io.to(room).emit(S2C.CHAT, { msg });

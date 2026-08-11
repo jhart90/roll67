@@ -154,6 +154,24 @@ function FieldInput({
   );
 }
 
+/**
+ * What the tick box says when it is OFF.
+ *
+ * An unticked box beside the word "Equipped" is ambiguous at a glance — it
+ * reads as a label for the row as easily as a state. Saying the negative
+ * outright means the card always states the fact rather than naming the
+ * question, whichever way the box is set.
+ */
+const UNSET_EQUIP_LABEL: Record<string, string> = {
+  Equipped: 'Unequipped',
+  Worn: 'Not being worn',
+  Wielded: 'Not being wielded',
+};
+function equipLabel(label: string, on: boolean): string {
+  if (on) return label;
+  return UNSET_EQUIP_LABEL[label] ?? `Not ${label.toLowerCase()}`;
+}
+
 const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoeSize', 'aoeWidth', 'condition', 'conditionSave', 'conditionDc']);
 
 /** Does this attack carry a rider effect (forced save, inflicted condition,
@@ -490,7 +508,7 @@ function ListEditor({
               {notes.map((n, j) => <div key={j} className="sc-notes">{n}</div>)}
               {equipCol && (
                 <label className={`sc-equip${isEquipped ? ' on' : ''}`} title={`${equipCol.label} — announced in chat`}>
-                  <span>{equipCol.label}</span>
+                  <span>{equipLabel(equipCol.label, isEquipped)}</span>
                   <input
                     type="checkbox"
                     checked={isEquipped}

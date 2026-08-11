@@ -412,10 +412,17 @@ export function buildMapState(
   // not they have a token on it. The DM controls what is visible by which
   // layer a piece sits on, so the GM layer is still withheld.
   if (map.isScene) {
+    const staged = allTokens.filter((t) => t.layer !== 'gm');
+    // Being SHOWN a scene is how you visit one. The battlemap rule below —
+    // "you have been here if a piece of yours stands here" — cannot apply to a
+    // scene, because a scene is a backdrop nobody stands on; applying it anyway
+    // meant scenes were never discovered by anyone and never reached a player's
+    // world tab. The DM put them in front of it; that is the visit.
+    if (!viewer.isDm) recordDiscovery(map.campaignId, viewer.userId, map.id, staged, true);
     return {
       map: mapView,
       dmGeometry: viewer.isDm ? { walls: map.walls, doors: map.doors, lights: map.lights } : null,
-      tokens: allTokens.filter((t) => t.layer !== 'gm'),
+      tokens: staged,
       drawings,
       visible: null,
       fade: null,

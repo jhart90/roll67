@@ -1403,10 +1403,20 @@ async function main() {
   ok(true, "previewing a player hides locations they can't see from the DM");
   await asPlayerShops;
   ok(true, 'previewing a player hides shops that are closed to them');
+  // The invariant the preview exists for: what the DM sees while previewing a
+  // player must equal what that player sees. This used to assert only that an
+  // array came back, which is true of the DM's own omniscient directory too --
+  // and that is exactly the bug it failed to catch (REQUEST_DIRECTORY read the
+  // raw role, so previewing handed the DM every map in the campaign).
   const asPlayerDir = waitFor(dmSock, 'directory', 5000, () => true);
   dmSock.emit('requestDirectory', {});
   const dirAsPlayer = (await asPlayerDir).maps;
-  ok(Array.isArray(dirAsPlayer), 'directory arrives scoped to the previewed player');
+  const realPlayerDir = waitFor(playerSock, 'directory', 5000, () => true);
+  playerSock.emit('requestDirectory', {});
+  const dirReal = (await realPlayerDir).maps;
+  const ids = (ms) => ms.map((m) => m.id).sort().join(',');
+  ok(ids(dirAsPlayer) === ids(dirReal),
+    `previewing a player shows exactly their maps (${dirAsPlayer.length} vs ${dirReal.length})`);
 
   // ...and switching back restores omniscience rather than leaving the DM
   // stuck in the player's narrower world.

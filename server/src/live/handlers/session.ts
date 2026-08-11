@@ -190,7 +190,13 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.REQUEST_DIRECTORY, safe(socket, () => {
     const d = sdata(socket);
     if (!d.campaignId || !d.role) return;
-    socket.emit(S2C.DIRECTORY, buildDirectory(d.campaignId, d.role === 'dm', d.userId));
+    // viewerFor, not d.role: while the DM is previewing a player this must
+    // answer as that player. Reading the raw role handed the previewing DM the
+    // whole campaign's atlas, so "View as" showed maps the player had never
+    // discovered — the preview disagreeing with reality in the one direction
+    // that makes it useless.
+    const v = viewerFor(d);
+    socket.emit(S2C.DIRECTORY, buildDirectory(d.campaignId, v.isDm, v.userId));
   }, 'REQUEST_DIRECTORY'));
 
   // Set your own 3D-dice color (a global user preference, shown to everyone).

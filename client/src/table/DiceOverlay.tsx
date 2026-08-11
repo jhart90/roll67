@@ -100,13 +100,14 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
  * its own clip rather than the server sending an extra event.
  *
  * Several files per style are picked at random, so a chain of aces does not
- * play the same explosion four times in a row. Disco has no clip yet; a style
- * with nothing listed simply stays silent.
+ * play the same explosion four times in a row. A style with nothing
+ * listed simply stays silent.
  */
 const ACE_SOUNDS: Partial<Record<AceStyle, string[]>> = {
   flash: ['shine_1'],
   explosion: ['explosion_1', 'explosion_2', 'explosion_3', 'explosion_4'],
   flames: ['fire_1'],
+  disco: ['disco_1'],
   rainbow: ['rainbow_1'],
   smoke: ['smoke_1'],
   water: ['water_1', 'water_2'],

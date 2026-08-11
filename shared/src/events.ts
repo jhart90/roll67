@@ -438,6 +438,9 @@ export interface CombatActionPayload {
   /** SWADE: rounds-per-attack setting for this shot, 1..weapon RoF
    *  (default: the weapon's full RoF). Drives Recoil, burst hits, ammo. */
   rof?: number;
+  /** SWADE Called Shot: what the attacker is aiming at, chosen before the
+   *  roll. The penalty is the target part's own Scale, not the creature's. */
+  calledShot?: { label: string; penalty: number; damageBonus?: number } | null;
 }
 
 /** Activate a psychic power that has no target (utility/self powers): commits

@@ -6,6 +6,7 @@ import {
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
+import { CALLED_SHOTS, calledShotById, clampCalledShotPenalty } from 'shared';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnFeatures } from './SwnFeatures';
 import { CombatStatus } from './CombatStatus';
@@ -21,7 +22,14 @@ const DEFAULT_TOKEN_COLOR = '#6c9bd2';
 const STATS_TAB = '__stats';
 const NOTES_TAB = '__notes';
 
-type AdvMode = null | 'adv' | 'dis';
+/**
+ * The attack-mode toggle. 'called' is a UI mode only — it decides which
+ * prompt opens, and the roll it produces goes out with adv=null plus a
+ * calledShot aim, so it must never reach the server in the adv slot.
+ */
+type AdvMode = null | 'adv' | 'dis' | 'called';
+/** adv as the wire accepts it: 'called' is not one of its values. */
+const wireAdv = (m: AdvMode): 'adv' | 'dis' | null => (m === 'adv' || m === 'dis' ? m : null);
 
 function FieldInput({
   field, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor,
@@ -615,6 +623,9 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
   const [adv, setAdv] = useState<AdvMode>(null);
   /** Burst-capable action awaiting its rate-of-fire choice (modal). */
   const [rofPrompt, setRofPrompt] = useState<{ action: CombatAction; ammoLeft: number } | null>(null);
+  const [calledShot, setCalledShot] = useState<{ action: CombatAction } | null>(null);
+  const [csPick, setCsPick] = useState<string>('head');
+  const [csCustom, setCsCustom] = useState<string>('-4');
   const schema = systemFor(character.system);
   const rollables = useMemo(() => schema.rollables(character.sheet), [schema, character.sheet]);
   const actions = useMemo(() => combatActions(character), [character]);
@@ -667,17 +678,21 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
   return (
     <div className="rolls-column">
       <div className="adv-toggle">
-        {([null, 'adv', 'dis'] as AdvMode[]).map((mode) => (
+        {(character.system === 'swade'
+          ? [null, 'adv', 'dis', 'called']
+          : [null, 'adv', 'dis']).map((mode) => (
           <button
             key={String(mode)}
             className={adv === mode ? 'active' : ''}
             title={character.system === 'swade' && mode === 'adv'
               ? 'Melee only: Wild Attack (+2 to hit and damage, but you become Vulnerable). For ranged bonuses, use the 🎯 Aim action.'
-              : undefined}
-            onClick={() => setAdv(mode)}
+              : mode === 'called'
+                ? 'Aim at a specific part — you pick what before the roll, and take its Scale as a penalty.'
+                : undefined}
+            onClick={() => setAdv(mode as AdvMode)}
           >
             {character.system === 'swade'
-              ? mode === null ? 'normal' : mode === 'adv' ? 'wild attack' : 'penalty −2'
+              ? mode === null ? 'normal' : mode === 'adv' ? 'wild attack' : mode === 'dis' ? 'penalty −2' : '🎯 called shot'
               : mode === null ? 'normal' : mode === 'adv' ? 'advantage' : 'disadvantage'}
           </button>
         ))}
@@ -708,9 +723,12 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                       : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`)}
                 onClick={() => {
                   if (!myToken) return;
+                  // Aim first, then pick the victim: the part decides the
+                  // penalty and the player should see it before committing.
+                  if (adv === 'called' && a.attackExpr) { setCalledShot({ action: a }); return; }
                   if (maxRof >= 2 && !a.suppressive) { setRofPrompt({ action: a, ammoLeft }); return; }
-                  if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null);
-                  else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null, undefined);
+                  if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, a.attackExpr ? wireAdv(adv) : null);
+                  else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? wireAdv(adv) : null, undefined);
                 }}
               >
                 <span>{a.effect === 'heal' ? '🧪' : a.aoe ? '💥' : '⚔️'} {a.label}</span>
@@ -789,7 +807,7 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                   title={noSlots ? `No level-${r.slotLevel}+ spell slot available` : r.expr}
                   onClick={() => r.slotLevel
                     ? useGameStore.getState().beginCast(character.id, r.id, r.slotLevel, r.label)
-                    : intents.sheetRoll(character.id, r.id, r.d20 ? adv : null)}
+                    : intents.sheetRoll(character.id, r.id, r.d20 ? wireAdv(adv) : null)}
                 >
                   <span>{r.label}{r.slotLevel ? <span className="slot-tag">L{r.slotLevel}</span> : null}</span>
                   <span className="roll-btn-expr">{r.expr}</span>
@@ -812,6 +830,64 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
         </div>
       ))}
 
+      {calledShot && myToken && (
+        <div className="sheet-backdrop" style={{ zIndex: 80 }} onPointerDown={(e) => { if (e.target === e.currentTarget) setCalledShot(null); }}>
+          <div className="panel called-shot-prompt">
+            <div className="dock-header"><h3>🎯 {calledShot.action.label} — called shot</h3></div>
+            <p className="dim" style={{ fontSize: 12, margin: '0 0 6px' }}>
+              The penalty is the Scale of the part you are aiming at, not of the creature it belongs to.
+            </p>
+            <div className="cs-options">
+              {CALLED_SHOTS.map((c) => (
+                <label key={c.id} className={`cs-option ${csPick === c.id ? 'on' : ''}`} title={c.note}>
+                  <input type="radio" name="cs" checked={csPick === c.id} onChange={() => setCsPick(c.id)} />
+                  <span className="cs-name">{c.label}</span>
+                  <span className="cs-pen">{c.penalty >= 0 ? '+' : '−'}{Math.abs(c.penalty)}</span>
+                  {c.damageBonus ? <span className="cs-dmg">+{c.damageBonus} dmg</span> : null}
+                </label>
+              ))}
+              <label className={`cs-option ${csPick === 'custom' ? 'on' : ''}`} title="Any other part — enter its Scale modifier yourself.">
+                <input type="radio" name="cs" checked={csPick === 'custom'} onChange={() => setCsPick('custom')} />
+                <span className="cs-name">Custom Scale modifier</span>
+                <input
+                  className="cs-custom" type="number" min={-8} max={6} value={csCustom}
+                  onFocus={() => setCsPick('custom')}
+                  onChange={(e) => setCsCustom(e.target.value)}
+                />
+              </label>
+            </div>
+            {(() => {
+              const chosen = csPick === 'custom'
+                ? { label: 'Custom', penalty: clampCalledShotPenalty(Number(csCustom)), damageBonus: 0 }
+                : calledShotById(csPick)!;
+              return (
+                <>
+                  <p className="cs-summary">
+                    {chosen.label}: <strong>{chosen.penalty >= 0 ? '+' : '−'}{Math.abs(chosen.penalty)}</strong> to the attack
+                    {chosen.damageBonus ? <> · <strong>+{chosen.damageBonus}</strong> damage on a hit</> : null}
+                  </p>
+                  <div className="row">
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        const a = calledShot.action;
+                        setCalledShot(null);
+                        if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, null);
+                        else useGameStore.getState().beginTargeting(character.id, myToken.id, a, null, undefined,
+                          { label: chosen.label, penalty: chosen.penalty, damageBonus: chosen.damageBonus });
+                      }}
+                    >
+                      Take the shot — pick a target
+                    </button>
+                    <button onClick={() => setCalledShot(null)}>Cancel</button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {rofPrompt && myToken && (
         <div className="sheet-backdrop" style={{ zIndex: 80 }} onPointerDown={(e) => { if (e.target === e.currentTarget) setRofPrompt(null); }}>
           <div className="panel levelup rof-modal">
@@ -833,7 +909,7 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                   onClick={() => {
                     const a = rofPrompt.action;
                     setRofPrompt(null);
-                    useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? adv : null, r);
+                    useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? wireAdv(adv) : null, r);
                   }}
                 >
                   <span>RoF {r}{r >= 2 ? ' · −2 Recoil' : ''}</span>

@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
@@ -1262,6 +1262,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (scaleMod) {
           mod += scaleMod;
           tags.push(sizeAttackTag(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0))!);
+        }
+        // Called Shot: the penalty is the Scale of the PART being aimed at,
+        // not of the creature it belongs to — a hand is a hand on a goblin or
+        // an ogre. The client picked it before the roll; clamp it to the Scale
+        // table's own range so a hand-typed modifier cannot invent one.
+        if (p.calledShot) {
+          const csPen = clampCalledShotPenalty(Number(p.calledShot.penalty) || 0);
+          const csDmg = Math.max(0, Math.min(8, Math.floor(Number(p.calledShot.damageBonus) || 0)));
+          const csLabel = String(p.calledShot.label || 'Called Shot').slice(0, 40);
+          mod += csPen;
+          dmgBonus += csDmg;
+          tags.push(calledShotTag(csLabel, csPen));
         }
         if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
         else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }

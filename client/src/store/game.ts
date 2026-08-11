@@ -128,6 +128,9 @@ function resetChatQueue(): void {
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain' | 'text';
 export type DockTab = 'chat' | 'initiative' | 'world';
 
+/** What a Called Shot is aimed at, chosen before the roll goes out. */
+export type CalledShotAim = { label: string; penalty: number; damageBonus?: number };
+
 /** A piece on the current map, named the way the World pane finds it: either a
  *  token, or one of the chest/shop/prop objects. Null = this row has nothing
  *  on the map. */
@@ -277,7 +280,7 @@ interface GameState {
   /** SWADE: per-character flags for which Benny rerolls are currently live. */
   bennyState: Record<string, BennyStatePayload>;
   /** In-progress combat action awaiting a target selection. */
-  targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number } | null;
+  targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number; calledShot?: CalledShotAim | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
   aoeTargeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; originHex: Hex; aimHex: Hex } | null;
   /** Floating +/-HP combat text over tokens. */
@@ -292,7 +295,7 @@ interface GameState {
   }>;
   /** On-screen rollable-table result pills (fade out after ~3s). */
   tableToasts: Array<{ id: number; text: string; color: string }>;
-  beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null, rof?: number): void;
+  beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null, rof?: number, calledShot?: CalledShotAim | null): void;
   cancelTargeting(): void;
   resolveTarget(targetTokenId: string): void;
   beginAoeTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
@@ -498,10 +501,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   projectiles: [],
   aoeBursts: [],
   tableToasts: [],
-  beginTargeting(characterId, sourceTokenId, action, adv, rof) {
+  beginTargeting(characterId, sourceTokenId, action, adv, rof, calledShot) {
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
-    set({ targeting: { characterId, sourceTokenId, action, adv, rof }, tool: 'select', selectedTokenId: null, selectedTokenIds: [] });
+    set({ targeting: { characterId, sourceTokenId, action, adv, rof, calledShot: calledShot ?? null }, tool: 'select', selectedTokenId: null, selectedTokenIds: [] });
     // Live-broadcast the range highlight so the DM + other players see the
     // same in-range/out-of-range tokens the caster sees, before they click.
     socket.emit(C2S.TARGET_PREVIEW, {
@@ -523,7 +526,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ dockTab: 'chat' });
     socket.emit(C2S.COMBAT_ACTION, {
       characterId: t.characterId, actionId: t.action.id,
-      sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv, rof: t.rof,
+      sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv, rof: t.rof, calledShot: t.calledShot ?? null,
     });
     set({ targeting: null });
     socket.emit(C2S.TARGET_PREVIEW, {

@@ -3051,3 +3051,19 @@ th > .term { border-bottom-style: dotted; }
    until hovered, like the pencil — neither should compete with the card. */
 .sc-post { opacity: 0.5; padding: 0 4px; font-size: 13px; }
 .sc-post:hover { opacity: 1; text-decoration: none; }
+
+/* Called Shot prompt: pick the part, see the penalty, then commit. */
+.called-shot-prompt { width: 380px; max-width: 92vw; }
+.cs-options { display: flex; flex-direction: column; gap: 2px; max-height: 46vh; overflow-y: auto; margin: 4px 0; }
+.cs-option {
+  display: grid; grid-template-columns: 14px 1fr auto auto; align-items: center; gap: 8px;
+  margin: 0; padding: 5px 6px; border-radius: 6px; font-size: 12px; color: var(--text); cursor: pointer;
+}
+.cs-option:hover { background: rgba(255, 255, 255, 0.06); }
+.cs-option.on { background: rgba(108, 155, 210, 0.22); }
+.cs-option input[type="radio"] { margin: 0; }
+.cs-name { overflow-wrap: anywhere; }
+.cs-pen { font-variant-numeric: tabular-nums; font-weight: 700; }
+.cs-dmg { font-size: 11px; color: var(--ok); }
+.cs-custom { width: 56px; margin: 0; padding: 2px 4px; font-size: 12px; }
+.cs-summary { font-size: 13px; margin: 6px 0; padding: 6px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.28); }

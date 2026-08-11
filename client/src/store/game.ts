@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, blastSoundClip, blastSoundVolume,
+  type FearSource, type SheetCard, type RollCalloutPayload, blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
@@ -354,6 +354,8 @@ interface GameState {
   /** This device's own music volume (multiplies the DM's jukebox volume). */
   localMusicVolume: number;
   /** This device's own sound-effects volume (soundboard hits, dice rattles). */
+  /** Whose roll is about to land, shown across the map. */
+  rollCallout: { id: number; name: string; what: string } | null;
   localSfxVolume: number;
   setLocalMusicVolume(v: number): void;
   setLocalSfxVolume(v: number): void;
@@ -523,6 +525,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   projectiles: [],
   aoeBursts: [],
   tableToasts: [],
+  rollCallout: null,
   beginTargeting(characterId, sourceTokenId, action, adv, rof, calledShot) {
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
@@ -1211,6 +1214,16 @@ export function wireSocket(): void {
 
   socket.on(S2C.TABLES, ({ tables }: { tables: RollableTable[] }) => {
     useGameStore.setState({ tableList: tables });
+  });
+
+  socket.on(S2C.ROLL_CALLOUT, (p: RollCalloutPayload) => {
+    const id = ++pingCounter;
+    useGameStore.setState({ rollCallout: { id, name: p.name, what: p.what } });
+    setTimeout(() => {
+      // Only clear if nobody else's callout has replaced it in the meantime.
+      const cur = useGameStore.getState();
+      if (cur.rollCallout?.id === id) useGameStore.setState({ rollCallout: null });
+    }, Math.max(500, Math.min(6000, p.holdMs || 2000)));
   });
 
   socket.on(S2C.TABLE_RESULT, (p: TableResultPayload) => {

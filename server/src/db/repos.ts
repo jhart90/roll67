@@ -4,7 +4,7 @@ import type {
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   Counter, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
 } from 'shared';
-import { isCounterPosition, statEntriesFromDice, type AceStyle, type DieRoll, type RollStatRow } from 'shared';
+import { isCounterPosition, statEntriesFromDice, type AceStyle, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
 /** SWADE's dice roles, and the column each one persists to. */
@@ -1443,6 +1443,20 @@ export const chat = {
   },
   clearUndo(id: number): void {
     stmt('UPDATE chat_messages SET undo_json = NULL WHERE id = ?').run(id);
+  },
+  /**
+   * Add to a message's recorded effects after it was posted.
+   *
+   * An area attack announces itself before anything has happened, then rolls
+   * saves and damage over the next several seconds. Its lead card has to be
+   * the thing the DM rewinds, so the effects are appended to it as they land
+   * rather than scattered across the cards that follow.
+   */
+  appendUndo(id: number, entries: UndoEntry[]): void {
+    if (entries.length === 0) return;
+    const existing = (chat.undoFor(id) as UndoEntry[] | null) ?? [];
+    stmt('UPDATE chat_messages SET undo_json = ? WHERE id = ?')
+      .run(JSON.stringify([...existing, ...entries]), id);
   },
   /** Last N messages visible to the given user (whispers filtered). */
   tailFor(campaignId: string, userId: string, username: string, isDm: boolean, limit: number): ChatMessage[] {

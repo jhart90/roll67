@@ -261,7 +261,7 @@ async function main() {
   ] } });
   await coneReady;
   const beastSaveRoll = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg?.text?.startsWith('Wall Beast')).catch(() => null);
-  const selfSaveRoll = expectSilence(playerSock, 'chatMsg', 4000, (p) => p.msg?.text?.startsWith('Smoke PC'));
+  const selfSaveRoll = expectSilence(playerSock, 'chatMsg', 4000, (p) => /^Smoke PC — /.test(p.msg?.text ?? ''));
   playerSock.emit('castAoe', {
     characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id,
     originHex: { q: 6, r: 5 }, aimHex: { q: 12, r: 5 }, adv: null,
@@ -276,7 +276,7 @@ async function main() {
   // test for a bug where trusting the client's origin left the caster's own
   // hex sitting dead-center on the line to the target, inside the blast.
   const staleBeastSaveP = waitFor(playerSock, 'chatMsg', 5000, (p) => p.msg?.text?.startsWith('Wall Beast')).catch(() => null);
-  const staleSelfSaveP = expectSilence(playerSock, 'chatMsg', 4000, (p) => p.msg?.text?.startsWith('Smoke PC'));
+  const staleSelfSaveP = expectSilence(playerSock, 'chatMsg', 4000, (p) => /^Smoke PC — /.test(p.msg?.text ?? ''));
   playerSock.emit('castAoe', {
     characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id,
     originHex: { q: 5, r: 5 }, aimHex: { q: 12, r: 5 }, adv: null,

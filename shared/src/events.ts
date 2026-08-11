@@ -786,6 +786,9 @@ export const S2C = {
   OPEN_CREATOR: 'openCreator',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
+  /** "X is rolling to evade!" — says whose roll is coming BEFORE the
+   *  result lands, so a group save isn't a silent wall of cards. */
+  ROLL_CALLOUT: 'rollCallout',
   CHAT_UPDATED: 'chatUpdated',
   SHOPS: 'shops',
   SHOP_PRESENTATION: 'shopPresentation',
@@ -962,6 +965,17 @@ export interface AoeBurstPayload {
   mapId: string; shape: AoeShape; sizeFt: number; sizeHexes?: number; widthFt?: number;
   originHex: Hex; aimHex: Hex; damageType?: string; flightMs: number;
 }
+/** Announces the roll that is about to happen, on everyone's screen. */
+export interface RollCalloutPayload {
+  /** Whose roll it is — shown large. */
+  name: string;
+  /** What they are rolling, phrased as an action: "rolling to evade!" */
+  what: string;
+  /** How long the banner should hold, ms. Matches the pause the server
+   *  leaves before the roll actually posts. */
+  holdMs: number;
+}
+
 /** A rollable-table result to flash on-screen (same text as the chat card). */
 export interface TableResultPayload { text: string; color: string }
 

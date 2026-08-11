@@ -503,6 +503,26 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
       )}
 
       <TableToasts />
+      <RollCallout />
+    </div>
+  );
+}
+
+/**
+ * "Training Dummy is rolling to evade!" across the middle of the map, a beat
+ * before the result lands in chat. A group save posts one card at a time with
+ * a long pause between them, and without this the table just watches results
+ * appear with no idea whose turn it is or what is being rolled for.
+ *
+ * Sits below the counters, out of the way of the tokens it is about.
+ */
+function RollCallout() {
+  const callout = useGameStore((s) => s.rollCallout);
+  if (!callout) return null;
+  return (
+    <div className="roll-callout" key={callout.id}>
+      <span className="rc-name">{callout.name}</span>
+      <span className="rc-what">{callout.what}</span>
     </div>
   );
 }

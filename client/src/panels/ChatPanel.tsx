@@ -378,7 +378,12 @@ function Message({ msg, isDm, hl, onMenu }: {
       </div>
       {playerHidden
         ? <div className="chat-text hidden-text">The DM has hidden this message.</div>
-        : msg.card ? <PostedCard card={msg.card} />
+        : msg.card ? (
+          <>
+            {msg.outcomeNote && <div className="chat-card-lead">{msg.outcomeNote}</div>}
+            <PostedCard card={msg.card} />
+          </>
+        )
           : msg.roll ? <RollCard msg={msg} hl={hl} /> : <div className="chat-text"><Highlighted text={msg.text} hl={hl} /></div>}
     </div>
   );
@@ -451,7 +456,11 @@ export function ChatPanel() {
           ) : (
             <>
               <button onClick={() => { intents.moderateMessage(menu.id, 'hide'); setMenu(null); }}>Hide</button>
-              {menuMsg.kind === 'roll' && (
+              {/* Rolls carry their own effects; so does the card an area attack
+                  leads with, which owns the undo for the entire power — its
+                  lead-in line is what marks it apart from a card someone
+                  simply posted to show off their gun. */}
+              {(menuMsg.kind === 'roll' || (!!menuMsg.card && !!menuMsg.outcomeNote)) && (
                 <button onClick={() => { intents.moderateMessage(menu.id, 'hideUndo'); setMenu(null); }}>Hide &amp; undo effects</button>
               )}
             </>

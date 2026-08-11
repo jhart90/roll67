@@ -12,7 +12,7 @@ import {
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail,
-  cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed,
+  cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
   fearCheckFailure, fearCheckMod, fearTableRow, fearTableTotal, PANICKED_OUTCOME, type RequestFearPayload,
 } from 'shared';
@@ -34,6 +34,9 @@ function requireCampaign(socket: Socket) {
 // single die within ~1700ms (delay 0 + dur up to 1450-1700ms). Add a 1s pause
 // on top per the requested "wait for the animation, pause a beat" pacing.
 const SAVE_STEP_DELAY_MS = 2800;
+/** How long the "who is rolling" banner holds. Shorter than the beat
+ *  between saves, so it clears before the next name goes up. */
+const CALLOUT_HOLD_MS = 2000;
 
 // General form of the same pacing, for rolls with more than one die (e.g. a
 // multi-die damage/heal roll): client/src/table/dice3d.ts staggers each die's
@@ -608,6 +611,13 @@ interface GroupSaveSpec {
   /** When the source spell is concentration: the caster to record the
    *  inflicted conditions on, so ending concentration lifts them. */
   concentrationCasterId?: string;
+  /**
+   * The "casting" card this whole resolution belongs to. Every reversible
+   * effect — damage, wounds, conditions — is appended to that message, so
+   * Hide & Undo on the one card the DM can actually point at rewinds the
+   * entire power rather than one roll out of the middle of it.
+   */
+  leadMessageId?: number;
 }
 
 /**
@@ -618,6 +628,45 @@ interface GroupSaveSpec {
  * cast once its template is locked in. Returns false (nothing posted) if
  * none of the given token ids resolve to a real token.
  */
+/**
+ * The card an area attack leads with: what is being used, by whom, before a
+ * single die is thrown.
+ *
+ * Built from the action rather than the sheet row so it says what is actually
+ * about to happen — the damage as modified, the template as aimed. It carries
+ * the undo for the whole resolution, which is why it has to exist even when
+ * the power is dull to look at: the DM needs one thing to right-click.
+ */
+function postCastCard(
+  io: Server, campaignId: string, userId: string, username: string,
+  actor: Character, action: CombatAction, label: string, ppSpent: number,
+): number {
+  const chips: { text: string; tone: string }[] = [];
+  if (action.aoe) {
+    const size = action.aoe.sizeHexes ? `${action.aoe.sizeHexes} tiles` : `${action.aoe.sizeFt} ft`;
+    chips.push({ text: `${action.aoe.shape} ${size}`, tone: 'range' });
+  }
+  if (usableAmount(action.amountExpr)) chips.push({ text: action.amountExpr, tone: 'damage' });
+  if (action.damageType) chips.push({ text: action.damageType, tone: 'plain' });
+  if (action.rangeFt > 0) chips.push({ text: `Range ${action.rangeFt} ft`, tone: 'range' });
+  if (ppSpent > 0) chips.push({ text: `${ppSpent} PP`, tone: 'use' });
+  if (action.saveId) chips.push({ text: `resisted by ${action.saveId}`, tone: 'skill' });
+  if (action.appliesCondition) chips.push({ text: getCondition(action.appliesCondition)?.label ?? action.appliesCondition, tone: 'severity' });
+
+  const card = sanitizeCard({ name: label, chips, notes: [] });
+  const msg = chat.add(campaignId, {
+    userId, fromName: username,
+    fromCharacter: actor.name, characterId: actor.id,
+    kind: 'say',
+    text: `${actor.name} is using power: ${label}`,
+    outcomeNote: `${actor.name} is using power:`,
+    card,
+    roll: null, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  return msg.id;
+}
+
 function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
   const targets: { tok: Token; ch: Character | undefined; sc: { expr: string; threshold: number; label: string } }[] = [];
   let touchedMap: string | null = null;
@@ -646,6 +695,11 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       if (passed || !ch) continue;
       const fresh = characters.byId(ch.id);
       if (!fresh) continue;
+      if (spec.leadMessageId) {
+        chat.appendUndo(spec.leadMessageId, [
+          { t: 'field', characterId: fresh.id, key: 'conditions', value: conditionsOf(fresh.sheet) },
+        ]);
+      }
       applyConditionTo(
         io, spec.campaignId, fresh, spec.appliesCondition, spec.label ?? 'a spell',
         spec.concentrationCasterId ? characters.byId(spec.concentrationCasterId) : undefined,
@@ -663,6 +717,8 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const dmg = roll(spec.damageExpr!);
     const base = Math.max(0, dmg.total);
     const undo: UndoEntry[] = [];
+    /** Sheet values as they stand before anything lands (see below). */
+    const preState: UndoEntry[] = [];
     // Figure out who takes what now (for undo + the card), but hold off on
     // actually touching anyone's HP until this roll's own dice have settled.
     const applications: Array<() => void> = [];
@@ -680,10 +736,26 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       if (amt <= 0) continue;
       if (!ch && !tok.bar) continue;
       undo.push(ch ? { t: 'hp', characterId: ch.id, delta: -amt } : { t: 'hp', tokenId: tok.id, delta: -amt });
+      // Wounds and conditions live on the sheet, so the ONLY way back is the
+      // value they held before this landed. Captured now, while it is still
+      // true — by apply time the damage has already rewritten it.
+      if (ch) preState.push(
+        { t: 'field', characterId: ch.id, key: 'wounds', value: num(ch.sheet, 'wounds', 0) },
+        { t: 'field', characterId: ch.id, key: 'conditions', value: conditionsOf(ch.sheet) },
+      );
       applications.push(() => {
         if (ch) {
           const fresh = characters.byId(ch.id);
-          if (fresh) applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw');
+          if (fresh) {
+            // The note carries the arithmetic — "10 vs Toughness 6 — Shaken".
+            // A single-target hit shows it on its own card; an area attack has
+            // no per-target card to put it on, so it goes out as its own line.
+            // Without this the log jumps from one damage roll straight to
+            // "X is Incapacitated" with nothing saying why.
+            const { note } = applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw');
+            const said = note.replace(/^\s*—\s*/, '').trim();
+            if (said) postStatusLine(io, spec.campaignId, `${fresh.name}: ${said}`);
+          }
         } else {
           const live = tokens.byId(tok.id);
           if (live?.bar) {
@@ -695,10 +767,14 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
         floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt, 'aoe', spec.damageType);
       });
     }
+    // With a lead card the effects belong to IT, not to the damage roll:
+    // undoing half a power is worse than not being able to undo it at all.
+    const all = [...preState, ...undo];
+    if (spec.leadMessageId && all.length > 0) chat.appendUndo(spec.leadMessageId, all);
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
       text: `${spec.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
-    }, undo.length > 0 ? undo : undefined);
+    }, !spec.leadMessageId && undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
     const settleMs = diceSettleDelayMs(dmg.dice);
     setTimeout(() => {
@@ -736,6 +812,14 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const br = roll(sc.expr);
     const passed = br.total >= sc.threshold;
     results.push({ tok, ch, passed });
+    // Say whose roll this is on everyone's screen. A group save posts one card
+    // at a time with a long beat between them; without this the table watches
+    // results appear with no idea who is up or what they are rolling for.
+    io.to(campaignRoom(spec.campaignId)).emit(S2C.ROLL_CALLOUT, {
+      name: tok.name,
+      what: spec.evasion ? 'is rolling to evade!' : `is rolling ${sc.label}!`,
+      holdMs: CALLOUT_HOLD_MS,
+    });
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
       text: `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
@@ -2080,12 +2164,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // caster before resolving the effect — mirrors C2S.COMBAT_ACTION. SWADE
     // area powers (Burst/Blast) spend Power Points the same way.
     const actorPatch: SheetData = {};
+    // What it cost to cast, as undo entries. This path spent the Power Points
+    // and the slot but recorded no way back, so a hide-and-undo left the
+    // caster paying for a power the log says never happened. They ride on the
+    // cast card below, with everything the resolution goes on to do.
+    const costUndo: UndoEntry[] = [];
     if (action.source === 'power' && action.ppCost) {
       const pp = num(actor.sheet, 'pp', 0);
       if (pp < action.ppCost) {
         emitError(socket, `Not enough Power Points (${pp} left, ${action.label} costs ${action.ppCost}).`);
         return;
       }
+      costUndo.push({ t: 'field', characterId: actor.id, key: 'pp', value: pp });
       actorPatch.pp = pp - action.ppCost;
     }
     let castLevel: number | null = null;
@@ -2097,6 +2187,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         emitError(socket, `No level-${action.slotLevel}+ spell slot available.`);
         return;
       }
+      costUndo.push({ t: 'slot', characterId: actor.id, level: castLevel });
       actorPatch[`slotsUsed${castLevel}`] = num(actor.sheet, `slotsUsed${castLevel}`, 0) + 1;
     }
     if (action.concentration && action.spellName) {
@@ -2213,8 +2304,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
         // rather than deriving one from the actor's spellcasting stat.
         const casterDc = action.fixedDc || Math.round(Number(systemFor(actor.system).derive(actor.sheet).spellDc)) || 10;
+        // Lead with the card, then resolve. It goes out before any roll so
+        // the log reads in the order things happen, and it inherits the cost
+        // already spent (Power Points, a spell slot) so undoing it refunds
+        // them along with everything the resolution goes on to do.
+        const leadMessageId = postCastCard(
+          io, d.campaignId, d.userId, d.username, actor, action, castLabel, action.ppCost ?? 0,
+        );
+        if (costUndo.length > 0) chat.appendUndo(leadMessageId, costUndo);
         runGroupSave(io, {
           campaignId: d.campaignId, userId: d.userId, username: d.username,
+          leadMessageId,
           tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
           ...(evadeable ? { evasion: true } : {}),
           damageExpr, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),

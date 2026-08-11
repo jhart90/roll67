@@ -330,6 +330,9 @@ interface DieSim {
   bounceH: number;
   /** How this die celebrates if it aced — the ROLLER's chosen style. */
   aceStyle: AceStyle;
+  /** Set once its ace effect has fired its sound, so a per-frame draw
+   *  does not retrigger the clip sixty times a second. */
+  aceSounded?: boolean;
   /** Wall-bounce: the point on a wall this die caroms off on its way to
    *  `target`. Absent for a die that flies straight there. */
   via?: { x: number; y: number };
@@ -1053,7 +1056,7 @@ function drawAceEffect(
   }
 }
 
-function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void {
+function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number, onAce?: (style: AceStyle) => void): void {
   const te = Math.max(0, Math.min(1, (tMs - sim.delay) / sim.dur));
   if (tMs < sim.delay - 1) return;
   const ease = easeOutCubic(te);
@@ -1098,6 +1101,9 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
     ? sinceSettle / ACE_FLASH_MS
     : null;
   if (acePhase !== null) {
+    // Announce the ace once, on the first frame of its effect — the caller
+    // owns what that means (a sound), this only says when.
+    if (!sim.aceSounded) { sim.aceSounded = true; onAce?.(sim.aceStyle); }
     ctx.save();
     drawAceEffect(ctx, sim.aceStyle, acePhase, x, y - height * 0.85, size);
     ctx.restore();
@@ -1175,8 +1181,11 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number): void 
 }
 
 /** Draw one animation frame; returns true while anything is still moving. */
-export function drawFrame(ctx: CanvasRenderingContext2D, sims: DieSim[], tMs: number, w: number, h: number): boolean {
+export function drawFrame(
+  ctx: CanvasRenderingContext2D, sims: DieSim[], tMs: number, w: number, h: number,
+  onAce?: (style: AceStyle) => void,
+): boolean {
   ctx.clearRect(0, 0, w, h);
-  for (const sim of sims) drawDie(ctx, sim, tMs);
+  for (const sim of sims) drawDie(ctx, sim, tMs, onAce);
   return tMs < simsSettleTime(sims) + 400;
 }

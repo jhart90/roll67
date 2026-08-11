@@ -59,7 +59,7 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
     let done = false;
     const tick = (now: number) => {
       const t = now - t0;
-      const moving = drawFrame(ctx, sims, t, w, h);
+      const moving = drawFrame(ctx, sims, t, w, h, playAceSound);
       // `settleAt` is the LAST die's landing time, which for an exploding
       // chain is well after the earlier dice have stopped — so the loop is
       // driven purely by the clock and never bails out during the pause
@@ -94,6 +94,36 @@ function DiceCanvas({ animId, dice, byName, total, expression, color, textColor,
 }
 
 /** Full-screen (non-interactive) 3D dice for the latest roll in chat. */
+/**
+ * The sound each Ace style makes, played on every screen the moment the
+ * effect starts — the animation is already broadcast, so each client fires
+ * its own clip rather than the server sending an extra event.
+ *
+ * Several files per style are picked at random, so a chain of aces does not
+ * play the same explosion four times in a row. Disco has no clip yet; a style
+ * with nothing listed simply stays silent.
+ */
+const ACE_SOUNDS: Partial<Record<AceStyle, string[]>> = {
+  flash: ['shine_1'],
+  explosion: ['explosion_1', 'explosion_2', 'explosion_3', 'explosion_4'],
+  flames: ['fire_1'],
+  rainbow: ['rainbow_1'],
+  smoke: ['smoke_1'],
+  water: ['water_1', 'water_2'],
+};
+
+function playAceSound(style: AceStyle): void {
+  const pool = ACE_SOUNDS[style];
+  if (!pool || pool.length === 0) return;
+  const clip = pool[Math.floor(Math.random() * pool.length)];
+  const audio = new Audio(`/sounds/ace/${clip}.mp3`);
+  // Under the dice clatter it rides with, and muted with everything else.
+  const s = useGameStore.getState();
+  audio.volume = 0.5 * s.localSfxVolume * (s.clientMuted ? 0 : 1);
+  // Autoplay may be blocked before the user's first interaction — ignore.
+  audio.play().catch(() => undefined);
+}
+
 export function DiceOverlay() {
   const anim = useGameStore((s) => s.diceAnim);
   const ending = useGameStore((s) => s.diceAnimEnding);

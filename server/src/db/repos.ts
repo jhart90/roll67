@@ -527,10 +527,10 @@ export const worldFolders = {
 export const audioTracks = {
   forCampaign(campaignId: string): AudioTrack[] {
     const rows = stmt(
-      `SELECT t.id, t.title, a.ext, a.id as assetId FROM audio_tracks t
-       JOIN assets a ON a.id = t.asset_id WHERE t.campaign_id = ? ORDER BY t.sort_order, t.title`,
-    ).all(campaignId) as Array<{ id: string; title: string; ext: string; assetId: string }>;
-    return rows.map((r) => ({ id: r.id, title: r.title, url: `/uploads/${r.assetId}.${r.ext}` }));
+      `SELECT t.id, t.title, t.playlist, a.ext, a.id as assetId FROM audio_tracks t
+       JOIN assets a ON a.id = t.asset_id WHERE t.campaign_id = ? ORDER BY t.playlist, t.sort_order, t.title`,
+    ).all(campaignId) as Array<{ id: string; title: string; playlist: number | null; ext: string; assetId: string }>;
+    return rows.map((r) => ({ id: r.id, title: r.title, url: `/uploads/${r.assetId}.${r.ext}`, playlist: r.playlist ?? 0 }));
   },
   byId(id: string): { id: string; url: string; campaignId: string } | undefined {
     const r = stmt(
@@ -539,9 +539,16 @@ export const audioTracks = {
     ).get(id) as { id: string; campaign_id: string; ext: string; assetId: string } | undefined;
     return r ? { id: r.id, url: `/uploads/${r.assetId}.${r.ext}`, campaignId: r.campaign_id } : undefined;
   },
-  add(campaignId: string, assetId: string, title: string): void {
-    const maxOrder = (stmt('SELECT MAX(sort_order) as m FROM audio_tracks WHERE campaign_id = ?').get(campaignId) as { m: number | null }).m ?? -1;
-    stmt('INSERT INTO audio_tracks (id, campaign_id, asset_id, title, sort_order) VALUES (?, ?, ?, ?, ?)').run(newId(), campaignId, assetId, title, maxOrder + 1);
+  /** How many tracks a playlist already holds — the cap is enforced above. */
+  countIn(campaignId: string, playlist: number): number {
+    return (stmt('SELECT COUNT(*) as n FROM audio_tracks WHERE campaign_id = ? AND playlist = ?')
+      .get(campaignId, playlist) as { n: number }).n;
+  },
+  add(campaignId: string, assetId: string, title: string, playlist = 0): void {
+    const maxOrder = (stmt('SELECT MAX(sort_order) as m FROM audio_tracks WHERE campaign_id = ? AND playlist = ?')
+      .get(campaignId, playlist) as { m: number | null }).m ?? -1;
+    stmt('INSERT INTO audio_tracks (id, campaign_id, asset_id, title, sort_order, playlist) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(newId(), campaignId, assetId, title, maxOrder + 1, playlist);
   },
   remove(id: string): void {
     stmt('DELETE FROM audio_tracks WHERE id = ?').run(id);

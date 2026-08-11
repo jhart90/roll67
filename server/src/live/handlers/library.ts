@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  C2S, S2C,
+  C2S, S2C, PLAYLIST_COUNT, PLAYLIST_SIZE,
   type AddAudioPayload, type AudioControlPayload, type AudioState,
   type CreateFolderPayload, type DeleteAssetPayload, type DeleteFolderPayload,
   type MoveAssetPayload, type MoveHandoutPayload, type RemoveAudioPayload,
@@ -26,7 +26,7 @@ export function broadcastAssets(io: Server, campaignId: string): void {
 const audioStates = new Map<string, AudioState>();
 
 export function getAudioState(campaignId: string): AudioState {
-  return audioStates.get(campaignId) ?? { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 };
+  return audioStates.get(campaignId) ?? { trackId: null, playing: false, loop: false, shuffle: false, playlist: 0, volume: 0.6, startedAt: 0 };
 }
 
 export function broadcastAudio(io: Server, campaignId: string): void {
@@ -126,11 +126,17 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
 
   // ----- audio -----
 
-  socket.on(C2S.ADD_AUDIO, safe(socket, ({ assetId, title }: AddAudioPayload) => {
+  socket.on(C2S.ADD_AUDIO, safe(socket, ({ assetId, title, playlist }: AddAudioPayload) => {
     const d = requireDm(socket);
     const a = assets.byId(assetId);
     if (!a || a.campaign_id !== d.campaignId || a.kind !== 'audio') throw new Error('Not an audio asset.');
-    audioTracks.add(d.campaignId, assetId, title?.trim() || a.filename);
+    const list = Math.max(0, Math.min(PLAYLIST_COUNT - 1, Math.floor(playlist ?? 0)));
+    // Enforced here, not just greyed out in the UI: the cap is what keeps a
+    // playlist a playlist rather than a library.
+    if (audioTracks.countIn(d.campaignId, list) >= PLAYLIST_SIZE) {
+      throw new Error(`Playlist ${list + 1} is full (${PLAYLIST_SIZE} tracks).`);
+    }
+    audioTracks.add(d.campaignId, assetId, title?.trim() || a.filename, list);
     broadcastAudio(io, d.campaignId);
   }, 'ADD_AUDIO'));
 
@@ -144,11 +150,13 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     broadcastAudio(io, d.campaignId);
   }, 'REMOVE_AUDIO'));
 
-  socket.on(C2S.AUDIO_CONTROL, safe(socket, ({ trackId, action, loop, volume }: AudioControlPayload) => {
+  socket.on(C2S.AUDIO_CONTROL, safe(socket, ({ trackId, action, loop, shuffle, playlist, volume }: AudioControlPayload) => {
     const d = requireDm(socket);
     const cur = getAudioState(d.campaignId);
     const next: AudioState = { ...cur };
     if (loop !== undefined) next.loop = loop;
+    if (shuffle !== undefined) next.shuffle = shuffle;
+    if (playlist !== undefined) next.playlist = Math.max(0, Math.min(PLAYLIST_COUNT - 1, Math.floor(playlist)));
     if (volume !== undefined) next.volume = Math.max(0, Math.min(1, volume));
     if (action === 'play') {
       if (trackId && trackId !== cur.trackId) {

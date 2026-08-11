@@ -599,12 +599,15 @@ export interface RenameAssetPayload { assetId: string; title: string }
 export interface DeleteAssetPayload { assetId: string }
 export interface MoveHandoutPayload { handoutId: string; folderId: string | null }
 
-export interface AddAudioPayload { assetId: string; title: string }
+export interface AddAudioPayload { assetId: string; title: string; /** Which of the three playlists to file it under (0-based). */ playlist?: number }
 export interface RemoveAudioPayload { trackId: string }
 export interface AudioControlPayload {
   trackId?: string;
   action: 'play' | 'stop' | 'pause';
   loop?: boolean;
+  shuffle?: boolean;
+  /** Which playlist is being played through. */
+  playlist?: number;
   volume?: number;
 }
 

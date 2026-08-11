@@ -369,6 +369,8 @@ ensureColumn('counters', 'shared_with', 'shared_with TEXT');
 // A briefing image shown to players above a chest's or a shop's contents —
 // the handout half of "here is what you are looking at".
 ensureColumn('map_objects', 'detail_asset_id', 'detail_asset_id TEXT');
+// Jukebox playlists: which of the three tabs a track sits on.
+ensureColumn('audio_tracks', 'playlist', 'playlist INTEGER NOT NULL DEFAULT 0');
 ensureColumn('shops', 'detail_asset_id', 'detail_asset_id TEXT');
 
 // Manual world-tree ordering: rank per "kind:id" key, campaign-scoped.

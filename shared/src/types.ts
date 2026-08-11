@@ -637,16 +637,27 @@ export interface AssetInfo {
 
 // ---------- Audio jukebox ----------
 
+/** How many playlists a campaign gets, and how many tracks fit in each. */
+export const PLAYLIST_COUNT = 3;
+export const PLAYLIST_SIZE = 7;
+
 export interface AudioTrack {
   id: string;
   title: string;
   url: string;
+  /** Which playlist tab it lives on, 0-based. */
+  playlist: number;
 }
 
 export interface AudioState {
   trackId: string | null;
   playing: boolean;
+  /** Wrap to the top of the playlist at the end instead of falling silent. */
   loop: boolean;
+  /** Pick the next track at random rather than in order. */
+  shuffle: boolean;
+  /** Which playlist is being played through. */
+  playlist: number;
   volume: number;      // 0..1
   /** Server epoch ms when the current track started (for rough sync). */
   startedAt: number;

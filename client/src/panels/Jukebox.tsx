@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PLAYLIST_COUNT, PLAYLIST_SIZE } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
@@ -15,9 +16,14 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
   const localMusicVolume = useGameStore((s) => s.localMusicVolume);
   const localSfxVolume = useGameStore((s) => s.localSfxVolume);
   const [uploading, setUploading] = useState(false);
+  // Which playlist tab is open. Purely local — the DM browsing playlist 2 does
+  // not change what is playing.
+  const [page, setPage] = useState(0);
   const { progress, upload } = useUploadProgress();
   const fileRef = useRef<HTMLInputElement>(null);
   const isDm = useGameStore((s) => s.isDm());
+  const pageTracks = tracks.filter((t) => (t.playlist ?? 0) === page);
+  const full = pageTracks.length >= PLAYLIST_SIZE;
 
   useEffect(() => { if (isDm) intents.requestAssets(); }, [isDm]);
   if (!campaign) return null;
@@ -32,7 +38,7 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
     try {
       for (const f of files) {
         const { assetId } = await upload(f, campaign.id, 'audio', { title: f.name });
-        intents.addAudio(assetId, f.name.replace(/\.[^.]+$/, ''));
+        intents.addAudio(assetId, f.name.replace(/\.[^.]+$/, ''), page);
       }
     } catch (err) {
       useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
@@ -93,15 +99,40 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
               type="range" min={0} max={1} step={0.05} value={state.volume}
               onChange={(e) => intents.audioControl({ action: state.playing ? 'play' : 'pause', volume: Number(e.target.value) })}
             />
-            <label className="loop-toggle">
-              <input type="checkbox" checked={state.loop} onChange={(e) => intents.audioControl({ action: state.playing ? 'play' : 'pause', loop: e.target.checked })} />
-              loop
-            </label>
+            {/* The two universal transport glyphs — crossing arrows for
+                shuffle, the cycle for repeat — rather than a word and a box. */}
+            <button
+              className={`jb-toggle ${state.shuffle ? 'on' : ''}`}
+              title={state.shuffle ? 'Shuffle on — next track is picked at random' : 'Shuffle off — tracks play in order'}
+              onClick={() => intents.audioControl({ action: state.playing ? 'play' : 'pause', shuffle: !state.shuffle })}
+            >🔀</button>
+            <button
+              className={`jb-toggle ${state.loop ? 'on' : ''}`}
+              title={state.loop ? 'Loop on — the playlist starts over at the end' : 'Loop off — playback stops at the end of the playlist'}
+              onClick={() => intents.audioControl({ action: state.playing ? 'play' : 'pause', loop: !state.loop })}
+            >🔁</button>
             <button onClick={() => intents.audioControl({ action: 'stop' })}>■ stop all</button>
           </div>
 
+          {/* Three tabs, like the soundboard's pages. */}
+          <div className="soundboard-pages">
+            {Array.from({ length: PLAYLIST_COUNT }, (_, i) => {
+              const n = tracks.filter((t) => (t.playlist ?? 0) === i).length;
+              return (
+                <button
+                  key={i}
+                  className={`btn btn-sm ${page === i ? 'primary' : ''}`}
+                  title={n ? `${n} of ${PLAYLIST_SIZE} tracks` : 'Empty playlist'}
+                  onClick={() => setPage(i)}
+                >
+                  Playlist {i + 1}{n ? ` · ${n}` : ''}
+                </button>
+              );
+            })}
+          </div>
+
           <ul className="track-list">
-            {tracks.map((t) => {
+            {pageTracks.map((t) => {
               const active = state.trackId === t.id && state.playing;
               return (
                 <li key={t.id} className={active ? 'active' : ''}>
@@ -113,20 +144,20 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
                 </li>
               );
             })}
-            {tracks.length === 0 && <p className="dim">No tracks yet — upload audio below.</p>}
+            {pageTracks.length === 0 && <p className="dim">Nothing on this playlist yet — upload audio below.</p>}
           </ul>
 
           <label className="asset-upload">
-            <input ref={fileRef} type="file" accept="audio/*" multiple onChange={onUpload} disabled={uploading} />
-            {uploading ? 'uploading…' : 'Upload audio (mp3, ogg, wav)'}
+            <input ref={fileRef} type="file" accept="audio/*" multiple onChange={onUpload} disabled={uploading || full} />
+            {uploading ? 'uploading…'
+              : full ? `Playlist ${page + 1} is full (${PLAYLIST_SIZE} tracks)`
+                : `Upload audio to playlist ${page + 1} (mp3, ogg, wav)`}
             <UploadProgressBar progress={progress} />
           </label>
 
-          {audioAssets.length > tracks.length && (
-            <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
-              Uploaded audio is added to the playlist automatically.
-            </div>
-          )}
+          <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            Uploads land on the playlist you are looking at. {PLAYLIST_SIZE} tracks each, {PLAYLIST_COUNT} playlists.
+          </div>
         </>
       )}
     </div>

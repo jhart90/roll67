@@ -422,7 +422,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   assetFolders: [],
   assetList: [],
   audioTracks: [],
-  audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 },
+  audioState: { trackId: null, playing: false, loop: false, shuffle: false, playlist: 0, volume: 0.6, startedAt: 0 },
   soundboardSlots: [],
   shopList: [],
   locationList: [],
@@ -678,7 +678,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       initiativeState: { entries: [], turnIdx: 0, round: 1, active: false }, cardDrawFlash: null, dockTab: 'world',
       showCharacterCreator: false, characterCreatorPrompted: false,
       shopList: [], locationList: [], worldFolderList: [], tableList: [], assetFolders: [], assetList: [],
-      audioTracks: [], audioState: { trackId: null, playing: false, loop: false, volume: 0.6, startedAt: 0 }, soundboardSlots: [],
+      audioTracks: [], audioState: { trackId: null, playing: false, loop: false, shuffle: false, playlist: 0, volume: 0.6, startedAt: 0 }, soundboardSlots: [],
       directory: null,
     });
     // Any windows still open (character sheets, handouts, shops) belong to
@@ -1714,9 +1714,9 @@ export const intents = {
     socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),
   clearSoundboardSlot: (slotIndex: number) => socket.emit(C2S.CLEAR_SOUNDBOARD_SLOT, { slotIndex }),
   playSfx: (slotIndex: number) => socket.emit(C2S.PLAY_SFX, { slotIndex }),
-  addAudio: (assetId: string, title: string) => socket.emit(C2S.ADD_AUDIO, { assetId, title }),
+  addAudio: (assetId: string, title: string, playlist?: number) => socket.emit(C2S.ADD_AUDIO, { assetId, title, playlist }),
   removeAudio: (trackId: string) => socket.emit(C2S.REMOVE_AUDIO, { trackId }),
-  audioControl: (p: { trackId?: string; action: 'play' | 'stop' | 'pause'; loop?: boolean; volume?: number }) =>
+  audioControl: (p: { trackId?: string; action: 'play' | 'stop' | 'pause'; loop?: boolean; shuffle?: boolean; playlist?: number; volume?: number }) =>
     socket.emit(C2S.AUDIO_CONTROL, p),
 
   createShop: (name: string) => socket.emit(C2S.CREATE_SHOP, { name }),

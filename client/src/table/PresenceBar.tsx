@@ -79,8 +79,8 @@ export function PresenceBar() {
     return () => window.removeEventListener('pointerdown', close);
   }, [menuFor, profileOpen]);
 
-  if (!you || !campaign) return null;
   const isDm = useGameStore((s) => s.isDm());
+  if (!you || !campaign) return null;
   const online = members.filter((m) => m.online);
   const offline = members.filter((m) => !m.online);
 

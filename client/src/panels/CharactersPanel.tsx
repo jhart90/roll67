@@ -17,8 +17,8 @@ export function CharactersPanel() {
   const [owner, setOwner] = useState<string>('npc');
   const [showLibrary, setShowLibrary] = useState(false);
 
-  if (!you || !campaign) return null;
   const isDm = useGameStore((s) => s.isDm());
+  if (!you || !campaign) return null;
 
   const mine = characters.filter((c) => c.ownerUserId === you.userId);
   const others = characters.filter((c) => c.ownerUserId !== you.userId);

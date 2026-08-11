@@ -221,8 +221,8 @@ export function HandoutsSection() {
   const [editing, setEditing] = useState<Handout | null | 'new'>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  if (!you) return null;
   const isDm = useGameStore((s) => s.isDm());
+  if (!you) return null;
   const open = handoutList.find((h) => h.id === openId);
 
   if (editing !== null) {

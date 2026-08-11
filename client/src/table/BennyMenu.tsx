@@ -22,8 +22,15 @@ export function BennyMenu() {
   const [open, setOpen] = useState(false);
   const [pickedId, setPickedId] = useState<string | null>(null);
 
-  if (!you || campaign?.system !== 'swade') return null;
+  // Both of these are hooks, so they run on EVERY render — above the guards,
+  // and above the `if (isDm)` branch that returns without reaching the
+  // player-side code below. A hook that only runs on some renders is the
+  // "rendered more hooks than during the previous render" crash, and toggling
+  // the DM preview is exactly what flips that branch.
   const isDm = useGameStore((s) => s.isDm());
+  const asUser = useGameStore((s) => s.asUserId());
+
+  if (!you || campaign?.system !== 'swade') return null;
 
   // The DM's menu awards rather than spends: every player-controlled Wild
   // Card, one click each, announced in chat. (NPC bennies live on sheets.)
@@ -57,7 +64,6 @@ export function BennyMenu() {
     );
   }
 
-  const asUser = useGameStore((s) => s.asUserId());
   const mine = characters.filter((c) => c.system === 'swade' && c.ownerUserId === asUser);
   if (mine.length === 0) return null;
   const ch = mine.find((c) => c.id === pickedId) ?? mine[0];

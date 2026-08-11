@@ -657,9 +657,14 @@ button.link:hover { text-decoration: underline; }
   min-width: 0;
 }
 .sheet-card-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+/* Card titles wrap rather than truncate. An item's name is the one thing on
+   the card you cannot guess from the rest of it — "Confederate LeMat Cavalry
+   Pi…" and its under-barrel twin read as the same weapon, which is exactly
+   the case where the tail matters most. Cards are already variable height,
+   so a second line costs nothing. */
 .sc-title {
   font-weight: 600; font-size: 13px; color: var(--text);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  white-space: normal; overflow-wrap: anywhere; min-width: 0;
 }
 .sc-pencil { font-size: 13px; padding: 0 2px; opacity: 0.55; flex: none; }
 .sheet-card:hover .sc-pencil { opacity: 1; }
@@ -667,7 +672,11 @@ button.link:hover { text-decoration: underline; }
 /* Reorder grip. Stacked tight so the pair reads as one control and costs the
    card head almost no width — the order of these cards is the order of the
    actions in the right-hand pane, so it earns a permanent spot. */
-.sc-move { display: flex; flex-direction: column; gap: 0; flex: none; align-self: center; margin-right: 2px; }
+/* Anchored to the top, not centred: a title that wraps to two lines would
+   otherwise drop the grip below the ✎ and 🗨 on the right, which stay on the
+   first line. All three controls belong on the same line as the first line
+   of the name. */
+.sc-move { display: flex; flex-direction: column; gap: 0; flex: none; align-self: flex-start; margin-right: 2px; }
 .sc-move button {
   font-size: 8px; line-height: 8px; padding: 1px 3px; opacity: 0.35;
   text-decoration: none; flex: none;
@@ -3061,7 +3070,8 @@ th > .term { border-bottom-style: dotted; }
 
 /* "Show this card in chat", sitting just left of the card's pencil. Quiet
    until hovered, like the pencil — neither should compete with the card. */
-.sc-post { opacity: 0.5; padding: 0 4px; font-size: 13px; }
+/* flex: none so a long wrapping title can never squeeze the button away. */
+.sc-post { opacity: 0.5; padding: 0 4px; font-size: 13px; flex: none; }
 .sc-post:hover { opacity: 1; text-decoration: none; }
 
 /* Called Shot prompt: pick the part, see the penalty, then commit. */

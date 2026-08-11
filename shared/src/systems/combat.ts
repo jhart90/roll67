@@ -180,7 +180,17 @@ export function combatActions(character: Character): CombatAction[] {
       if (!hasAmount && !condition && character.system !== 'swade') return;
       const name = str(pw, 'name', '').trim() || `Power ${i + 1}`;
       const effect = str(pw, 'effect', 'damage') === 'heal' ? 'heal' as const : 'damage' as const;
-      const save = str(pw, 'save', '');
+      // An AREA power is never dodged. Nothing in the Powers chapter lets a
+      // target evade one — evasion belongs to thrown and fired templates,
+      // which reach the engine as attacks, never as powers.
+      //
+      // Enforced here rather than only in the compendium because a sheet
+      // keeps its own COPY of the row: every Burst added before the data was
+      // corrected still carries `save: agility`, and fixing the compendium
+      // does nothing for a character who already knows the power. This is
+      // also simply the better place for it — it is a rule, not a datum.
+      const isAreaPower = !!str(pw, 'aoeShape', '') && (num(pw, 'aoeSize', 0) > 0 || num(pw, 'aoeHexes', 0) > 0);
+      const save = isAreaPower ? '' : str(pw, 'save', '');
       const onSave = str(pw, 'onSave', 'negate') === 'half' ? 'half' as const : 'negate' as const;
       const rangeFt = Math.max(0, num(pw, 'range', 0));
       const aoeShape = str(pw, 'aoeShape', '');

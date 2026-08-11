@@ -298,6 +298,35 @@ describe('SWADE library & compendium', () => {
     expect(action.fixedTn).toBe(4);
   });
 
+  // The compendium is only half the story: a sheet keeps its own COPY of the
+  // row, so every Burst added before that data was corrected still carries
+  // save: 'agility'. The rule has to hold for those too.
+  it('ignores a stale save on an area power already written to a sheet', () => {
+    const stale = {
+      name: 'Burst', cost: 2, effect: 'damage', damage: '2d6!',
+      save: 'agility', onSave: 'negate', aoeShape: 'cone', aoeSize: 54,
+    };
+    const sheet = {
+      ...swade.defaultSheet(), arcaneSkill: 'Spellcasting',
+      skills: [{ name: 'Spellcasting', die: 'd8' }], powers: [stale],
+    };
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet } as unknown as Character;
+    const action = combatActions(character).find((a) => a.id === 'power:0')!;
+    expect(action.saveId).toBeUndefined();
+    expect(action.aoe).toBeTruthy();
+  });
+
+  // A single-target power that the book DOES have the victim resist keeps it.
+  it('still lets a single-target power be resisted', () => {
+    const sheet = {
+      ...swade.defaultSheet(), arcaneSkill: 'Spellcasting',
+      skills: [{ name: 'Spellcasting', die: 'd8' }],
+      powers: [{ name: 'Puppet', cost: 3, effect: 'damage', condition: 'charmed', save: 'spirit', range: 72 }],
+    };
+    const character = { id: 'c', campaignId: 'x', ownerUserId: null, name: 'Mage', system: 'swade', sheet } as unknown as Character;
+    expect(combatActions(character).find((a) => a.id === 'power:0')!.saveId).toBe('spirit');
+  });
+
   it('leaves no area power asking for an Agility dodge', () => {
     const bad = contentForSystem('swade')
       .filter((c) => c.kind === 'power' && c.power?.aoe && c.power?.save === 'agility')

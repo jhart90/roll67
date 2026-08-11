@@ -42,7 +42,58 @@ export const SKILLS_SWADE = [
 export const RANKS_SWADE = ['Novice', 'Seasoned', 'Veteran', 'Heroic', 'Legendary'];
 
 export const ARCANE_BACKGROUNDS_SWADE = ['Gifted', 'Magic', 'Miracles', 'Psionics', 'Weird Science'];
+
+/**
+ * What each Arcane Background comes with, straight off the book's page: the
+ * skill it rolls, the attribute that skill is linked to, how many powers it
+ * starts with, and its Power Points.
+ *
+ * One table, so the dropdown label, the auto-fill and the derived badges can
+ * never disagree about what Weird Science is worth.
+ */
+export interface ArcaneProfile {
+  skill: string;
+  attribute: string;
+  startingPowers: number;
+  powerPoints: number;
+}
+export const ARCANE_PROFILES_SWADE: Record<string, ArcaneProfile> = {
+  Gifted: { skill: 'Focus', attribute: 'Spirit', startingPowers: 1, powerPoints: 15 },
+  Magic: { skill: 'Spellcasting', attribute: 'Smarts', startingPowers: 3, powerPoints: 10 },
+  Miracles: { skill: 'Faith', attribute: 'Spirit', startingPowers: 3, powerPoints: 10 },
+  Psionics: { skill: 'Psionics', attribute: 'Smarts', startingPowers: 3, powerPoints: 10 },
+  'Weird Science': { skill: 'Weird Science', attribute: 'Smarts', startingPowers: 2, powerPoints: 15 },
+};
+
+/** The profile for a background name, matched loosely (case, stray spaces). */
+export function arcaneProfile(background: string): ArcaneProfile | null {
+  const want = background.trim().toLowerCase();
+  const hit = Object.entries(ARCANE_PROFILES_SWADE).find(([k]) => k.toLowerCase() === want);
+  return hit ? hit[1] : null;
+}
+
+/**
+ * The sheet fields an Arcane Background decides. Applied when the background
+ * changes, so picking "Weird Science" fills in Weird Science (Smarts), 15 PP
+ * and 2 starting powers rather than leaving three fields to be looked up.
+ */
+export function applyArcaneBackground(background: string): SheetData {
+  const prof = arcaneProfile(background);
+  if (!prof) return { arcaneBackground: background };
+  return {
+    arcaneBackground: background,
+    arcaneSkill: prof.skill,
+    pp: prof.powerPoints,
+    maxPp: prof.powerPoints,
+  };
+}
+
 const ARCANE_SKILLS = ['', 'Focus', 'Spellcasting', 'Faith', 'Psionics', 'Weird Science'];
+/** "Focus (Spirit)" in the dropdown; the stored value stays the bare skill,
+ *  which is what skillDie() and every roll expression look up. */
+const ARCANE_SKILL_LABELS: Record<string, string> = Object.fromEntries(
+  Object.values(ARCANE_PROFILES_SWADE).map((p) => [p.skill, `${p.skill} (${p.attribute})`]),
+);
 
 export const ANCESTRIES_SWADE = [
   'Human', 'Android', 'Aquarian', 'Avion', 'Dwarf', 'Elf', 'Half-Elf', 'Half-Folk', 'Rakashan', 'Saurian',
@@ -477,7 +528,7 @@ const powersTab: SheetTab = {
       kind: 'fields', id: 'arcane', title: 'Arcane Background',
       fields: [
         { id: 'arcaneBackground', label: 'Arcane Background', type: 'text', width: 'third', suggestions: ARCANE_BACKGROUNDS_SWADE },
-        { id: 'arcaneSkill', label: 'Arcane skill', type: 'select', width: 'third', options: ARCANE_SKILLS, default: '' },
+        { id: 'arcaneSkill', label: 'Arcane skill', type: 'select', width: 'third', options: ARCANE_SKILLS, optionLabels: ARCANE_SKILL_LABELS, default: '' },
         { id: 'pp', label: 'Power Points', type: 'number', width: 'sixth', default: 10 },
         { id: 'maxPp', label: 'Max PP', type: 'number', width: 'sixth', default: 10 },
       ],
@@ -546,6 +597,13 @@ export const swade: SystemSchema = {
     const out: Record<string, number | string> = {};
     for (const a of ATTRIBUTES_SWADE) {
       out[a.id] = str(sheet, a.id, 'd6');
+    }
+    // Shown as a badge on the Arcane Background field: what the book gives
+    // this background, so the number is on screen rather than in the book.
+    const arc = arcaneProfile(str(sheet, 'arcaneBackground', ''));
+    if (arc) {
+      out.arcaneBackground = `${arc.startingPowers} starting power${arc.startingPowers === 1 ? '' : 's'} · ${arc.powerPoints} PP`;
+      out.arcaneSkill = `${arc.skill} (${arc.attribute})`;
     }
     out.parry = swadeParry(sheet);
     out.toughness = swadeToughness(sheet);

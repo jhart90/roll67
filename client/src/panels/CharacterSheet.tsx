@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
-  AMMO_BY_ROF, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
 import { intents, useGameStore } from '../store/game';
@@ -102,7 +102,9 @@ function FieldInput({
           disabled={readOnly}
           onChange={(e) => onPatch({ [field.id]: e.target.value })}
         >
-          {(field.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+          {(field.options ?? []).map((o) => (
+            <option key={o} value={o}>{field.optionLabels?.[o] ?? o}</option>
+          ))}
         </select>
       </label>
     );
@@ -916,7 +918,14 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
   const activeTab = schema.tabs.find((t) => t.id === tabId) ?? schema.tabs[0];
 
   function patch(p: SheetData) {
-    if (character) intents.updateCharacter(character.id, p);
+    if (!character) return;
+    // An Arcane Background decides the skill and the Power Points, so setting
+    // one sets those too rather than leaving three fields to be looked up.
+    // Sent as one patch so the sheet never sits half-updated.
+    const next = typeof p.arcaneBackground === 'string' && character.system === 'swade'
+      ? { ...p, ...applyArcaneBackground(p.arcaneBackground) }
+      : p;
+    intents.updateCharacter(character.id, next);
   }
 
   /** Kit changes are table-visible: say so in chat, in the item's own words

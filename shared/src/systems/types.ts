@@ -11,6 +11,9 @@ export interface FieldDef {
   label: string;
   type: FieldType;
   options?: string[];
+  /** Display text per option value, when the label should say more than the
+   *  stored value does ("Focus (Spirit)" for the value "Focus"). */
+  optionLabels?: Record<string, string>;
   /** For text fields: dropdown of known values, but free typing still allowed. */
   suggestions?: string[];
   /** Grid width hint for the renderer. */

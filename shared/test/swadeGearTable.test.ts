@@ -441,15 +441,17 @@ describe('SWADE gear tables', () => {
   });
 
   /**
-   * Powers the book puts on a template but which used to be single-target
-   * here. Each must reach the sheet with its area AND become a real targeted
-   * AoE action — a template that generates no action is inert data.
+   * Powers whose BASE is a template — the book prints the area in the power's
+   * own text, not as a modifier. Each must reach the sheet with its area AND
+   * become a real targeted AoE action; a template that generates no action is
+   * inert data.
+   *
+   * Stun, Fear, Entangle and Slumber used to be in this list and are not any
+   * more: the book gives each of them "AREA OF EFFECT (+2/+3)" under MODIFIERS,
+   * so they are single-target until a caster pays for the template. Baking it
+   * in made them strictly better than the book's version, for free.
    */
   const AREA_POWERS: Array<[string, string]> = [
-    ['Stun', 'stunned'],
-    ['Fear', 'frightened'],
-    ['Entangle', 'entangled'],
-    ['Slumber', 'unconscious'],
     ['Silence', 'silenced'],
     ['Light/Darkness', 'blinded'],
   ];

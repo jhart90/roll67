@@ -55,3 +55,39 @@ describe('the chat tag', () => {
     expect(calledShotTag('Head or vitals', -4)).toBe('−4 Called Shot (Head or vitals)');
   });
 });
+
+import { calledShotPenalty } from '../src/systems/swadeCalledShot.js';
+
+describe('parts scale with the creature they belong to', () => {
+  const part = (id: string) => calledShotById(id)!;
+
+  // A head is a head — but a Huge creature's head is the size of a small car.
+  it('makes a Huge creature’s head far easier to hit than a person’s', () => {
+    expect(calledShotPenalty(part('head'), 0)).toBe(-4);   // person
+    expect(calledShotPenalty(part('head'), 9)).toBe(0);    // Huge (Scale +4)
+    expect(calledShotPenalty(part('head'), 14)).toBe(2);   // Gargantuan (+6)
+  });
+
+  it('makes a Tiny creature’s limb nearly impossible', () => {
+    expect(calledShotPenalty(part('limb'), 0)).toBe(-2);
+    expect(calledShotPenalty(part('limb'), -4)).toBe(-8);  // Tiny (Scale −6)
+  });
+
+  // Still harder than simply hitting the creature: a Huge target is +4 to hit
+  // normally, and its limb is +2 — a real cost for a real advantage.
+  it('stays harder than an ordinary swing at the same creature', () => {
+    expect(calledShotPenalty(part('limb'), 9)).toBe(2);
+  });
+
+  // An item is its own size whoever is carrying it.
+  it('does not grow items with their owner', () => {
+    expect(calledShotPenalty(part('itemPistol'), 0)).toBe(-4);
+    expect(calledShotPenalty(part('itemPistol'), 9)).toBe(-4);
+    expect(calledShotPenalty(part('itemSword'), 14)).toBe(-2);
+  });
+
+  it('holds the result inside the Scale table', () => {
+    expect(calledShotPenalty(part('unarmoredTiny'), -4)).toBe(-8);
+    expect(calledShotPenalty(part('limb'), 20)).toBe(4);
+  });
+});

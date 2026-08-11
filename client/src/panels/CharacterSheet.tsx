@@ -4,9 +4,8 @@ import {
   AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef,
 } from 'shared';
-import { intents, useGameStore } from '../store/game';
+import { intents, useGameStore, CALLED_SHOT_PENDING } from '../store/game';
 import { openWindow } from '../store/windowManager';
-import { CALLED_SHOTS, calledShotById, clampCalledShotPenalty } from 'shared';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnFeatures } from './SwnFeatures';
 import { CombatStatus } from './CombatStatus';
@@ -623,9 +622,6 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
   const [adv, setAdv] = useState<AdvMode>(null);
   /** Burst-capable action awaiting its rate-of-fire choice (modal). */
   const [rofPrompt, setRofPrompt] = useState<{ action: CombatAction; ammoLeft: number } | null>(null);
-  const [calledShot, setCalledShot] = useState<{ action: CombatAction } | null>(null);
-  const [csPick, setCsPick] = useState<string>('head');
-  const [csCustom, setCsCustom] = useState<string>('-4');
   const schema = systemFor(character.system);
   const rollables = useMemo(() => schema.rollables(character.sheet), [schema, character.sheet]);
   const actions = useMemo(() => combatActions(character), [character]);
@@ -725,7 +721,12 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                   if (!myToken) return;
                   // Aim first, then pick the victim: the part decides the
                   // penalty and the player should see it before committing.
-                  if (adv === 'called' && a.attackExpr) { setCalledShot({ action: a }); return; }
+                  // Flag the run; the aim prompt comes once a target is
+                  // picked, because the part's Scale is read off the DEFENDER.
+                  if (adv === 'called' && a.attackExpr) {
+                    useGameStore.getState().beginTargeting(character.id, myToken.id, a, null, undefined, CALLED_SHOT_PENDING);
+                    return;
+                  }
                   if (maxRof >= 2 && !a.suppressive) { setRofPrompt({ action: a, ammoLeft }); return; }
                   if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, a.attackExpr ? wireAdv(adv) : null);
                   else useGameStore.getState().beginTargeting(character.id, myToken.id, a, a.attackExpr ? wireAdv(adv) : null, undefined);
@@ -829,64 +830,6 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
           })}
         </div>
       ))}
-
-      {calledShot && myToken && (
-        <div className="sheet-backdrop" style={{ zIndex: 80 }} onPointerDown={(e) => { if (e.target === e.currentTarget) setCalledShot(null); }}>
-          <div className="panel called-shot-prompt">
-            <div className="dock-header"><h3>🎯 {calledShot.action.label} — called shot</h3></div>
-            <p className="dim" style={{ fontSize: 12, margin: '0 0 6px' }}>
-              The penalty is the Scale of the part you are aiming at, not of the creature it belongs to.
-            </p>
-            <div className="cs-options">
-              {CALLED_SHOTS.map((c) => (
-                <label key={c.id} className={`cs-option ${csPick === c.id ? 'on' : ''}`} title={c.note}>
-                  <input type="radio" name="cs" checked={csPick === c.id} onChange={() => setCsPick(c.id)} />
-                  <span className="cs-name">{c.label}</span>
-                  <span className="cs-pen">{c.penalty >= 0 ? '+' : '−'}{Math.abs(c.penalty)}</span>
-                  {c.damageBonus ? <span className="cs-dmg">+{c.damageBonus} dmg</span> : null}
-                </label>
-              ))}
-              <label className={`cs-option ${csPick === 'custom' ? 'on' : ''}`} title="Any other part — enter its Scale modifier yourself.">
-                <input type="radio" name="cs" checked={csPick === 'custom'} onChange={() => setCsPick('custom')} />
-                <span className="cs-name">Custom Scale modifier</span>
-                <input
-                  className="cs-custom" type="number" min={-8} max={6} value={csCustom}
-                  onFocus={() => setCsPick('custom')}
-                  onChange={(e) => setCsCustom(e.target.value)}
-                />
-              </label>
-            </div>
-            {(() => {
-              const chosen = csPick === 'custom'
-                ? { label: 'Custom', penalty: clampCalledShotPenalty(Number(csCustom)), damageBonus: 0 }
-                : calledShotById(csPick)!;
-              return (
-                <>
-                  <p className="cs-summary">
-                    {chosen.label}: <strong>{chosen.penalty >= 0 ? '+' : '−'}{Math.abs(chosen.penalty)}</strong> to the attack
-                    {chosen.damageBonus ? <> · <strong>+{chosen.damageBonus}</strong> damage on a hit</> : null}
-                  </p>
-                  <div className="row">
-                    <button
-                      className="primary"
-                      onClick={() => {
-                        const a = calledShot.action;
-                        setCalledShot(null);
-                        if (a.aoe) useGameStore.getState().beginAoeTargeting(character.id, myToken.id, a, null);
-                        else useGameStore.getState().beginTargeting(character.id, myToken.id, a, null, undefined,
-                          { label: chosen.label, penalty: chosen.penalty, damageBonus: chosen.damageBonus });
-                      }}
-                    >
-                      Take the shot — pick a target
-                    </button>
-                    <button onClick={() => setCalledShot(null)}>Cancel</button>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
 
       {rofPrompt && myToken && (
         <div className="sheet-backdrop" style={{ zIndex: 80 }} onPointerDown={(e) => { if (e.target === e.currentTarget) setRofPrompt(null); }}>

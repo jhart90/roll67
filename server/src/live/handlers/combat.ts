@@ -1258,15 +1258,19 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // Scale: the smaller creature adds the difference, the larger
         // subtracts it. A fly swatting at a dragon is easy; the dragon
         // swatting back at the fly is not.
-        const scaleMod = sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
+        // A Called Shot uses the Scale of the PART instead of the creature's,
+        // so the two never both apply — the book is explicit that the modifier
+        // depends on "the Scale of the target itself, not the creature it's
+        // part of". Stacking them charged the attacker twice for one Scale.
+        const scaleMod = p.calledShot ? 0 : sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
         if (scaleMod) {
           mod += scaleMod;
           tags.push(sizeAttackTag(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0))!);
         }
-        // Called Shot: the penalty is the Scale of the PART being aimed at,
-        // not of the creature it belongs to — a hand is a hand on a goblin or
-        // an ogre. The client picked it before the roll; clamp it to the Scale
-        // table's own range so a hand-typed modifier cannot invent one.
+        // Called Shot: the Scale of the PART being aimed at, which the client
+        // worked out from the defender's own Size once a target was picked —
+        // a Huge creature's head is a bigger thing to hit than a person's.
+        // Re-clamped here so a hand-typed modifier cannot invent one.
         if (p.calledShot) {
           const csPen = clampCalledShotPenalty(Number(p.calledShot.penalty) || 0);
           const csDmg = Math.max(0, Math.min(8, Math.floor(Number(p.calledShot.damageBonus) || 0)));

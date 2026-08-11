@@ -130,6 +130,8 @@ export type DockTab = 'chat' | 'initiative' | 'world';
 
 /** What a Called Shot is aimed at, chosen before the roll goes out. */
 export type CalledShotAim = { label: string; penalty: number; damageBonus?: number };
+/** Declared before a target is picked; the part's Scale needs the defender. */
+export const CALLED_SHOT_PENDING = 'pending' as const;
 
 /** A piece on the current map, named the way the World pane finds it: either a
  *  token, or one of the chest/shop/prop objects. Null = this row has nothing
@@ -280,7 +282,7 @@ interface GameState {
   /** SWADE: per-character flags for which Benny rerolls are currently live. */
   bennyState: Record<string, BennyStatePayload>;
   /** In-progress combat action awaiting a target selection. */
-  targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number; calledShot?: CalledShotAim | null } | null;
+  targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number; calledShot?: CalledShotAim | typeof CALLED_SHOT_PENDING | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
   aoeTargeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; originHex: Hex; aimHex: Hex } | null;
   /** Floating +/-HP combat text over tokens. */
@@ -295,7 +297,7 @@ interface GameState {
   }>;
   /** On-screen rollable-table result pills (fade out after ~3s). */
   tableToasts: Array<{ id: number; text: string; color: string }>;
-  beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null, rof?: number, calledShot?: CalledShotAim | null): void;
+  beginTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null, rof?: number, calledShot?: CalledShotAim | typeof CALLED_SHOT_PENDING | null): void;
   cancelTargeting(): void;
   resolveTarget(targetTokenId: string): void;
   beginAoeTargeting(characterId: string, sourceTokenId: string, action: CombatAction, adv: 'adv' | 'dis' | null): void;
@@ -340,6 +342,10 @@ interface GameState {
   /** Which bottom-corner chip has its panel open (Benny or Keyring), if any.
    *  Shared so the two are mutually exclusive: both panels open upward from
    *  the same baseline, so two at once would overlap each other. */
+  /** A Called Shot waiting on its aim, now that the target is known. */
+  calledShotPending: { targetTokenId: string } | null;
+  confirmCalledShot(aim: CalledShotAim): void;
+  cancelCalledShot(): void;
   openChip: 'benny' | 'keyring' | null;
   setOpenChip(c: 'benny' | 'keyring' | null): void;
   /** Local-only: mute audio on this device without affecting others. */
@@ -523,6 +529,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   resolveTarget(targetTokenId) {
     const t = get().targeting;
     if (!t) return;
+    // A Called Shot cannot be priced until the victim is known: the part's
+    // Scale is read off THEIR Size. Hold the attack and ask now.
+    if (t.calledShot === CALLED_SHOT_PENDING) {
+      set({ calledShotPending: { targetTokenId }, targeting: { ...t, calledShot: null } });
+      return;
+    }
     set({ dockTab: 'chat' });
     socket.emit(C2S.COMBAT_ACTION, {
       characterId: t.characterId, actionId: t.action.id,
@@ -754,6 +766,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     const char = get().characters.find((c) => c.id === characterId);
     openWindow('characterSheet', characterId, { characterId }, char?.name ?? 'Character');
   },
+  calledShotPending: null,
+  confirmCalledShot(aim) {
+    const s = get();
+    const t = s.targeting;
+    const pend = s.calledShotPending;
+    if (!t || !pend) return;
+    set({ dockTab: 'chat', calledShotPending: null, targeting: null });
+    socket.emit(C2S.COMBAT_ACTION, {
+      characterId: t.characterId, actionId: t.action.id,
+      sourceTokenId: t.sourceTokenId, targetTokenId: pend.targetTokenId,
+      adv: t.adv, rof: t.rof, calledShot: aim,
+    });
+    socket.emit(C2S.TARGET_PREVIEW, { sourceTokenId: t.sourceTokenId, rangeFt: 0, effect: 'damage', label: '', active: false });
+  },
+  cancelCalledShot() { set({ calledShotPending: null }); get().cancelTargeting(); },
   openChip: null,
   setOpenChip(openChip) { set({ openChip }); },
   clearError() { set({ errorToast: null }); },

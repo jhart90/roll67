@@ -111,6 +111,7 @@ const ACE_SOUNDS: Partial<Record<AceStyle, string[]>> = {
   rainbow: ['rainbow_1'],
   smoke: ['smoke_1'],
   water: ['water_1', 'water_2'],
+  confetti: ['confetti_1'],
 };
 
 function playAceSound(style: AceStyle): void {

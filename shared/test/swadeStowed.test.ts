@@ -82,7 +82,7 @@ describe('a weapon taken from the compendium', () => {
   // which is right: you have bought it, not drawn it.
   it('arrives stowed until the player draws it', () => {
     const colt = CONTENT_SWADE.find((e) => e.name === 'Colt Peacemaker (.45)')!;
-    const added = applyEntry(colt, 'swade');
+    const added = applyEntry(colt, swade.defaultSheet());
     expect(added!.listId).toBe('attacks');
     expect(swadeStowed(added!.row)).toBe(true);
   });

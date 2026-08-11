@@ -334,6 +334,11 @@ interface GameState {
    *  never touches selection. */
   worldHover: MapTarget;
   setWorldHover(t: MapTarget): void;
+  /** Which bottom-corner chip has its panel open (Benny or Keyring), if any.
+   *  Shared so the two are mutually exclusive: both panels open upward from
+   *  the same baseline, so two at once would overlap each other. */
+  openChip: 'benny' | 'keyring' | null;
+  setOpenChip(c: 'benny' | 'keyring' | null): void;
   /** Local-only: mute audio on this device without affecting others. */
   clientMuted: boolean;
   /** This device's own music volume (multiplies the DM's jukebox volume). */
@@ -746,6 +751,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const char = get().characters.find((c) => c.id === characterId);
     openWindow('characterSheet', characterId, { characterId }, char?.name ?? 'Character');
   },
+  openChip: null,
+  setOpenChip(openChip) { set({ openChip }); },
   clearError() { set({ errorToast: null }); },
   toast(message, kind = 'error') {
     set({ errorToast: message, toastKind: kind });

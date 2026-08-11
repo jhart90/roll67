@@ -21,7 +21,8 @@ export function KeyringMenu() {
   const currentMapId = useGameStore((s) => s.map?.id ?? null);
   const system = useGameStore((s) => s.campaign?.system ?? 'dnd5e');
   const asUser = useGameStore((s) => s.asUserId());
-  const [open, setOpen] = useState(false);
+  const open = useGameStore((s) => s.openChip === 'keyring');
+  const setOpen = (v: boolean) => useGameStore.getState().setOpenChip(v ? 'keyring' : null);
   // The door editor can send the DM straight here to cut the key it needs.
   const summoned = useGameStore((s) => s.keyManagerOpen);
   useEffect(() => {
@@ -50,7 +51,7 @@ export function KeyringMenu() {
 
   return (
     <div className="keyring-menu">
-      <button className="keyring-chip" onClick={() => setOpen((o) => !o)} title={isDm ? 'Key Manager' : 'Your keyring'}>
+      <button className={`keyring-chip ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} title={isDm ? 'Key Manager' : 'Your keyring'}>
         🔑{isDm ? ' DM' : ` ${total}`}
       </button>
       {open && (isDm

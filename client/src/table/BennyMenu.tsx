@@ -19,7 +19,10 @@ export function BennyMenu() {
   const soakOffer = useGameStore((s) => s.soakOffer);
   const bennyState = useGameStore((s) => s.bennyState);
   const init = useGameStore((s) => s.initiativeState);
-  const [open, setOpen] = useState(false);
+  // Shared with the keyring chip beside it: only one panel at a time.
+  const open = useGameStore((s) => s.openChip === 'benny');
+  const setOpen = (v: boolean | ((o: boolean) => boolean)) =>
+    useGameStore.getState().setOpenChip((typeof v === 'function' ? v(open) : v) ? 'benny' : null);
   const [pickedId, setPickedId] = useState<string | null>(null);
 
   // Both of these are hooks, so they run on EVERY render — above the guards,
@@ -40,7 +43,7 @@ export function BennyMenu() {
     if (wildCards.length === 0) return null;
     return (
       <div className="benny-menu">
-        <button className="benny-chip" onClick={() => setOpen((o) => !o)} title="Award Bennies">
+        <button className={`benny-chip ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} title="Award Bennies">
           🪙 DM
         </button>
         {open && (
@@ -131,7 +134,7 @@ export function BennyMenu() {
 
   return (
     <div className="benny-menu">
-      <button className="benny-chip" onClick={() => setOpen((o) => !o)} title="Benny menu">
+      <button className={`benny-chip ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} title="Benny menu">
         🪙 {bennies}
       </button>
       {open && (

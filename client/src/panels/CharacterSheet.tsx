@@ -770,12 +770,17 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             const maxRof = a.rof ?? 1;
             const minNeeded = a.suppressive ? 3 * AMMO_BY_ROF[Math.min(6, maxRof)] : 1;
             const dry = ammoLeft >= 0 && ammoLeft < minNeeded;
+            // Not in hand. Left in the list rather than hidden, because a
+            // weapon that vanishes reads as broken while a greyed one names
+            // its own fix.
+            const stowed = a.stowed === true;
             return (
             <div key={a.id} className="roll-row">
               <button
-                className={`roll-btn action-btn ${a.effect}`}
-                disabled={!canRoll || !myToken || dry}
-                title={!myToken ? "Place this character's token on the map first"
+                className={`roll-btn action-btn ${a.effect}${stowed ? ' action-stowed' : ''}`}
+                disabled={!canRoll || !myToken || dry || stowed}
+                title={stowed ? `${a.label} isn't in hand — tick Wielded on its card to use it`
+                  : !myToken ? "Place this character's token on the map first"
                   : dry ? `Needs ${minNeeded} round${minNeeded === 1 ? '' : 's'} — only ${ammoLeft} left. Reload!`
                     : maxRof >= 2 && !a.suppressive ? 'Choose a rate of fire, then pick a target'
                       : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`)}
@@ -799,6 +804,7 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                   {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
                   {maxRof >= 2 && !a.suppressive ? ` · RoF ${maxRof}` : ''}
                   {a.suppressive ? ` · ${minNeeded} rounds` : ''}
+                  {stowed ? ' · not wielded' : ''}
                 </span>
               </button>
               {canRoll && (

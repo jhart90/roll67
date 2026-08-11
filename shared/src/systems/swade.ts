@@ -209,6 +209,26 @@ export function swadeArcaneExpr(sheet: SheetData): string | null {
   return traitExpr(sheet, sides);
 }
 
+/**
+ * Is this weapon put away — a thing on the sheet the character is not
+ * currently holding?
+ *
+ * Two rows are deliberately NOT put away even though they aren't ticked:
+ *
+ *   - a row with no `wielded` key at all. Every creature in the bestiary
+ *     arrives that way, and a dragon's Bite is not something it forgot to
+ *     draw. Absence of the field means the sheet doesn't track wielding.
+ *   - a natural weapon, which is marked as one in its notes. A claw is
+ *     attached; there is nothing to pick up.
+ *
+ * Everything else — a compendium weapon, a hand-added row — starts life at
+ * `wielded: false` and means it.
+ */
+export function swadeStowed(atk: SheetData): boolean {
+  if (atk.wielded !== false) return false;
+  return !/natural weapon/i.test(str(atk, 'notes', ''));
+}
+
 /** Parry modifier from wielded weapons (a Rapier's +1, a Great Sword's −1). */
 function wieldedWeaponParry(sheet: SheetData): number {
   return rows(sheet, 'attacks')

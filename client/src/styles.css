@@ -1864,6 +1864,13 @@ button.link:hover { text-decoration: underline; }
 }
 .action-btn.heal { border-left-color: var(--ok); }
 .action-btn.damage { border-left-color: var(--danger); }
+/* Not in hand: still listed so a forgotten tick box doesn't read as a missing
+   weapon, but drained of colour so it never competes with what you can
+   actually do. The dimming beats the :disabled default, hence the override. */
+.action-btn.action-stowed:disabled {
+  opacity: 0.4; filter: grayscale(1);
+  border-left-color: var(--border); font-style: italic;
+}
 .action-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--panel); }
 /* The meta never overruns the narrow pane: it may shrink, wrap onto its own
    line, and break inside long tokens instead of spilling past the border. */

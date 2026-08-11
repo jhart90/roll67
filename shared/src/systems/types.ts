@@ -112,6 +112,10 @@ export interface CombatAction {
   /** SWADE: the power's DUR column. A round count starts a countdown on the
    *  caster's sheet; anything else is left to the table. */
   duration?: string;
+  /** SWADE: the weapon is on the sheet but not in hand. The action still
+   *  shows — hiding it makes a forgotten tick box look like a broken
+   *  weapon — but it is greyed out and the server refuses it. */
+  stowed?: true;
   /** SWADE: armor piercing — reduces the target's ranged-armor soak. */
   ap?: number;
   /** SWADE: lobbed rather than fired (a grenade). Thrown weapons have no

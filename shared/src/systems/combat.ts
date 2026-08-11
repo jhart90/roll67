@@ -1,7 +1,7 @@
 import type { AoeShape, Character, SheetData } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
-import { gearTraitBonus, skillDie, swade, swadeArcaneExpr, traitExpr } from './swade.js';
+import { gearTraitBonus, skillDie, swade, swadeArcaneExpr, swadeStowed, traitExpr } from './swade.js';
 import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
 const SYSTEMS = { dnd5e, swn, swade };
@@ -75,6 +75,8 @@ export function combatActions(character: Character): CombatAction[] {
       ...(condition && !save && conditionSave && conditionDc > 0
         ? { conditionSaveId: conditionSave, conditionDc } : {}),
       ...(atk.hardRange === true ? { hardRange: true } : {}),
+      // Put away: still listed, but greyed out and refused until drawn.
+      ...(character.system === 'swade' && swadeStowed(atk) ? { stowed: true as const } : {}),
     });
 
     // SWADE Suppressive Fire: any RoF 2+ ranged weapon can hose down a
@@ -100,6 +102,8 @@ export function combatActions(character: Character): CombatAction[] {
         onSave: 'negate',
         appliesCondition: 'distracted',
         aoe: { shape: 'sphere', sizeFt: 0, sizeHexes: 3 },
+        // Hosing down a template needs the gun in hand as much as aiming does.
+        ...(swadeStowed(atk) ? { stowed: true as const } : {}),
       });
     }
   });

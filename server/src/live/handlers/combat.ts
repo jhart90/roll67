@@ -12,7 +12,7 @@ import {
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail,
-  cardDrawPlan, chooseCard, quickRedraws, type DrawPlan,
+  cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
   fearCheckFailure, fearCheckMod, fearTableRow, fearTableTotal, PANICKED_OUTCOME, type RequestFearPayload,
 } from 'shared';
@@ -1112,6 +1112,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // Weapons that track ammo (SWN's optional "Ammo left" column) can't fire empty.
     if (action.source === 'attack') {
       const atkRow = rows(actor.sheet, 'attacks')[action.index];
+      // A weapon that isn't in hand isn't an option. Re-derived from the live
+      // sheet rather than trusted from the payload, and checked here so a
+      // macro can't reach past the greyed-out button in the action pane.
+      if (actor.system === 'swade' && atkRow && swadeStowed(atkRow)) {
+        emitError(socket, `${action.label} isn't in hand — tick Wielded on its card first.`);
+        return;
+      }
       // SWADE burst fire needs its full round count in the magazine.
       if (actor.system === 'swade' && atkRow && num(atkRow, 'ammo', -1) >= 0) {
         const need = AMMO_BY_ROF[Math.min(6, effRof)];

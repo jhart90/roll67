@@ -13,6 +13,9 @@ function pillDisabled(m: Macro, characters: Character[]): { disabled: boolean; r
   if (m.actionId) {
     const action = combatActions(char).find((a) => a.id === m.actionId);
     if (!action) return { disabled: true, reason: 'Out of stock / unavailable' };
+    // A pinned weapon that has been put away. The server refuses it anyway;
+    // saying so on the pill saves the round trip and the error toast.
+    if (action.stowed) return { disabled: true, reason: `${action.label} isn't in hand — tick Wielded on its card` };
     return { disabled: false };
   }
   if (m.rollableId) {

@@ -121,6 +121,50 @@ describe('SWADE bestiary', () => {
   });
 
   /**
+   * The Spice Coast set is a whole scenario's cast — two ships and both their
+   * crews plus the port around them — pitched at six Novices with one Advance
+   * apiece. What it must keep is the pitch: Extras a starting party can
+   * actually fight, and no boss it cannot reach.
+   */
+  describe('the Spice Coast scenario set', () => {
+    const spice = NPCS_SWADE.filter((n) => n.category === 'Spice Coast (Scenario)');
+    const extras = spice.filter((n) => n.challengeLabel === 'Extra' && !/Indiaman|Brigantine/.test(n.name));
+
+    it('fields both ships and both crews', () => {
+      expect(spice.length).toBeGreaterThanOrEqual(30);
+      for (const ship of ['East Indiaman', 'Pirate Brigantine']) {
+        const v = spice.find((n) => n.name === ship);
+        expect(v, `${ship} should exist`).toBeTruthy();
+        expect(v!.sheet.armor, `${ship} needs a hull`).toBeTruthy();
+        expect(String(v!.sheet.notes ?? ''), `${ship} should note its crew`).toMatch(/Crew/);
+      }
+      // Each ship has a Wild Card at the top of its chain of command.
+      for (const boss of ['VOC Captain', 'Pirate Captain']) {
+        expect(spice.find((n) => n.name === boss)?.challengeLabel, boss).toBe('Wild Card');
+      }
+    });
+
+    it('keeps every Extra inside a Novice party’s reach', () => {
+      expect(extras.length).toBeGreaterThanOrEqual(20);
+      for (const e of extras) {
+        expect(e.hp, `${e.name} is too tough for an Extra`).toBeLessThanOrEqual(16);
+        // Parry 7+ on a mook means a Novice needs a raise to touch it.
+        expect(e.ac, `${e.name} out-parries a starting hero`).toBeLessThanOrEqual(6);
+        const armor = (e.sheet.armor ?? []) as Array<{ armor?: number }>;
+        expect(Math.max(0, ...armor.map((a) => a.armor ?? 0)), `${e.name} armor`).toBeLessThanOrEqual(2);
+      }
+    });
+
+    it('keeps the pirate captain the hardest thing in the set', () => {
+      const boss = spice.find((n) => n.name === 'Pirate Captain')!;
+      const others = spice.filter((n) => n.name !== 'Pirate Captain' && !/Indiaman|Brigantine/.test(n.name));
+      expect(Math.max(...others.map((n) => n.hp))).toBeLessThan(boss.hp);
+      // A boss with one attack is a boss the party solves once and repeats.
+      expect((boss.sheet.attacks as unknown[] ?? []).length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  /**
    * A template is measured either in feet (cones) or in tiles beyond the
    * target (SWADE's Small/Medium/Large blasts). sheetFor used to copy a shape
    * only when a FOOT size came with it, so every tile-based blast in the

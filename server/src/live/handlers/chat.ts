@@ -296,7 +296,11 @@ function runSheetRoll(
   const sheetCritFail = character.system === 'swade'
     && critFailFor(io, campaignId, character, breakdown.dice);
   recordBennyRoll(io, campaignId, character, 'trait', rollable.expr, breakdown.total, rollable.label, sheetCritFail);
+  // The banner over the map while these dice are in the air. A damage roll
+  // off the sheet is not a trait test, and the table can see which is which.
+  const isDamage = /^damage_/.test(rollable.id) || /damage/i.test(rollable.label);
   const msg = chat.add(campaignId, {
+    callout: { what: isDamage ? `${rollable.label} — damage` : `${rollable.label} — trait test`, tone: isDamage ? 'damage' : 'trait' },
     userId, fromName: username, fromCharacter: character.name, characterId: character.id, kind: 'roll',
     text: rollable.label, roll: breakdown, recipients: null,
   });

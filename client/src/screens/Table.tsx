@@ -525,12 +525,22 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
  * Sits below the counters, out of the way of the tokens it is about.
  */
 function RollCallout() {
-  const callout = useGameStore((s) => s.rollCallout);
-  if (!callout) return null;
+  // While dice are actually in the air, the banner belongs to THAT roll —
+  // every animated roll gets one, from a called shot to a hand-typed 2d6+3.
+  // The server's own callout is the announcement that comes BEFORE a roll (a
+  // group save naming who is up next), so the live one wins while it lasts.
+  const anim = useGameStore((s) => s.diceAnim);
+  const announced = useGameStore((s) => s.rollCallout);
+  const shown = anim
+    ? { key: `anim-${anim.id}`, name: anim.who, what: anim.what, tone: anim.tone }
+    : announced
+      ? { key: `evt-${announced.id}`, name: announced.name, what: announced.what, tone: 'neutral' as const }
+      : null;
+  if (!shown) return null;
   return (
-    <div className="roll-callout" key={callout.id}>
-      <span className="rc-name">{callout.name}</span>
-      <span className="rc-what">{callout.what}</span>
+    <div className={`roll-callout tone-${shown.tone}`} key={shown.key}>
+      <span className="rc-name">{shown.name}</span>
+      <span className="rc-what">{shown.what}</span>
     </div>
   );
 }

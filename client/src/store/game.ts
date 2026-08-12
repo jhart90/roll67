@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -265,7 +265,11 @@ interface GameState {
    *  somewhere they are not even looking. */
   toast(message: string, kind?: 'error' | 'info'): void;
   /** Live 3D dice animation for the latest roll. */
-  diceAnim: { id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string } | null;
+  diceAnim: {
+    id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string;
+    /** The banner over the map: who is rolling, what for, and its colour. */
+    who: string; what: string; tone: RollCalloutTone;
+  } | null;
   /** True once the settled dice have had their sit time and may fade out. */
   diceAnimEnding: boolean;
   /** SWADE: your Wild Card just took wounds it may Soak with a Benny. */
@@ -1235,6 +1239,13 @@ export function wireSocket(): void {
           anim: {
             id, dice: shown, byName: msg.fromName,
             byUserId: msg.fromUserId, total: msg.roll.total, expression: msg.roll.expression,
+            // Whoever the dice belong to: the character if there is one, the
+            // account otherwise — a bare /r is the player rolling, not a token.
+            who: msg.fromCharacter || msg.fromName,
+            // What the handler said it was, or the expression itself. Every
+            // roll says SOMETHING, even a hand-typed 2d6+3.
+            what: msg.callout?.what || msg.roll.expression,
+            tone: msg.callout?.tone ?? 'neutral',
           },
         },
       });

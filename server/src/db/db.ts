@@ -59,6 +59,8 @@ function ensureColumn(table: string, column: string, ddl: string): void {
   }
 }
 ensureColumn('campaign_members', 'map_id', 'map_id TEXT');
+// What the "who is rolling" banner says while a roll's dice are in the air.
+ensureColumn('chat_messages', 'callout_json', 'callout_json TEXT');
 // SWADE: the GM's own Benny pool — one per player character each session,
 // plus whatever the villains' Jokers pay in.
 ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0');

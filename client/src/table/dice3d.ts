@@ -4,7 +4,10 @@
 // EXACTLY on the orientation that shows the rolled face (number upright),
 // bouncing on the "table" (the screen plane) as it settles near the middle.
 
-import { ACE_STYLE_DEFAULT, type AceStyle, type DieRoll } from 'shared';
+import {
+  ACE_STYLE_DEFAULT, BENNY_FLIP_FADE_MS, BENNY_FLIP_FLY_MS, BENNY_FLIP_MS,
+  type AceStyle, type DieRoll,
+} from 'shared';
 
 // ---------- tiny vector / quaternion math ----------
 
@@ -639,17 +642,14 @@ export function estimateDiceAnimMs(dice: DieRoll[]): number {
 export const BENNY_GOLD = '#e8b73a';
 export const BENNY_INK = '#5c430b';
 
-/** Toss, tumble, and land. Slower than a die: a Benny is a real cost, and the
- *  table should watch it land rather than catch it out of the corner of an eye. */
-const BENNY_FLY_MS = 1900;
-/** How long the words sit readable once the coin has settled. */
-const BENNY_HOLD_MS = 1800;
+// The coin's clock lives in the protocol: the server waits it out before
+// rolling whatever the Benny bought, so the two animations never overlap.
+const BENNY_FLY_MS = BENNY_FLIP_FLY_MS;
 /** The fade that takes the whole thing off screen. */
-export const BENNY_FADE_MS = 550;
+export const BENNY_FADE_MS = BENNY_FLIP_FADE_MS;
 /** When the coin lands, in the flip's own clock — the CSS times off this. */
-export const BENNY_LAND_MS = BENNY_FLY_MS;
-/** The flip, end to end. */
-export const BENNY_FLIP_MS = BENNY_FLY_MS + BENNY_HOLD_MS + BENNY_FADE_MS;
+export const BENNY_LAND_MS = BENNY_FLIP_FLY_MS;
+export { BENNY_FLIP_MS };
 
 /**
  * The Benny coin, thrown as the d2 it already is.

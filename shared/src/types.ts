@@ -448,6 +448,19 @@ export interface SheetCard {
   theme?: string;
 }
 
+/**
+ * What the banner over the map says while this roll's dice are in the air:
+ * what is being rolled, and a tone to colour it by. WHO is rolling comes from
+ * the message itself — the character, or the account for a bare /r.
+ *
+ * Set by whichever handler knows what the roll MEANS. A roll that sets none
+ * still gets a banner: the client falls back to the dice expression, so the
+ * table always learns who is rolling and what for.
+ */
+export type RollCalloutTone =
+  | 'attack' | 'damage' | 'save' | 'trait' | 'recover' | 'fear' | 'benny' | 'initiative' | 'neutral';
+export interface RollCalloutInfo { what: string; tone?: RollCalloutTone }
+
 export interface ChatMessage {
   id: number;
   kind: ChatKind;
@@ -471,6 +484,8 @@ export interface ChatMessage {
   /** A sheet card shown in the log instead of `text` (which stays as the
    *  plain-text fallback for search and for anything that can't render it). */
   card?: SheetCard | null;
+  /** The banner shown over the map while this roll's dice are animating. */
+  callout?: RollCalloutInfo | null;
 }
 
 export interface Macro {

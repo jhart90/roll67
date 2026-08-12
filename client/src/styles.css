@@ -658,6 +658,25 @@ button.link:hover { text-decoration: underline; }
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.94); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
+/* Colour by what KIND of roll is in the air, so the table can read the stakes
+   before the dice land: red for an attack, orange for the damage that follows
+   it, blue for a roll made in defence, green for shaking something off. */
+.roll-callout.tone-attack     { border-color: #d2564f; }
+.roll-callout.tone-attack     .rc-what { color: #f0a5a0; }
+.roll-callout.tone-damage     { border-color: #c8802f; }
+.roll-callout.tone-damage     .rc-what { color: #e6c48a; }
+.roll-callout.tone-save       { border-color: #5b86c2; }
+.roll-callout.tone-save       .rc-what { color: #a8c8f0; }
+.roll-callout.tone-trait      { border-color: #479e94; }
+.roll-callout.tone-trait      .rc-what { color: #9fd8d2; }
+.roll-callout.tone-recover    { border-color: #3fa86a; }
+.roll-callout.tone-recover    .rc-what { color: #a6dcb4; }
+.roll-callout.tone-fear       { border-color: #9b5fb0; }
+.roll-callout.tone-fear       .rc-what { color: #dcb0e8; }
+.roll-callout.tone-benny      { border-color: #e8b73a; }
+.roll-callout.tone-benny      .rc-what { color: #ffe9a8; }
+.roll-callout.tone-initiative { border-color: #6a7286; }
+.roll-callout.tone-initiative .rc-what { color: #c9cede; }
 
 /* ---------- world tree ---------- */
 .handout-window, .map-window { width: min(560px, 92vw); max-height: 88vh; overflow-y: auto; }

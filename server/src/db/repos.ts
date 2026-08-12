@@ -2,7 +2,7 @@ import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
-  Counter, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, Token, Wall, WorldFolder,
+  Counter, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, RollCalloutInfo, Token, Wall, WorldFolder,
 } from 'shared';
 import { isCounterPosition, statEntriesFromDice, type AceStyle, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
 import { db, newId, now, stmt } from './db.js';
@@ -1173,7 +1173,7 @@ export const rollableTables = {
 interface ChatRow {
   id: number; user_id: string | null; from_name: string; from_character: string | null; action_name: string | null; outcome_note: string | null; kind: ChatKind; text: string;
   roll_json: string | null; recipients_json: string | null; hidden: number; created_at: number;
-  card_json: string | null; thread_id: number | null;
+  card_json: string | null; callout_json: string | null; thread_id: number | null;
 }
 
 /** Redact a hidden message for non-DM recipients (DM sees the original). */
@@ -1197,6 +1197,7 @@ function toChatMsg(r: ChatRow): ChatMessage {
     at: r.created_at,
     hidden: r.hidden === 1,
     ...(r.card_json ? { card: safeParse<ChatMessage['card']>(r.card_json, null) } : {}),
+    ...(r.callout_json ? { callout: safeParse<ChatMessage['callout']>(r.callout_json, null) } : {}),
   };
 }
 
@@ -1419,6 +1420,8 @@ export const chat = {
     statsUserId?: string | null;
     /** A sheet card to render in place of `text`. */
     card?: SheetCard | null;
+    /** What the "who is rolling" banner says while these dice are in the air. */
+    callout?: RollCalloutInfo | null;
     /** The cast card this message belongs to (see thread_id). */
     threadId?: number | null;
   }, undo?: unknown): ChatMessage {
@@ -1436,8 +1439,8 @@ export const chat = {
       rollStats.record(campaignId, uid, chId, msg.roll.dice);
     }
     const info = stmt(
-      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, thread_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, callout_json, thread_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     ).run(
       campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null,
       msg.actionName ?? null, msg.outcomeNote ?? null, msg.kind, msg.text,
@@ -1445,6 +1448,7 @@ export const chat = {
       msg.recipients ? JSON.stringify(msg.recipients) : null,
       undo ? JSON.stringify(undo) : null,
       msg.card ? JSON.stringify(msg.card) : null,
+      msg.callout ? JSON.stringify(msg.callout) : null,
       msg.threadId ?? null,
       at,
     );

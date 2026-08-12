@@ -1,11 +1,11 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type DieRoll, type SheetCard, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -409,6 +409,7 @@ export function resolveShakenRecovery(io: Server, campaignId: string, ch: Charac
   const msg = chat.add(campaignId, {
     userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id, kind: 'roll',
     text: recovered ? `${ch.name} shakes it off — Spirit roll` : `${ch.name} is still Shaken — Spirit roll`,
+    callout: { what: 'shaking it off — Spirit', tone: 'recover' },
     roll: { ...b, outcome: recovered ? 'success' as const : 'failure' as const }, recipients: null,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
@@ -1139,6 +1140,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
       text: `${who} — group ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`
         + ' — one roll, with a Wild Die, stands for all of them',
+      callout: { what: `${sc.label} — group roll`, tone: 'save' },
       characterId: targets[0].ch?.id ?? null,
       roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       threadId: spec.leadMessageId,
@@ -1181,6 +1183,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
       text: `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+      callout: { what: spec.evasion ? `${sc.label} — Evasion` : `${sc.label} — ${spec.label?.trim() || 'save'}`, tone: 'save' },
       // The save is the TARGET's roll — their stats, not the caster's.
       characterId: ch?.id ?? null, statsUserId: ch?.ownerUserId ?? null,
       roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
@@ -1240,11 +1243,15 @@ function runGroupFear(io: Server, spec: GroupFearSpec): boolean {
   if (targets.length === 0) return false;
 
   const what = spec.label?.trim() || 'Fear';
-  const post = (text: string, br: ReturnType<typeof roll> | null, ch: Character, outcome?: 'success' | 'failure') => {
+  const post = (
+    text: string, br: ReturnType<typeof roll> | null, ch: Character,
+    outcome?: 'success' | 'failure', callout?: RollCalloutInfo,
+  ) => {
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: br ? 'roll' : 'system', text,
       characterId: ch.id, statsUserId: ch.ownerUserId ?? null,
       roll: br ? { ...br, ...(outcome ? { outcome } : {}) } : null, recipients: null,
+      ...(callout ? { callout } : {}),
     });
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
   };
@@ -1295,7 +1302,7 @@ function runGroupFear(io: Server, spec: GroupFearSpec): boolean {
 
     post(
       `${ch.name} — ${what} check (Spirit${fmtMod(fearCheckMod(spec.fearPenalty))}): ${passed ? 'Success' : critFail ? 'Critical Failure' : 'Failure'}`,
-      br, ch, passed ? 'success' : 'failure',
+      br, ch, passed ? 'success' : 'failure', { what: `${what} check — Spirit`, tone: 'fear' },
     );
 
     if (passed) { next(); return; }
@@ -2374,6 +2381,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const cardRoll = amountRoll;
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text, roll: cardRoll, recipients: null,
+        callout: {
+          what: `${action.label}${action.healsWounds ? ' — Healing' : action.effect === 'heal' ? ' — healing' : ' — damage'}`,
+          tone: action.healsWounds || action.effect === 'heal' ? 'recover' : 'damage',
+        },
       }, undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
 
@@ -2471,6 +2482,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         : `${actor.name} attacks ${tgt.name} with`;
       const attackMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: attackText,
+        callout: { what: `${action.label} — attack`, tone: 'attack' },
         actionName: action.label, outcomeNote: attackOutcome,
         roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
       }, !hit && undo.length > 0 ? undo : undefined);
@@ -3272,25 +3284,39 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // The new wounds do not penalise the roll to soak them: offset the wound
     // penalty by the wounds in this offer.
     const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')), offer.wounds);
-    const breakdown = roll(expr);
     // Soaking spends a Benny outside the Benny menu, so it needs the coin
     // flipped here too — otherwise the one use that most deserves the
-    // table's attention would be the one it never sees.
+    // table's attention would be the one it never sees. The chip is spent and
+    // announced now; the Vigor dice wait for the coin to land, so the two
+    // animations take their turn instead of talking over each other.
     flipBenny(io, d.campaignId, ch.name, 'to Soak Wounds');
-    const { removed, woundsAfter } = applySoakResult(io, d.campaignId, ch, offer.wounds, breakdown.total, 0, bennies - 1);
+    persistSheet(io, d.campaignId, ch, { bennies: bennies - 1 });
+    postStatusLine(io, d.campaignId, `🪙 ${ch.name} spends a Benny to Soak ${offer.wounds} Wound${offer.wounds === 1 ? '' : 's'}.`);
+    setTimeout(() => soakAfterCoin(io, d, ch.id, offer.wounds, expr), BENNY_FLIP_MS);
+  }, 'SOAK_ROLL'));
+
+  /** The Vigor roll a Soak buys, made once the coin has finished flipping. */
+  function soakAfterCoin(
+    io2: Server, d: ReturnType<typeof requireCampaign>, chId: string, offerWounds: number, expr: string,
+  ): void {
+    const ch = characters.byId(chId);
+    if (!ch) return;
+    const breakdown = roll(expr);
+    const { removed, woundsAfter } = applySoakResult(io2, d.campaignId, ch, offerWounds, breakdown.total, 0);
     // The Soak is a Vigor roll like any other, and the book lets a Benny
     // reroll it. Recorded with the offer so the reroll can take MORE wounds
     // off this same attack rather than just print a better number.
-    recordSoakRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, expr, breakdown.total, offer.wounds, removed);
+    recordSoakRoll(io2, d.campaignId, characters.byId(ch.id) ?? ch, expr, breakdown.total, offerWounds, removed);
     const text = removed > 0
-      ? `${ch.name} spends a Benny to Soak — ${removed} Wound${removed === 1 ? '' : 's'} soaked (now ${woundsAfter})${removed === offer.wounds ? ', no longer Shaken' : ''}`
-      : `${ch.name} spends a Benny to Soak — Vigor roll fails, the wounds stand`;
+      ? `${ch.name} Soaks — ${removed} Wound${removed === 1 ? '' : 's'} soaked (now ${woundsAfter})${removed === offerWounds ? ', no longer Shaken' : ''}`
+      : `${ch.name} Soaks — the Vigor roll fails, the wounds stand`;
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, fromCharacter: ch.name, characterId: ch.id, kind: 'roll', text,
       roll: { ...breakdown, outcome: removed > 0 ? 'success' as const : 'failure' as const }, recipients: null,
+      callout: { what: 'Soaking Wounds — Vigor', tone: 'benny' },
     });
-    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
-  }, 'SOAK_ROLL'));
+    io2.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }
 
   /**
    * Answer the live grenade at your feet. The blast is parked mid-resolution
@@ -3510,10 +3536,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return persistSheet(io, d.campaignId, characters.byId(ch.id) ?? ch,
         { bennies: num((characters.byId(ch.id) ?? ch).sheet, 'bennies', 0) - 1, ...extra });
     };
-    const postRoll = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
+    const postRoll = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean, what = 'a Benny reroll') => {
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: ch.name, characterId: ch.id, kind: 'roll', text,
         roll: { ...breakdown, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+        callout: { what, tone: 'benny' as const },
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     };
@@ -3544,37 +3571,44 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           return;
         }
         spendBenny();
-        const b = roll(rec.expr);
-        const better = b.total > rec.total;
-        // A Soak reroll is not just a better number on a card: the same
-        // attack's Wounds come off for real. Keep whichever roll went
-        // further, apply only what the first one did not, and re-record so a
-        // second Benny can push it further still.
-        if (rec.soak) {
-          const best = Math.max(rec.total, b.total);
-          const { removed, woundsAfter } = applySoakResult(
-            io, d.campaignId, ch, rec.soak.offerWounds, best, rec.soak.removed,
-          );
-          const gained = removed - rec.soak.removed;
-          recordSoakRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, rec.expr, best, rec.soak.offerWounds, removed);
+        // Spending the chip and making the roll are two moments, so they get
+        // two lines and two animations. The coin is thrown now and says what
+        // it bought; the dice wait until it has landed and faded, because two
+        // animations playing over each other is two nobody watches.
+        postStatusLine(io, d.campaignId, `🪙 ${ch.name} spends a Benny to reroll ${rec.label}.`);
+        setTimeout(() => {
+          const now = characters.byId(ch.id);
+          if (!now) return;
+          const b = roll(rec.expr);
+          const better = b.total > rec.total;
+          // A Soak reroll is not just a better number on a card: the same
+          // attack's Wounds come off for real. Keep whichever roll went
+          // further, apply only what the first one did not, and re-record so
+          // a second Benny can push it further still.
+          if (rec.soak) {
+            const best = Math.max(rec.total, b.total);
+            const { removed, woundsAfter } = applySoakResult(
+              io, d.campaignId, now, rec.soak.offerWounds, best, rec.soak.removed,
+            );
+            const gained = removed - rec.soak.removed;
+            recordSoakRoll(io, d.campaignId, characters.byId(now.id) ?? now, rec.expr, best, rec.soak.offerWounds, removed);
+            postRoll(
+              `${now.name} rerolls the Soak — ${b.total} vs the original ${rec.total}: `
+              + (gained > 0
+                ? `${gained} more Wound${gained === 1 ? '' : 's'} soaked (now ${woundsAfter})`
+                : 'no better — the wounds stand'),
+              b, gained > 0, 'rerolling the Soak — Vigor',
+            );
+            return;
+          }
+          const rerollCrit = kind === 'trait' && critFailFor(io, d.campaignId, now, b.dice);
+          // The reroll stands beside the original; whichever is higher counts.
+          recordBennyRoll(io, d.campaignId, now, kind, rec.expr, Math.max(rec.total, b.total), rec.label, rerollCrit);
           postRoll(
-            `🪙 ${ch.name} spends another Benny to reroll the Soak — ${b.total} vs the original ${rec.total}: `
-            + (gained > 0
-              ? `${gained} more Wound${gained === 1 ? '' : 's'} soaked (now ${woundsAfter})`
-              : 'no better — the wounds stand'),
-            b, gained > 0,
+            `${now.name} rerolls ${rec.label} — ${b.total} vs the original ${rec.total}: ${better ? 'the reroll counts!' : 'keep the original.'}`,
+            b, better, `rerolling ${rec.label}`,
           );
-          break;
-        }
-        // The reroll stands beside the original; whichever is higher counts.
-        // The reroll can itself come up a Critical Failure, and then the
-        // attempt is over for good.
-        const rerollCrit = kind === 'trait' && critFailFor(io, d.campaignId, ch, b.dice);
-        recordBennyRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, kind, rec.expr, Math.max(rec.total, b.total), rec.label, rerollCrit);
-        postRoll(
-          `🪙 ${ch.name} spends a Benny to reroll ${rec.label} — ${b.total} vs the original ${rec.total}: ${better ? 'the reroll counts!' : 'keep the original.'}`,
-          b, better,
-        );
+        }, BENNY_FLIP_MS);
         break;
       }
       case 'redraw-card': {

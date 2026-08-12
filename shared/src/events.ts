@@ -988,6 +988,20 @@ export interface AoeBurstPayload {
  * everyone is watching, and two people seeing it land differently would make
  * it obvious the flip is decoration.
  */
+/**
+ * How long the coin is on screen, in ms — the throw, the beat where the words
+ * sit readable, and the fade.
+ *
+ * It lives in the protocol because both sides need the same number for
+ * different reasons: the client animates to it, and the SERVER waits it out
+ * before rolling whatever the Benny bought. Two animations playing over each
+ * other is two animations nobody watches.
+ */
+export const BENNY_FLIP_FLY_MS = 1900;
+export const BENNY_FLIP_HOLD_MS = 1800;
+export const BENNY_FLIP_FADE_MS = 550;
+export const BENNY_FLIP_MS = BENNY_FLIP_FLY_MS + BENNY_FLIP_HOLD_MS + BENNY_FLIP_FADE_MS;
+
 export interface BennyFlipPayload {
   /** Whose Benny — the character, not the account. */
   name: string;

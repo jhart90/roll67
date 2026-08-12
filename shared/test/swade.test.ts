@@ -505,6 +505,36 @@ describe('SWADE library & compendium', () => {
  * more with the Luck Edges. The pip row used to hardcode "at least three",
  * so a Lucky character's fourth chip had nowhere to sit.
  */
+/**
+ * The Group Roll turns a mob of Extras into one roll — and crucially gives
+ * that roll a Wild Die none of them would have alone. The transform is a
+ * string rewrite on the trait expression, so it is worth pinning down.
+ */
+describe('group roll expressions', () => {
+  const groupExpr = (expr: string): string =>
+    expr.startsWith('best(') ? expr : expr.replace(/^1d(\d+)!/, 'best(1d$1!, 1d6!)');
+
+  it("gives an Extra's roll the Wild Die it would not otherwise have", () => {
+    expect(groupExpr('1d6!')).toBe('best(1d6!, 1d6!)');
+    expect(groupExpr('1d8!')).toBe('best(1d8!, 1d6!)');
+  });
+
+  it('keeps whatever modifier the roll already carried', () => {
+    expect(groupExpr('1d6!-2')).toBe('best(1d6!, 1d6!)-2');
+    expect(groupExpr('1d10!+1')).toBe('best(1d10!, 1d6!)+1');
+  });
+
+  it('leaves a Wild Card alone — it already rolls two dice', () => {
+    expect(groupExpr('best(1d8!, 1d6!)-1')).toBe('best(1d8!, 1d6!)-1');
+  });
+
+  it('produces something the roller actually understands', () => {
+    for (const e of ['1d4!', '1d6!-2', '1d12!+2']) {
+      expect(() => roll(groupExpr(e))).not.toThrow();
+    }
+  });
+});
+
 describe('the Benny hand', () => {
   const withEdges = (...names: string[]) => ({ edges: names.map((name) => ({ name })) });
 

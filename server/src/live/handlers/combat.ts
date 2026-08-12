@@ -5,7 +5,7 @@ import {
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type DieRoll, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type DieRoll, type SheetCard, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -637,13 +637,17 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
   const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean }> = [];
   // Which sides drew a Joker this round — paid out after the whole deal, so
   // the Bennies land once the table can see every card.
-  const jokerSides: boolean[] = [];
+  const jokerDraws: Array<{ name: string; playerSide: boolean; hidden: boolean }> = [];
   for (const entry of state.entries) {
     if (entry.held) continue;
     const { card } = drawActionCard(state, sheetForToken(entry.tokenId));
     if (card.rank === 15) {
       state.jokerDealt = true;
-      jokerSides.push(entry.tokenId ? isPlayerSideToken(entry.tokenId) : false);
+      jokerDraws.push({
+        name: entry.name,
+        playerSide: entry.tokenId ? isPlayerSideToken(entry.tokenId) : false,
+        hidden: !!entry.hidden,
+      });
     }
     state.drawCounter = (state.drawCounter ?? 0) + 1;
     entry.card = card;
@@ -653,10 +657,9 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
   }
   state.entries.sort(compareCardEntries);
   state.turnIdx = 0;
-  const jokers = dealt.filter((c) => c.card.rank === 15 && !c.hidden).map((c) => c.name);
   const msg = chat.add(campaignId, {
     userId: null, fromName: 'System', kind: 'system',
-    text: `🂠 Round ${state.round} — new action cards are dealt.${jokers.length ? ` Joker to ${jokers.join(' & ')}!` : ''}`,
+    text: `🂠 Round ${state.round} — new action cards are dealt.`,
     roll: null, recipients: null,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
@@ -666,7 +669,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     round: state.round,
     cards: dealt.filter((c) => !c.hidden).map(({ hidden: _h, ...rest }) => rest),
   });
-  for (const playerSide of jokerSides) jokersWild(io, campaignId, playerSide);
+  for (const j of jokerDraws) jokersWild(io, campaignId, j.name, j.playerSide, j.hidden);
 }
 
 export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaignId: string): InitiativeState {
@@ -712,6 +715,8 @@ interface GroupSaveSpec {
   appliesCondition?: string;
   /** SWADE Evasion: the save is an Agility dive at −2. */
   evasion?: boolean;
+  /** SWADE Group Roll: one roll decides the whole mob (see runGroupSave). */
+  group?: boolean;
   /** SWADE Covering: somebody threw themselves on the grenade. They take
    *  double damage and never get to dive clear (they are diving the other
    *  way); their Toughness comes off everyone else's damage. */
@@ -772,27 +777,52 @@ interface GroupSaveSpec {
  * The draw itself already grants the +2 and the free placement in the round;
  * this is only the Bennies.
  */
-function jokersWild(io: Server, campaignId: string, drawnByPlayerSide: boolean): void {
+function jokersWild(
+  io: Server, campaignId: string, drawerName: string, drawnByPlayerSide: boolean, hidden = false,
+): void {
   const all = characters.forCampaign(campaignId).filter((c) => c.system === 'swade');
-  if (drawnByPlayerSide) {
-    const heroes = all.filter((c) => c.ownerUserId);
-    for (const ch of heroes) {
-      persistSheet(io, campaignId, ch, { bennies: num(ch.sheet, 'bennies', 0) + 1 });
-    }
-    if (heroes.length > 0) {
-      postStatusLine(io, campaignId, `🃏 Joker's Wild! A Benny to every hero — ${heroes.map((h) => h.name).join(', ')}.`);
-    }
-    return;
-  }
-  const pool = campaigns.setGmBennies(campaignId, campaigns.gmBennies(campaignId) + 1);
-  // Enemy Wild Cards only: an Extra has no Bennies to hold.
-  const villains = all.filter((c) => !c.ownerUserId && c.sheet.wildCard !== false);
-  for (const ch of villains) {
+  // Who the chips go to. Heroes share a Joker between them; the other side
+  // pays its Wild Cards and the GM's pool.
+  const paid = drawnByPlayerSide
+    ? all.filter((c) => c.ownerUserId)
+    // Extras hold no Bennies, so there is nobody else on that side to pay.
+    : all.filter((c) => !c.ownerUserId && c.sheet.wildCard !== false);
+  for (const ch of paid) {
     persistSheet(io, campaignId, ch, { bennies: num(ch.sheet, 'bennies', 0) + 1 });
   }
-  postStatusLine(io, campaignId,
-    `🃏 Joker's Wild for the other side — a Benny to the GM's pool (now ${pool})`
-    + (villains.length ? `, and one to ${villains.map((v) => v.name).join(', ')}.` : '.'));
+  const pool = drawnByPlayerSide ? null : campaigns.setGmBennies(campaignId, campaigns.gmBennies(campaignId) + 1);
+
+  // One card, everything a Joker means. It is the best thing that can happen
+  // to a combatant in SWADE and it changes four separate things at once — a
+  // one-line "Joker!" leaves three of them for somebody to remember.
+  const card: SheetCard = {
+    name: `🃏 Joker — ${drawerName}`,
+    theme: drawnByPlayerSide ? 'card-good' : 'card-bad',
+    chips: [
+      { text: 'Acts anywhere in the round', tone: 'skill' },
+      { text: '+2 to every Trait roll', tone: 'bonus' },
+      { text: '+2 to damage', tone: 'damage' },
+      ...(paid.length ? [{ text: `+1 Benny × ${paid.length}`, tone: 'bonus' }] : []),
+      ...(pool !== null ? [{ text: `GM pool: ${pool}`, tone: 'qty' }] : []),
+    ],
+    notes: [
+      drawnByPlayerSide
+        ? `Joker's Wild — every hero takes a Benny${paid.length ? `: ${paid.map((c) => c.name).join(', ')}.` : '.'}`
+        : `Joker's Wild for the other side — a Benny to the GM's pool${paid.length ? `, and one to ${paid.map((c) => c.name).join(', ')}.` : '.'}`,
+      `${drawerName} may act at any point in the round, interrupting anyone, and carries +2 on every Trait roll and damage roll until the round ends.`,
+      'The action deck is reshuffled at the end of this round.',
+    ],
+  };
+  const flat = [...card.chips.map((c) => c.text), ...card.notes].join(' · ');
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', kind: 'system',
+    text: `🃏 ${card.name}: ${flat}`,
+    card, roll: null, recipients: null,
+  });
+  // A combatant the party cannot see must not announce itself by name. The
+  // Bennies are still paid — the DM reads the card, the players find out when
+  // the thing acts out of turn.
+  io.to(hidden ? dmRoom(campaignId) : campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
 /** Whose side is this combatant on? Owned by a player = the heroes' side. */
@@ -933,6 +963,19 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
   const hasDamage = !!spec.damageExpr && usableAmount(spec.damageExpr);
   const results: { tok: Token; ch: Character | undefined; passed: boolean }[] = [];
 
+  /**
+   * The Group Roll: one Trait die and a Wild Die stand for a whole mob of
+   * like Extras, and that one result is every one of their results.
+   *
+   * The Wild Die is the point. A group of Extras rolling together is treated
+   * as a single competent actor rather than eight separate chances to fumble
+   * — which is both faster and kinder to them, and is why the book offers it.
+   * So the expression is forced into `best(trait, 1d6!)` even though not one
+   * of them would roll a Wild Die alone.
+   */
+  const groupExpr = (expr: string): string =>
+    expr.startsWith('best(') ? expr : expr.replace(/^1d(\d+)!/, 'best(1d$1!, 1d6!)');
+
   // Inflict the spec's condition on every character target that failed its
   // save (skipped for bare tokens: no sheet to carry a condition). Runs at
   // damage-apply time for damaging saves, or after the final save card for
@@ -1039,6 +1082,36 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     }
   };
 
+  /**
+   * One roll for the whole mob, posted as one card. Everything downstream —
+   * damage, conditions, the undo trail — runs exactly as it does for
+   * individual saves; only the number of dice changed.
+   */
+  const postGroupSave = (): void => {
+    const { sc } = targets[0];
+    const expr = groupExpr(sc.expr);
+    const br = roll(expr);
+    const passed = br.total >= sc.threshold;
+    for (const { tok, ch } of targets) results.push({ tok, ch, passed });
+    const who = `${targets.length} × ${targets[0].tok.name}`;
+    io.to(campaignRoom(spec.campaignId)).emit(S2C.ROLL_CALLOUT, {
+      name: who,
+      what: spec.evasion ? 'roll as a group to evade!' : `roll ${sc.label} as a group!`,
+      holdMs: CALLOUT_HOLD_MS,
+    });
+    const msg = chat.add(spec.campaignId, {
+      userId: spec.userId, fromName: spec.username, kind: 'roll',
+      text: `${who} — group ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`
+        + ' — one roll, with a Wild Die, stands for all of them',
+      characterId: targets[0].ch?.id ?? null,
+      roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
+      threadId: spec.leadMessageId,
+    });
+    io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
+    if (hasDamage) setTimeout(postDamage, SAVE_STEP_DELAY_MS);
+    else setTimeout(() => { applyConditions(); finish(); }, diceSettleDelayMs(1));
+  };
+
   const postSave = (i: number): void => {
     const { tok, ch, sc } = targets[i];
     // Whoever threw themselves on the grenade rolls nothing: they are not
@@ -1091,7 +1164,10 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     }
   };
 
-  postSave(0);
+  // A group roll needs at least two of them to be a group; one Extra alone
+  // just rolls, and the covering-body case is a per-target story.
+  if (spec.group && targets.length > 1 && !spec.cover) postGroupSave();
+  else postSave(0);
   return true;
 }
 
@@ -3475,10 +3551,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         spendBenny();
         broadcastInitiative(io, d.campaignId);
         // A Joker bought with a Benny still turns the whole table's luck.
-        if (redrawJoker) jokersWild(io, d.campaignId, !!ch.ownerUserId);
+        if (redrawJoker) jokersWild(io, d.campaignId, ch.name, !!ch.ownerUserId);
         const msg = chat.add(d.campaignId, {
           userId: d.userId, fromName: d.username, kind: 'system',
-          text: `🂠 ${ch.name} spends a Benny to redraw — draws the ${cardName(card)} ${cardShort(card)}${card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''}`,
+          text: `🂠 ${ch.name} spends a Benny to redraw — draws the ${cardName(card)} ${cardShort(card)}`,
           roll: null, recipients: null,
         });
         const room = entry.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId);
@@ -3812,12 +3888,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       userId: d.userId, fromName: d.username, kind: 'system',
       text: `🂠 ${pending.name} draws the ${cardName(card)} ${cardShort(card)}`
         + (plan.reasons.length ? ` [${plan.reasons.join('; ')}]` : '')
-        + (discarded.length ? ` — discarded ${discarded.map((c) => cardShort(c)).join(' ')}` : '')
-        + (card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''),
+        + (discarded.length ? ` — discarded ${discarded.map((c) => cardShort(c)).join(' ')}` : ''),
       roll: null, recipients: null,
     });
     io.to(room).emit(S2C.CHAT, { msg });
     io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId: pending.tokenId, name: pending.name, card, byUserId: d.userId });
-    if (drewJoker) jokersWild(io, d.campaignId, isPlayerSideToken(pending.tokenId));
+    if (drewJoker) jokersWild(io, d.campaignId, pending.name, isPlayerSideToken(pending.tokenId), pending.hidden);
   }, 'INIT_CARD_DRAW'));
 }

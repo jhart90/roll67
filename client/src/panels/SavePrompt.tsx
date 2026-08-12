@@ -19,6 +19,7 @@ export function SavePrompt({ onClose }: { onClose: () => void }) {
   const [damageType, setDamageType] = useState('');
   const [label, setLabel] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set(mapTokens.map((t) => t.id)));
+  const [group, setGroup] = useState(false);
 
   function toggle(id: string) {
     setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -30,6 +31,7 @@ export function SavePrompt({ onClose }: { onClose: () => void }) {
       tokenIds: [...picked], saveId, dc,
       damageExpr: damageExpr.trim() || undefined,
       onSave, damageType: damageType || undefined, label: label.trim() || undefined,
+      ...(group ? { group: true } : {}),
     });
     onClose();
   }
@@ -67,6 +69,19 @@ export function SavePrompt({ onClose }: { onClose: () => void }) {
         )}
         {swn && <p className="dim" style={{ fontSize: 12 }}>SWN: each target rolls against its own save target (15 − level − mod).</p>}
         {swade && <p className="dim" style={{ fontSize: 12 }}>SWADE: each target makes a trait roll against target number 4 (wild die included).</p>}
+
+        {/* The book's Group Roll: a mob of like Extras rolls once, WITH a Wild
+            Die, and that result is all of theirs. Faster than eight rolls and
+            kinder to them — a group is treated as one competent actor. */}
+        {swade && picked.size > 1 && (
+          <label className="lu-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} style={{ width: 'auto' }} />
+            <span>
+              Roll once as a group
+              <span className="dim"> — one Trait die + a Wild Die decides all {picked.size}</span>
+            </span>
+          </label>
+        )}
 
         <label className="lu-field">
           Damage (optional, e.g. 8d6)

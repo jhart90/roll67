@@ -474,6 +474,9 @@ export interface RequestSavePayload {
   onSave: 'half' | 'negate';
   damageType?: string;
   label?: string;
+  /** SWADE Group Roll: one roll — a Trait die AND a Wild Die — stands for the
+   *  whole mob of like Extras, instead of one roll each. */
+  group?: boolean;
 }
 
 /** Show a character-sheet card in the chat log, as the card itself. */

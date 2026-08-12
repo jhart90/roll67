@@ -468,8 +468,8 @@ function playBlastSound(sizeHexes: number | undefined, damageType: string | unde
 // Ace animation a template can use — the burst is drawn with the dice's own
 // effect now, and unmounting mid-explosion would cut it off in the middle.
 const AOE_BURST_MS = 2000;
-/** Coin flight + the beat it rests + the dust. Matches BennyCoin's own clock. */
-const BENNY_FLIP_MS = 2700;
+/** Toss + bounce + roll + rest + confetti. Matches BennyCoin's own clock. */
+const BENNY_FLIP_MS = 6500;
 
 export const useGameStore = create<GameState>((set, get) => ({
   connected: false,

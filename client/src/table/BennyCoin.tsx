@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useGameStore } from '../store/game';
 
 /**
- * The Benny coin: flipped in from off screen, tumbling, landing on a random
- * face, then bursting into metallic dust as the reason it was spent appears.
+ * The Benny coin: tossed up from below the screen, turning lazily, bouncing
+ * twice, rolling on its edge and slapping flat on a random face — then coming
+ * apart into gold confetti as the reason it was spent appears.
  *
  * Canvas rather than CSS because the point of the thing is the METAL — a
  * highlight that sweeps across the face as it turns, an edge that catches the
@@ -20,10 +21,22 @@ const RADIUS_FRAC = 0.13;
 /** Where the light is, relative to the coin's centre: up and a little left. */
 const LIGHT = { x: -0.25, y: -0.85 };
 
-const FLY_MS = 900;     // arcing in from off screen, tumbling
-const SETTLE_MS = 700;  // sitting still so the face can be read
-const POOF_MS = 1100;   // dust, and the text
-const TOTAL_MS = FLY_MS + SETTLE_MS + POOF_MS;
+/**
+ * The flip, in five acts. Slow on purpose: a Benny is a real cost and the
+ * table should feel it land, not catch it out of the corner of an eye.
+ */
+const FLY_MS = 1700;     // tossed up from below, turning lazily
+const BOUNCE_MS = 950;   // two diminishing bounces on the flat
+const ROLL_MS = 1300;    // up on its edge, rolling, then falling flat
+const SETTLE_MS = 850;   // still, so the face can actually be read
+const POOF_MS = 1700;    // gold confetti, and the words
+const LAND_MS = FLY_MS + BOUNCE_MS + ROLL_MS;
+const REST_MS = LAND_MS + SETTLE_MS;
+const TOTAL_MS = REST_MS + POOF_MS;
+
+/** How many turns the coin makes on the way up and over. Low: it should read
+ *  as a heavy coin turning, not a spinning token. */
+const FLY_TURNS = 3.25;
 
 const GOLD_LIT = '#fff3c4';
 const GOLD = '#e8b73a';
@@ -53,12 +66,13 @@ export function BennyCoin() {
     const restX = w / 2;
     const restY = h * 0.42;
     // Deterministic per-flip dust, so it does not reshuffle every frame.
-    const motes: Mote[] = Array.from({ length: 90 }, (_, i) => ({
-      a: (i / 90) * Math.PI * 2 + (i % 7) * 0.31,
-      speed: 0.7 + ((i * 13) % 9) / 9,
-      size: 1 + ((i * 5) % 4),
-      drift: -0.4 + ((i * 3) % 7) / 7,
-      spin: ((i * 11) % 5) - 2,
+    const CONFETTI = 220;
+    const motes: Mote[] = Array.from({ length: CONFETTI }, (_, i) => ({
+      a: (i / CONFETTI) * Math.PI * 2 + (i % 11) * 0.29,
+      speed: 0.55 + ((i * 13) % 11) / 11,
+      size: 0.7 + ((i * 5) % 6) / 4,
+      drift: ((i * 3) % 7) / 7,
+      spin: ((i * 17) % 6) - 2,
     }));
 
     const start = performance.now();
@@ -67,26 +81,67 @@ export function BennyCoin() {
       const t = now - start;
       ctx.clearRect(0, 0, w, h);
 
-      if (t < FLY_MS + SETTLE_MS) {
-        const flying = Math.min(1, t / FLY_MS);
-        // Thrown in from the left, arcing up and settling — eased so it slows
-        // into place rather than stopping dead.
-        const ease = 1 - Math.pow(1 - flying, 3);
-        const x = -R * 2 + (restX + R * 2) * ease;
-        const arc = Math.sin(flying * Math.PI) * h * 0.18;
-        const y = restY - arc * (1 - flying * 0.35);
-        // Tumbling: many turns on the way in, easing to a stop. The landing
-        // face is the server's, so every screen sees the same side.
-        const turns = 7.5 * ease;
-        const spin = flying < 1 ? turns * Math.PI * 2 : Math.round(turns) * Math.PI * 2;
-        const faceUp = flip.face === 'csb' ? Math.PI : 0;
-        drawCoin(ctx, x, y, R, spin + faceUp, flip.face);
+      const faceUp = flip.face === 'csb' ? Math.PI : 0;
+
+      if (t < FLY_MS) {
+        // Tossed up from below the screen: a high, slow arc that peaks above
+        // where it will land, so it falls INTO place rather than sliding in.
+        const k = t / FLY_MS;
+        // Straight run from below the screen up to where it lands, plus a
+        // hop over the top of that line. Written this way so the ends are
+        // exact by construction: it starts off screen and finishes ON the
+        // resting spot, which the bounce that follows depends on.
+        const startY = h + R;
+        const ease = 1 - Math.pow(1 - k, 2);   // decelerating, as gravity does
+        const y = startY + (restY - startY) * ease - Math.sin(k * Math.PI) * R * 2.1;
+        const x = restX - R * 1.6 + R * 1.6 * ease;
+        // Turning lazily, easing as it rises — a heavy coin, not a top.
+        const spin = FLY_TURNS * Math.PI * 2 * (1 - Math.pow(1 - k, 2.2));
+        drawCoin(ctx, x, y, R, spin + faceUp);
         raf = requestAnimationFrame(frame);
         return;
       }
 
-      const poof = Math.min(1, (t - FLY_MS - SETTLE_MS) / POOF_MS);
-      drawDust(ctx, restX, restY, R, poof, motes);
+      if (t < FLY_MS + BOUNCE_MS) {
+        // Two diminishing bounces. Each one is a half-turn, so it keeps
+        // showing alternating faces as it settles.
+        const k = (t - FLY_MS) / BOUNCE_MS;
+        const bounces = 2;
+        const seg = Math.min(bounces - 0.001, k * bounces);
+        const within = seg % 1;
+        const damp = Math.pow(0.42, Math.floor(seg));
+        const hop = Math.sin(within * Math.PI) * R * 1.5 * damp;
+        const spin = FLY_TURNS * Math.PI * 2 + seg * Math.PI * 0.5;
+        drawCoin(ctx, restX + R * 0.25 * k, restY - hop, R, spin + faceUp);
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
+      if (t < LAND_MS) {
+        // Up on its edge and rolling — a small circle, tightening, the way a
+        // spun coin does before it slaps flat. `lean` tips it toward the
+        // viewer over the last stretch so it falls onto the winning face.
+        const k = Math.min(1, (t - FLY_MS - BOUNCE_MS) / ROLL_MS);
+        const fall = Math.max(0, (k - 0.62) / 0.38);
+        const radius = R * 0.85 * (1 - k) * (1 - fall);
+        const around = k * Math.PI * 3.1;
+        const x = restX + R * 0.25 + Math.cos(around) * radius;
+        const y = restY + Math.sin(around) * radius * 0.35;
+        // Edge-on is spin = π/2; easing back to the face as it drops flat.
+        const lean = Math.PI / 2 * (1 - Math.pow(fall, 1.7));
+        drawCoin(ctx, x, y, R, faceUp + lean);
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
+      if (t < REST_MS) {
+        drawCoin(ctx, restX + R * 0.25, restY, R, faceUp);
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
+      const poof = Math.min(1, (t - REST_MS) / POOF_MS);
+      drawDust(ctx, restX + R * 0.25, restY, R, poof, motes);
       if (t < TOTAL_MS) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -109,7 +164,7 @@ export function BennyCoin() {
 
 /** One face of the coin, plus its thickness, lit from just off overhead. */
 function drawCoin(
-  ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, spin: number, face: 'benny' | 'csb',
+  ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, spin: number,
 ): void {
   // A coin seen edge-on is a line: squashing the width by cos(spin) is the
   // whole illusion of it turning. Which face you can see flips with the sign.
@@ -171,7 +226,6 @@ function drawCoin(
     ctx.restore();
   }
   ctx.restore();
-  void face;
 }
 
 /** The plain side: a struck "B". */
@@ -226,28 +280,55 @@ function drawCsbDevice(ctx: CanvasRenderingContext2D, R: number): void {
   ctx.restore();
 }
 
-/** The coin coming apart into metallic dust that blows off screen. */
+/**
+ * The coin coming apart into gold confetti.
+ *
+ * Same motion as the Confetti Ace — fired outward, then tumbling about its
+ * own axis and fluttering down and off the bottom — but in the coin's own
+ * metals rather than party colours, and a great deal more of it: this is a
+ * whole coin coming apart, not a die announcing itself.
+ */
 function drawDust(
   ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, phase: number, motes: Mote[],
 ): void {
-  // The coin fades as the dust leaves it, so it comes apart rather than
-  // vanishing and being replaced.
-  const left = Math.max(0, 1 - phase * 2.2);
+  // The coin thins out as the confetti leaves it, so it comes APART rather
+  // than vanishing and being replaced by something else.
+  const left = Math.max(0, 1 - phase * 2.4);
   if (left > 0) {
     ctx.globalAlpha = left;
-    drawCoin(ctx, cx, cy, R * (1 - phase * 0.15), 0, 'benny');
+    drawCoin(ctx, cx, cy, R * (1 - phase * 0.12), 0);
     ctx.globalAlpha = 1;
   }
+
+  const burst = 1 - Math.pow(1 - Math.min(1, phase / 0.16), 3);
+  const fallT = Math.max(0, (phase - 0.1) / 0.9);
+  // Starts from rest and settles to a drift, the way a light flake reaches
+  // terminal velocity within a few feet.
+  const fall = (fallT * fallT * 0.34 + fallT * 0.66) * R * 16;
+
   for (const m of motes) {
-    const travel = phase * R * 9 * m.speed;
-    const x = cx + Math.cos(m.a) * travel + travel * 0.55;   // blown to the right
-    const y = cy + Math.sin(m.a) * travel * 0.55 - travel * 0.18 * m.drift;
-    const alpha = Math.max(0, 1 - phase * 1.25);
-    if (alpha <= 0) continue;
-    ctx.globalAlpha = alpha;
-    // Each mote is a chip of metal, so it glints rather than glowing.
-    ctx.fillStyle = (m.spin + 2) % 3 === 0 ? GOLD_LIT : GOLD;
-    ctx.fillRect(x, y, m.size * (1 - phase * 0.4), m.size * 0.6 * (1 - phase * 0.4));
+    const reach = R * (0.5 + m.speed * 1.9);
+    const sway = Math.sin(phase * (2.6 + m.speed * 2.4) * Math.PI + m.a) * R * (0.18 + m.drift * 0.2);
+    const x = cx + Math.cos(m.a) * reach * burst + sway + Math.cos(m.a) * fall * 0.1;
+    const y = cy + Math.sin(m.a) * reach * burst * 0.8 + fall;
+
+    // Tumbling: cos() of the spin squashes each flake to nothing twice a
+    // turn, which is what makes it read as a sheet turning edge-on rather
+    // than a brick rotating.
+    const turn = phase * (4.5 + m.spin * 1.4) * Math.PI + m.a;
+    const flat = Math.cos(turn);
+    const wf = R * 0.075 * m.size;
+    const hf = R * 0.05 * m.size;
+
+    ctx.globalAlpha = Math.min(1, (1 - phase) * 3.5);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.sin(turn * 0.5) * 0.9 + m.a * 0.15);
+    // A flake catches the light on one side of its turn and is in shadow on
+    // the other — the same trick the coin's own face uses, in miniature.
+    ctx.fillStyle = flat > 0.35 ? GOLD_LIT : flat > -0.2 ? GOLD : GOLD_DEEP;
+    ctx.fillRect(-wf / 2, (-hf / 2) * flat, wf, Math.max(0.6, hf * Math.abs(flat)));
+    ctx.restore();
   }
   ctx.globalAlpha = 1;
 }

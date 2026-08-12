@@ -14,7 +14,7 @@ export type UiTheme = 'standard' | 'dark' | 'light';
 export const UI_THEMES: { id: UiTheme; label: string; hint: string }[] = [
   { id: 'standard', label: 'Standard', hint: 'the original slate blue' },
   { id: 'dark', label: 'Dark', hint: 'matte black, for a dim room' },
-  { id: 'light', label: 'Light', hint: 'dark text on pale blue' },
+  { id: 'light', label: 'Light', hint: 'dark text on cool grey' },
 ];
 
 /** The variables a theme overrides. Everything else is shared. */
@@ -35,17 +35,20 @@ const THEME_VARS: Record<UiTheme, ThemeVars> = {
     '--accent': '#6c9bd2',
     '--accent-2': '#d2a56c',
   },
+  // Grey, not white. A pure-white panel beside a dark map is a torch in the
+  // face — every surface here is a cool grey, and the lightest of them still
+  // sits well below white so nothing glares.
   light: {
-    '--bg': '#eef3fb',
-    '--panel': '#ffffff',
-    '--panel-2': '#e4ecf7',
-    '--border': '#c2cfe2',
-    '--text': '#161a22',
-    '--text-dim': '#5a6478',
-    '--accent': '#2f6db5',
-    '--accent-2': '#a86a1f',
-    '--danger': '#b53434',
-    '--ok': '#2f7d43',
+    '--bg': '#c9cfd8',
+    '--panel': '#dde2e9',
+    '--panel-2': '#ccd3dc',
+    '--border': '#a9b3c1',
+    '--text': '#191d24',
+    '--text-dim': '#525b69',
+    '--accent': '#33608f',
+    '--accent-2': '#8a5a1c',
+    '--danger': '#a83636',
+    '--ok': '#2e6f40',
   },
 };
 

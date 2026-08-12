@@ -2583,6 +2583,16 @@ th > .term { border-bottom-style: dotted; }
 /* Windowed panels need their own opaque surface — the frame only draws a bar. */
 .account-details { background: var(--panel); padding: 12px; min-width: 300px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
 .rollstats-window, .irondice-window { background: var(--panel); padding: 10px 12px; border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; }
+/* Settings gets a wider gutter than the others: its rows end in sliders and
+   swatches, which read as cramped when they run up against the frame. The
+   same padding applies popped out, where there is no frame to hide behind. */
+.settings-window {
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 300px;
+  background: var(--panel);
+  padding: 12px 18px 16px;
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px;
+}
 
 /* World-tab visibility: DM badge + right-click reveal/hide menu. */
 .dir-vis { margin-right: 5px; font-size: 10px; opacity: 0.75; cursor: help; }
@@ -3158,7 +3168,6 @@ th > .term { border-bottom-style: dotted; }
 
 /* ---------- settings window ---------- */
 
-.settings-window { display: flex; flex-direction: column; gap: 2px; min-width: 300px; }
 .settings-head {
   margin: 10px 0 4px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--text-dim); border-bottom: 1px solid var(--border); padding-bottom: 4px;

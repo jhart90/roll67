@@ -123,6 +123,9 @@ export interface CombatAction {
   stowed?: true;
   /** SWADE: armor piercing — reduces the target's ranged-armor soak. */
   ap?: number;
+  /** SWADE: a Heavy Weapon — a cannon, a torpedo, a dragon's breath. The only
+   *  thing that can hurt Heavy Armor, which every Gargantuan creature has. */
+  heavy?: boolean;
   /** SWADE: lobbed rather than fired (a grenade). Thrown weapons have no
    *  Extreme band — past Long they are simply out of range. */
   thrown?: boolean;

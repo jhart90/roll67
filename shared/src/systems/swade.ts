@@ -393,6 +393,14 @@ const identityFields: FieldDef[] = [
   { id: 'size', label: 'Size', type: 'number', width: 'sixth', default: 0 },
   // Blank/0 = derive from Wild Card status and Size. Set it to override.
   { id: 'maxWoundsOverride', label: 'Wound cap', type: 'number', width: 'sixth', default: 0 },
+  // The bestiary's three "is it that kind of thing" switches. Each one turns
+  // off a rule the engine otherwise applies to everybody.
+  { id: 'hardy', label: 'Hardy', type: 'checkbox', width: 'sixth', default: false },
+  // Gargantuan things have it automatically; the box is for the armoured
+  // thing that isn't Gargantuan, like a tank.
+  { id: 'heavyArmor', label: 'Heavy Armor', type: 'checkbox', width: 'sixth', default: false },
+  { id: 'fearless', label: 'Fearless', type: 'checkbox', width: 'sixth', default: false },
+  { id: 'regeneration', label: 'Regeneration', type: 'select', width: 'sixth', default: '', options: ['', 'fast', 'slow'], optionLabels: { '': 'none', fast: 'Fast (every round)', slow: 'Slow (on the DM’s call)' } },
 ];
 
 const attributeFields: FieldDef[] = ATTRIBUTES_SWADE.map((a) => ({
@@ -516,6 +524,7 @@ const gearTab: SheetTab = {
         { id: 'dtype', label: 'Dmg type', type: 'select', width: 'sixth', default: '', options: ['', ...DAMAGE_TYPES] },
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
         { id: 'ap', label: 'AP', type: 'number', width: 'sixth', default: 0 },
+        { id: 'heavy', label: 'Heavy', type: 'checkbox', width: 'sixth' },
         { id: 'parryBonus', label: 'Parry mod', type: 'number', width: 'sixth', default: 0 },
         { id: 'wielded', label: 'Wielded', type: 'checkbox', width: 'sixth' },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },

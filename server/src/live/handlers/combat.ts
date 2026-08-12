@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, hasHeavyArmor, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
@@ -339,6 +339,12 @@ function multiActionPenalty(campaignId: string, characterId: string): number {
   return Math.min(2, prior) * -2;
 }
 
+/** Does this creature's Immunity list cover the damage type of an attack? */
+function isImmuneTo(character: Character, damageType: string | undefined): boolean {
+  if (!damageType) return false;
+  return applyDamageDefenses(character.system, character.sheet, damageType, 1).amount === 0;
+}
+
 function bestSkillOf(sheet: SheetData, names: string[]): { name: string; sides: number } {
   let best = { name: names[0], sides: skillDie(sheet, names[0]) };
   for (const n of names) {
@@ -396,7 +402,13 @@ function resolveSwadeManeuver(
     : kind === 'grapple'
       ? { aLabel: 'Athletics', aSides: skillDie(actor.sheet, 'Athletics'), dLabel: 'Athletics', dSides: skillDie(targetChar.sheet, 'Athletics') }
       : (() => {
-        const sk = bestSkillOf(actor.sheet, ['Taunt', 'Intimidation', 'Athletics']);
+        // Fearless creatures cannot be Intimidated, but they CAN be Taunted —
+        // ridicule draws their attention where fear finds nothing to grip. So
+        // the Test drops Intimidation from the skills it would pick between
+        // rather than failing outright.
+        const fearless = targetChar.sheet.fearless === true;
+        const sk = bestSkillOf(actor.sheet, fearless ? ['Taunt', 'Athletics'] : ['Taunt', 'Intimidation', 'Athletics']);
+        if (fearless) postStatusLine(io, campaignId, `${targetChar.name} is Fearless — Intimidation finds nothing to grip; ${actor.name} tries ${sk.name} instead.`);
         const attr = SKILL_ATTR_SWADE[sk.name] ?? 'smarts';
         return { aLabel: sk.name, aSides: sk.sides, dLabel: attr[0].toUpperCase() + attr.slice(1), dSides: dieSides(String(targetChar.sheet[attr] ?? 'd4')) };
       })();
@@ -1013,6 +1025,15 @@ function runGroupFear(io: Server, spec: GroupFearSpec): boolean {
     if (i >= targets.length) return;
     const next = () => { if (i + 1 < targets.length) setTimeout(() => step(i + 1), SAVE_STEP_DELAY_MS); };
     const { ch } = targets[i]!;
+    // Fearless creatures do not roll. Skipping the roll rather than rolling
+    // and discarding it matters at the table: the mindless thing walking into
+    // the horror is supposed to be conspicuous, and a chat line saying so is
+    // how the players learn what they are dealing with.
+    if (ch.sheet.fearless === true) {
+      postStatusLine(io, spec.campaignId, `${ch.name} is Fearless — no ${what} check.`);
+      next();
+      return;
+    }
     const wildCard = ch.sheet.wildCard !== false;
     // Spirit is an attribute, not a skill — same roll the Shaken recovery makes.
     const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4')), fearCheckMod(spec.fearPenalty));
@@ -1765,6 +1786,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (!conditionId || !targetChar) return;
       const fresh = characters.byId(targetChar.id);
       if (!fresh) return;
+      // Immunity stops the Stun as well as the damage: a creature born in
+      // fire is not knocked senseless by a fireball either. Only Stun — an
+      // immunity says nothing about being tangled in a net that happens to
+      // be on fire.
+      if (conditionId === 'stunned' && isImmuneTo(fresh, action.damageType)) {
+        postStatusLine(io, d.campaignId, `${fresh.name} is immune to ${action.damageType} — no Stun.`);
+        return;
+      }
       const casterAfter = applyConditionTo(
         io, d.campaignId, fresh, conditionId, action.spellName ?? action.label,
         action.concentration ? (characters.byId(actor.id) ?? actor) : undefined,
@@ -1855,7 +1884,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // Save-based spells scale the rolled damage (half / none on a save).
       if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
       let resistTag = '';
-      if (action.effect === 'damage' && hit && targetChar) {
+      // Heavy Armor: an ordinary weapon does not scratch a Gargantuan hull —
+      // not less damage, none. The fight has to be won with a Heavy Weapon or
+      // some other way entirely, and saying so plainly is the point: a player
+      // who sees "0 — cutlass can't hurt Heavy Armor" goes looking for the
+      // cannon, where a small number just reads as bad luck.
+      if (action.effect === 'damage' && hit && targetChar && targetChar.system === 'swade'
+        && hasHeavyArmor({ size: num(targetChar.sheet, 'size', 0), flag: targetChar.sheet.heavyArmor })
+        && action.heavy !== true) {
+        magnitude = 0;
+        resistTag = ' (Heavy Armor — needs a Heavy Weapon)';
+      }
+      if (action.effect === 'damage' && hit && targetChar && magnitude > 0) {
         const defended = applyDamageDefenses(targetChar.system, targetChar.sheet, action.damageType, magnitude);
         if (defended.label) {
           magnitude = defended.amount;

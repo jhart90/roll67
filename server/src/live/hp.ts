@@ -416,6 +416,7 @@ function applySwadeDamage(
       size: num(character.sheet, 'size', 0),
       override: num(character.sheet, 'maxWoundsOverride', 0),
     }),
+    hardy: character.sheet.hardy === true,
   });
   if (!out.shaken) return { character, note: ` — ${out.summary}` };
 

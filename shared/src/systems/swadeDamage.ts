@@ -45,6 +45,10 @@ export function swadeDamageOutcome(
      *  to the book's 3 for a Wild Card and 0 for an Extra (any Wound drops
      *  them). Size raises it — see swadeWoundCap. */
     maxWounds?: number;
+    /** Hardy: being Shaken a second time does not become a Wound. It is the
+     *  difference between an Extra who folds to two glancing blows and one
+     *  who has to actually be hurt, so golems, oozes and the like have it. */
+    hardy?: boolean;
   },
 ): SwadeHitResult {
   // An Extra's cap is 0: the first Wound takes them out. A Huge Extra's is 2,
@@ -60,14 +64,18 @@ export function swadeDamageOutcome(
   }
   const raises = Math.floor(margin / 4);
   // A success with no raise Shakes — and re-Shaking someone already Shaken
-  // with damage upgrades to a Wound.
-  const woundsDealt = raises > 0 ? raises : (opts.alreadyShaken ? 1 : 0);
+  // with damage upgrades to a Wound, unless they are Hardy, for whom a second
+  // Shaken is just Shaken again. Raises still wound a Hardy creature: Hardy
+  // only spares it the wound it would take for being rattled twice.
+  const doubleShakenWound = opts.alreadyShaken && !opts.hardy;
+  const woundsDealt = raises > 0 ? raises : (doubleShakenWound ? 1 : 0);
   const woundsAfter = Math.min(opts.currentWounds + woundsDealt, cap + 1);
   const incapacitated = woundsAfter > cap;
 
   const verdict = woundsDealt > 0
     ? `${woundsDealt} Wound${woundsDealt === 1 ? '' : 's'}`
-    : (opts.alreadyShaken ? 'Shaken (again)' : 'Shaken');
+    // Say WHY the second Shaken cost nothing, or the table reads it as a bug.
+    : (opts.alreadyShaken ? (opts.hardy ? 'Shaken (again — Hardy, no Wound)' : 'Shaken (again)') : 'Shaken');
   const stateNote = incapacitated ? 'INCAPACITATED'
     : woundsDealt > 0 ? `now ${woundsAfter} Wound${woundsAfter === 1 ? '' : 's'}, Shaken`
       : null;

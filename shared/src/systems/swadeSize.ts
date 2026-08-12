@@ -74,6 +74,23 @@ export function sizeAttackTag(attackerSize: number, targetSize: number): string 
 }
 
 /**
+ * Heavy Armor, and the weapons that can get through it.
+ *
+ * A Gargantuan creature — a kaiju, a warship, a tank — has Heavy Armor, and
+ * ordinary weapons simply cannot hurt it. Not "hurt it less": a cutlass does
+ * nothing to a hull at all, and the fight has to be won some other way
+ * (a cannon, a boarding action, the rudder). Only a Heavy Weapon touches it.
+ *
+ * A sheet can also declare Heavy Armor outright, for the armoured thing that
+ * isn't Gargantuan — the tank at Size 8 is the reason the flag exists.
+ */
+export const HEAVY_ARMOR_SIZE = 12;
+
+export function hasHeavyArmor(opts: { size: number; flag?: unknown }): boolean {
+  return opts.flag === true || (Number.isFinite(opts.size) && Math.round(opts.size) >= HEAVY_ARMOR_SIZE);
+}
+
+/**
  * How many Wounds a creature carries before it goes down.
  *
  * Base is the book's three for a Wild Card and none for an Extra — an Extra

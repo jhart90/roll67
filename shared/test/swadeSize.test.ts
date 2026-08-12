@@ -60,8 +60,50 @@ describe('Scale difference on attacks', () => {
   });
 });
 
+import { hasHeavyArmor } from '../src/systems/swadeSize.js';
 import { NPCS_SWADE } from '../src/data/npcsSwade.js';
 import { num } from '../src/systems/types.js';
+
+/**
+ * Heavy Armor is a wall, not a discount: an ordinary weapon does nothing at
+ * all to a Gargantuan hull. Getting the boundary right is what keeps a
+ * boarding action interesting and a cutlass-versus-warship fight from
+ * happening at all.
+ */
+describe('Heavy Armor', () => {
+  it('comes with Gargantuan size and not before it', () => {
+    expect(hasHeavyArmor({ size: 12 })).toBe(true);
+    expect(hasHeavyArmor({ size: 20 })).toBe(true);
+    expect(hasHeavyArmor({ size: 11 })).toBe(false);
+    expect(hasHeavyArmor({ size: 0 })).toBe(false);
+  });
+
+  it('can be declared by something merely Huge, like a tank', () => {
+    expect(hasHeavyArmor({ size: 8, flag: true })).toBe(true);
+    expect(hasHeavyArmor({ size: 8, flag: false })).toBe(false);
+  });
+
+  it('covers the ships that need it and spares the brigantine', () => {
+    const byName = (n: string) => NPCS_SWADE.find((x) => x.name === n)!;
+    const heavy = (n: string) => hasHeavyArmor({
+      size: num(byName(n).sheet, 'size', 0), flag: byName(n).sheet.heavyArmor,
+    });
+    expect(heavy('East Indiaman')).toBe(true);
+    expect(heavy('Sailing Ship')).toBe(true);
+    expect(heavy('Main Battle Tank')).toBe(true);
+    // Huge, not Gargantuan — she can be chopped at, slowly.
+    expect(heavy('Pirate Brigantine')).toBe(false);
+    expect(heavy('Pirate Captain')).toBe(false);
+  });
+
+  it('arms those ships with something that can answer', () => {
+    const attacks = (n: string) => (NPCS_SWADE.find((x) => x.name === n)!.sheet.attacks ?? []) as Array<Record<string, unknown>>;
+    expect(attacks('East Indiaman').some((a) => a.heavy === true)).toBe(true);
+    // The gunner on the wharf is the one crewman who can hurt a hull.
+    expect(attacks('VOC Gunner').some((a) => a.heavy === true)).toBe(true);
+    expect(attacks('Pirate Cutthroat').some((a) => a.heavy === true)).toBe(false);
+  });
+});
 
 describe('bestiary sizes', () => {
   it('gives every SWADE creature a Size', () => {

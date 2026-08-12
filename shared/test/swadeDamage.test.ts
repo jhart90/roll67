@@ -39,6 +39,36 @@ describe('swadeDamageOutcome', () => {
     expect(swadeDamageOutcome(7, 6, extra).incapacitated).toBe(false);
     expect(swadeDamageOutcome(10, 6, extra).incapacitated).toBe(true);
   });
+
+  /**
+   * Hardy is the difference between a thing that folds to two glancing blows
+   * and one that has to actually be hurt. It spares only the double-Shaken
+   * wound — a raise still wounds a golem.
+   */
+  describe('Hardy', () => {
+    const shaken = { alreadyShaken: true, wildCard: true, currentWounds: 0 };
+
+    it('turns a second Shaken back into just Shaken', () => {
+      expect(swadeDamageOutcome(7, 6, shaken).woundsDealt).toBe(1);
+      expect(swadeDamageOutcome(7, 6, { ...shaken, hardy: true }).woundsDealt).toBe(0);
+    });
+
+    it('says why the blow cost nothing', () => {
+      expect(swadeDamageOutcome(7, 6, { ...shaken, hardy: true }).verdict).toMatch(/Hardy/);
+    });
+
+    it('does not protect against raises', () => {
+      // 10 vs Toughness 6 is a raise: a Wound whether Hardy or not.
+      expect(swadeDamageOutcome(10, 6, { ...shaken, hardy: true }).woundsDealt).toBe(1);
+      expect(swadeDamageOutcome(14, 6, { ...shaken, hardy: true }).woundsDealt).toBe(2);
+    });
+
+    it('leaves an unshaken target alone either way', () => {
+      const fresh = { alreadyShaken: false, wildCard: true, currentWounds: 0 };
+      expect(swadeDamageOutcome(7, 6, { ...fresh, hardy: true }).woundsDealt).toBe(0);
+      expect(swadeDamageOutcome(7, 6, fresh).woundsDealt).toBe(0);
+    });
+  });
 });
 
 describe('soakSuccesses', () => {

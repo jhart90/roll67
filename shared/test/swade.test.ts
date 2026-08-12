@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty, swadeBennyMax } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
+import type { FieldDef } from '../src/systems/types.js';
 import { swadeWoundsHealed } from '../src/systems/swadeDamage.js';
 import { canTakeHindrance, hindrancePoints } from '../src/systems/swadeCreation.js';
 import { blocksMovement, combatResources, conditionsFor } from '../src/systems/effects.js';
@@ -510,6 +511,51 @@ describe('SWADE library & compendium', () => {
  * that roll a Wild Die none of them would have alone. The transform is a
  * string rewrite on the trait expression, so it is worth pinning down.
  */
+/**
+ * The Skills table's linked-attribute column. It is the number a player
+ * checks most often while spending build points — a skill costs 1 point a
+ * step up to its attribute's die and 2 beyond — and it was nowhere on the
+ * sheet before.
+ */
+describe('the linked-attribute column', () => {
+  const skillsSection = swade.tabs
+    .flatMap((t) => t.sections)
+    .find((sec) => sec.kind === 'list' && sec.id === 'skills') as { columns: FieldDef[] };
+  const col = skillsSection.columns.find((c) => c.id === 'linkedAttr')!;
+  const cell = (skill: string, die: string, sheet: Record<string, unknown>) =>
+    col.compute!({ name: skill, die }, sheet);
+
+  it('names the attribute and the die the skill reaches for one point a step', () => {
+    expect(cell('Fighting', 'd6', { agility: 'd8' }).text).toBe('Agility (d8)');
+    expect(cell('Healing', 'd4', { smarts: 'd10' }).text).toBe('Smarts (d10)');
+    expect(cell('Faith', 'd4', { spirit: 'd6' }).text).toBe('Spirit (d6)');
+  });
+
+  it('matches the skill however it is cased', () => {
+    expect(cell('fighting', 'd6', { agility: 'd8' }).text).toBe('Agility (d8)');
+    expect(cell('  Common Knowledge  ', 'd6', { smarts: 'd6' }).text).toBe('Smarts (d6)');
+  });
+
+  it('flags a skill that has outgrown its attribute — those steps cost double', () => {
+    expect(cell('Fighting', 'd10', { agility: 'd6' }).tone).toBe('warn');
+    expect(cell('Fighting', 'd6', { agility: 'd6' }).tone).toBeUndefined();
+    expect(cell('Fighting', 'd4', { agility: 'd6' }).tone).toBeUndefined();
+  });
+
+  it('says so plainly when a skill is not one of the core ones', () => {
+    expect(cell('Basket Weaving', 'd6', { agility: 'd8' }).text).toBe('—');
+  });
+
+  it('falls back to d4 for an attribute the sheet has not set', () => {
+    expect(cell('Fighting', 'd4', {}).text).toBe('Agility (d4)');
+  });
+
+  it('explains itself on hover, both ways round', () => {
+    expect(cell('Fighting', 'd4', { agility: 'd8' }).title).toMatch(/1 point a step up to d8/);
+    expect(cell('Fighting', 'd10', { agility: 'd6' }).title).toMatch(/costs 2 points/);
+  });
+});
+
 describe('group roll expressions', () => {
   const groupExpr = (expr: string): string =>
     expr.startsWith('best(') ? expr : expr.replace(/^1d(\d+)!/, 'best(1d$1!, 1d6!)');

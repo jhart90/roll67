@@ -1284,6 +1284,19 @@ button.link:hover { text-decoration: underline; }
 .sheet-list td { padding: 2px 4px; }
 .sheet-list input, .sheet-list select { margin: 0; padding: 4px 6px; font-size: 12px; }
 
+/* A locked table row reads as text, not as a form. The padding matches the
+   inputs an unlocked row swaps in, so nothing jumps when the pencil opens. */
+.cell-static { display: inline-block; padding: 4px 6px; line-height: 1.3; }
+/* Something legal but worth noticing — a skill raised past its attribute,
+   which costs two points a step instead of one. */
+.cell-warn { color: #e6c48a; cursor: help; }
+.sheet-list tr.row-editing { background: var(--panel-2); }
+.sheet-list td.row-tools { white-space: nowrap; text-align: right; }
+/* The pencil is quiet until you go looking for it: this table is read far
+   more often than it is edited. */
+.sheet-list .sc-pencil { opacity: 0.35; }
+.sheet-list tr:hover .sc-pencil { opacity: 1; }
+
 .rolls-column {
   width: 240px;
   flex: 0 0 auto;

@@ -406,7 +406,32 @@ function ListEditor({
     setRows([...rows, row]);
   }
 
+  /**
+   * A locked row's cell: what the value SAYS, not a control to change it.
+   * The skills table spends its life being read — a die rating glanced at
+   * mid-roll — and a grid of live inputs invites the mis-click that quietly
+   * rewrites a character.
+   */
+  function renderStatic(col: FieldDef, row: SheetData, sheetData: SheetData) {
+    if (col.compute) return renderComputed(col, row, sheetData);
+    const v = row[col.id];
+    if (col.type === 'checkbox') return <span className="cell-static">{v === true ? '✓' : '—'}</span>;
+    const text = v === undefined || v === '' ? '' : String(v);
+    return <span className="cell-static">{text || <span className="dim">—</span>}</span>;
+  }
+
+  function renderComputed(col: FieldDef, row: SheetData, sheetData: SheetData) {
+    const out = col.compute!(row, sheetData);
+    return (
+      <span className={`cell-static${out.tone === 'warn' ? ' cell-warn' : ''}`} title={out.title}>
+        {out.text}
+      </span>
+    );
+  }
+
   function renderCell(col: FieldDef, row: SheetData, i: number) {
+    // Worked out from the rest of the sheet — there is nothing here to edit.
+    if (col.compute) return renderComputed(col, row, sheet);
     if (col.type === 'checkbox') {
       return (
         <input
@@ -460,7 +485,12 @@ function ListEditor({
     );
   }
 
-  // Skill-style sections keep the quick-edit table.
+  // Skill-style sections keep the compact table. Rows are LOCKED by default:
+  // this table is read far more often than it is written — a die rating
+  // glanced at mid-roll — and a grid of live inputs is an invitation to
+  // quietly rewrite a character with a stray click. The pencil unlocks one
+  // row at a time, and deleting lives inside that unlocked row, where it
+  // cannot be hit by accident.
   if (TABLE_SECTIONS.has(section.id)) {
     return (
       <div className="sheet-list">
@@ -472,18 +502,43 @@ function ListEditor({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
-              <tr key={i}>
-                {mainCols.map((col) => (
-                  <td key={col.id}>{renderCell(col, row, i)}</td>
-                ))}
-                {!readOnly && (
-                  <td>
-                    <button className="link danger" onClick={() => setRows(rows.filter((_, j) => j !== i))}>×</button>
-                  </td>
-                )}
-              </tr>
-            ))}
+            {rows.map((row, i) => {
+              const editing = editIdx === i;
+              return (
+                <tr key={i} className={editing ? 'row-editing' : ''}>
+                  {mainCols.map((col) => (
+                    <td key={col.id}>
+                      {editing ? renderCell(col, row, i) : renderStatic(col, row, sheet)}
+                    </td>
+                  ))}
+                  {!readOnly && (
+                    <td className="row-tools">
+                      {editing ? (
+                        <>
+                          <button
+                            className="link"
+                            title="Done editing this row"
+                            onClick={() => setEditIdx(null)}
+                          >✓</button>
+                          <ConfirmButton
+                            className="link danger"
+                            title={`Remove ${String(row.name || 'this row')}`}
+                            confirmLabel="×?"
+                            onConfirm={() => { setEditIdx(null); setRows(rows.filter((_, j) => j !== i)); }}
+                          >×</ConfirmButton>
+                        </>
+                      ) : (
+                        <button
+                          className="link sc-pencil"
+                          title={`Edit ${String(row.name || 'this row')}`}
+                          onClick={() => setEditIdx(i)}
+                        >✎</button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {!readOnly && <button className="link" onClick={addRow}>+ add {section.title.toLowerCase()}</button>}

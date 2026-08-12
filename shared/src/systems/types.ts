@@ -24,6 +24,13 @@ export interface FieldDef {
   /** Grid width hint for the renderer. */
   width?: 'full' | 'half' | 'third' | 'sixth';
   default?: unknown;
+  /**
+   * A column the sheet works out rather than stores: it renders as static
+   * text and is never editable. Returns the text, an optional tooltip, and
+   * an optional tone the renderer can colour ('warn' for something the
+   * player should notice, like a skill that has outgrown its attribute).
+   */
+  compute?: (row: SheetData, sheet: SheetData) => { text: string; title?: string; tone?: 'warn' };
   /** Hard cap for text/textarea fields, enforced by the sheet renderer.
    *  Used where something downstream has a fixed amount of room for the value
    *  (see CONCEPT_MAX_LEN and the nameplate). */

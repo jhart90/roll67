@@ -434,6 +434,36 @@ export function gangUpBonus(attackerHex: Hex, defenderHex: Hex, others: GangUpCo
   return Math.max(0, Math.min(4, raw - cancel));
 }
 
+/**
+ * The Skills table's "Linked (free to)" cell: which attribute a skill hangs
+ * off, and the die it can be raised to at one build point per step.
+ *
+ * That ceiling is simply the attribute's own die — past it every step costs
+ * two — which makes it the number a player checks most often while spending
+ * points, and it was nowhere on the sheet. A skill already past its
+ * attribute is flagged rather than hidden: it is legal, it just cost double,
+ * and dropping the attribute later is what silently creates one.
+ */
+function linkedAttrCell(row: SheetData, sheet: SheetData): { text: string; title?: string; tone?: 'warn' } {
+  const name = str(row, 'name', '').trim().toLowerCase();
+  const entry = Object.entries(SKILL_ATTR_SWADE).find(([k]) => k.toLowerCase() === name);
+  if (!entry) {
+    return { text: '—', title: 'Not one of the core skills, so the GM decides what it hangs off.' };
+  }
+  const attrId = entry[1];
+  const label = ATTRIBUTES_SWADE.find((a) => a.id === attrId)?.label ?? attrId;
+  const cap = str(sheet, attrId, 'd4');
+  const die = str(row, 'die', 'd4');
+  const over = dieStepIndex(die) > dieStepIndex(cap);
+  return {
+    text: `${label} (${cap})`,
+    tone: over ? 'warn' : undefined,
+    title: over
+      ? `${label} is ${cap}, so ${str(row, 'name', 'this skill')} is past its linked attribute: every step above ${cap} costs 2 points instead of 1.`
+      : `Linked to ${label}. Raising this skill costs 1 point a step up to ${cap}, and 2 a step beyond it.`,
+  };
+}
+
 // ---------- Tab 1: Core ----------
 
 const identityFields: FieldDef[] = [
@@ -524,6 +554,11 @@ const coreTab: SheetTab = {
       columns: [
         { id: 'name', label: 'Skill', type: 'text', width: 'third', suggestions: SKILLS_SWADE },
         { id: 'die', label: 'Die', type: 'select', width: 'sixth', options: TRAIT_DICE, default: 'd4' },
+        // Which attribute this skill hangs off, and how far it can be raised
+        // for one build point a step — that ceiling IS the attribute's die.
+        // Shown because it is the single most consulted number in SWADE
+        // character building and nothing on the sheet was saying it.
+        { id: 'linkedAttr', label: 'Linked (free to)', type: 'text', width: 'sixth', compute: linkedAttrCell },
         { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
       ],
     },

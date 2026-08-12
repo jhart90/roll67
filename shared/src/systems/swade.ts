@@ -500,6 +500,10 @@ const gearTab: SheetTab = {
   title: 'Gear & Combat',
   sections: [
     {
+      kind: 'fields', id: 'money', title: 'Money',
+      fields: [{ id: 'dollars', label: 'Currency ($)', type: 'number', width: 'third', default: 500 }],
+    },
+    {
       kind: 'list', id: 'attacks', title: 'Weapons (damage dice ace with "!")',
       columns: [
         { id: 'name', label: 'Weapon', type: 'text', width: 'third' },
@@ -516,55 +520,6 @@ const gearTab: SheetTab = {
         { id: 'rof', label: 'RoF', type: 'number', width: 'sixth', default: 1 },
         { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
-      ],
-    },
-    {
-      kind: 'list', id: 'armor', title: 'Armor & Shields',
-      columns: [
-        { id: 'name', label: 'Item', type: 'text', width: 'third' },
-        { id: 'armor', label: 'Armor (+Toughness)', type: 'number', width: 'sixth', default: 0 },
-        { id: 'parryBonus', label: 'Parry (+shield)', type: 'number', width: 'sixth', default: 0 },
-        { id: 'rangedArmor', label: 'Armor vs ranged', type: 'number', width: 'sixth', default: 0 },
-        { id: 'equipped', label: 'Worn', type: 'checkbox', width: 'sixth' },
-        { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
-        { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
-      ],
-    },
-    {
-      kind: 'fields', id: 'money', title: 'Money',
-      fields: [{ id: 'dollars', label: 'Currency ($)', type: 'number', width: 'third', default: 500 }],
-    },
-    {
-      kind: 'list', id: 'inventory', title: 'Gear',
-      columns: [
-        { id: 'name', label: 'Item', type: 'text', width: 'third' },
-        { id: 'qty', label: 'Qty', type: 'number', width: 'sixth', default: 1 },
-        { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
-        { id: 'effect', label: 'Use', type: 'select', width: 'sixth', options: ['none', 'heal', 'damage'], default: 'none' },
-        { id: 'amount', label: 'Amount', type: 'text', width: 'sixth' },
-        { id: 'equipped', label: 'Equipped', type: 'checkbox', width: 'sixth' },
-        { id: 'bonusSkill', label: 'Boosts trait', type: 'text', width: 'sixth', suggestions: [...SKILLS_SWADE, 'Strength', 'Agility', 'Smarts', 'Spirit', 'Vigor'] },
-        { id: 'bonusAmt', label: '+', type: 'number', width: 'sixth', default: 0 },
-        { id: 'caliber', label: 'Caliber', type: 'text', width: 'sixth' },
-        { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
-      ],
-    },
-  ],
-};
-
-// ---------- Tab 3: Powers & Bio ----------
-
-const powersTab: SheetTab = {
-  id: 'powers',
-  title: 'Powers & Bio',
-  sections: [
-    {
-      kind: 'fields', id: 'portrait', title: 'Portrait & Token',
-      fields: [
-        { id: 'tokenImage', label: 'Token image', type: 'image', width: 'half' },
-        { id: 'detailImage', label: 'Detail / portrait', type: 'image', width: 'half' },
-        { id: 'tokenColor', label: 'Token colour', type: 'color', width: 'half' },
-        { id: 'bioPublic', label: 'Profile / Bio (public-facing)', type: 'textarea', width: 'full' },
       ],
     },
     {
@@ -621,6 +576,51 @@ const powersTab: SheetTab = {
         { id: 'name', label: 'Power', type: 'text', width: 'third' },
         { id: 'rounds', label: 'Rounds left', type: 'number', width: 'sixth', default: 5 },
         { id: 'upkeep', label: 'PP/round', type: 'number', width: 'sixth', default: 1 },
+      ],
+    },
+    {
+      kind: 'list', id: 'armor', title: 'Armor & Shields',
+      columns: [
+        { id: 'name', label: 'Item', type: 'text', width: 'third' },
+        { id: 'armor', label: 'Armor (+Toughness)', type: 'number', width: 'sixth', default: 0 },
+        { id: 'parryBonus', label: 'Parry (+shield)', type: 'number', width: 'sixth', default: 0 },
+        { id: 'rangedArmor', label: 'Armor vs ranged', type: 'number', width: 'sixth', default: 0 },
+        { id: 'equipped', label: 'Worn', type: 'checkbox', width: 'sixth' },
+        { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
+      ],
+    },
+    {
+      kind: 'list', id: 'inventory', title: 'Gear',
+      columns: [
+        { id: 'name', label: 'Item', type: 'text', width: 'third' },
+        { id: 'qty', label: 'Qty', type: 'number', width: 'sixth', default: 1 },
+        { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
+        { id: 'effect', label: 'Use', type: 'select', width: 'sixth', options: ['none', 'heal', 'damage'], default: 'none' },
+        { id: 'amount', label: 'Amount', type: 'text', width: 'sixth' },
+        { id: 'equipped', label: 'Equipped', type: 'checkbox', width: 'sixth' },
+        { id: 'bonusSkill', label: 'Boosts trait', type: 'text', width: 'sixth', suggestions: [...SKILLS_SWADE, 'Strength', 'Agility', 'Smarts', 'Spirit', 'Vigor'] },
+        { id: 'bonusAmt', label: '+', type: 'number', width: 'sixth', default: 0 },
+        { id: 'caliber', label: 'Caliber', type: 'text', width: 'sixth' },
+        { id: 'notes', label: 'Notes', type: 'text', width: 'third' },
+      ],
+    },
+  ],
+};
+
+// ---------- Tab 3: Bio ----------
+
+const powersTab: SheetTab = {
+  id: 'powers',
+  title: 'Bio',
+  sections: [
+    {
+      kind: 'fields', id: 'portrait', title: 'Portrait & Token',
+      fields: [
+        { id: 'tokenImage', label: 'Token image', type: 'image', width: 'half' },
+        { id: 'detailImage', label: 'Detail / portrait', type: 'image', width: 'half' },
+        { id: 'tokenColor', label: 'Token colour', type: 'color', width: 'half' },
+        { id: 'bioPublic', label: 'Profile / Bio (public-facing)', type: 'textarea', width: 'full' },
       ],
     },
     {

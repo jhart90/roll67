@@ -45,6 +45,31 @@ function emitCharacter(io: Server, campaignId: string, character: Character): vo
   }
 }
 
+/**
+ * Take the bestiary's per-creature ability text off a sheet about to be
+ * spawned, so the caller can put it where it belongs.
+ *
+ * That prose — "Change Form: as an action… Invulnerability: can only be slain
+ * by sunlight…" — is the one part of a stat block that is mechanics a player
+ * should not simply read off a monster, and no sheet has had a field for it
+ * since Notes was dropped. Riding along on the sheet it was dead data nothing
+ * rendered; its home is the DM's own secret notes, a separate DM-gated store.
+ *
+ * Mutates the sheet, which is always a clone by the time it reaches here.
+ */
+function takeAbilityText(sheet: SheetData): string {
+  const text = typeof sheet.notes === 'string' ? sheet.notes.trim() : '';
+  delete sheet.notes;
+  return text;
+}
+
+/** Seed a freshly spawned creature's DM notes with its ability text. */
+function seedDmNotes(io: Server, campaignId: string, characterId: string, text: string): void {
+  if (!text) return;
+  dmNotes.set(campaignId, characterId, text);
+  io.to(dmRoom(campaignId)).emit(S2C.DM_NOTES, { characterId, text });
+}
+
 export function registerCharacterHandlers(io: Server, socket: Socket): void {
   // DM world-tab curation: force-reveal or force-hide an entry for all
   // players regardless of what the party has actually seen.
@@ -176,10 +201,12 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const entry = npcById(libraryId);
     if (entry) {
       if (entry.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
+      const sheet = structuredClone(entry.sheet);
+      const abilities = takeAbilityText(sheet);
       const character = characters.create(
-        d.campaignId, null, name?.trim() || entry.name, entry.system,
-        structuredClone(entry.sheet),
+        d.campaignId, null, name?.trim() || entry.name, entry.system, sheet,
       );
+      seedDmNotes(io, d.campaignId, character.id, abilities);
       emitCharacter(io, d.campaignId, character);
       return;
     }
@@ -187,11 +214,13 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     if (custom) {
       if (custom.system !== campaign.system) throw new Error('That NPC belongs to a different game system.');
       const sheet = structuredClone(custom.sheet);
+      const abilities = takeAbilityText(sheet);
       if (custom.artAssetId) (sheet as Record<string, unknown>).tokenImageAssetId = custom.artAssetId;
       if (custom.color) (sheet as Record<string, unknown>).tokenColor = custom.color;
       const character = characters.create(
         d.campaignId, null, name?.trim() || custom.name, custom.system, sheet,
       );
+      seedDmNotes(io, d.campaignId, character.id, abilities);
       emitCharacter(io, d.campaignId, character);
       return;
     }
@@ -218,7 +247,11 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     const n = Math.max(1, Math.min(10, count ?? 1));
     for (let i = 0; i < n; i++) {
       const gen = model ? generateNpcFromModel(model) : generateNpc(campaign.system);
+      // A jittered copy of a bestiary entry inherits its ability text, which
+      // belongs in the DM's notes for the same reason the original's does.
+      const abilities = takeAbilityText(gen.sheet);
       const character = characters.create(d.campaignId, null, gen.name, campaign.system, gen.sheet);
+      seedDmNotes(io, d.campaignId, character.id, abilities);
       emitCharacter(io, d.campaignId, character);
     }
     broadcastDirectory(io, d.campaignId);

@@ -3226,16 +3226,17 @@ th > .term { border-bottom-style: dotted; }
 
 /* ---------- incapacitation ledger (Stats tab) ---------- */
 
-/* Rolls and their consequences side by side, dropping to one column when the
-   window is too narrow to read two. */
-.rollstats-split { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-.rollstats-rolls { flex: 1 1 320px; min-width: 0; }
+/* Ledger first, dice under it: what came of the rolls is the headline, and
+   the histograms are the detail you scroll for. */
+.rollstats-split { display: flex; flex-direction: column; gap: 12px; }
+.rollstats-rolls { min-width: 0; }
+/* The two lists sit side by side across the top — they are short, and reading
+   what this character did against what was done to them wants them adjacent. */
 .incap-ledger {
-  flex: 0 1 190px; min-width: 160px;
-  display: flex; flex-direction: column; gap: 12px;
-  border-left: 1px solid var(--border); padding-left: 12px;
+  display: flex; gap: 18px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); padding-bottom: 10px;
 }
-.incap-block { min-width: 0; }
+.incap-block { flex: 1 1 140px; min-width: 0; }
 .incap-head {
   margin: 0 0 5px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
   display: flex; align-items: center; gap: 6px;

@@ -174,6 +174,7 @@ export function RollStatsTab({ characterId }: { characterId: string }) {
   useEffect(() => { intents.getRollStats(characterId); }, [characterId]);
   return (
     <div className="rollstats-window rollstats-split">
+      <IncapLedger characterId={characterId} />
       <div className="rollstats-rolls">
         {!data
           ? <p className="dim" style={{ margin: 8 }}>Crunching the numbers…</p>
@@ -181,7 +182,6 @@ export function RollStatsTab({ characterId }: { characterId: string }) {
             ? <p className="dim" style={{ margin: 8 }}>No rolls recorded for this character yet.</p>
             : <StatsView slices={toSlices(data.users)} />}
       </div>
-      <IncapLedger characterId={characterId} />
     </div>
   );
 }
@@ -189,8 +189,9 @@ export function RollStatsTab({ characterId }: { characterId: string }) {
 /**
  * Who this character has put out of the fight, and who has done it to them.
  *
- * Beside the dice rather than under them: the rolls say how the character
- * performs, this says what came of it, and the two are read together.
+ * At the top, above the dice: two short lists that are the headline of the
+ * tab — what came of this character's rolls — where the histograms below are
+ * the detail you scroll for.
  */
 function IncapLedger({ characterId }: { characterId: string }) {
   const character = useGameStore((s) => s.characters.find((c) => c.id === characterId));

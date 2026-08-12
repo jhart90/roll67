@@ -1092,7 +1092,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
             📝 Notes
           </button>
           <button className={tabId === STATS_TAB ? 'active' : ''} onClick={() => setTabId(STATS_TAB)}>
-            📊 Roll Stats
+            📊 Stats
           </button>
         </div>
 

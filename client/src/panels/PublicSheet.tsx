@@ -6,7 +6,7 @@ import { RollStatsTab } from './RollStats';
 /**
  * The safe view of somebody else's character: exactly what their nameplate
  * already shows (name, colour, descriptive lines), plus portrait, token art,
- * and the sheet's free-text bio sections — and the Roll Stats tab. Never
+ * and the sheet's free-text bio sections — and the Stats tab. Never
  * stats, gear, HP, or anything mechanical; the server builds the payload,
  * the full sheet never reaches this client.
  */
@@ -83,7 +83,7 @@ export function PublicSheetWindow({ characterId }: { characterId: string }) {
       <div className="sheet-tabs">
         <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>Profile</button>
         <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>📝 My Notes</button>
-        <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}>📊 Roll Stats</button>
+        <button className={tab === 'stats' ? 'active' : ''} onClick={() => setTab('stats')}>📊 Stats</button>
       </div>
       {tab === 'notes' ? (
         <PrivateNotesTab characterId={characterId} name={sheet.name} />

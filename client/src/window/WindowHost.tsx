@@ -12,6 +12,7 @@ import { MapEditorWindow } from '../table/dm/MapManager';
 import { NpcLibrary } from '../panels/NpcLibrary';
 import { RandomizeNpcModal } from '../panels/RandomizeNpcModal';
 import { AssetLibrary } from '../panels/AssetLibrary';
+import { SettingsWindow } from '../panels/SettingsWindow';
 import { AccountDetails } from '../panels/AccountDetails';
 import { Soundboard } from '../panels/Soundboard';
 import { RollStatsWindow } from '../panels/RollStats';
@@ -96,6 +97,9 @@ export function WindowHost() {
             break;
           case 'accountDetails':
             content = <AccountDetails onClose={onClose} />;
+            break;
+          case 'settings':
+            content = <SettingsWindow />;
             break;
           case 'characterCreator':
             content = system === 'swade' ? <SwadeCharacterCreator onClose={onClose} />

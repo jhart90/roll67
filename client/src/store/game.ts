@@ -15,6 +15,7 @@ import {
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
+import { readMapColors, readTheme, saveMapColors, saveTheme, type MapColors, type UiTheme } from '../util/appearance';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
 import { estimateDiceAnimMs } from '../table/dice3d';
 
@@ -369,6 +370,11 @@ interface GameState {
   /** Local-only: mute audio on this device without affecting others. */
   clientMuted: boolean;
   /** This device's own music volume (multiplies the DM's jukebox volume). */
+  /** How this viewer likes the app to look. Local only — see util/appearance. */
+  uiTheme: UiTheme;
+  setUiTheme(theme: UiTheme): void;
+  mapColors: MapColors;
+  setMapColors(colors: MapColors): void;
   localMusicVolume: number;
   /** This device's own sound-effects volume (soundboard hits, dice rattles). */
   /** Whose roll is about to land, shown across the map. */
@@ -670,6 +676,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   selectedDoorId: null,
   clientMuted: false,
   setClientMuted(clientMuted) { set({ clientMuted }); },
+  uiTheme: readTheme(),
+  setUiTheme(theme) { saveTheme(theme); set({ uiTheme: theme }); },
+  mapColors: readMapColors(),
+  setMapColors(colors) { saveMapColors(colors); set({ mapColors: colors }); },
   localMusicVolume: readLocalVolume('roll67.musicVolume'),
   localSfxVolume: readLocalVolume('roll67.sfxVolume'),
   setLocalMusicVolume(v) {

@@ -180,6 +180,12 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         )}
         <TurnBanner />
         <button onClick={() => setShowAudio((v) => !v)} title="Jukebox">🎵</button>
+        <button
+          onClick={() => openWindow('settings', 'me', {}, 'Settings')}
+          title="Settings — sound and appearance"
+        >
+          ⚙
+        </button>
         <button className="user-chip" onClick={() => openWindow('accountDetails', 'me', {}, 'Account Details')} title="Account settings">{you.username} ({you.role})</button>
       </header>
 

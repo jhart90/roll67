@@ -16,6 +16,7 @@ export type WindowKind =
   | 'publicSheet'
   | 'mapDetails'
   | 'accountDetails'
+  | 'settings'
   // Long-running jobs that used to be centred modals. They are multi-minute
   // tasks you want to do WITH the map and your sheet visible, so they belong
   // in the window system like everything else.

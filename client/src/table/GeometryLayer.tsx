@@ -5,6 +5,9 @@ import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
+// A window/one-way/stained-glass wall's colour MEANS something — it says
+// which kind it is — so only the plain solid wall follows the viewer's own
+// setting. Recolouring the others would cost information to gain taste.
 const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b', stainedglass: '#d26cd2' };
 
 /** A light marker: selectable, draggable, and right-clickable (DM), in both the
@@ -69,7 +72,9 @@ const LightPiece = memo(function LightPiece({ light, selected, interactive, hexP
 const WallPiece = memo(function WallPiece({ wall, selected, interactive }: { wall: Wall; selected: boolean; interactive: boolean }) {
   const type = wall.type ?? 'solid';
   const pts = wall.points.map((p) => `${p.x},${p.y}`).join(' ');
-  const strokeColor = type === 'stainedglass' ? (wall.glassColor || '#d26cd2') : WALL_STROKE[type];
+  const mapColors = useGameStore((s) => s.mapColors);
+  const strokeColor = type === 'stainedglass' ? (wall.glassColor || '#d26cd2')
+    : type === 'solid' ? mapColors.wall : WALL_STROKE[type];
 
   // One-way arrows: solid triangles along each segment pointing toward the
   // see-through side. The normal of A→B is (-dy, dx); `flip` inverts it.
@@ -164,7 +169,12 @@ const DoorPiece = memo(function DoorPiece({ door, mapId, tool, selected, isDm }:
   const isGate = door.type === 'gate';
   // Gates get a blue palette (always see-through) instead of the normal
   // door's green/orange (blocks sight too, when closed).
-  const color = isGate ? (door.open ? '#8ad2e8' : '#4b8fc9') : (door.open ? '#7ed28a' : '#c98d4b');
+  const mapColors = useGameStore((s) => s.mapColors);
+  // A gate keeps its blue: that colour says WHICH KIND of door this is, and
+  // is not the viewer's to repaint. An ordinary door is theirs.
+  const color = isGate ? (door.open ? '#8ad2e8' : '#4b8fc9')
+    : (door.open ? mapColors.doorOpen : mapColors.doorClosed);
+  const alpha = isGate ? 1 : (door.open ? mapColors.doorOpenOpacity : mapColors.doorClosedOpacity);
   return (
     <g>
       {selected && <circle cx={mid.x} cy={mid.y} r={15} fill="none" stroke="#fff" strokeWidth={2.5} opacity={0.7} pointerEvents="none" />}
@@ -174,6 +184,7 @@ const DoorPiece = memo(function DoorPiece({ door, mapId, tool, selected, isDm }:
         strokeWidth={5}
         strokeLinecap="round"
         strokeDasharray={door.open ? '4 8' : undefined}
+        opacity={alpha}
       />
       {door.locked && (
         <text x={mid.x} y={mid.y - 12} textAnchor="middle" fontSize={12} pointerEvents="none">🔒</text>
@@ -250,6 +261,7 @@ export function GeometryLayer() {
 
   const walls = isDm ? dmGeometry?.walls ?? [] : [];
   const knownWalls = useGameStore((s) => s.knownWalls);
+  const mapColors = useGameStore((s) => s.mapColors);
   const doors = isDm ? dmGeometry?.doors ?? [] : knownDoors;
   const lights = isDm ? dmGeometry?.lights ?? [] : [];
   const wallType = useGameStore((s) => s.wallType);
@@ -258,7 +270,7 @@ export function GeometryLayer() {
   const wallRainbow = useGameStore((s) => s.wallRainbow);
   const doorType = useGameStore((s) => s.doorType);
 
-  const DOOR_STROKE: Record<string, string> = { door: '#c98d4b', gate: '#4b8fc9' };
+  // Open and closed doors are two different facts, so they get two colours.
 
   // Cancel drafts when the tool changes.
   useEffect(() => {
@@ -618,7 +630,7 @@ export function GeometryLayer() {
         <line
           key={`kw-${i}`}
           x1={seg.a.x} y1={seg.a.y} x2={seg.b.x} y2={seg.b.y}
-          stroke="#d8574f" strokeWidth={2} strokeLinecap="round" opacity={0.55}
+          stroke={mapColors.wall} strokeWidth={2} strokeLinecap="round" opacity={mapColors.wallOpacity * 0.65}
           pointerEvents="none"
         />
       ))}
@@ -632,7 +644,9 @@ export function GeometryLayer() {
           placed (matches the final render's colors) so it's clear which
           kind you're drawing before you commit it, not just after. */}
       {draft.length > 0 && (() => {
-        const draftColor = tool === 'door' ? DOOR_STROKE[doorType] : WALL_STROKE[wallType];
+        const draftColor = tool === 'door'
+          ? (doorType === 'gate' ? '#4b8fc9' : mapColors.doorClosed)
+          : wallType === 'solid' ? mapColors.wall : WALL_STROKE[wallType];
         return (
           <>
             <polyline

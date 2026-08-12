@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsFor, conditionsOf,
+  applyDamageDefenses, applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsFor, conditionsOf,
   critDamageExpr, damageMultiplier, multiplierLabel,
 } from '../src/systems/effects.js';
 
@@ -17,6 +17,44 @@ describe('damage types & resistance', () => {
   it('immunity beats resistance beats vulnerability', () => {
     const sheet = { resist: 'fire', immune: 'fire', vulnerable: 'fire' };
     expect(damageMultiplier(sheet, 'fire')).toBe(0);
+  });
+
+  /**
+   * SWADE does not halve or double. Environmental Resistance and Weakness
+   * move the total by a flat four — one raise, and so exactly one Wound —
+   * which is a different answer from the 5e model at every damage value
+   * except eight.
+   */
+  describe('applyDamageDefenses', () => {
+    const sheet = { resist: 'fire', vulnerable: 'cold', immune: 'poison' };
+
+    it('shifts a SWADE hit by four in either direction', () => {
+      expect(applyDamageDefenses('swade', sheet, 'fire', 11).amount).toBe(7);
+      expect(applyDamageDefenses('swade', sheet, 'cold', 11).amount).toBe(15);
+      expect(applyDamageDefenses('swade', sheet, 'slashing', 11).amount).toBe(11);
+    });
+
+    it('never drives a resisted SWADE hit below zero', () => {
+      expect(applyDamageDefenses('swade', sheet, 'fire', 3).amount).toBe(0);
+    });
+
+    it('zeroes an immunity in every system', () => {
+      for (const sys of ['swade', 'dnd5e', 'swn'] as const) {
+        expect(applyDamageDefenses(sys, sheet, 'poison', 20)).toEqual({ amount: 0, label: 'immune' });
+      }
+    });
+
+    it('keeps halving and doubling for the systems that use them', () => {
+      expect(applyDamageDefenses('dnd5e', sheet, 'fire', 11).amount).toBe(5);
+      expect(applyDamageDefenses('dnd5e', sheet, 'cold', 11).amount).toBe(22);
+      expect(applyDamageDefenses('swn', sheet, 'fire', 11).amount).toBe(5);
+    });
+
+    it('says which defence fired, for the chat card', () => {
+      expect(applyDamageDefenses('swade', sheet, 'fire', 11).label).toMatch(/resistance −4/);
+      expect(applyDamageDefenses('swade', sheet, 'cold', 11).label).toMatch(/weakness \+4/);
+      expect(applyDamageDefenses('swade', sheet, 'slashing', 11).label).toBe('');
+    });
   });
 
   it('applies the multiplier with floor, never negative', () => {

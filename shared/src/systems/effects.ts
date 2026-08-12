@@ -16,6 +16,15 @@ export const DAMAGE_TYPES = [
   'kinetic', 'energy',
 ] as const;
 
+/**
+ * The damage types that read as an environment — a kind of energy or
+ * substance a creature can be built to shrug off or to fear — as opposed to
+ * simply being hit with something. SWADE's Environmental Resistance and
+ * Environmental Weakness are chosen from these.
+ */
+export const ENVIRONMENTAL_TYPES = DAMAGE_TYPES
+  .filter((t) => !['bludgeoning', 'piercing', 'slashing', 'kinetic'].includes(t));
+
 function parseTypeList(raw: string): Set<string> {
   return new Set(raw.toLowerCase().split(/[,;/]/).map((s) => s.trim()).filter(Boolean));
 }
@@ -46,6 +55,45 @@ export function multiplierLabel(mult: number): string {
   if (mult < 1) return 'resisted';
   if (mult > 1) return 'vulnerable';
   return '';
+}
+
+/**
+ * SWADE moves Environmental Resistance and Weakness by a flat four rather
+ * than halving or doubling, and four is not an arbitrary number: it is
+ * exactly one raise on a damage roll, which is exactly one Wound. Resisting
+ * fire means one Wound less from every fire, at any size of hit — where
+ * halving would barely matter against a small hit and swing a huge one.
+ */
+export const SWADE_ENV_SHIFT = 4;
+
+/**
+ * What a target's defences do to an incoming hit, in the arithmetic its own
+ * system uses: SWADE shifts by four, 5e and SWN halve or double. Immunity is
+ * zero everywhere.
+ *
+ * One function rather than a multiplier every caller has to remember to apply
+ * correctly — the SWADE branch cannot be expressed as a multiplier at all,
+ * and every damage site in the game funnels through here.
+ */
+export function applyDamageDefenses(
+  system: GameSystem, sheet: SheetData, damageType: string, amount: number,
+): { amount: number; label: string } {
+  const t = (damageType || '').toLowerCase().trim();
+  if (!t) return { amount, label: '' };
+  if (parseTypeList(str(sheet, 'immune', '')).has(t)) return { amount: 0, label: 'immune' };
+  if (system === 'swade') {
+    if (parseTypeList(str(sheet, 'resist', '')).has(t)) {
+      return { amount: Math.max(0, amount - SWADE_ENV_SHIFT), label: `environmental resistance −${SWADE_ENV_SHIFT}` };
+    }
+    if (parseTypeList(str(sheet, 'vulnerable', '')).has(t)) {
+      return { amount: amount + SWADE_ENV_SHIFT, label: `environmental weakness +${SWADE_ENV_SHIFT}` };
+    }
+    return { amount, label: '' };
+  }
+  const mult = damageMultiplier(sheet, t);
+  return mult === 1
+    ? { amount, label: '' }
+    : { amount: applyDamageMultiplier(amount, mult), label: multiplierLabel(mult) };
 }
 
 /**

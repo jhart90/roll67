@@ -3,8 +3,8 @@ import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
-  applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
-  damageMultiplier, multiplierLabel, swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
+  applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
+  swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
@@ -828,7 +828,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
           coverToughness: spec.cover.toughness,
         });
       }
-      if (ch && spec.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, spec.damageType));
+      if (ch && spec.damageType) amt = applyDamageDefenses(ch.system, ch.sheet, spec.damageType, amt).amount;
       if (amt <= 0) continue;
       if (!ch && !tok.bar) continue;
       undo.push(ch ? { t: 'hp', characterId: ch.id, delta: -amt } : { t: 'hp', tokenId: tok.id, delta: -amt });
@@ -1856,10 +1856,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
       let resistTag = '';
       if (action.effect === 'damage' && hit && targetChar) {
-        const mult = damageMultiplier(targetChar.sheet, action.damageType);
-        if (mult !== 1) {
-          magnitude = applyDamageMultiplier(magnitude, mult);
-          resistTag = ` (${multiplierLabel(mult)})`;
+        const defended = applyDamageDefenses(targetChar.system, targetChar.sheet, action.damageType, magnitude);
+        if (defended.label) {
+          magnitude = defended.amount;
+          resistTag = ` (${defended.label})`;
         }
         // SWADE shields: armor that counts only vs ranged attacks (a Medium/
         // Large Shield's +2) soaks that much off any ranged hit automatically.
@@ -2139,7 +2139,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             setTimeout(() => {
               const fresh = characters.byId(targetId);
               if (!fresh) return;
-              const dmg = applyDamageMultiplier(action.shockDamage!, damageMultiplier(fresh.sheet, action.damageType));
+              const dmg = applyDamageDefenses(fresh.system, fresh.sheet, action.damageType, action.shockDamage!).amount;
               if (dmg <= 0) return;
               applyHpDelta(io, d.campaignId, fresh, -dmg, `${action.label} (shock)`, actor.name);
               const after = characters.byId(targetId)!;
@@ -2469,7 +2469,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (mod.cover) {
           amt = coverAdjustedDamage(amt, { isCoverer: tok.id === mod.cover.tokenId, coverToughness: mod.cover.toughness });
         }
-        if (ch && action.damageType) amt = applyDamageMultiplier(amt, damageMultiplier(ch.sheet, action.damageType));
+        if (ch && action.damageType) amt = applyDamageDefenses(ch.system, ch.sheet, action.damageType, amt).amount;
         if (amt <= 0) continue;
         undo.push(ch ? { t: 'hp', characterId: ch.id, delta: -amt } : { t: 'hp', tokenId: tok.id, delta: -amt });
         applications.push(() => {

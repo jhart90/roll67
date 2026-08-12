@@ -214,16 +214,40 @@ describe('buildSwadeCharacterSheet — assembly', () => {
     expect(swadeToughness(small)).toBe(swadeToughness(plain) - 1);
   });
 
-  it('Infravision sets darkvision, and immunities/resistances land on the damage lists', () => {
+  it('Infravision sets darkvision, and an immunity lands on the immunity list', () => {
     const sheet = buildSwadeCharacterSheet(baseInput({
       ancestryName: 'Deepwalker', ancestryIsCustom: true,
       customTraitPicks: [
         { traitId: 'infravision' },
-        { traitId: 'immune-poison-disease', choice: 'poison' },
+        { traitId: 'immune-poison-disease', choice: 'Toxins' },
       ],
     }));
     expect(sheet.darkvision).toBe(24);
-    expect(String(sheet.resist)).toContain('poison');
+    // An immunity zeroes the damage; it is not a resistance, which only
+    // shifts it by four. This used to be filed as the latter.
+    expect(String(sheet.immune)).toContain('poison');
+    expect(String(sheet.resist ?? '')).not.toContain('poison');
+  });
+
+  /**
+   * Environmental Resistance used to write nothing but a sentence on a trait
+   * row: the player paid a build point and the damage engine never heard
+   * about it. The chosen environment now reaches the sheet as the damage type
+   * an attack would carry, which is the only form anything can match.
+   */
+  it('Environmental Resistance and Weakness reach the sheet as damage types', () => {
+    const sheet = buildSwadeCharacterSheet(baseInput({
+      ancestryName: 'Emberkin', ancestryIsCustom: true,
+      customTraitPicks: [
+        { traitId: 'environmental-resistance', choice: 'Heat' },
+        { traitId: 'environmental-weakness', choice: 'Cold' },
+      ],
+    }));
+    expect(String(sheet.resist)).toContain('fire');
+    expect(String(sheet.vulnerable)).toContain('cold');
+    // The trait row still explains itself in the book's own terms.
+    const traits = (sheet.racialTraits ?? []) as Array<{ name: string; notes: string }>;
+    expect(traits.find((t) => t.name.startsWith('Environmental Resistance'))?.notes).toMatch(/Heat/);
   });
 
   it('Skill Bonus grants its +2 through the trait row, and Skill grants a starting die', () => {

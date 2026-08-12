@@ -1237,6 +1237,21 @@ button.link:hover { text-decoration: underline; }
 .sheet-field input, .sheet-field select { margin: 0; padding: 6px 8px; }
 .sheet-field.checkbox { flex-direction: row; align-items: center; gap: 6px; padding-top: 14px; }
 .sheet-field.checkbox input { width: auto; }
+
+/* Multi-select: what has been picked reads as chips, and the dropdown beside
+   them offers only what is left, so the control shrinks as it fills up. */
+.ms-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-height: 30px; }
+.ms-row select { flex: 0 1 auto; max-width: 100%; }
+.ms-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 4px 2px 8px; font-size: 11px; line-height: 18px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px;
+}
+.ms-chip button {
+  all: unset; cursor: pointer; padding: 0 4px; border-radius: 999px;
+  color: var(--text-dim); font-size: 13px; line-height: 14px;
+}
+.ms-chip button:hover { color: var(--danger); background: var(--panel); }
 .derived-badge {
   display: inline-block;
   margin-left: 6px;

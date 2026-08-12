@@ -15,7 +15,7 @@ import {
 } from './types.js';
 import { scaleBand, swadeWoundCap } from './swadeSize.js';
 import { COVER_PENALTY, isCoverGrade } from './swadeCover.js';
-import { conditionsOf, DAMAGE_TYPES } from './effects.js';
+import { conditionsOf, DAMAGE_TYPES, ENVIRONMENTAL_TYPES } from './effects.js';
 
 export const ATTRIBUTES_SWADE = [
   { id: 'agility', label: 'Agility' },
@@ -406,11 +406,15 @@ const combatFields: FieldDef[] = [
   { id: 'fatigue', label: 'Fatigue (0–2)', type: 'number', width: 'sixth', default: 0 },
   { id: 'pace', label: 'Pace', type: 'number', width: 'sixth', default: 6 },
   { id: 'runningDie', label: 'Running die', type: 'select', width: 'sixth', options: TRAIT_DICE, default: 'd6' },
-  // Damage-type lists hold comma-separated entries and outgrow a third fast,
-  // so each takes the full width of the pane.
-  { id: 'resist', label: 'Resistances', type: 'text', width: 'full', default: '' },
-  { id: 'vulnerable', label: 'Vulnerabilities', type: 'text', width: 'full', default: '' },
-  { id: 'immune', label: 'Immunities', type: 'text', width: 'full', default: '' },
+  // The bestiary's three defence lines, under the book's own names. Each is a
+  // pick-list rather than free text: a typo used to mean a creature quietly
+  // resisted nothing, since these are matched against an attack's damage type
+  // and only an exact match counts.
+  { id: 'resist', label: 'Environmental Resistance', type: 'multiselect', width: 'full', default: '', options: [...ENVIRONMENTAL_TYPES] },
+  { id: 'vulnerable', label: 'Environmental Weakness', type: 'multiselect', width: 'full', default: '', options: [...ENVIRONMENTAL_TYPES] },
+  // Immunity is not limited to the environmental list: a creature can be
+  // immune to a kind of attack as well as to a substance.
+  { id: 'immune', label: 'Immunity', type: 'multiselect', width: 'full', default: '', options: [...DAMAGE_TYPES] },
 ];
 
 const sensesFields: FieldDef[] = [

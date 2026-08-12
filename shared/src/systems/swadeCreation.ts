@@ -43,8 +43,6 @@ export type CustomRaceTraitEffect =
   | { kind: 'immunity' }
   | { kind: 'envResist' }
   | { kind: 'envWeak' }
-  | { kind: 'resist' }
-  | { kind: 'vulnerable' }
   | { kind: 'skillBonus'; skill: string; amount: number }
   | { kind: 'none' };
 
@@ -133,7 +131,7 @@ export const CUSTOM_RACE_TRAITS: CustomRaceTrait[] = [
       { cost: 2, label: 'Horns (d6)', desc: 'Horns that cause Strength+d6 damage.', effect: { kind: 'naturalWeapon', damage: 'Str+d6' } },
     ],
   },
-  { id: 'immune-poison-disease', name: 'Immune to Poison or Disease', cost: 1, category: 'positive', maxTakes: 2, effect: { kind: 'immunity' }, desc: 'Immune to poison or to disease (your choice). Take it twice for both.' },
+  { id: 'immune-poison-disease', name: 'Immune to Poison or Disease', cost: 1, category: 'positive', maxTakes: 2, needsEnvironmentChoice: true, effect: { kind: 'immunity' }, desc: 'Immune to poison or to disease (your choice — pick Toxins or Disease). Take it twice for both.' },
   { id: 'infravision', name: 'Infravision', cost: 1, category: 'positive', effect: { kind: 'vision', darkvision: 24 }, desc: 'Sees heat, halving Illumination penalties against warm targets (even invisible ones).' },
   { id: 'leaper', name: 'Leaper', cost: 2, category: 'positive', effect: { kind: 'none' }, desc: 'Jumps twice as far, and adds +4 damage when leaping as part of a Wild Attack instead of +2.' },
   { id: 'low-light-vision', name: 'Low Light Vision', cost: 1, category: 'positive', effect: { kind: 'vision', darkvision: 12 }, desc: 'Ignores penalties for Dim and Dark illumination (but not Pitch Darkness).' },
@@ -322,6 +320,18 @@ export const RACE_TRAIT_CONTENT_SWADE: ContentEntry[] = CUSTOM_RACE_TRAITS.flatM
 export const RACE_ENVIRONMENTS = [
   'Heat', 'Cold', 'Lack of air', 'Radiation', 'Pressure', 'Sunlight', 'Water', 'Toxins', 'Disease', 'Magic',
 ];
+
+/**
+ * The damage type an environment arrives as when something actually attacks
+ * with it, so a chosen Environmental Resistance can be matched against an
+ * incoming hit. The environments left out — pressure, lack of air, water,
+ * disease — are hazards a GM narrates rather than damage types anything rolls,
+ * so the trait's own note carries them and there is nothing to match.
+ */
+export const ENVIRONMENT_DAMAGE_TYPE: Record<string, string> = {
+  Heat: 'fire', Cold: 'cold', Radiation: 'radiant', Sunlight: 'radiant',
+  Toxins: 'poison', Magic: 'force',
+};
 
 export const RESISTIBLE_DAMAGE_TYPES = DAMAGE_TYPES;
 
@@ -548,6 +558,7 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   let darkvisionBonus = 0;
   const resistTypes: string[] = [];
   const vulnerableTypes: string[] = [];
+  const immuneTypes: string[] = [];
   const ancestryTraitNotes: string[] = [];
   // Racial abilities are first-class traits on the sheet, carrying the same
   // live modifier columns as Edges — never disguised as gear or armor rows.
@@ -609,21 +620,34 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
         case 'skillBonus':
           if (choice) { row.bonusSkill = choice; row.bonusAmt = effect.amount; }
           break;
+        // The note explains the trait; the sheet field is what the damage
+        // engine reads. Writing only the note (which is all this used to do)
+        // left a paid-for Environmental Resistance doing nothing at the table.
         case 'envResist':
-          if (choice) row.notes = `+4 to resist ${choice}, and 4 less damage from it.`;
+          if (choice) {
+            row.notes = `+4 to resist ${choice}, and 4 less damage from it.`;
+            const dtype = ENVIRONMENT_DAMAGE_TYPE[choice];
+            if (dtype) resistTypes.push(dtype);
+          }
           break;
         case 'envWeak':
-          if (choice) row.notes = `−4 to resist ${choice}, and +4 damage from it.`;
+          if (choice) {
+            row.notes = `−4 to resist ${choice}, and +4 damage from it.`;
+            const dtype = ENVIRONMENT_DAMAGE_TYPE[choice];
+            if (dtype) vulnerableTypes.push(dtype);
+          }
           break;
-        case 'immunity':
+        // An immunity is not a resistance: it belongs in the field that zeroes
+        // the damage, not the one that shifts it by four.
+        case 'immunity': {
+          const dtype = choice ? ENVIRONMENT_DAMAGE_TYPE[choice] : '';
+          if (dtype) immuneTypes.push(dtype);
+          break;
+        }
         case 'construct':
-          if (choice) resistTypes.push(choice);
-          break;
-        case 'resist':
-          if (choice) resistTypes.push(choice);
-          break;
-        case 'vulnerable':
-          if (choice) vulnerableTypes.push(choice);
+          // Immune to poison and to disease; poison is the half of that the
+          // damage engine can actually match an attack against.
+          immuneTypes.push('poison');
           break;
         case 'grantEdge':
         case 'grantPower':
@@ -655,6 +679,7 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
   sheet.darkvision = darkvisionBonus;
   if (resistTypes.length) sheet.resist = resistTypes.join(', ');
   if (vulnerableTypes.length) sheet.vulnerable = vulnerableTypes.join(', ');
+  if (immuneTypes.length) sheet.immune = immuneTypes.join(', ');
 
   sheet.racialTraits = racialTraitRows;
 

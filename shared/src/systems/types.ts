@@ -4,7 +4,12 @@
 
 import type { AoeSpec, SheetData, VisionStats } from '../types.js';
 
-export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'image' | 'color';
+/**
+ * `multiselect` holds any number of `options`, stored as one comma-separated
+ * string so it stays the same shape on the sheet a plain text field had —
+ * every reader of these lists already splits on commas.
+ */
+export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'multiselect' | 'image' | 'color';
 
 export interface FieldDef {
   id: string;

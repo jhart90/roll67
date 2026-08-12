@@ -206,6 +206,9 @@ const TERMS_SWN: Record<string, string> = {
 // ---------- SWADE sheet-only labels ----------
 
 const SWADE_SHEET: Record<string, string> = {
+  'Environmental Resistance': 'Kinds of energy or substance this creature shrugs off: damage of that type comes in 4 lower, and it rolls +4 to resist matching hazards. Four points is one raise — one Wound less from every such hit, however hard it lands.',
+  'Environmental Weakness': 'Kinds of energy or substance this creature suffers from: damage of that type comes in 4 higher, and it rolls −4 to resist matching hazards.',
+  Immunity: 'Kinds of damage that do nothing at all to this creature — no damage and no Stun from that source.',
   Wounds: 'Injuries taken. Each Wound is −1 to every trait roll (max −3); a fourth takes a Wild Card out of the fight.',
   Fatigue: 'Exhaustion from strain, poison, or cold. Each level is −1 to trait rolls; two levels leave you Incapacitated.',
   'Wound/Fatigue penalty': 'The running total your Wounds and Fatigue subtract from every trait roll — applied automatically.',

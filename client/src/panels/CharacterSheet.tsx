@@ -118,6 +118,42 @@ function FieldInput({
     );
   }
 
+  if (field.type === 'multiselect') {
+    // Stored as one comma-separated string, the same shape the plain text
+    // field it replaces used, so nothing downstream had to change. Values
+    // already on a sheet that are no longer offered still show as chips and
+    // can still be removed — a schema that drops an option must never strand
+    // a creature holding it.
+    const picked = String(value ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const remaining = (field.options ?? []).filter((o) => o && !picked.includes(o));
+    const set = (list: string[]) => onPatch({ [field.id]: list.join(', ') });
+    return (
+      <label className={`sheet-field w-${field.width ?? 'full'} multiselect-field`}>
+        <span><SheetTerm system={system} label={field.label} />{derivedBadge && <span className="derived-badge">{derivedBadge}</span>}</span>
+        <span className="ms-row">
+          {picked.map((p) => (
+            <span key={p} className="ms-chip">
+              {field.optionLabels?.[p] ?? p}
+              {!readOnly && (
+                <button type="button" title={`Remove ${p}`} onClick={() => set(picked.filter((x) => x !== p))}>×</button>
+              )}
+            </span>
+          ))}
+          {!readOnly && remaining.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => { if (e.target.value) set([...picked, e.target.value]); }}
+            >
+              <option value="">{picked.length ? '+ add…' : 'none — add…'}</option>
+              {remaining.map((o) => <option key={o} value={o}>{field.optionLabels?.[o] ?? o}</option>)}
+            </select>
+          )}
+          {readOnly && picked.length === 0 && <span className="dim">none</span>}
+        </span>
+      </label>
+    );
+  }
+
   if (field.type === 'textarea') {
     return (
       <label className={`sheet-field w-full`}>

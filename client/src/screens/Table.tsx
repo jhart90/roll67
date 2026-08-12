@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { intents, useGameStore, wireSocket, type DockTab, type Tool, type TerrainBrush } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { MapStage } from '../table/MapStage';
+import { BennyFlip } from '../table/BennyFlip';
 import { MapManager } from '../table/dm/MapManager';
 import { TokenInspector } from '../table/TokenInspector';
 import { LightInspector } from '../table/LightInspector';
@@ -510,6 +511,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
       <TableToasts />
       <RollCallout />
+      <BennyFlip />
     </div>
   );
 }

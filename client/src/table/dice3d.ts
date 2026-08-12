@@ -311,7 +311,7 @@ function luminance(rgb: [number, number, number]): number {
 
 // ---------- simulation ----------
 
-interface DieSim {
+export interface DieSim {
   die: DieRoll;
   geom: DieGeometry;
   targetFace: Face;
@@ -338,6 +338,15 @@ interface DieSim {
   via?: { x: number; y: number };
   /** Where in the flight (0..1 of eased progress) it meets that wall. */
   viaAt?: number;
+  /**
+   * Paints this die's faces itself instead of the rolled numeral. Called once
+   * per visible labelled face, inside the same face-plane transform the number
+   * would have used, so whatever it draws foreshortens and turns with the die.
+   * `r` is the face's outer radius in that space; draw relative to it.
+   *
+   * The Benny coin is the one user: a d2 carrying a device on each side.
+   */
+  faceArt?: (ctx: CanvasRenderingContext2D, value: number, r: number) => void;
 }
 
 /** The walls dice carom off: the playable map, not the whole window. */
@@ -622,6 +631,79 @@ export function estimateDiceAnimMs(dice: DieRoll[]): number {
   // However wild the chain, never leave the chat waiting on the dice forever.
   // The read pause makes long chains slower, so the ceiling has room to match.
   return Math.min(latest, 20000);
+}
+
+// ---------- the Benny coin ----------
+
+/** The metal a Benny is struck from, and the shade its device is stamped in. */
+export const BENNY_GOLD = '#e8b73a';
+export const BENNY_INK = '#5c430b';
+
+/** Toss, tumble, and land. Slower than a die: a Benny is a real cost, and the
+ *  table should watch it land rather than catch it out of the corner of an eye. */
+const BENNY_FLY_MS = 1900;
+/** How long the words sit readable once the coin has settled. */
+const BENNY_HOLD_MS = 1800;
+/** The fade that takes the whole thing off screen. */
+export const BENNY_FADE_MS = 550;
+/** When the coin lands, in the flip's own clock — the CSS times off this. */
+export const BENNY_LAND_MS = BENNY_FLY_MS;
+/** The flip, end to end. */
+export const BENNY_FLIP_MS = BENNY_FLY_MS + BENNY_HOLD_MS + BENNY_FADE_MS;
+
+/**
+ * The Benny coin, thrown as the d2 it already is.
+ *
+ * The d2 in this set is a real 14-sided-rim coin model, so a Benny gets the
+ * dice's own throw — the arc in from off screen, the tumble decaying onto the
+ * face that landed, the bounce, the shadow, the landing pop — instead of an
+ * animation of its own. Only three things differ from an ordinary die: it is
+ * much bigger, it flips end over end about a level axis the way a tossed coin
+ * does rather than tumbling about a random one, and its faces carry devices
+ * (passed in by the caller) instead of a 1 and a 2.
+ *
+ * `ace` is set so the shared aced-die flash fires the moment it lands: a
+ * Benny going off in gold is exactly what that effect already draws.
+ */
+export function buildBennySim(
+  w: number, h: number, face: 'benny' | 'csb',
+  faceArt: (ctx: CanvasRenderingContext2D, value: number, r: number) => void,
+): DieSim[] {
+  const value = face === 'benny' ? 1 : 2;
+  const geom = geometryFor(2);
+  const size = Math.max(66, Math.min(118, Math.min(w, h) * 0.1));
+  // Dead centre, a little above the middle: this is the only thing on screen,
+  // and the words it reveals hang underneath it.
+  const target = { x: w / 2, y: h * 0.44 };
+  const fromLeft = Math.random() < 0.5;
+  const start = {
+    x: fromLeft ? -size * 2 : w + size * 2,
+    y: target.y + 190 + Math.random() * 130,
+  };
+  // A tossed coin turns about an axis lying IN its own face — nearly so here,
+  // with a little lean, which is what stops it looking mechanical.
+  const spinTilt = Math.random() * Math.PI * 2;
+  return [{
+    die: { sides: 2, value, kept: true, ace: true },
+    geom,
+    targetFace: geom.faces[targetFaceIndex(geom, value)],
+    rgb: hexToRgb(BENNY_GOLD),
+    textColor: BENNY_INK,
+    size,
+    start,
+    target,
+    delay: 0,
+    dur: BENNY_FLY_MS,
+    fadeAt: Infinity,
+    qTarget: targetOrientation(geom, value),
+    spinAxis: norm(v3(Math.cos(spinTilt), Math.sin(spinTilt), 0.14)),
+    // Few enough turns to read as a heavy coin going over and over, not a
+    // token spinning.
+    spinTotal: Math.PI * 2 * (4.5 + Math.random() * 1.5) * (fromLeft ? 1 : -1),
+    bounceH: 230,
+    aceStyle: 'flash',
+    faceArt,
+  }];
 }
 
 // ---------- rendering ----------
@@ -1238,7 +1320,11 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number, onAce?
       ctx.save();
       // Post-multiply so the canvas's own DPR scaling stays in effect.
       ctx.transform(u3.x * k, u3.y * k, v3r.x * k, v3r.y * k, c2.x, c2.y);
-      if (sim.die.sides === 6) {
+      if (sim.faceArt) {
+        // Model unit 1 lands at `size` px, and this space is scaled by k, so
+        // the face's own radius is 1/k of a model unit here.
+        sim.faceArt(ctx, Number(f.label), 24 / f.textSize);
+      } else if (sim.die.sides === 6) {
         drawPips(ctx, Number(f.label), sim.textColor);
       } else {
         ctx.textAlign = 'center';

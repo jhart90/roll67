@@ -787,6 +787,8 @@ export const S2C = {
   OPEN_CREATOR: 'openCreator',
   TABLES: 'tables',
   TABLE_RESULT: 'tableResult',
+  /** SWADE: someone spent a Benny — flip the coin on every screen. */
+  BENNY_FLIP: 'bennyFlip',
   /** "X is rolling to evade!" — says whose roll is coming BEFORE the
    *  result lands, so a group save isn't a silent wall of cards. */
   ROLL_CALLOUT: 'rollCallout',
@@ -974,6 +976,22 @@ export interface AoeBurstPayload {
   mapId: string; shape: AoeShape; sizeFt: number; sizeHexes?: number; widthFt?: number;
   originHex: Hex; aimHex: Hex; damageType?: string; flightMs: number;
 }
+/**
+ * A Benny being spent, shown as a coin flip on every screen at the table.
+ *
+ * The landing face is decided HERE rather than on each client: it is a coin
+ * everyone is watching, and two people seeing it land differently would make
+ * it obvious the flip is decoration.
+ */
+export interface BennyFlipPayload {
+  /** Whose Benny — the character, not the account. */
+  name: string;
+  /** What it bought, as a phrase: "to Recover from Shaken". */
+  reason: string;
+  /** Which side lands up. */
+  face: 'benny' | 'csb';
+}
+
 /** Announces the roll that is about to happen, on everyone's screen. */
 export interface RollCalloutPayload {
   /** Whose roll it is — shown large. */

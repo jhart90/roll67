@@ -11,13 +11,13 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
 import { readMapColors, readTheme, saveMapColors, saveTheme, type MapColors, type UiTheme } from '../util/appearance';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
-import { estimateDiceAnimMs } from '../table/dice3d';
+import { BENNY_FLIP_MS, estimateDiceAnimMs } from '../table/dice3d';
 
 /**
  * Serialized chat pipeline.
@@ -379,6 +379,8 @@ interface GameState {
   /** This device's own sound-effects volume (soundboard hits, dice rattles). */
   /** Whose roll is about to land, shown across the map. */
   rollCallout: { id: number; name: string; what: string } | null;
+  /** A Benny being spent — the coin flip everyone at the table watches. */
+  bennyFlip: { id: number; name: string; reason: string; face: 'benny' | 'csb' } | null;
   localSfxVolume: number;
   setLocalMusicVolume(v: number): void;
   setLocalSfxVolume(v: number): void;
@@ -554,6 +556,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aoeBursts: [],
   tableToasts: [],
   rollCallout: null,
+  bennyFlip: null,
   beginTargeting(characterId, sourceTokenId, action, adv, rof, calledShot) {
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
@@ -1252,6 +1255,17 @@ export function wireSocket(): void {
 
   socket.on(S2C.TABLES, ({ tables }: { tables: RollableTable[] }) => {
     useGameStore.setState({ tableList: tables });
+  });
+
+  socket.on(S2C.BENNY_FLIP, (p: BennyFlipPayload) => {
+    const id = ++pingCounter;
+    useGameStore.setState({ bennyFlip: { id, name: p.name, reason: p.reason, face: p.face } });
+    setTimeout(() => {
+      // Only clear our own flip: a second Benny spent while this one is still
+      // in the air replaces it, and must not be cut short by the first timer.
+      const cur = useGameStore.getState();
+      if (cur.bennyFlip?.id === id) useGameStore.setState({ bennyFlip: null });
+    }, BENNY_FLIP_MS);
   });
 
   socket.on(S2C.ROLL_CALLOUT, (p: RollCalloutPayload) => {

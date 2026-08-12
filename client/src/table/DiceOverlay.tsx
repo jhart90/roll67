@@ -114,7 +114,7 @@ const ACE_SOUNDS: Partial<Record<AceStyle, string[]>> = {
   confetti: ['confetti_1'],
 };
 
-function playAceSound(style: AceStyle): void {
+export function playAceSound(style: AceStyle): void {
   const pool = ACE_SOUNDS[style];
   if (!pool || pool.length === 0) return;
   const clip = pool[Math.floor(Math.random() * pool.length)];

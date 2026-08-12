@@ -652,6 +652,27 @@ interface GroupSaveSpec {
  * Returns null when the power does not go off, having already posted the card
  * and taken the one Power Point a failure costs. The caller stops there.
  */
+/** What each Benny buys, as the subheading the coin reveals. */
+const BENNY_REASON: Record<string, string> = {
+  'recover-shaken': 'to Recover from Shaken',
+  'reroll-trait': 'to reroll a Trait test',
+  'reroll-damage': 'to reroll damage',
+  'soak': 'to Soak Wounds',
+  'redraw': 'to redraw their Action Card',
+  'reroll': 'to reroll',
+};
+
+/**
+ * Flip the coin on every screen. The landing face is chosen here, not per
+ * client — everyone is watching the same coin, and two people seeing it land
+ * differently would give away that the flip is decoration.
+ */
+function flipBenny(io: Server, campaignId: string, name: string, reason: string): void {
+  io.to(campaignRoom(campaignId)).emit(S2C.BENNY_FLIP, {
+    name, reason, face: Math.random() < 0.5 ? 'benny' : 'csb',
+  });
+}
+
 function activatePower(
   io: Server, campaignId: string, userId: string, username: string, socket: Socket,
   actor: Character, action: CombatAction, undo: UndoEntry[], threadId?: number,
@@ -2879,6 +2900,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const breakdown = roll(expr);
     const removed = Math.min(offer.wounds, soakSuccesses(breakdown.total));
     const woundsAfter = Math.max(0, num(ch.sheet, 'wounds', 0) - removed);
+    // Soaking spends a Benny outside the Benny menu, so it needs the coin
+    // flipped here too — otherwise the one use that most deserves the
+    // table's attention would be the one it never sees.
+    flipBenny(io, d.campaignId, ch.name, 'to Soak Wounds');
     const patch: Record<string, unknown> = { bennies: bennies - 1 };
     if (removed > 0) patch.wounds = woundsAfter;
     let conds = conditionsOf(ch.sheet);
@@ -3085,9 +3110,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       emitError(socket, `${ch.name} has no Bennies left.`);
       return;
     }
-    const spendBenny = (extra: Record<string, unknown> = {}): Character =>
-      persistSheet(io, d.campaignId, characters.byId(ch.id) ?? ch,
+    const spendBenny = (extra: Record<string, unknown> = {}): Character => {
+      // Every use funnels through here, so this is the one place the coin has
+      // to be flipped from — no way to spend a Benny without the table seeing it.
+      flipBenny(io, d.campaignId, ch.name, BENNY_REASON[use] ?? 'to change their fate');
+      return persistSheet(io, d.campaignId, characters.byId(ch.id) ?? ch,
         { bennies: num((characters.byId(ch.id) ?? ch).sheet, 'bennies', 0) - 1, ...extra });
+    };
     const postRoll = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean) => {
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: ch.name, characterId: ch.id, kind: 'roll', text,

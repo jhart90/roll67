@@ -20,7 +20,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -830,6 +830,42 @@ function isPlayerSideToken(tokenId: string): boolean {
   const tok = tokens.byId(tokenId);
   const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
   return !!ch?.ownerUserId;
+}
+
+/**
+ * Put a Soak result on the sheet: the Wounds it took back, the Shaken it
+ * clears when it soaks the lot, and standing up again if that brought the
+ * character under their Wound cap.
+ *
+ * `alreadyRemoved` is what an earlier roll on this SAME attack already took
+ * off, so a Benny reroll applies only the difference — soaking twice for the
+ * same two Wounds would heal four.
+ */
+function applySoakResult(
+  io: Server, campaignId: string, ch: Character,
+  offerWounds: number, total: number, alreadyRemoved: number, benniesLeft?: number,
+): { removed: number; woundsAfter: number } {
+  const fresh = characters.byId(ch.id) ?? ch;
+  const removed = Math.max(alreadyRemoved, Math.min(offerWounds, soakSuccesses(total)));
+  const extra = removed - alreadyRemoved;
+  const woundsAfter = Math.max(0, num(fresh.sheet, 'wounds', 0) - extra);
+  const patch: Record<string, unknown> = {};
+  if (benniesLeft !== undefined) patch.bennies = benniesLeft;
+  if (extra > 0) patch.wounds = woundsAfter;
+  let conds = conditionsOf(fresh.sheet);
+  if (removed === offerWounds && removed > 0) conds = conds.filter((c) => c !== 'shaken');
+  // Soaking back under the cap stands you up again — the cap, not a flat 3,
+  // or a Huge creature would stay down at 4 Wounds it can actually carry.
+  const soakCap = swadeWoundCap({
+    wildCard: fresh.sheet.wildCard !== false,
+    size: num(fresh.sheet, 'size', 0),
+    override: num(fresh.sheet, 'maxWoundsOverride', 0),
+    resilient: str(fresh.sheet, 'resilient', ''),
+  });
+  if (woundsAfter <= soakCap) conds = conds.filter((c) => c !== 'incapacitated' && c !== 'bleeding');
+  patch.conditions = conds;
+  persistSheet(io, campaignId, fresh, patch);
+  return { removed, woundsAfter };
 }
 
 /** What each Benny buys, as the subheading the coin reveals. */
@@ -1773,6 +1809,19 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // expression, so only positional and target-side effects apply here.
         let mod = 0;
         const tags: string[] = [];
+        // A healer works against the patient's own condition: their Wound
+        // levels come off the Healing roll. It cannot be baked into the
+        // expression the sheet builds — that is written before anyone has
+        // been picked to treat — so it lands here, where the patient is
+        // known. Without it, patching up a dying casualty was as easy as
+        // dressing a scratch.
+        if (action.healsWounds && targetChar?.system === 'swade') {
+          const hurt = Math.min(3, Math.max(0, num(targetChar.sheet, 'wounds', 0)));
+          if (hurt > 0) {
+            mod -= hurt;
+            tags.push(`−${hurt} patient's Wounds`);
+          }
+        }
         // The adv slot is repurposed: melee 'adv' is a Wild Attack (+2 to
         // hit AND damage, but you're Vulnerable), ranged 'adv' is Aim (+2).
         if (p.adv === 'adv' && !action.ranged) {
@@ -3224,27 +3273,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // penalty by the wounds in this offer.
     const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')), offer.wounds);
     const breakdown = roll(expr);
-    const removed = Math.min(offer.wounds, soakSuccesses(breakdown.total));
-    const woundsAfter = Math.max(0, num(ch.sheet, 'wounds', 0) - removed);
     // Soaking spends a Benny outside the Benny menu, so it needs the coin
     // flipped here too — otherwise the one use that most deserves the
     // table's attention would be the one it never sees.
     flipBenny(io, d.campaignId, ch.name, 'to Soak Wounds');
-    const patch: Record<string, unknown> = { bennies: bennies - 1 };
-    if (removed > 0) patch.wounds = woundsAfter;
-    let conds = conditionsOf(ch.sheet);
-    if (removed === offer.wounds && removed > 0) conds = conds.filter((c) => c !== 'shaken');
-    // Soaking back under the cap stands you up again — the cap, not a flat 3,
-    // or a Huge creature would stay down at 4 Wounds it can actually carry.
-    const soakCap = swadeWoundCap({
-      wildCard: ch.sheet.wildCard !== false,
-      size: num(ch.sheet, 'size', 0),
-      override: num(ch.sheet, 'maxWoundsOverride', 0),
-      resilient: str(ch.sheet, 'resilient', ''),
-    });
-    if (woundsAfter <= soakCap) conds = conds.filter((c) => c !== 'incapacitated' && c !== 'bleeding');
-    patch.conditions = conds;
-    persistSheet(io, d.campaignId, ch, patch);
+    const { removed, woundsAfter } = applySoakResult(io, d.campaignId, ch, offer.wounds, breakdown.total, 0, bennies - 1);
+    // The Soak is a Vigor roll like any other, and the book lets a Benny
+    // reroll it. Recorded with the offer so the reroll can take MORE wounds
+    // off this same attack rather than just print a better number.
+    recordSoakRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, expr, breakdown.total, offer.wounds, removed);
     const text = removed > 0
       ? `${ch.name} spends a Benny to Soak — ${removed} Wound${removed === 1 ? '' : 's'} soaked (now ${woundsAfter})${removed === offer.wounds ? ', no longer Shaken' : ''}`
       : `${ch.name} spends a Benny to Soak — Vigor roll fails, the wounds stand`;
@@ -3509,6 +3546,26 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         spendBenny();
         const b = roll(rec.expr);
         const better = b.total > rec.total;
+        // A Soak reroll is not just a better number on a card: the same
+        // attack's Wounds come off for real. Keep whichever roll went
+        // further, apply only what the first one did not, and re-record so a
+        // second Benny can push it further still.
+        if (rec.soak) {
+          const best = Math.max(rec.total, b.total);
+          const { removed, woundsAfter } = applySoakResult(
+            io, d.campaignId, ch, rec.soak.offerWounds, best, rec.soak.removed,
+          );
+          const gained = removed - rec.soak.removed;
+          recordSoakRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, rec.expr, best, rec.soak.offerWounds, removed);
+          postRoll(
+            `🪙 ${ch.name} spends another Benny to reroll the Soak — ${b.total} vs the original ${rec.total}: `
+            + (gained > 0
+              ? `${gained} more Wound${gained === 1 ? '' : 's'} soaked (now ${woundsAfter})`
+              : 'no better — the wounds stand'),
+            b, gained > 0,
+          );
+          break;
+        }
         // The reroll stands beside the original; whichever is higher counts.
         // The reroll can itself come up a Critical Failure, and then the
         // attempt is over for good.

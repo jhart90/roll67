@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
-  playerColorFor, reachableAlong, roll, swadePace, systemFor,
+  playerColorFor, reachableAlong, roll, str, swadePace, systemFor,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type MoveTokenPayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
@@ -395,12 +395,17 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     swadeTurnMoves.set(d.campaignId, per);
     const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
     if (rec.runBonus !== null) return; // already spent the running die
-    const br = roll('1d6');
+    // The character's OWN running die, and it Aces like any other die in this
+    // game. A d6 for most people, but Fleet-Footed and several ancestries step
+    // it up — and hardcoding a d6 here quietly threw that away, along with the
+    // wild sprint an Ace is supposed to allow.
+    const die = str(character.sheet, 'runningDie', 'd6') || 'd6';
+    const br = roll(`1${die}!`);
     rec.runBonus = br.total;
     per.set(tokenId, rec);
     const msg = chat.add(d.campaignId, {
       userId: d.userId, fromName: d.username, fromCharacter: character.name, characterId: character.id, kind: 'roll',
-      text: `🏃 ${character.name} runs — +${br.total} Pace this turn (−2 to their other actions).`,
+      text: `🏃 ${character.name} runs (${die}) — +${br.total} Pace this turn (−2 to their other actions).`,
       roll: br, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });

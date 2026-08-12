@@ -526,6 +526,10 @@ export interface BennyRollRec {
    *  explicit that it ends the attempt and must be accepted. Recorded with
    *  the roll so the Benny menu can refuse rather than take the chip. */
   critFail?: boolean;
+  /** This trait roll was a Soak. Rerolling one is not just a better number:
+   *  it takes MORE Wounds off the same attack, so the reroll has to know
+   *  what the attack offered and what the first roll already removed. */
+  soak?: { offerWounds: number; removed: number };
 }
 export const lastBennyRolls = new Map<string, { trait?: BennyRollRec; damage?: BennyRollRec }>();
 const BENNY_REROLL_TTL_MS = 5 * 60_000;
@@ -556,6 +560,23 @@ export function recordBennyRoll(
   if (ch.system !== 'swade') return;
   const rec = lastBennyRolls.get(ch.id) ?? {};
   rec[kind] = { expr, total, label, at: Date.now(), ...(critFail ? { critFail: true } : {}) };
+  lastBennyRolls.set(ch.id, rec);
+  emitBennyState(io, ch);
+}
+
+/**
+ * Record a Soak as the trait roll a Benny may reroll. The book allows it in
+ * so many words — "may spend Bennies as usual to reroll the Vigor check if
+ * they aren't satisfied" — and it is the one reroll a player most wants,
+ * because the alternative is lying there Incapacitated.
+ */
+export function recordSoakRoll(
+  io: Server, campaignId: string, ch: Character,
+  expr: string, total: number, offerWounds: number, removed: number,
+): void {
+  if (ch.system !== 'swade') return;
+  const rec = lastBennyRolls.get(ch.id) ?? {};
+  rec.trait = { expr, total, label: 'their Soak roll', at: Date.now(), soak: { offerWounds, removed } };
   lastBennyRolls.set(ch.id, rec);
   emitBennyState(io, ch);
 }

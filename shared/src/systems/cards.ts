@@ -1,7 +1,11 @@
 // SWADE action-deck initiative: a 54-card deck (52 + red/black jokers).
-// Aces are high; jokers beat aces. Ties in rank break by draw order (the
-// earlier draw acts first). Pure functions + injectable RNG so the server
-// deals authoritatively and everything is unit-testable.
+// Aces are high; jokers beat aces. Pure functions + injectable RNG so the
+// server deals authoritatively and everything is unit-testable.
+//
+// HOUSE RULE, deliberate: ties in rank break by DRAW ORDER — whoever drew
+// first acts first — where the book breaks them by suit (♠ > ♥ > ♦ > ♣).
+// Every card here carries its suit, so the book's rule is a two-line change
+// if it is ever wanted; this is a choice, not an oversight. Please leave it.
 
 import type { RNG } from '../dice/roller.js';
 

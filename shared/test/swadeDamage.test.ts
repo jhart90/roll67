@@ -97,6 +97,35 @@ describe('swadeDamageOutcome', () => {
   });
 });
 
+/**
+ * A Soak reroll takes MORE Wounds off the same attack — it does not soak the
+ * attack twice. The arithmetic that keeps it honest is "best roll so far,
+ * minus what the first roll already removed".
+ */
+describe('soaking again with a second Benny', () => {
+  const soakedBy = (offerWounds: number, total: number, already: number) => {
+    const removed = Math.max(already, Math.min(offerWounds, soakSuccesses(total)));
+    return { removed, extra: removed - already };
+  };
+
+  it('only applies the difference when the reroll is better', () => {
+    // First roll soaked one of three; a reroll worth two takes one more off.
+    expect(soakedBy(3, 8, 1)).toEqual({ removed: 2, extra: 1 });
+  });
+
+  it('changes nothing when the reroll is worse', () => {
+    expect(soakedBy(3, 4, 2)).toEqual({ removed: 2, extra: 0 });
+  });
+
+  it('never soaks more Wounds than the attack dealt', () => {
+    expect(soakedBy(2, 20, 0)).toEqual({ removed: 2, extra: 2 });
+  });
+
+  it('is a no-op on a failed reroll of a failed soak', () => {
+    expect(soakedBy(3, 3, 0)).toEqual({ removed: 0, extra: 0 });
+  });
+});
+
 describe('soakSuccesses', () => {
   it('success at 4, one more per raise', () => {
     expect(soakSuccesses(3)).toBe(0);

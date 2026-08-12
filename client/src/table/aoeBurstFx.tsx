@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { GridConfig, Hex } from 'shared';
 import { coneTemplatePath, hexToPixel } from 'shared';
 import { Projectile, impactColor, projectileShape } from './impactFx';
+import { AoeBurstAce, aceStyleForBurst } from './AoeBurstAce';
 
 export interface AoeBurstState {
   id: number;
@@ -68,13 +69,31 @@ export function AoeBurst({ burst, grid }: { burst: AoeBurstState; grid: GridConf
     : burst.sizeFt * pxPerFt;
 
   if (burst.shape === 'sphere' || burst.shape === 'cylinder') {
+    // A grenade, a fireball or a smoke bomb is drawn with the dice's own Ace
+    // animation, scaled to the template — the same function, so the two can
+    // never drift apart. Anything with no matching Ace style keeps the plain
+    // coloured shockwave.
+    const ace = aceStyleForBurst(burst);
     return (
       <>
         <g transform={`translate(${origin.x}, ${origin.y})`}>
           <Projectile dx={aim.x - origin.x} dy={aim.y - origin.y} color={color} flightMs={burst.flightMs} shape={projectileShape(burst.damageType)} />
         </g>
         <g transform={`translate(${aim.x}, ${aim.y})`}>
-          <BurstSphere radiusPx={sizePx} color={color} delayMs={burst.flightMs} />
+          {ace
+            // foreignObject rather than a floating div: the Ace effect is
+            // canvas and the map is SVG, and this is what keeps it inside the
+            // map's own pan and zoom instead of drifting when either changes.
+            ? (
+              <foreignObject
+                x={-sizePx * 1.5} y={-sizePx * 1.5}
+                width={Math.ceil(sizePx * 3)} height={Math.ceil(sizePx * 3)}
+                style={{ overflow: 'visible', pointerEvents: 'none' }}
+              >
+                <AoeBurstAce burst={burst} radiusPx={sizePx} style={ace} />
+              </foreignObject>
+            )
+            : <BurstSphere radiusPx={sizePx} color={color} delayMs={burst.flightMs} />}
         </g>
       </>
     );

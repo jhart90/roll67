@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  blastSoundClip, blastSoundPool, blastSoundVolume, blastTemplate,
+  blastAceStyle, blastSoundClip, blastSoundPool, blastSoundVolume, blastTemplate,
 } from '../src/systems/blastSound.js';
 import { CONTENT_SWADE } from '../src/data/contentSwade.js';
 
@@ -65,6 +65,35 @@ describe('choosing from the pool', () => {
   it('never runs off the end of the pool', () => {
     expect(blastSoundClip(3, 'kinetic', 1)).toBe('explosion_4');
     expect(blastSoundClip(3, 'kinetic', 0)).toBe('explosion_1');
+  });
+});
+
+describe('the picture matches the noise', () => {
+  // One family decides both, so a burst that hisses can never also look like
+  // a fireball.
+  it.each([
+    ['kinetic', 'explosion'],
+    ['force', 'explosion'],
+    ['fire', 'flames'],
+    ['cold', 'water'],
+    ['poison', 'smoke'],
+    ['radiant', 'flash'],
+  ])('draws %s as the %s Ace', (type, style) => {
+    expect(blastAceStyle(3, type)).toBe(style);
+  });
+
+  it('gives a smoke grenade the smoke Ace, not an explosion', () => {
+    expect(blastAceStyle(5, '')).toBe('smoke');
+    expect(blastAceStyle(5, undefined)).toBe('smoke');
+  });
+
+  // The big bang is still an explosion — only the clip changes at that size.
+  it('keeps the Large Blast Template on the explosion Ace', () => {
+    expect(blastAceStyle(5, 'kinetic')).toBe('explosion');
+  });
+
+  it('only dresses up round templates’ own families it knows', () => {
+    expect(blastAceStyle(3, 'necrotic')).toBe('smoke');
   });
 });
 

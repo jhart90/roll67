@@ -364,7 +364,7 @@ export const ACE_GAP_MS = ACE_FLASH_MS + ACE_READ_PAUSE_MS;
  * keeps fluttering while the next die is already in the air — which is what
  * real confetti does.
  */
-function aceEffectMs(style: AceStyle): number {
+export function aceEffectMs(style: AceStyle): number {
   return style === 'confetti' ? 2800 : ACE_FLASH_MS;
 }
 /** Stagger between dice thrown in the same wave. */
@@ -661,7 +661,7 @@ function drawPips(ctx: CanvasRenderingContext2D, value: number, color: string): 
  * `phase` runs 0 → 1 across ACE_FLASH_MS. Fading out by the end is each
  * style's own job; the caller restores alpha afterwards either way.
  */
-function drawAceEffect(
+export function drawAceEffect(
   ctx: CanvasRenderingContext2D, style: AceStyle, phase: number, cx: number, cy: number, size: number,
 ): void {
   const fade = 1 - phase;

@@ -76,6 +76,28 @@ export function blastSoundClip(
   return pool[i]!;
 }
 
+/**
+ * The dice's own Ace animation to play over a blast template.
+ *
+ * A grenade going off on the map and an aced die going off in the tray are
+ * the same event to look at, so they use the same drawing — scaled to the
+ * template instead of to a die. Deliberately keyed off the SAME family as the
+ * sound: a burst that hisses should not also look like a fireball.
+ *
+ * null for families with no matching Ace style, which keeps the plain
+ * shockwave those already had.
+ */
+export function blastAceStyle(sizeHexes: number | undefined, damageType: string | undefined): string | null {
+  const pool = blastSoundPool(sizeHexes, damageType);
+  const first = pool[0] ?? '';
+  if (first.startsWith('explosion') || first === 'huge_explosion') return 'explosion';
+  if (first.startsWith('fire')) return 'flames';
+  if (first.startsWith('smoke')) return 'smoke';
+  if (first.startsWith('water')) return 'water';
+  if (first.startsWith('shine')) return 'flash';
+  return null;
+}
+
 /** Louder for the bigger templates — a Large Blast should feel like one. */
 export function blastSoundVolume(sizeHexes: number | undefined): number {
   switch (blastTemplate(sizeHexes)) {

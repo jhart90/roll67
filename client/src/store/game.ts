@@ -462,7 +462,10 @@ function playBlastSound(sizeHexes: number | undefined, damageType: string | unde
 // How long an AoE burst/ripple's own expansion-and-fade plays once it starts
 // (after any projectile flight for sphere/cylinder shapes) -- see
 // client/src/table/CombatTextLayer.tsx's aoe-burst CSS animation.
-const AOE_BURST_MS = 750;
+// How long a burst stays mounted after it lands. Long enough for the slowest
+// Ace animation a template can use — the burst is drawn with the dice's own
+// effect now, and unmounting mid-explosion would cut it off in the middle.
+const AOE_BURST_MS = 2000;
 
 export const useGameStore = create<GameState>((set, get) => ({
   connected: false,

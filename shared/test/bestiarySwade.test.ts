@@ -54,8 +54,14 @@ describe('SWADE bestiary', () => {
 
   it('keeps Toughness and Parry in sane ranges', () => {
     for (const npc of NPCS_SWADE) {
+      // SWADE has no hit points: the entry's `hp` field carries derived
+      // Toughness, so these are Toughness bounds — a range a damage roll can
+      // plausibly reach, not a pool. Nothing in the book goes past the low
+      // twenties (the heaviest thing here is a main battle tank at 20).
       expect(npc.hp, `${npc.name} Toughness`).toBeGreaterThan(0);
-      expect(npc.hp, `${npc.name} Toughness`).toBeLessThanOrEqual(60);
+      expect(npc.hp, `${npc.name} Toughness`).toBeLessThanOrEqual(24);
+      expect(npc.sheet.hp, `${npc.name} must not carry hit points`).toBeUndefined();
+      expect(npc.sheet.maxHp, `${npc.name} must not carry hit points`).toBeUndefined();
       expect(npc.ac, `${npc.name} Parry`).toBeGreaterThanOrEqual(0);
     }
   });
@@ -82,7 +88,8 @@ describe('SWADE bestiary', () => {
     const novice = dinos.filter((n) => n.challenge <= 2);
     expect(novice.length).toBeGreaterThan(dinos.length / 2);
     for (const d of novice) {
-      expect(d.hp, `${d.name} is too tough for Novices`).toBeLessThanOrEqual(18);
+      // Toughness 13 is the ceiling a Novice's damage die can still ace past.
+      expect(d.hp, `${d.name} is too tough for Novices`).toBeLessThanOrEqual(13);
       const armor = (d.sheet.armor ?? []) as Array<{ armor?: number }>;
       const worst = Math.max(0, ...armor.map((a) => a.armor ?? 0));
       expect(worst, `${d.name} armor outclasses Novice damage`).toBeLessThanOrEqual(5);
@@ -107,7 +114,8 @@ describe('SWADE bestiary', () => {
     const attacks = (boss!.sheet.attacks ?? []) as Array<{ name: string; damage: string }>;
     // A melee threat, an area attack, a ranged option and a fear effect.
     expect(attacks.length).toBeGreaterThanOrEqual(4);
-    expect(boss!.hp).toBeGreaterThan(35);
+    // Toughness, not a pool: heavy plating over a d12 Vigor frame.
+    expect(boss!.hp).toBeGreaterThanOrEqual(16);
     expect(String(boss!.sheet.notes ?? '')).toMatch(/[Ww]eak point/);
   });
 
@@ -147,7 +155,9 @@ describe('SWADE bestiary', () => {
     it('keeps every Extra inside a Novice party’s reach', () => {
       expect(extras.length).toBeGreaterThanOrEqual(20);
       for (const e of extras) {
-        expect(e.hp, `${e.name} is too tough for an Extra`).toBeLessThanOrEqual(16);
+        // Toughness 7 is a d6 damage roll plus a Strength die away — reachable
+        // by any starting hero without needing an ace.
+        expect(e.hp, `${e.name} is too tough for an Extra`).toBeLessThanOrEqual(7);
         // Parry 7+ on a mook means a Novice needs a raise to touch it.
         expect(e.ac, `${e.name} out-parries a starting hero`).toBeLessThanOrEqual(6);
         const armor = (e.sheet.armor ?? []) as Array<{ armor?: number }>;
@@ -158,7 +168,9 @@ describe('SWADE bestiary', () => {
     it('keeps the pirate captain the hardest thing in the set', () => {
       const boss = spice.find((n) => n.name === 'Pirate Captain')!;
       const others = spice.filter((n) => n.name !== 'Pirate Captain' && !/Indiaman|Brigantine/.test(n.name));
+      // Toughest Toughness and the best Fighting die on the wharf.
       expect(Math.max(...others.map((n) => n.hp))).toBeLessThan(boss.hp);
+      expect(Math.max(...others.map((n) => n.ac))).toBeLessThan(boss.ac);
       // A boss with one attack is a boss the party solves once and repeats.
       expect((boss.sheet.attacks as unknown[] ?? []).length).toBeGreaterThanOrEqual(3);
     });

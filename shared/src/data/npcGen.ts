@@ -210,13 +210,14 @@ export function generateNpc(system: GameSystem, rng: RNG = Math.random): Generat
     Object.assign(sheet, {
       concept: occupation, ancestry: pick(ANCESTRIES_SWADE, rng), rank: 'Novice', wildCard: false,
       agility: die(), smarts: die(), spirit: die(), strength, vigor: die(),
-      hp: 10, maxHp: 10, bennies: 0, pace: 6,
+      // No hp: SWADE has none. Toughness comes off the Vigor die above.
+      bennies: 0, pace: 6,
       age, height, weight, eyes, skin, hair,
       dollars: between(20, 400, rng),
       skills: [...coreSkills, ...skillPool.map((name) => ({ name, die: pick(TRAIT_DICE.slice(0, 3), rng), notes: '' }))],
       attacks: [{ name: 'Knife', skill: 'Fighting', damage: `1${strength}!+1d4!`, dtype: 'piercing', range: 5, notes: '' }],
       inventory: pickSome(GEAR_SWADE, 2, rng).map((g) => ({ name: g, qty: 1, weight: 0, notes: '' })),
-      notes: `Occupation: ${occupation}. ${personality[0]}, ${personality[1]}; has ${appearance}; ${quirk}. Hook: ${hook}.`,
+      bioPublic: `Occupation: ${occupation}. ${personality[0]}, ${personality[1]}; has ${appearance}; ${quirk}. Hook: ${hook}.`,
     });
     return { name, occupation, tags, sheet };
   }
@@ -239,7 +240,7 @@ export function generateNpc(system: GameSystem, rng: RNG = Math.random): Generat
     skills: skillPool.map((s) => ({ name: s, level: between(0, 1, rng), attr: pick(['str', 'dex', 'int', 'wis', 'cha'], rng), notes: '' })),
     attacks: [{ name: 'Knife', bonus: 0, damage: '1d4', notes: 'kinetic' }],
     inventory: pickSome(GEAR_SWN, 2, rng).map((g) => ({ name: g, qty: 1, enc: 1, notes: '' })),
-    notes: `Occupation: ${occupation}. ${personality[0]}, ${personality[1]}; has ${appearance}; ${quirk}.`,
+    bioPublic: `Occupation: ${occupation}. ${personality[0]}, ${personality[1]}; has ${appearance}; ${quirk}.`,
   });
   return { name, occupation, tags, sheet };
 }
@@ -880,13 +881,16 @@ export function generateNpcFromModel(entry: NpcEntry, rng: RNG = Math.random): G
   const sheet: SheetData = structuredClone(entry.sheet);
   const priorNotes = typeof sheet.bioPublic === 'string' ? sheet.bioPublic : '';
 
-  // HP/AC always exist on library sheets; ability scores only on 5e ones.
-  const hp = jitter(Number(sheet.maxHp ?? sheet.hp ?? entry.hp), 0.15, rng, 1);
-  sheet.hp = hp;
-  sheet.maxHp = hp;
-  // SWADE sheets have no manual AC (Parry is derived) or attack bonus, and
-  // trait dice don't jitter — only the HP pool above varies for them.
+  // HP and AC exist on 5e/SWN library sheets; ability scores only on 5e ones.
+  // A SWADE sheet has none of the three: Parry and Toughness are derived from
+  // trait dice and armor, and trait dice do not jitter — so a SWADE copy is
+  // the model's stat block wearing a different name, which is exactly what a
+  // named goon is. Writing hp here would put a hit-point pool on a system
+  // that has no hit points, and nothing would ever read it.
   if (entry.system !== 'swade') {
+    const hp = jitter(Number(sheet.maxHp ?? sheet.hp ?? entry.hp), 0.15, rng, 1);
+    sheet.hp = hp;
+    sheet.maxHp = hp;
     sheet.ac = jitter(Number(sheet.ac ?? entry.ac), 0.08, rng, 5);
   }
   if (entry.system === 'dnd5e') {

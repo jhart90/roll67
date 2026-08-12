@@ -28,7 +28,9 @@ describe('random NPC generator', () => {
   it('produces an SWN NPC with attributes, gear, and bio filled', () => {
     const npc = generateNpc('swn', seededRng(2));
     expect(npc.name).toBeTruthy();
-    for (const f of ['background', 'homeworld', 'species', 'goal', 'age', 'height', 'weight', 'notes']) {
+    // The generator's blurb lands on the public bio — the sheet's scratch
+    // Notes field is gone, and what it wrote there was never a secret.
+    for (const f of ['background', 'homeworld', 'species', 'goal', 'age', 'height', 'weight', 'bioPublic']) {
       expect(String(npc.sheet[f] ?? '').length, f).toBeGreaterThan(0);
     }
     expect(systemFor('swn').hp(npc.sheet).maxHp).toBeGreaterThan(0);

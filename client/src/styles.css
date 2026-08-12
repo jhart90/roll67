@@ -125,6 +125,28 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
 
+/* A colour input is a SWATCH, not a text field, and the blanket rule above
+   ruins it: full width plus 8px of padding leaves the colour showing as a
+   thin line inside a big empty box. Reset it once, here, so every picker in
+   the app shows the colour it is set to — the character sheet used to carry
+   a local fix for exactly this, which meant every OTHER picker was broken. */
+input[type="color"] {
+  width: 44px;
+  height: 26px;
+  flex: none;
+  margin-top: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+/* The swatch itself fills the control — without these the browser leaves its
+   own inset padding around it and the colour still reads as a stripe. */
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
+input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
+
 button {
   padding: 8px 14px;
   background: var(--panel-2);
@@ -2640,10 +2662,6 @@ th > .term { border-bottom-style: dotted; }
 
 /* Sheet colour picker (token colour). */
 .sheet-field.color-field .color-row { display: flex; align-items: center; gap: 8px; }
-.sheet-field.color-field input[type="color"] {
-  width: 44px; height: 26px; padding: 0; border: 1px solid var(--border);
-  border-radius: 5px; background: none; cursor: pointer;
-}
 .sheet-field.color-field .dim { font-size: 11px; font-variant-numeric: tabular-nums; }
 .public-sheet-bio h4 { margin: 8px 0 2px; }
 

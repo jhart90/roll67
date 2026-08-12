@@ -120,9 +120,13 @@ export function persistSheet(io: Server, campaignId: string, character: Characte
   if (updated.ownerUserId) io.to(userRoom(updated.ownerUserId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
 
   const hp = systemFor(updated.system).hp(updated.sheet);
+  // Conditions ride the token for the same reason the HP bar does: a player
+  // is never sent somebody else's sheet, and "that thing is Shaken" is public
+  // at a table — it is the badge over its head, not a secret on a page.
+  const conds = conditionsOf(updated.sheet);
   const touched = new Set<string>();
   for (const t of tokens.forCharacter(character.id)) {
-    tokens.update(t.id, { bar: hp });
+    tokens.update(t.id, { bar: hp, conditions: conds });
     io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(t.id)! });
     touched.add(t.mapId);
   }

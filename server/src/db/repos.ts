@@ -820,6 +820,7 @@ interface TokenRow {
   color: string;
   vision_json: string | null;
   bar_json: string | null;
+  conditions_json: string | null;
   light_json: string | null;
   /** From the LEFT JOIN in TOKEN_SELECT — the art asset's file extension. */
   art_ext: string | null;
@@ -848,6 +849,7 @@ function toToken(row: TokenRow): Token {
     color: row.color,
     vision: row.vision_json ? safeParse(row.vision_json, null) : null,
     bar: row.bar_json ? safeParse(row.bar_json, null) : null,
+    conditions: row.conditions_json ? safeParse<string[]>(row.conditions_json, []) : null,
     light: row.light_json ? safeParse(row.light_json, null) : null,
   };
 }
@@ -891,11 +893,12 @@ export const tokens = {
     name?: string; layer?: 'token' | 'gm'; size?: number; shape?: string; color?: string;
     characterId?: string | null; artAssetId?: string | null;
     vision?: object | null; bar?: object | null; light?: object | null;
+    conditions?: string[] | null;
   }): void {
     const cur = stmt('SELECT * FROM tokens WHERE id = ?').get(id) as TokenRow | undefined;
     if (!cur) return;
     stmt(
-      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?, light_json = ?, revealed_at = ?
+      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?, conditions_json = ?, light_json = ?, revealed_at = ?
        WHERE id = ?`,
     ).run(
       patch.name ?? cur.name,
@@ -907,6 +910,7 @@ export const tokens = {
       patch.artAssetId !== undefined ? patch.artAssetId : cur.art_asset_id,
       patch.vision !== undefined ? (patch.vision ? JSON.stringify(patch.vision) : null) : cur.vision_json,
       patch.bar !== undefined ? (patch.bar ? JSON.stringify(patch.bar) : null) : cur.bar_json,
+      patch.conditions !== undefined ? (patch.conditions ? JSON.stringify(patch.conditions) : null) : cur.conditions_json,
       patch.light !== undefined ? (patch.light ? JSON.stringify(patch.light) : null) : cur.light_json,
       // Crossing from the GM layer onto the visible one is a reveal: stamp it
       // so players fade the piece in rather than have it blink into being.

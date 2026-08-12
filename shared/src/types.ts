@@ -321,6 +321,11 @@ export interface Token {
   /** Explicit stats for NPC tokens; PC tokens derive from their character sheet. */
   vision: VisionStats | null;
   bar: { hp: number; maxHp: number } | null;
+  /** Condition ids to badge over the token, mirrored from the linked
+   *  character's sheet. On the TOKEN rather than read from the sheet because
+   *  a player is not sent other people's sheets, and being able to see that
+   *  the ogre is Shaken is the whole point of the badge. */
+  conditions?: string[] | null;
   /** When this token was moved onto the visible layer. Players fade it in over
    *  REVEAL_FADE_MS from this moment; null once the fade is ancient history. */
   revealedAt?: number | null;

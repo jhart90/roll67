@@ -52,15 +52,25 @@ function migrateAssetsAudioKind(): void {
 migrateAssetsAudioKind();
 
 // Additive migrations for databases created before a column existed.
-function ensureColumn(table: string, column: string, ddl: string): void {
+function ensureColumn(table: string, column: string, ddl: string): boolean {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-  if (!cols.some((c) => c.name === column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
-  }
+  if (cols.some((c) => c.name === column)) return false;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  return true;
 }
 ensureColumn('campaign_members', 'map_id', 'map_id TEXT');
 // What the "who is rolling" banner says while a roll's dice are in the air.
 ensureColumn('chat_messages', 'callout_json', 'callout_json TEXT');
+// The status badges over a token. Mirrored from the sheet like bar_json is,
+// because what is wrong with a creature is public at a table — the players
+// can SEE that the ogre is reeling — but sheets are not.
+if (ensureColumn('tokens', 'conditions_json', 'conditions_json TEXT')) {
+  // Backfill from the sheets so a campaign in progress does not have to wait
+  // for each character's next save before its players can see who is Shaken.
+  db.exec(`UPDATE tokens SET conditions_json = (
+             SELECT json_extract(c.sheet_json, '$.conditions') FROM characters c WHERE c.id = tokens.character_id
+           ) WHERE character_id IS NOT NULL`);
+}
 // SWADE: the GM's own Benny pool — one per player character each session,
 // plus whatever the villains' Jokers pay in.
 ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0');

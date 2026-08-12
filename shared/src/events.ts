@@ -161,6 +161,8 @@ export const C2S = {
   JUMP_ROLL: 'jumpRoll',
   /** SWADE: answer the crawl prompt — stand up, or stay down. */
   PRONE_MOVE: 'proneMove',
+  /** SWADE: the DM's answer to the aftermath prompt. */
+  AFTERMATH_ROLL: 'aftermathRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
@@ -832,6 +834,8 @@ export const S2C = {
   RUN_PROMPT: 'runPrompt',
   /** SWADE: a prone character is moving — stand up, or crawl? */
   CRAWL_PROMPT: 'crawlPrompt',
+  /** SWADE: the fight is over and Extras are lying there — roll for them? */
+  AFTERMATH_PROMPT: 'aftermathPrompt',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
@@ -1206,6 +1210,10 @@ export interface CrawlPromptPayload { tokenId: string; name: string; crawlPace: 
 /** SWADE: leap. `withRunUp` doubles the free distance (2″ of movement first);
  *  `athletics` spends the turn's action to roll for extra distance. */
 export interface JumpRollPayload { tokenId: string; withRunUp: boolean; athletics: boolean }
+/** DM-only: the fight ended with this many Incapacitated Extras on the floor. */
+export interface AftermathPromptPayload { names: string[] }
+/** Roll Vigor for each of them, or let the wounds finish what they started. */
+export interface AftermathRollPayload { roll: boolean }
 /** Their answer: get up, or stay down and crawl. */
 export interface ProneMovePayload { tokenId: string; mode: 'stand' | 'crawl' }
 export interface IronDicePayload {

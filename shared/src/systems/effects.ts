@@ -173,6 +173,61 @@ export const CONDITIONS: ConditionDef[] = [
 
 const CONDITION_MAP = new Map(CONDITIONS.map((c) => [c.id, c]));
 
+/**
+ * The colour a condition is written in wherever it is named — the chat log,
+ * chiefly, where "is now Shaken" should be findable at a glance in a wall of
+ * text rather than read for.
+ *
+ * Two colours each, because the log is not one colour: `on` is for the dark
+ * panel most messages sit on, `alt` for the lighter/tinted rows (whispers,
+ * highlighted mentions, a light theme). Both are picked to clear 4.5:1
+ * against their own background, which is why Blinded is not the near-black
+ * its flavour wants — an unreadable label is not a design, it is a bug.
+ *
+ * Grouped by what the condition MEANS, so the log teaches itself: yellow for
+ * rattled, orange for hampered, blue-grey for held, purple for the mind,
+ * red for dying, black-red for dead.
+ */
+export const CONDITION_COLORS: Record<string, { on: string; alt: string }> = {
+  // Chosen stances — cool and calm, nothing wrong with you.
+  aiming: { on: '#7fd4c8', alt: '#1d6b60' },
+  defending: { on: '#8fc4f0', alt: '#1d5183' },
+  invisible: { on: '#c9d2e6', alt: '#4a5570' },
+  // Rattled and hampered: the yellows and oranges.
+  shaken: { on: '#f2cf4a', alt: '#8a6b00' },
+  distracted: { on: '#e8b76a', alt: '#7d5312' },
+  vulnerable: { on: '#f0a878', alt: '#8a4213' },
+  encumbered: { on: '#d7b98a', alt: '#6d5326' },
+  // Held in place: blue-greys.
+  entangled: { on: '#9fb4d8', alt: '#3a4c72' },
+  bound: { on: '#8fa3cc', alt: '#2f4068' },
+  grappled: { on: '#9fb4d8', alt: '#3a4c72' },
+  restrained: { on: '#8fa3cc', alt: '#2f4068' },
+  prone: { on: '#b9c2d4', alt: '#48526a' },
+  // The senses and the mind: purples.
+  blinded: { on: '#b9a6e0', alt: '#4a3a7a' },
+  deafened: { on: '#b9a6e0', alt: '#4a3a7a' },
+  silenced: { on: '#c0b0e4', alt: '#50407e' },
+  frightened: { on: '#d5a6e8', alt: '#5f2f77' },
+  charmed: { on: '#f0a8d0', alt: '#82285e' },
+  // Poison and its kin: sickly greens.
+  poisoned: { on: '#a8d888', alt: '#3f6f24' },
+  // Down, dying, gone: reds into black-red.
+  stunned: { on: '#f5b942', alt: '#8a5a00' },
+  paralyzed: { on: '#9fd0e8', alt: '#1f5a75' },
+  petrified: { on: '#b8b8b8', alt: '#4d4d4d' },
+  incapacitated: { on: '#f08a7a', alt: '#8c2c1c' },
+  unconscious: { on: '#c99a9a', alt: '#6b3232' },
+  bleeding: { on: '#ff6b6b', alt: '#a11414' },
+  dead: { on: '#e05555', alt: '#6d0d0d' },
+};
+
+/** Every condition label, longest first, so "Bleeding Out" is matched before
+ *  anything shorter could claim part of it. */
+export const CONDITION_LABELS: Array<{ id: string; label: string }> = CONDITIONS
+  .map((c) => ({ id: c.id, label: c.label }))
+  .sort((a, b) => b.label.length - a.label.length);
+
 export function getCondition(id: string): ConditionDef | undefined {
   return CONDITION_MAP.get(id);
 }

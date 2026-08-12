@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, ChatMessage, DieRoll, MemberInfo, SheetCard, TokenView } from 'shared';
-import { contentForSystem, num, swadeSnakeEyes } from 'shared';
+import { CONDITION_COLORS, CONDITION_LABELS, contentForSystem, num, swadeSnakeEyes } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
 import { DIE_COLORS, DieShape } from '../table/DiceShapes';
@@ -48,16 +48,62 @@ function buildNameHighlights(
   return { regex: new RegExp(`(${names.map(escapeRegExp).join('|')})`, 'g'), colors };
 }
 
-/** Bolds any mentioned token name, and colors it if that token is player-controlled. */
+/**
+ * Every condition name the log might mention, longest first so "Bleeding Out"
+ * is matched whole rather than losing its tail to a shorter neighbour.
+ * Word-bounded, so "Deadly" is not a corpse and "Shakenspeare" is nobody.
+ */
+const CONDITION_RE = new RegExp(
+  `\b(${CONDITION_LABELS.map((c) => escapeRegExp(c.label)).join('|')})\b`,
+  'g',
+);
+const CONDITION_BY_LABEL = new Map(CONDITION_LABELS.map((c) => [c.label.toLowerCase(), c.id]));
+
+/**
+ * A condition wherever the log names it: bold, and in its own colour.
+ *
+ * "Training Dummy is now Shaken" is a line the table has to find in a wall of
+ * grey text, usually in a hurry and usually while something else is on fire.
+ * Colour makes it a glance instead of a read, and the colours are grouped by
+ * meaning — yellow rattled, blue-grey held, purple senses, red dying — so the
+ * log teaches its own vocabulary.
+ */
+function ConditionWord({ label, alt }: { label: string; alt: boolean }) {
+  const id = CONDITION_BY_LABEL.get(label.toLowerCase());
+  const pair = id ? CONDITION_COLORS[id] : undefined;
+  if (!pair) return <b>{label}</b>;
+  return <b className="chat-condition" style={{ color: alt ? pair.alt : pair.on }}>{label}</b>;
+}
+
+/**
+ * Bolds any mentioned token name (coloured if that token is player-controlled)
+ * and any condition. Names win where the two collide: a character called
+ * Shaken is still a person.
+ */
 function Highlighted({ text, hl }: { text: string; hl: NameHighlights }) {
-  if (!hl.regex || !text) return <>{text}</>;
+  // Which of each condition's two colours to use. The pastels that carry a
+  // dark panel wash out entirely on the light theme's cool grey, so the
+  // deeper, more saturated pair takes over there.
+  const alt = useGameStore((s) => s.uiTheme) === 'light';
+  if (!text) return <>{text}</>;
+  const parts = hl.regex ? text.split(hl.regex) : [text];
   return (
     <>
-      {text.split(hl.regex).map((part, i) =>
-        hl.colors.has(part)
-          ? <b key={i} style={hl.colors.get(part) ? { color: hl.colors.get(part)! } : undefined}>{part}</b>
-          : part,
-      )}
+      {parts.map((part, i) => {
+        if (hl.colors.has(part)) {
+          return <b key={i} style={hl.colors.get(part) ? { color: hl.colors.get(part)! } : undefined}>{part}</b>;
+        }
+        // Everything that is not a name gets scanned for conditions.
+        return (
+          <span key={i}>
+            {part.split(CONDITION_RE).map((bit, j) => (
+              CONDITION_BY_LABEL.has(bit.toLowerCase())
+                ? <ConditionWord key={j} label={bit} alt={alt} />
+                : <span key={j}>{bit}</span>
+            ))}
+          </span>
+        );
+      })}
     </>
   );
 }

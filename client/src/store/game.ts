@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -282,6 +282,8 @@ interface GameState {
   runPrompt: RunPromptPayload | null;
   /** A prone character is trying to move: stand up, or stay down and crawl? */
   crawlPrompt: CrawlPromptPayload | null;
+  /** DM-only: the fight ended with Extras on the floor. Roll for them? */
+  aftermathPrompt: AftermathPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
   /** SWADE: your Stunned character may roll Vigor to come to. */
@@ -548,6 +550,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   incapPrompt: null,
   runPrompt: null,
   crawlPrompt: null,
+  aftermathPrompt: null,
   rollStatsData: {},
   ironDice: null,
   publicSheets: {},
@@ -1364,6 +1367,10 @@ export function wireSocket(): void {
     useGameStore.setState({ crawlPrompt: p });
   });
 
+  socket.on(S2C.AFTERMATH_PROMPT, (p: AftermathPromptPayload) => {
+    useGameStore.setState({ aftermathPrompt: p });
+  });
+
   let roundCardsSeq = 0;
   socket.on(S2C.ROUND_CARDS, (p: RoundCardsPayload) => {
     useGameStore.setState({ roundCardsDeal: { ...p, seq: ++roundCardsSeq } });
@@ -1951,6 +1958,11 @@ export const intents = {
   /** Leap: free at 1″ (2″ off a run-up), or spend the action on Athletics. */
   jumpRoll: (tokenId: string, withRunUp: boolean, athletics: boolean) =>
     socket.emit(C2S.JUMP_ROLL, { tokenId, withRunUp, athletics }),
+  /** Answer the aftermath prompt: roll for the fallen Extras, or let them go. */
+  aftermathRoll: (roll: boolean) => {
+    socket.emit(C2S.AFTERMATH_ROLL, { roll });
+    useGameStore.setState({ aftermathPrompt: null });
+  },
   /** Answer the crawl prompt: get up, or stay down and crawl. */
   proneMove: (tokenId: string, mode: 'stand' | 'crawl') => {
     socket.emit(C2S.PRONE_MOVE, { tokenId, mode });

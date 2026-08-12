@@ -7,7 +7,7 @@ import {
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AftermathRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -778,17 +778,29 @@ interface GroupSaveSpec {
  * roll nobody makes at a real table because it is a dozen dice for nameless
  * mooks — which is exactly the kind of bookkeeping a VTT should do for free.
  */
-function aftermathForExtras(io: Server, campaignId: string): void {
-  const downed = characters.forCampaign(campaignId).filter((c) => c.system === 'swade'
+function downedExtras(campaignId: string) {
+  return characters.forCampaign(campaignId).filter((c) => c.system === 'swade'
     && c.sheet.wildCard === false
     && conditionsOf(c.sheet).includes('incapacitated')
     && !conditionsOf(c.sheet).includes('dead'));
+}
+
+/** Ask the DM whether the fallen get their roll. Nothing happens until they say. */
+function offerAftermath(io: Server, campaignId: string): void {
+  const downed = downedExtras(campaignId);
+  if (downed.length === 0) return;
+  io.to(dmRoom(campaignId)).emit(S2C.AFTERMATH_PROMPT, { names: downed.map((c) => c.name) });
+}
+
+function aftermathForExtras(io: Server, campaignId: string, shouldRoll: boolean): void {
+  const downed = downedExtras(campaignId);
   if (downed.length === 0) return;
   const survivors: string[] = [];
   const lost: string[] = [];
   for (const ch of downed) {
-    const br = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4'))));
-    if (br.total >= 4) {
+    // Skipped: the wounds finish what they started, no dice.
+    const survived = shouldRoll && roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')))).total >= 4;
+    if (survived) {
       survivors.push(ch.name);
     } else {
       lost.push(ch.name);
@@ -808,7 +820,9 @@ function aftermathForExtras(io: Server, campaignId: string): void {
     notes: [
       ...(survivors.length ? [`Survived, and need seeing to — or guarding: ${survivors.join(', ')}.`] : []),
       ...(lost.length ? [`Did not: ${lost.join(', ')}.`] : []),
-      'Each Incapacitated Extra rolled Vigor once the fighting stopped.',
+      shouldRoll
+        ? 'Each Incapacitated Extra rolled Vigor once the fighting stopped.'
+        : 'The DM waved the rolls: none of the fallen were going to get up.',
     ],
   };
   const msg = chat.add(campaignId, {
@@ -3814,6 +3828,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_SORT'));
 
+  socket.on(C2S.AFTERMATH_ROLL, safe(socket, ({ roll: shouldRoll }: AftermathRollPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    aftermathForExtras(io, d.campaignId, !!shouldRoll);
+  }, 'AFTERMATH_ROLL'));
+
   socket.on(C2S.INIT_CLEAR, safe(socket, () => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
@@ -3822,7 +3842,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     resetSwadeTurnMoves(d.campaignId);
     swadeActionCounts.delete(d.campaignId);
     broadcastInitiative(io, d.campaignId);
-    if (ending.active) aftermathForExtras(io, d.campaignId);
+    if (ending.active) offerAftermath(io, d.campaignId);
   }, 'INIT_CLEAR'));
 
   socket.on(C2S.INIT_ROLL_MAP, safe(socket, ({ mapId, includeGm }: InitRollMapPayload) => {
@@ -3870,7 +3890,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-    if (wasActive && !state.active) aftermathForExtras(io, d.campaignId);
+    if (wasActive && !state.active) offerAftermath(io, d.campaignId);
   }, 'INIT_SET_ACTIVE'));
 
   // ----- roll-your-own initiative (5e / SWN) -----

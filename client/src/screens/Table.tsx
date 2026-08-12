@@ -36,6 +36,7 @@ import { RoundCardsOverlay } from '../table/RoundCardsOverlay';
 import { CountersOverlay } from '../table/CountersOverlay';
 import { RunPrompt } from '../table/RunPrompt';
 import { CrawlPrompt } from '../table/CrawlPrompt';
+import { AftermathPrompt } from '../table/AftermathPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -478,6 +479,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <IncapPrompt />
         <RunPrompt />
         <CrawlPrompt />
+        <AftermathPrompt />
         <CookPrompt />
         <CalledShotPrompt />
         <BlastPrompt />

@@ -999,6 +999,10 @@ button.link:hover { text-decoration: underline; }
   gap: 8px;
 }
 .chat-msg.whisper { background: rgba(176, 108, 210, 0.08); border-radius: 6px; padding: 4px 6px; }
+/* A condition named in the log. The colour comes from the shared palette (one
+   place, so chat and any future surface agree); this only carries the weight
+   and a hair of letter-spacing so it reads as a STATE rather than a word. */
+.chat-condition { font-weight: 700; letter-spacing: 0.01em; }
 .chat-meta { display: flex; gap: 8px; align-items: baseline; }
 /* Same dim grey as .chat-time on the other end of the row — the whole meta
    line reads as one quiet band above the message. */

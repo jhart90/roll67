@@ -296,10 +296,12 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // at a glance.
   const barScale = bar && bar.maxHp > 20 ? Math.min(3, 1 + (2 * (bar.maxHp - 20)) / 80) : 1;
   const barW = radius * 2 * barScale;
-  // Condition badges (from the linked character we're allowed to see).
-  const conditionIcons = character
-    ? conditionsOf(character.sheet).map((id) => getCondition(id)?.icon).filter(Boolean) as string[]
-    : [];
+  // Condition badges. Read from the token, not the sheet: a player is never
+  // sent another character's sheet, so reading it there meant only the DM
+  // ever saw that the ogre was Shaken. The sheet still wins when we have it,
+  // since it is the live copy the owner is editing.
+  const conditionIds = character ? conditionsOf(character.sheet) : (token.conditions ?? []);
+  const conditionIcons = conditionIds.map((id) => getCondition(id)?.icon).filter(Boolean) as string[];
   if (character && typeof character.sheet.concentration === 'string' && character.sheet.concentration) {
     conditionIcons.push('🌀');
   }

@@ -43,12 +43,34 @@ describe('swadeCritFail', () => {
     expect(swadeCritFail([d(1), d(3, { wild: true })], true)).toBe(false);
   });
 
-  it('for an Extra, a lone natural 1 is the whole rule — they roll no Wild Die', () => {
-    expect(swadeCritFail([d(1)], false)).toBe(true);
-    expect(swadeCritFail([d(2)], false)).toBe(false);
+  /**
+   * An Extra has no Wild Die to pair a 1 with, so the book confirms with a
+   * d6: only a 1 on THAT is a Critical Failure. Treating the bare 1 as one —
+   * which this used to — fumbled a mob six times too often.
+   */
+  it('for an Extra, a natural 1 is confirmed by a d6', () => {
+    expect(swadeCritFail([d(1)], false, () => 1)).toBe(true);
+    expect(swadeCritFail([d(1)], false, () => 2)).toBe(false);
+    expect(swadeCritFail([d(1)], false, () => 6)).toBe(false);
+  });
+
+  it('does not roll the confirming d6 at all without a natural 1', () => {
+    let rolled = 0;
+    expect(swadeCritFail([d(2)], false, () => { rolled++; return 1; })).toBe(false);
+    expect(rolled).toBe(0);
+  });
+
+  it("treats an unconfirmed 1 as a plain failure when nobody asks", () => {
+    expect(swadeCritFail([d(1)], false)).toBe(false);
   });
 
   it("does not let an Extra's raise die damn them", () => {
-    expect(swadeCritFail([d(5), d(1, { raise: true })], false)).toBe(false);
+    expect(swadeCritFail([d(5), d(1, { raise: true })], false, () => 1)).toBe(false);
+  });
+
+  it('never asks for a confirming die on a Wild Card', () => {
+    let rolled = 0;
+    swadeCritFail([d(1), d(1, { wild: true })], true, () => { rolled++; return 1; });
+    expect(rolled).toBe(0);
   });
 });

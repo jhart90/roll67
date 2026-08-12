@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, addTally, isAbomination, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, isAbomination, swadeCritFail, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -415,6 +415,29 @@ function namedWeakness(sheet: SheetData, damageType?: string): boolean {
   return str(sheet, 'vulnerable', '').toLowerCase().split(/[,;/]/).map((x) => x.trim()).includes(t);
 }
 
+/**
+ * Was that a Critical Failure?
+ *
+ * A Wild Card's snake eyes answer themselves. An Extra's natural 1 does not:
+ * the book asks for a d6 and only a 1 on it confirms the fumble. That roll
+ * happens here so every site uses the same die, and it is announced whenever
+ * it is called for — a 1 that does NOT blow up needs explaining just as much
+ * as one that does, or the table thinks the fumble rule is broken.
+ */
+export function critFailFor(io: Server, campaignId: string, ch: Character, dice: DieRoll[]): boolean {
+  const wildCard = ch.sheet.wildCard !== false;
+  let confirm: number | null = null;
+  const crit = swadeCritFail(dice, wildCard, () => {
+    confirm = roll('1d6').total;
+    return confirm;
+  });
+  if (confirm !== null) {
+    postStatusLine(io, campaignId,
+      `${ch.name} rolled a natural 1 — confirming d6: ${confirm}${crit ? ' — Critical Failure!' : ' — an ordinary failure.'}`);
+  }
+  return crit;
+}
+
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
@@ -497,7 +520,13 @@ function applySwadeDamage(
  * "Reroll damage" Bennies re-roll. Records expire so a stale morning roll
  * can't be Benny'd back at the evening table.
  */
-export interface BennyRollRec { expr: string; total: number; label: string; at: number }
+export interface BennyRollRec {
+  expr: string; total: number; label: string; at: number;
+  /** A Critical Failure cannot be rerolled, even with a Benny — the book is
+   *  explicit that it ends the attempt and must be accepted. Recorded with
+   *  the roll so the Benny menu can refuse rather than take the chip. */
+  critFail?: boolean;
+}
 export const lastBennyRolls = new Map<string, { trait?: BennyRollRec; damage?: BennyRollRec }>();
 const BENNY_REROLL_TTL_MS = 5 * 60_000;
 
@@ -518,11 +547,11 @@ export function emitBennyState(io: Server, ch: Character): void {
 
 export function recordBennyRoll(
   io: Server, campaignId: string, ch: Character, kind: 'trait' | 'damage',
-  expr: string, total: number, label: string,
+  expr: string, total: number, label: string, critFail = false,
 ): void {
   if (ch.system !== 'swade') return;
   const rec = lastBennyRolls.get(ch.id) ?? {};
-  rec[kind] = { expr, total, label, at: Date.now() };
+  rec[kind] = { expr, total, label, at: Date.now(), ...(critFail ? { critFail: true } : {}) };
   lastBennyRolls.set(ch.id, rec);
   emitBennyState(io, ch);
 }

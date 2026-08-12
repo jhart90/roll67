@@ -382,12 +382,23 @@ export function swadeSnakeEyes(dice: DieRoll[]): boolean {
 }
 
 /**
- * The full Critical Failure rule. An Extra rolls no Wild Die, so a natural 1 on
- * the trait die alone damns them; a Wild Card needs both to come up 1.
+ * The full Critical Failure rule.
+ *
+ * A Wild Card needs snake eyes — a 1 on the trait die AND on the Wild Die.
+ *
+ * An Extra rolls no Wild Die, so it has nothing to pair a 1 with. The book
+ * does NOT damn it for the 1 alone: when it matters, the GM rolls a d6, and
+ * only a 1 on that confirms the Critical Failure. One in six, not one in
+ * every — a mob of Extras was dropping its weapons six times too often here.
+ *
+ * `confirm` supplies that d6. Without one an Extra's 1 is a plain failure,
+ * which is the book's own default for the times nobody needs to know.
  */
-export function swadeCritFail(dice: DieRoll[], wildCard: boolean): boolean {
+export function swadeCritFail(dice: DieRoll[], wildCard: boolean, confirm?: () => number): boolean {
   if (wildCard) return swadeSnakeEyes(dice);
-  return dice.some((d) => !d.wild && !d.raise && d.value === 1);
+  const naturalOne = dice.some((d) => !d.wild && !d.raise && d.value === 1);
+  if (!naturalOne) return false;
+  return confirm ? confirm() === 1 : false;
 }
 
 /** Pace after Edge/Hindrance modifiers (Fleet-Footed +2, Slow −2). */

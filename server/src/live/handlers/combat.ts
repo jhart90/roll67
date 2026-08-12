@@ -5,7 +5,7 @@ import {
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
-  type AoeShape, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
+  type AoeShape, type DieRoll, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
@@ -20,7 +20,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -758,8 +758,9 @@ const BENNY_REASON: Record<string, string> = {
   'reroll-trait': 'to reroll a Trait test',
   'reroll-damage': 'to reroll damage',
   'soak': 'to Soak Wounds',
-  'redraw': 'to redraw their Action Card',
-  'reroll': 'to reroll',
+  'redraw-card': 'to draw a new Action Card',
+  'regain-pp': 'to regain 5 Power Points',
+  'influence': 'to influence the story',
 };
 
 /**
@@ -799,6 +800,7 @@ function activatePower(
   if (!expr) { emitError(socket, `${actor.name} has no arcane skill set.`); return null; }
   const br = roll(expr);
   const out = activationOutcome({
+    confirmCritFail: () => roll('1d6').total,
     total: br.total, dice: br.dice, wildCard: actor.sheet.wildCard !== false, cost, paid,
   });
 
@@ -1127,7 +1129,7 @@ function runGroupFear(io: Server, spec: GroupFearSpec): boolean {
     const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4')), fearCheckMod(spec.fearPenalty));
     const br = roll(expr);
     const passed = br.total >= 4;
-    const critFail = swadeCritFail(br.dice, wildCard);
+    const critFail = critFailFor(io, spec.campaignId, ch, br.dice);
 
     post(
       `${ch.name} — ${what} check (Spirit${fmtMod(fearCheckMod(spec.fearPenalty))}): ${passed ? 'Success' : critFail ? 'Critical Failure' : 'Failure'}`,
@@ -1608,6 +1610,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let raise = false;
     let saveScale = 1;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
+    let attackCritFail = false;
     let hitLabel = '';
     // The attack card shows this under the dice instead of in its headline.
     let attackOutcome = '';
@@ -1811,7 +1814,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       }
       attackBreakdown = roll(expr);
       if (actor.system === 'swade') {
-        recordBennyRoll(io, d.campaignId, actor, 'trait', expr, attackBreakdown.total, `their ${action.label} roll`);
+        // Decided once, here: the Benny menu must know whether this roll is
+        // rerollable at all, and a Critical Failure never is.
+        attackCritFail = critFailFor(io, d.campaignId, actor, attackBreakdown.dice);
+        recordBennyRoll(io, d.campaignId, actor, 'trait', expr, attackBreakdown.total, `their ${action.label} roll`, attackCritFail);
         // Itemize every flat modifier for the chat tooltip: sheet-borne
         // penalties plus the situational tags computed above.
         attackBreakdown.modWhy = [
@@ -2535,7 +2541,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // A SWADE Critical Failure: the trait die shows 1, and for a Wild Card
       // the Wild Die does too. One shared rule, so the mechanical outcome here
       // and the snake-eyes flare the client draws can never disagree.
-      const critFail = swadeCritFail(br.dice, actor.sheet.wildCard !== false);
+      const critFail = critFailFor(io, d.campaignId, actor, br.dice);
       cooked = !critFail && br.total >= 4;
       let text: string;
       if (critFail) {
@@ -3164,7 +3170,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // blast — claiming it here is what makes it "one attempt only".
     if (!claimBlast(io, pb)) return;
     const br = roll(traitExpr(ch.sheet, skillDie(ch.sheet, 'Athletics'), cand.potatoMod));
-    const critFail = swadeCritFail(br.dice, ch.sheet.wildCard !== false);
+    const critFail = critFailFor(io, d.campaignId, ch, br.dice);
     const caught = !critFail && br.total >= 4;
     const holdTag = cand.onHold ? ' on Hold' : '';
 
@@ -3339,11 +3345,20 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           emitError(socket, `No recent ${kind} roll to reroll.`);
           return;
         }
+        // A Critical Failure ends the attempt and must be accepted — the one
+        // thing a Benny cannot buy back. Refused before the chip is spent.
+        if (rec.critFail) {
+          emitError(socket, 'A Critical Failure cannot be rerolled — not even with a Benny.');
+          return;
+        }
         spendBenny();
         const b = roll(rec.expr);
         const better = b.total > rec.total;
         // The reroll stands beside the original; whichever is higher counts.
-        recordBennyRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, kind, rec.expr, Math.max(rec.total, b.total), rec.label);
+        // The reroll can itself come up a Critical Failure, and then the
+        // attempt is over for good.
+        const rerollCrit = kind === 'trait' && critFailFor(io, d.campaignId, ch, b.dice);
+        recordBennyRoll(io, d.campaignId, characters.byId(ch.id) ?? ch, kind, rec.expr, Math.max(rec.total, b.total), rec.label, rerollCrit);
         postRoll(
           `🪙 ${ch.name} spends a Benny to reroll ${rec.label} — ${b.total} vs the original ${rec.total}: ${better ? 'the reroll counts!' : 'keep the original.'}`,
           b, better,

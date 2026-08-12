@@ -54,6 +54,9 @@ export interface ActivationInput {
   cost: number;
   /** Points the caster chose to pay, when Shorting. Defaults to the cost. */
   paid?: number;
+  /** The d6 that confirms an EXTRA's Critical Failure — see swadeCritFail.
+   *  Wild Cards never need it. */
+  confirmCritFail?: () => number;
 }
 
 /**
@@ -82,7 +85,7 @@ export function activationOutcome(input: ActivationInput): ActivationOutcome {
   const cost = Math.max(0, Math.round(input.cost));
   const paid = Math.max(0, Math.round(input.paid ?? cost));
   const shorted = isShorted(cost, paid);
-  const critFail = swadeCritFail(input.dice, input.wildCard);
+  const critFail = swadeCritFail(input.dice, input.wildCard, input.confirmCritFail);
   const activated = input.total >= ACTIVATION_TN;
 
   if (!activated) {

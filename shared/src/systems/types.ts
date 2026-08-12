@@ -126,6 +126,9 @@ export interface CombatAction {
   /** SWADE: a Heavy Weapon — a cannon, a torpedo, a dragon's breath. The only
    *  thing that can hurt Heavy Armor, which every Gargantuan creature has. */
   heavy?: boolean;
+  /** SWADE: venomous. A hit that at least Shakes forces a Vigor roll at
+   *  `poisonMod` (the poison's strength); failing it costs `poisonEffect`. */
+  poison?: { mod: number; effect: 'fatigue' | 'shaken' | 'incapacitated' };
   /** SWADE: lobbed rather than fired (a grenade). Thrown weapons have no
    *  Extreme band — past Long they are simply out of range. */
   thrown?: boolean;

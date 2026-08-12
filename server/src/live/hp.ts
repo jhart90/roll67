@@ -577,14 +577,19 @@ function applySwadeHeal(
  * Mend a specific number of Wounds — what a successful SWADE Healing roll
  * produces (one, or two on a raise). Also steadies the Shaken and stands a
  * Wild Card back up if the mending pulls them off the incapacitation line.
+ *
+ * `clearShaken` is false for mending that is not treatment: a regenerating
+ * troll knits its flesh back together, but nobody has slapped it round the
+ * face, so it is still Shaken and still has to shake that off itself.
  */
 export function applySwadeWoundHeal(
   io: Server, campaignId: string, character: Character, woundsHealed: number,
+  clearShaken = true,
 ): { character: Character; note: string } {
   const wounds = num(character.sheet, 'wounds', 0);
   woundsHealed = Math.max(0, Math.min(wounds, Math.floor(woundsHealed)));
   const woundsAfter = wounds - woundsHealed;
-  const wasShaken = conditionsOf(character.sheet).includes('shaken');
+  const wasShaken = clearShaken && conditionsOf(character.sheet).includes('shaken');
   let cur = character;
   const patch: SheetData = {};
   if (woundsHealed > 0) patch.wounds = woundsAfter;
@@ -597,7 +602,7 @@ export function applySwadeWoundHeal(
   });
   if (woundsHealed > 0 && woundsAfter <= healCap && conditionsOf(cur.sheet).includes('incapacitated')) {
     patch.conditions = (Array.isArray(patch.conditions) ? patch.conditions as string[] : conditionsOf(cur.sheet))
-      .filter((c) => c !== 'incapacitated' && c !== 'shaken' && c !== 'bleeding');
+      .filter((c) => c !== 'incapacitated' && (clearShaken ? c !== 'shaken' : true) && c !== 'bleeding');
   }
   if (Object.keys(patch).length > 0) cur = persistSheet(io, campaignId, cur, patch);
   const bits: string[] = [];

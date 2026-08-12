@@ -3,6 +3,8 @@ import type { Character } from '../src/types.js';
 import { combatActions } from '../src/systems/combat.js';
 import { castableLevels, spellSlots } from '../src/systems/spells.js';
 import { dnd5e } from '../src/systems/dnd5e.js';
+import { swade } from '../src/systems/swade.js';
+import { NPCS_SWADE } from '../src/data/npcsSwade.js';
 import { applyEntry } from '../src/data/compendiumTypes.js';
 
 function pc(sheet: Record<string, unknown>): Character {
@@ -109,6 +111,60 @@ describe('combatActions', () => {
     const rolls = dnd5e.rollables(sheet);
     expect(rolls.find((r) => r.id === 'cantrip_0')?.slotLevel).toBeUndefined();
     expect(rolls.find((r) => r.id === 'spell_0')?.slotLevel).toBe(3);
+  });
+});
+
+/**
+ * SWADE's creature abilities reach the action the same way AP and range do:
+ * off the attack row. These used to have nowhere to be stated at all — the
+ * bestiary described venom in prose and the engine borrowed 5e's `poisoned`
+ * condition, which means something else entirely.
+ */
+describe('SWADE creature abilities on an attack', () => {
+  const swadePc = (sheet: Record<string, unknown>): Character =>
+    ({ id: 'c2', campaignId: 'x', ownerUserId: null, name: 'Thing', system: 'swade', sheet });
+
+  it('carries the Heavy Weapon flag through', () => {
+    const [a] = combatActions(swadePc({
+      ...swade.defaultSheet(),
+      attacks: [{ name: 'Deck Cannon', skill: 'Shooting', damage: '3d10!', range: 600, heavy: true }],
+    }));
+    expect(a.heavy).toBe(true);
+  });
+
+  it('leaves an ordinary weapon unflagged', () => {
+    const [a] = combatActions(swadePc({
+      ...swade.defaultSheet(),
+      attacks: [{ name: 'Cutlass', skill: 'Fighting', damage: '1d6!+1d6!', range: 5 }],
+    }));
+    expect(a.heavy).toBeUndefined();
+    expect(a.poison).toBeUndefined();
+  });
+
+  it('carries venom, its strength and what failing costs', () => {
+    const [a] = combatActions(swadePc({
+      ...swade.defaultSheet(),
+      attacks: [{ name: 'Bite', skill: 'Fighting', damage: '1d4!+2', range: 5, poison: true, poisonMod: -2, poisonEffect: 'incapacitated' }],
+    }));
+    expect(a.poison).toEqual({ mod: -2, effect: 'incapacitated' });
+  });
+
+  it('defaults an unspecified venom to a level of Fatigue', () => {
+    const [a] = combatActions(swadePc({
+      ...swade.defaultSheet(),
+      attacks: [{ name: 'Sting', skill: 'Fighting', damage: '1d6!', range: 5, poison: true }],
+    }));
+    expect(a.poison).toEqual({ mod: 0, effect: 'fatigue' });
+  });
+
+  it('gives the bestiary’s venomous creatures real poison, not 5e’s condition', () => {
+    const venomous = ['Snake, Venomous', 'Giant Spider', 'Giant Scorpion'];
+    for (const name of venomous) {
+      const npc = NPCS_SWADE.find((n) => n.name === name)!;
+      const attacks = (npc.sheet.attacks ?? []) as Array<Record<string, unknown>>;
+      expect(attacks.some((atk) => atk.poison === true), `${name} should be venomous`).toBe(true);
+      expect(attacks.some((atk) => atk.condition === 'poisoned'), `${name} still borrows 5e poison`).toBe(false);
+    }
   });
 });
 

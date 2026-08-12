@@ -253,6 +253,14 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
     reread();
   }
 
+  // Regeneration goes first, and before the Incapacitated gate below: a
+  // regenerating creature heals whether or not it is down, and a roll good
+  // enough to pull it back over the line stands it up in time to act.
+  if (str(ch.sheet, 'regeneration', '') === 'fast' && num(ch.sheet, 'wounds', 0) > 0) {
+    resolveFastRegeneration(io, campaignId, ch);
+    reread();
+  }
+
   // Bleeding Out: die on a failure, hang on with a success, stabilize on a
   // raise. A player-owned character gets the prompt and rolls it themself;
   // ownerless NPCs roll automatically.
@@ -283,6 +291,74 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
     const room = ch.ownerUserId ? userRoom(ch.ownerUserId) : dmRoom(campaignId);
     io.to(room).emit(S2C.SHAKEN_PROMPT, { characterId: ch.id, name: ch.name });
   }
+}
+
+/**
+ * SWADE venom.
+ *
+ * The bite has to actually tell — a hit that does not at least Shake never
+ * delivers the poison, which is the rule that stops a venomous creature being
+ * a save-or-die machine that ignores armour. Then the victim rolls Vigor,
+ * modified by the strength of the poison, and pays for a failure.
+ *
+ * What failure costs is the creature's own line to state (the Hazards table
+ * runs from a level of Fatigue to lethal), so the attack row carries it and
+ * this only decides when to ask and what to do with the answer.
+ */
+function resolvePoison(
+  io: Server, campaignId: string, target: Character, poison: { mod: number; effect: string }, sourceLabel: string,
+): void {
+  const fresh = characters.byId(target.id) ?? target;
+  const br = roll(traitExpr(fresh.sheet, dieSides(String(fresh.sheet.vigor ?? 'd4')), poison.mod));
+  const resisted = br.total >= 4;
+  const effectWord = poison.effect === 'incapacitated' ? 'Incapacitated'
+    : poison.effect === 'shaken' ? 'Shaken' : 'a level of Fatigue';
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', kind: 'roll', characterId: fresh.id,
+    text: `${fresh.name} — Poison (Vigor${fmtMod(poison.mod)}) from ${sourceLabel}: ${resisted ? 'shrugs it off' : `takes ${effectWord}`}`,
+    roll: { ...br, outcome: resisted ? 'success' as const : 'failure' as const }, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  if (resisted) return;
+  if (poison.effect === 'fatigue') {
+    // Fatigue is a track, not a condition: two levels and they are out.
+    const after = Math.min(2, num(fresh.sheet, 'fatigue', 0) + 1);
+    persistSheet(io, campaignId, fresh, { fatigue: after });
+    postStatusLine(io, campaignId, `${fresh.name} is Fatigued by poison (${after} of 2).`);
+    if (after >= 2) applyConditionTo(io, campaignId, characters.byId(fresh.id) ?? fresh, 'incapacitated', 'poison');
+    return;
+  }
+  applyConditionTo(io, campaignId, fresh, poison.effect === 'shaken' ? 'shaken' : 'incapacitated', 'poison');
+}
+
+/**
+ * Fast Regeneration: a Vigor roll at the start of every turn knits a Wound
+ * shut, two on a raise — and it happens even while Incapacitated, which is
+ * the whole horror of the troll. It gets back up.
+ *
+ * Rolled rather than prompted: there is no decision in it, so a click would
+ * only be a click. It does NOT clear Shaken — flesh closing over is not the
+ * same as getting your wits back, and the creature still has to shake that
+ * off on its own.
+ *
+ * What it cannot regenerate — fire for a troll, silver for a werewolf — is
+ * the DM's to hold back. Nothing on a sheet records which Wound came from
+ * what, so the engine cannot know, and pretending otherwise would be worse
+ * than leaving it to the person who watched it happen.
+ */
+function resolveFastRegeneration(io: Server, campaignId: string, ch: Character): void {
+  const br = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4'))));
+  const healed = swadeWoundsHealed(br.total >= 4, br.total >= 8);
+  const outcome = healed > 0
+    ? `knits shut ${healed} Wound${healed === 1 ? '' : 's'}`
+    : 'the flesh holds where it is';
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', kind: 'roll', characterId: ch.id,
+    text: `${ch.name} — Regeneration (Vigor): ${outcome}`,
+    roll: { ...br, outcome: healed > 0 ? 'success' as const : 'failure' as const }, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  if (healed > 0) applySwadeWoundHeal(io, campaignId, ch, healed, false);
 }
 
 /**
@@ -1938,6 +2014,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       /** Where the target stands afterwards: "INCAPACITATED", "Kira 12/20". */
       let statusRow = '';
       let applyToTarget: (() => void) | null = null;
+      /** Venom only travels on a hit that at least Shakes — see resolvePoison. */
+      let poisonLands = false;
       if (action.healsWounds && targetChar) {
         // Wound mending has its own application path — applyHpDelta's point
         // arithmetic (4 points to a Wound) would misread a wound count.
@@ -1972,6 +2050,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             defenseTag = ` (Toughness ${toughness})`;
             verdictRow = `${out.verdict} (${-delta} vs. Toughness ${toughness})`;
             statusRow = out.stateNote ?? '';
+            poisonLands = out.shaken && !!action.poison;
           } else {
             const { patch, note } = computeHpDelta(targetChar, delta);
             const nh = systemFor(targetChar.system).hp({ ...targetChar.sheet, ...patch });
@@ -2069,6 +2148,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           emitProjectile(io, d.campaignId, src.mapId, src.id, tgt.id, action.damageType);
         }
         setTimeout(applyToTarget, settleMs);
+      }
+
+      // Venom, once the bite has landed and told. Scheduled a beat after the
+      // damage so the table reads the wound before the poison that came with
+      // it, rather than two cards arriving at once.
+      if (poisonLands && targetChar && action.poison) {
+        const targetId = targetChar.id;
+        const poison = action.poison;
+        setTimeout(() => {
+          const fresh = characters.byId(targetId);
+          if (fresh) resolvePoison(io, d.campaignId, fresh, poison, action.label);
+        }, diceSettleDelayMs(cardRoll.dice) + SAVE_STEP_DELAY_MS);
       }
 
       // Condition rider, timed with the damage it rode in on: a hit's rider

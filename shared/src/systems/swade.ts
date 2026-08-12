@@ -400,7 +400,10 @@ const identityFields: FieldDef[] = [
   // thing that isn't Gargantuan, like a tank.
   { id: 'heavyArmor', label: 'Heavy Armor', type: 'checkbox', width: 'sixth', default: false },
   { id: 'fearless', label: 'Fearless', type: 'checkbox', width: 'sixth', default: false },
-  { id: 'regeneration', label: 'Regeneration', type: 'select', width: 'sixth', default: '', options: ['', 'fast', 'slow'], optionLabels: { '': 'none', fast: 'Fast (every round)', slow: 'Slow (on the DM’s call)' } },
+  // Only Fast is offered. Slow Regeneration is a natural healing roll once a
+  // day, and this app has no day clock to hang one on — a switch that never
+  // fires is worse than a line in the DM's notes, which is where it lives.
+  { id: 'regeneration', label: 'Regeneration', type: 'select', width: 'sixth', default: '', options: ['', 'fast'], optionLabels: { '': 'none', fast: 'Fast (Vigor each turn)' } },
 ];
 
 const attributeFields: FieldDef[] = ATTRIBUTES_SWADE.map((a) => ({
@@ -525,6 +528,11 @@ const gearTab: SheetTab = {
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
         { id: 'ap', label: 'AP', type: 'number', width: 'sixth', default: 0 },
         { id: 'heavy', label: 'Heavy', type: 'checkbox', width: 'sixth' },
+        // Venom. It only comes into play on a hit that at least Shakes, so
+        // these three sit next to the damage they depend on.
+        { id: 'poison', label: 'Poison', type: 'checkbox', width: 'sixth' },
+        { id: 'poisonMod', label: 'Poison str', type: 'number', width: 'sixth', default: 0 },
+        { id: 'poisonEffect', label: 'Poison effect', type: 'select', width: 'sixth', default: 'fatigue', options: ['fatigue', 'shaken', 'incapacitated'], optionLabels: { fatigue: 'Fatigue a level', shaken: 'Shaken', incapacitated: 'Incapacitated' } },
         { id: 'parryBonus', label: 'Parry mod', type: 'number', width: 'sixth', default: 0 },
         { id: 'wielded', label: 'Wielded', type: 'checkbox', width: 'sixth' },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },

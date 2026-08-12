@@ -65,6 +65,16 @@ export function combatActions(character: Character): CombatAction[] {
       ...(swadeRof(atk) >= 2 ? { rof: swadeRof(atk) } : {}),
       ...(num(atk, 'ap', 0) > 0 ? { ap: num(atk, 'ap', 0) } : {}),
       ...(atk.heavy === true ? { heavy: true } : {}),
+      ...(atk.poison === true
+        ? {
+          poison: {
+            mod: num(atk, 'poisonMod', 0),
+            effect: (['fatigue', 'shaken', 'incapacitated'].includes(str(atk, 'poisonEffect', ''))
+              ? str(atk, 'poisonEffect', 'fatigue')
+              : 'fatigue') as 'fatigue' | 'shaken' | 'incapacitated',
+          },
+        }
+        : {}),
       ...(atk.thrown === true ? { thrown: true } : {}),
       ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
         ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),

@@ -206,11 +206,14 @@ const TERMS_SWN: Record<string, string> = {
 // ---------- SWADE sheet-only labels ----------
 
 const SWADE_SHEET: Record<string, string> = {
+  Poison: 'This attack is venomous. It only tells if the hit at least Shakes — armour and a tough hide keep the venom out along with the fangs — and then the victim rolls Vigor against it.',
+  'Poison str': 'How strong the venom is, as the modifier on the victim’s Vigor roll: −2 for something nasty, 0 for ordinary, +2 for a weak dose.',
+  'Poison effect': 'What failing that Vigor roll costs: a level of Fatigue (two levels puts them out), Shaken, or straight to Incapacitated for something lethal.',
   'Heavy Armor': 'Ordinary weapons cannot hurt this at all — not less damage, none. Only a Heavy Weapon gets through. Every Gargantuan creature (Size 12+) has it automatically; tick this for something merely Huge that should too, like a tank.',
   Heavy: 'A Heavy Weapon — cannon, torpedo, main gun. The only kind of attack that can hurt Heavy Armor.',
   Hardy: 'Being Shaken a second time does not turn into a Wound for this creature — it is simply Shaken again. Raises on a damage roll still wound it normally. Golems, oozes and the like.',
   Fearless: 'Immune to Fear effects and to Intimidation — it makes no Fear checks at all. It can still be Taunted: ridicule draws its attention where fear finds nothing to grip.',
-  Regeneration: 'Fast: at the start of every one of its turns it rolls Vigor to heal a Wound — two on a raise — even while Incapacitated. Slow: the same roll, but only when the DM calls for it. Damage its description says it cannot regenerate is the DM’s to hold back.',
+  Regeneration: 'Fast: at the start of every one of its turns it rolls Vigor and knits a Wound shut — two on a raise — even while Incapacitated, so a good roll can stand it back up. It does not clear Shaken. Damage its description says it cannot regenerate (fire for a troll, silver for a werewolf) is the DM’s to hold back. Slow Regeneration is a once-a-day healing roll and lives in the DM’s notes instead.',
   'Environmental Resistance': 'Kinds of energy or substance this creature shrugs off: damage of that type comes in 4 lower, and it rolls +4 to resist matching hazards. Four points is one raise — one Wound less from every such hit, however hard it lands.',
   'Environmental Weakness': 'Kinds of energy or substance this creature suffers from: damage of that type comes in 4 higher, and it rolls −4 to resist matching hazards.',
   Immunity: 'Kinds of damage that do nothing at all to this creature — no damage and no Stun from that source.',

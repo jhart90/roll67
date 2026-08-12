@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { NPCS_SWADE } from '../src/data/npcsSwade.js';
 import { SKILLS_SWADE } from '../src/systems/swade.js';
+import { conditionsFor } from '../src/systems/effects.js';
 import { roll } from '../src/dice/roller.js';
 
 const DIE = /^d(4|6|8|10|12)$/;
@@ -39,6 +40,36 @@ describe('SWADE bestiary', () => {
       for (const row of (npc.sheet.skills ?? []) as Array<{ name: string; die: string }>) {
         expect(known, `${npc.name} has unknown skill "${row.name}"`).toContain(row.name);
         expect(row.die, `${npc.name}.${row.name}`).toMatch(DIE);
+      }
+    }
+  });
+
+  /**
+   * A condition a SWADE creature inflicts has to be one SWADE actually has.
+   * Borrowed ones look fine in the data and mean something else at the table:
+   * `poisoned` is 5e's "disadvantage on attacks", which is not what venom does
+   * here, and `grappled` is not a SWADE state at all — Bound is.
+   */
+  it('only inflicts conditions SWADE knows about', () => {
+    const known = new Set(conditionsFor('swade').map((c) => c.id));
+    for (const npc of NPCS_SWADE) {
+      for (const atk of (npc.sheet.attacks ?? []) as Array<Record<string, unknown>>) {
+        const cond = typeof atk.condition === 'string' ? atk.condition : '';
+        if (!cond) continue;
+        expect(known, `${npc.name} / ${String(atk.name)} inflicts "${cond}"`).toContain(cond);
+      }
+    }
+  });
+
+  it('states venom as venom rather than borrowing a condition', () => {
+    const venomous = NPCS_SWADE.filter((n) =>
+      ((n.sheet.attacks ?? []) as Array<Record<string, unknown>>).some((a) => a.poison === true));
+    expect(venomous.length).toBeGreaterThanOrEqual(3);
+    for (const npc of venomous) {
+      for (const atk of (npc.sheet.attacks ?? []) as Array<Record<string, unknown>>) {
+        if (atk.poison !== true) continue;
+        expect(typeof atk.poisonMod, `${npc.name} venom strength`).toBe('number');
+        expect(['fatigue', 'shaken', 'incapacitated'], `${npc.name} venom effect`).toContain(atk.poisonEffect);
       }
     }
   });

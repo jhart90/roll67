@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -374,6 +374,31 @@ function rollDisruption(io: Server, campaignId: string, ch: Character, sourceLab
   if (!held) persistSheet(io, campaignId, ch, disruptionPatch());
 }
 
+/**
+ * Write the incapacitation into both sheets' tallies: one to the attacker's
+ * "dropped" list, one to the victim's "dropped by" list.
+ *
+ * Only recorded when there is an attacker to name — damage from a fall or a
+ * trap has nobody to credit, and inventing one would make the ledger lie.
+ * The attacker is looked up by NAME among this campaign's characters, since
+ * that is all the damage path carries; if two characters share a name the
+ * tally may land on the wrong one, which is a fair trade for not threading an
+ * id through every damage site in the engine.
+ */
+function recordIncapacitation(
+  io: Server, campaignId: string, attackerName: string | undefined, victim: Character,
+): void {
+  if (!attackerName) return;
+  const fresh = characters.byId(victim.id);
+  if (fresh) {
+    persistSheet(io, campaignId, fresh, { [DEATHS_KEY]: addTally(fresh.sheet, DEATHS_KEY, attackerName) });
+  }
+  const attacker = characters.forCampaign(campaignId).find((c) => c.name === attackerName);
+  if (attacker) {
+    persistSheet(io, campaignId, attacker, { [KILLS_KEY]: addTally(attacker.sheet, KILLS_KEY, victim.name) });
+  }
+}
+
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
@@ -420,6 +445,7 @@ function applySwadeDamage(
     postStatusLine(io, campaignId, attackerName
       ? `💀 ${attackerName} incapacitates ${cur.name}${withWhat}!`
       : `💀 ${cur.name} is Incapacitated${withWhat}!`);
+    recordIncapacitation(io, campaignId, attackerName, cur);
   }
 
   // Record the Soak while the wounds are fresh (any Wild Card with a Benny —

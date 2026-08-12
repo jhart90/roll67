@@ -3222,3 +3222,33 @@ th > .term { border-bottom-style: dotted; }
 /* Blast templates drawn with the dice's Ace animation: a canvas riding inside
    the map's SVG, so it pans and zooms with everything else. */
 .aoe-burst-ace { pointer-events: none; }
+
+
+/* ---------- incapacitation ledger (Stats tab) ---------- */
+
+/* Rolls and their consequences side by side, dropping to one column when the
+   window is too narrow to read two. */
+.rollstats-split { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.rollstats-rolls { flex: 1 1 320px; min-width: 0; }
+.incap-ledger {
+  flex: 0 1 190px; min-width: 160px;
+  display: flex; flex-direction: column; gap: 12px;
+  border-left: 1px solid var(--border); padding-left: 12px;
+}
+.incap-block { min-width: 0; }
+.incap-head {
+  margin: 0 0 5px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 6px;
+}
+.incap-good { color: var(--ok); }
+.incap-bad { color: var(--danger); }
+.incap-total {
+  font-size: 10px; font-weight: 700; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 0 6px; letter-spacing: 0;
+}
+.incap-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.incap-list li { display: flex; align-items: baseline; gap: 6px; font-size: 12px; min-width: 0; }
+.incap-name { overflow-wrap: anywhere; min-width: 0; }
+.incap-count { flex: none; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.incap-empty { font-size: 11px; margin: 0; }

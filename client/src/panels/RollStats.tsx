@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { parseRollKey, type RollStatKeySummary, type RollStatsSummary, type RollStatsUserBlock } from 'shared';
+import { parseRollKey, tallyOf, tallyRows, DEATHS_KEY, KILLS_KEY, type RollStatKeySummary, type RollStatsSummary, type RollStatsUserBlock } from 'shared';
 import { intents, useGameStore } from '../store/game';
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
@@ -173,12 +173,68 @@ export function RollStatsTab({ characterId }: { characterId: string }) {
   const data = useGameStore((s) => s.rollStatsData[characterId]);
   useEffect(() => { intents.getRollStats(characterId); }, [characterId]);
   return (
-    <div className="rollstats-window">
-      {!data
-        ? <p className="dim" style={{ margin: 8 }}>Crunching the numbers…</p>
-        : data.users.length === 0
-          ? <p className="dim" style={{ margin: 8 }}>No rolls recorded for this character yet.</p>
-          : <StatsView slices={toSlices(data.users)} />}
+    <div className="rollstats-window rollstats-split">
+      <div className="rollstats-rolls">
+        {!data
+          ? <p className="dim" style={{ margin: 8 }}>Crunching the numbers…</p>
+          : data.users.length === 0
+            ? <p className="dim" style={{ margin: 8 }}>No rolls recorded for this character yet.</p>
+            : <StatsView slices={toSlices(data.users)} />}
+      </div>
+      <IncapLedger characterId={characterId} />
+    </div>
+  );
+}
+
+/**
+ * Who this character has put out of the fight, and who has done it to them.
+ *
+ * Beside the dice rather than under them: the rolls say how the character
+ * performs, this says what came of it, and the two are read together.
+ */
+function IncapLedger({ characterId }: { characterId: string }) {
+  const character = useGameStore((s) => s.characters.find((c) => c.id === characterId));
+  if (!character) return null;
+  const caused = tallyRows(tallyOf(character.sheet, KILLS_KEY));
+  const suffered = tallyRows(tallyOf(character.sheet, DEATHS_KEY));
+
+  return (
+    <div className="incap-ledger">
+      <LedgerList
+        title="Incapacitated" rows={caused}
+        empty="Nobody yet." tone="good"
+      />
+      <LedgerList
+        title="Incapacitated by" rows={suffered}
+        empty="Still standing." tone="bad"
+      />
+    </div>
+  );
+}
+
+function LedgerList({ title, rows, empty, tone }: {
+  title: string; rows: { name: string; count: number }[]; empty: string; tone: 'good' | 'bad';
+}) {
+  const total = rows.reduce((n, r) => n + r.count, 0);
+  return (
+    <div className="incap-block">
+      <h5 className={`incap-head incap-${tone}`}>
+        {title}
+        {total > 0 && <span className="incap-total">{total}</span>}
+      </h5>
+      {rows.length === 0
+        ? <p className="dim incap-empty">{empty}</p>
+        : (
+          <ul className="incap-list">
+            {rows.map((r) => (
+              <li key={r.name}>
+                <span className="incap-name">{r.name}</span>
+                {/* The count is only worth the ink when it happened twice. */}
+                {r.count > 1 && <span className="incap-count">×{r.count}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
     </div>
   );
 }

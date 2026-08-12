@@ -766,6 +766,60 @@ interface GroupSaveSpec {
  * and taken the one Power Point a failure costs. The caller stops there.
  */
 /**
+ * Aftermath: what became of the Extras left lying there.
+ *
+ * When the fighting stops, every Incapacitated Extra makes a Vigor roll.
+ * Success and they pull through — to be patched up, taken prisoner, or
+ * released, which is where the interesting problems start. Failure and the
+ * fight killed them after all.
+ *
+ * Wild Cards are not here: they have their own Incapacitation roll and their
+ * own Bleeding Out clock, both of which happen during the fight. This is the
+ * roll nobody makes at a real table because it is a dozen dice for nameless
+ * mooks — which is exactly the kind of bookkeeping a VTT should do for free.
+ */
+function aftermathForExtras(io: Server, campaignId: string): void {
+  const downed = characters.forCampaign(campaignId).filter((c) => c.system === 'swade'
+    && c.sheet.wildCard === false
+    && conditionsOf(c.sheet).includes('incapacitated')
+    && !conditionsOf(c.sheet).includes('dead'));
+  if (downed.length === 0) return;
+  const survivors: string[] = [];
+  const lost: string[] = [];
+  for (const ch of downed) {
+    const br = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4'))));
+    if (br.total >= 4) {
+      survivors.push(ch.name);
+    } else {
+      lost.push(ch.name);
+      persistSheet(io, campaignId, ch, { conditions: [...conditionsOf(ch.sheet), 'dead'] });
+    }
+  }
+  // One card for the lot. A dozen separate roll cards for nameless Extras is
+  // the bookkeeping this is meant to spare the table, not perform for them.
+  const card: SheetCard = {
+    name: '⚔️ Aftermath',
+    theme: lost.length > survivors.length ? 'card-bad' : 'card-info',
+    chips: [
+      { text: `${downed.length} Extra${downed.length === 1 ? '' : 's'} down`, tone: 'qty' },
+      ...(survivors.length ? [{ text: `${survivors.length} pulled through`, tone: 'bonus' }] : []),
+      ...(lost.length ? [{ text: `${lost.length} died of their wounds`, tone: 'penalty' }] : []),
+    ],
+    notes: [
+      ...(survivors.length ? [`Survived, and need seeing to — or guarding: ${survivors.join(', ')}.`] : []),
+      ...(lost.length ? [`Did not: ${lost.join(', ')}.`] : []),
+      'Each Incapacitated Extra rolled Vigor once the fighting stopped.',
+    ],
+  };
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', kind: 'system',
+    text: `⚔️ Aftermath — ${survivors.length} of ${downed.length} downed Extras pulled through.`,
+    card, roll: null, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+}
+
+/**
  * Joker's Wild.
  *
  * A Joker is not just a good card. When a player character draws one, EVERY
@@ -3763,10 +3817,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.INIT_CLEAR, safe(socket, () => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
+    const ending = initiative.get(d.campaignId);
     initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
     resetSwadeTurnMoves(d.campaignId);
     swadeActionCounts.delete(d.campaignId);
     broadcastInitiative(io, d.campaignId);
+    if (ending.active) aftermathForExtras(io, d.campaignId);
   }, 'INIT_CLEAR'));
 
   socket.on(C2S.INIT_ROLL_MAP, safe(socket, ({ mapId, includeGm }: InitRollMapPayload) => {
@@ -3803,6 +3859,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
+    const wasActive = state.active;
     state.active = !!active;
     if (active) {
       const msg = chat.add(d.campaignId, {
@@ -3813,6 +3870,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
+    if (wasActive && !state.active) aftermathForExtras(io, d.campaignId);
   }, 'INIT_SET_ACTIVE'));
 
   // ----- roll-your-own initiative (5e / SWN) -----

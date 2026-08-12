@@ -1,9 +1,9 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
-  playerColorFor, reachableAlong, roll, str, swadePace, systemFor,
+  playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type GridConfig, type Hex, type MoveTokenPayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
+  type GridConfig, type Hex, type JumpRollPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
 import { assets, campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
@@ -11,11 +11,33 @@ import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom 
 import { breakAim, persistSheet, postStatusLine } from '../hp.js';
 
 /** SWADE combat movement spent this turn, per campaign → token. */
-interface TurnMoveRec { moved: number; runBonus: number | null }
+/** A crawl is 2″ of Pace, whatever the character's legs would normally do. */
+const CRAWL_PACE = 2;
+/**
+ * What a prone character chose to do about it this turn, by token id: stand
+ * up, or stay down and crawl. Cleared when they stand, and with the rest of
+ * the turn's movement when the turn ends.
+ */
+const proneIntent = new Map<string, 'stand' | 'crawl'>();
+
+/**
+ * A jump, in inches: 1″ flat, doubled off a run-up of at least 2″, and an
+ * Athletics roll as an action adds 1″ more — 2″ on a raise.
+ *
+ * What a jump BUYS on a hex grid is not extra distance (it still counts
+ * against Pace, per the book) but the right to ignore what is on the ground:
+ * you clear the rough patch, the tar, the low wall of crates. So the distance
+ * is banked as hexes the mover may cross this turn at the ordinary rate.
+ */
+const JUMP_BASE = 1;
+const JUMP_WITH_RUN_UP = 2;
+
+interface TurnMoveRec { moved: number; runBonus: number | null; jump?: number }
 const swadeTurnMoves = new Map<string, Map<string, TurnMoveRec>>();
 
 /** New turn (or combat over): everyone's movement budget refills. */
 export function resetSwadeTurnMoves(campaignId: string): void {
+  for (const tokenId of swadeTurnMoves.get(campaignId)?.keys() ?? []) proneIntent.delete(tokenId);
   swadeTurnMoves.delete(campaignId);
 }
 
@@ -323,17 +345,39 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm' && character?.system === 'swade') {
       const prone = conditionsOf(character.sheet).includes('prone');
       const combat = initiative.get(d.campaignId).active;
+      // Prone is a choice, not a state to be dragged out of. A character on
+      // the ground can get up — a free action that costs 2″ of Pace — or stay
+      // down and crawl, which caps them at 2″ but is unaffected by Difficult
+      // Ground and keeps the −2 that ranged attackers suffer against them.
+      // Moving used to stand them up unasked, which silently threw away the
+      // reason they went prone in the first place.
+      if (prone && combat && !proneIntent.get(tokenId)) {
+        socket.emit(S2C.TOKEN_UPSERTED, { token });
+        socket.emit(S2C.CRAWL_PROMPT, { tokenId, name: character.name, crawlPace: CRAWL_PACE });
+        return;
+      }
+      const crawling = prone && proneIntent.get(tokenId) === 'crawl';
       if (combat) {
         const per = swadeTurnMoves.get(d.campaignId) ?? new Map<string, TurnMoveRec>();
         swadeTurnMoves.set(d.campaignId, per);
         const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
-        const pace = Math.max(1, swadePace(character.sheet) - (prone ? 2 : 0));
+        // Crawling is its own tiny budget; standing spends 2″ of a normal one.
+        const pace = crawling ? CRAWL_PACE : Math.max(1, swadePace(character.sheet) - (prone ? 2 : 0));
         // Difficult Ground: each hex of rough terrain entered costs 2" of
         // Pace instead of 1 — walk the hexes the move crosses, not just the
-        // straight-line distance.
-        const rough = new Set(map.terrain);
+        // straight-line distance. A crawler is already down in it and pays
+        // the ordinary rate.
+        const rough = crawling ? new Set<number>() : new Set(map.terrain);
         const path = hexLine({ q: token.q, r: token.r }, dest).slice(1);
-        const stepDist = path.reduce((a, h) => a + (rough.has(packHex(h)) ? 2 : 1), 0);
+        // A jump in hand clears the rough hexes it covers — that is what the
+        // leap was for. It is spent as it is used, hex by hex.
+        let airborne = rec.jump ?? 0;
+        const stepDist = path.reduce((a, h) => {
+          const isRough = rough.has(packHex(h));
+          if (isRough && airborne > 0) { airborne -= 1; return a + 1; }
+          return a + (isRough ? 2 : 1);
+        }, 0);
+        rec.jump = airborne;
         if (rec.moved + stepDist > pace + (rec.runBonus ?? 0)) {
           if (rec.runBonus === null) {
             // Past Pace with no running die spent: ask, never auto-roll —
@@ -351,9 +395,10 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         rec.moved += stepDist;
         per.set(tokenId, rec);
       }
-      if (prone) {
+      if (prone && !crawling) {
         persistSheet(io, d.campaignId, character, { conditions: conditionsOf(character.sheet).filter((c) => c !== 'prone') });
         postStatusLine(io, d.campaignId, combat ? `${character.name} stands up (2″ of Pace).` : `${character.name} stands up.`);
+        proneIntent.delete(tokenId);
       }
     }
     // Moving under your own power breaks a held Aim — regardless of who
@@ -383,6 +428,67 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
 
   // The player accepted the run: roll the d6 running die (logged to chat)
   // and extend this turn's budget. Their next move attempt then goes through.
+  /**
+   * The answer to the crawl prompt. Recording the choice is all this does —
+   * the move that prompted it was refused, so the player makes it again and
+   * it is honoured. Standing up happens on that move, not here, because
+   * standing is free but the 2″ it costs belongs to a move that actually
+   * happens.
+   */
+  socket.on(C2S.PRONE_MOVE, safe(socket, ({ tokenId, mode }: ProneMovePayload) => {
+    const d = requireCampaign(socket);
+    const token = tokens.byId(tokenId);
+    if (!token) return;
+    const character = token.characterId ? characters.byId(token.characterId) : undefined;
+    if (!character || character.system !== 'swade') return;
+    if (!canMoveToken(d.role, d.userId, token, character)) return;
+    proneIntent.set(tokenId, mode === 'crawl' ? 'crawl' : 'stand');
+    postStatusLine(io, d.campaignId, mode === 'crawl'
+      ? `${character.name} stays down and crawls (${CRAWL_PACE}″, still Prone).`
+      : `${character.name} gets up — the next move stands them up for 2″ of Pace.`);
+  }, 'PRONE_MOVE'));
+
+  /**
+   * Leap. Free at 1″, or 2″ off a run-up; an Athletics roll spends the turn's
+   * action to add 1″ more, 2″ on a raise. The distance still comes out of
+   * Pace — the book is explicit that jumping never lets you exceed it — so
+   * what the jump actually buys is the ground it clears: banked hexes this
+   * turn that cost the ordinary rate however rough they are.
+   */
+  socket.on(C2S.JUMP_ROLL, safe(socket, ({ tokenId, withRunUp, athletics }: JumpRollPayload) => {
+    const d = requireCampaign(socket);
+    const token = tokens.byId(tokenId);
+    if (!token) return;
+    const character = token.characterId ? characters.byId(token.characterId) : undefined;
+    if (!character || character.system !== 'swade') return;
+    if (!canMoveToken(d.role, d.userId, token, character)) return;
+    const per = swadeTurnMoves.get(d.campaignId) ?? new Map<string, TurnMoveRec>();
+    swadeTurnMoves.set(d.campaignId, per);
+    const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
+    let distance = withRunUp ? JUMP_WITH_RUN_UP : JUMP_BASE;
+    let br: ReturnType<typeof roll> | null = null;
+    if (athletics) {
+      br = roll(traitExpr(character.sheet, skillDie(character.sheet, 'Athletics')));
+      // A success adds an inch; a raise adds two.
+      if (br.total >= 8) distance += 2;
+      else if (br.total >= 4) distance += 1;
+    }
+    rec.jump = (rec.jump ?? 0) + distance;
+    per.set(tokenId, rec);
+    const how = withRunUp ? 'with a run-up' : 'from standing';
+    const text = `🤸 ${character.name} jumps ${how} — ${distance}″ cleared`
+      + (athletics ? ` (Athletics ${br!.total})` : '')
+      + '. It still costs Pace, but rough ground under the leap does not.';
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, fromCharacter: character.name, characterId: character.id,
+      kind: br ? 'roll' : 'system', text,
+      roll: br ? { ...br, outcome: br.total >= 4 ? 'success' as const : 'failure' as const } : null,
+      recipients: null,
+      ...(br ? { callout: { what: 'Jumping — Athletics', tone: 'trait' as const } } : {}),
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'JUMP_ROLL'));
+
   socket.on(C2S.RUN_ROLL, safe(socket, ({ tokenId }: RunRollPayload) => {
     const d = requireCampaign(socket);
     const token = tokens.byId(tokenId);

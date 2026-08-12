@@ -938,6 +938,40 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
               </div>
             );
           })()}
+          {character.system === 'swade' && (
+            <div className="roll-row">
+              {/* A jump is free and short. What it BUYS on a map is the ground
+                  it clears — the rough patch, the rubble — since the distance
+                  itself still comes out of Pace. */}
+              <button
+                className="roll-btn action-btn"
+                disabled={!canRoll || !myToken}
+                title="Free action: leap 1″ from standing, or 2″ with at least 2″ of run-up first. The distance still costs Pace, but rough ground under the jump costs nothing extra."
+                onClick={() => { if (myToken) intents.jumpRoll(myToken.id, false, false); }}
+              >
+                <span>🤸 Jump</span>
+                <span className="action-meta">free · 1″</span>
+              </button>
+              <button
+                className="roll-btn action-btn"
+                disabled={!canRoll || !myToken}
+                title="Jump with a run-up of at least 2″: 2″ cleared instead of 1″."
+                onClick={() => { if (myToken) intents.jumpRoll(myToken.id, true, false); }}
+              >
+                <span>🏃 Running jump</span>
+                <span className="action-meta">free · 2″</span>
+              </button>
+              <button
+                className="roll-btn action-btn"
+                disabled={!canRoll || !myToken}
+                title="Spend your ACTION on an Athletics roll to jump further: +1″ on a success, +2″ on a raise, on top of the run-up."
+                onClick={() => { if (myToken) intents.jumpRoll(myToken.id, true, true); }}
+              >
+                <span>🤸 Athletics jump</span>
+                <span className="action-meta">action · +1-2″</span>
+              </button>
+            </div>
+          )}
           {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
         </div>
       )}

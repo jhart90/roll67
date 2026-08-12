@@ -157,6 +157,10 @@ export const C2S = {
   INCAP_DEATH: 'incapDeath',
   /** SWADE: roll the running die to move past Pace this turn. */
   RUN_ROLL: 'runRoll',
+  /** SWADE: jump — clears rough ground, and Athletics can extend it. */
+  JUMP_ROLL: 'jumpRoll',
+  /** SWADE: answer the crawl prompt — stand up, or stay down. */
+  PRONE_MOVE: 'proneMove',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
@@ -826,6 +830,8 @@ export const S2C = {
   INCAP_PROMPT: 'incapPrompt',
   /** SWADE: that move needs the running die — confirm or decline. */
   RUN_PROMPT: 'runPrompt',
+  /** SWADE: a prone character is moving — stand up, or crawl? */
+  CRAWL_PROMPT: 'crawlPrompt',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
@@ -1194,6 +1200,14 @@ export interface IncapPromptPayload {
 }
 export interface RunRollPayload { tokenId: string }
 export interface RunPromptPayload { tokenId: string; name: string; pace: number; moved: number }
+/** SWADE: a prone character asked to move. Standing costs 2″ of this turn's
+ *  Pace; crawling keeps them down, is capped at 2″, and ignores rough ground. */
+export interface CrawlPromptPayload { tokenId: string; name: string; crawlPace: number }
+/** SWADE: leap. `withRunUp` doubles the free distance (2″ of movement first);
+ *  `athletics` spends the turn's action to roll for extra distance. */
+export interface JumpRollPayload { tokenId: string; withRunUp: boolean; athletics: boolean }
+/** Their answer: get up, or stay down and crawl. */
+export interface ProneMovePayload { tokenId: string; mode: 'stand' | 'crawl' }
 export interface IronDicePayload {
   /** SHA-256 of the ACTIVE secret seed — published before its rolls happen. */
   commit: string;

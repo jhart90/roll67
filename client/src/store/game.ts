@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -280,6 +280,8 @@ interface GameState {
   shakenPrompt: ShakenPromptPayload | null;
   /** SWADE: that move needs the running die — confirm or decline. */
   runPrompt: RunPromptPayload | null;
+  /** A prone character is trying to move: stand up, or stay down and crawl? */
+  crawlPrompt: CrawlPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
   /** SWADE: your Stunned character may roll Vigor to come to. */
@@ -545,6 +547,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   stunPrompt: null,
   incapPrompt: null,
   runPrompt: null,
+  crawlPrompt: null,
   rollStatsData: {},
   ironDice: null,
   publicSheets: {},
@@ -1357,6 +1360,10 @@ export function wireSocket(): void {
     useGameStore.setState({ runPrompt: p });
   });
 
+  socket.on(S2C.CRAWL_PROMPT, (p: CrawlPromptPayload) => {
+    useGameStore.setState({ crawlPrompt: p });
+  });
+
   let roundCardsSeq = 0;
   socket.on(S2C.ROUND_CARDS, (p: RoundCardsPayload) => {
     useGameStore.setState({ roundCardsDeal: { ...p, seq: ++roundCardsSeq } });
@@ -1940,6 +1947,14 @@ export const intents = {
   runRoll: (tokenId: string) => {
     socket.emit(C2S.RUN_ROLL, { tokenId });
     useGameStore.setState({ runPrompt: null });
+  },
+  /** Leap: free at 1″ (2″ off a run-up), or spend the action on Athletics. */
+  jumpRoll: (tokenId: string, withRunUp: boolean, athletics: boolean) =>
+    socket.emit(C2S.JUMP_ROLL, { tokenId, withRunUp, athletics }),
+  /** Answer the crawl prompt: get up, or stay down and crawl. */
+  proneMove: (tokenId: string, mode: 'stand' | 'crawl') => {
+    socket.emit(C2S.PRONE_MOVE, { tokenId, mode });
+    useGameStore.setState({ crawlPrompt: null });
   },
   setSoundboardSlot: (slotIndex: number, assetId: string, label: string) =>
     socket.emit(C2S.SET_SOUNDBOARD_SLOT, { slotIndex, assetId, label }),

@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, addTally, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, isAbomination, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -220,6 +220,11 @@ export function applyHpDelta(
   /** Who dealt it, for the line that announces a kill. Absent for damage with
    *  no author — falling, a trap, the DM adjusting a bar by hand. */
   attackerName?: string,
+  /** What kind of damage this was. Only Invulnerability reads it here — the
+   *  resist/immune arithmetic has already been applied by the caller — and an
+   *  untyped hit is exactly the anonymous violence Invulnerability shrugs
+   *  off, so leaving it out is the safe default rather than a gap. */
+  damageType?: string,
 ): { character: Character; note: string } {
   // SWADE characters use the real damage ladder — Shaken and Wounds against
   // Toughness — never the HP pool. Every damage/heal site funnels through
@@ -227,7 +232,7 @@ export function applyHpDelta(
   // heals alike.
   if (character.system === 'swade') {
     return delta < 0
-      ? applySwadeDamage(io, campaignId, character, -delta, sourceLabel, attackerName)
+      ? applySwadeDamage(io, campaignId, character, -delta, sourceLabel, attackerName, damageType)
       : applySwadeHeal(io, campaignId, character, delta);
   }
   const { patch, note, status, concCheck } = computeHpDelta(character, delta);
@@ -399,10 +404,21 @@ function recordIncapacitation(
   }
 }
 
+/**
+ * Does this damage type appear in the creature's Environmental Weakness — the
+ * one thing that gets through an Invulnerability? Sunlight for the vampire,
+ * a stained-glass shard for the ancient god the cultists misguidedly raised.
+ */
+function namedWeakness(sheet: SheetData, damageType?: string): boolean {
+  const t = (damageType ?? '').toLowerCase().trim();
+  if (!t) return false;
+  return str(sheet, 'vulnerable', '').toLowerCase().split(/[,;/]/).map((x) => x.trim()).includes(t);
+}
+
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
-  attackerName?: string,
+  attackerName?: string, damageType?: string,
 ): { character: Character; note: string } {
   const derived = systemFor('swade').derive(character.sheet);
   const toughness = Number(derived.toughness) || 4;
@@ -415,8 +431,14 @@ function applySwadeDamage(
       wildCard,
       size: num(character.sheet, 'size', 0),
       override: num(character.sheet, 'maxWoundsOverride', 0),
+      resilient: str(character.sheet, 'resilient', ''),
     }),
     hardy: character.sheet.hardy === true,
+    // Invulnerable to everything EXCEPT what its own Environmental Weakness
+    // names — the field already says what gets through, so the ability needs
+    // no second list of its own. A hit with no damage type at all cannot be
+    // the named exception, so it never wounds one.
+    invulnerable: character.sheet.invulnerable === true && !namedWeakness(character.sheet, damageType),
   });
   if (!out.shaken) return { character, note: ` — ${out.summary}` };
 
@@ -544,7 +566,9 @@ export function resolveIncapacitation(io: Server, campaignId: string, ch: Charac
   let cur = persistSheet(io, campaignId, ch, {
     injuries: (prev ? `${prev}; ` : '') + `${injury.location} ${duration}`,
   });
-  if (!ok) {
+  // You cannot bleed what does not pump: constructs and undead go down and
+  // stay down rather than dying on a failed Vigor roll a few rounds later.
+  if (!ok && !isAbomination(cur.sheet)) {
     applyConditionTo(io, campaignId, cur, 'bleeding', 'Incapacitation');
     cur = characters.byId(cur.id) ?? cur;
   }
@@ -599,6 +623,7 @@ export function applySwadeWoundHeal(
     wildCard: cur.sheet.wildCard !== false,
     size: num(cur.sheet, 'size', 0),
     override: num(cur.sheet, 'maxWoundsOverride', 0),
+    resilient: str(cur.sheet, 'resilient', ''),
   });
   if (woundsHealed > 0 && woundsAfter <= healCap && conditionsOf(cur.sheet).includes('incapacitated')) {
     patch.conditions = (Array.isArray(patch.conditions) ? patch.conditions as string[] : conditionsOf(cur.sheet))

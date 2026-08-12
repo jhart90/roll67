@@ -106,7 +106,14 @@ export function swadeWoundCap(opts: {
   wildCard: boolean;
   size: number;
   override?: number;
+  /** Elite Extras: Resilient takes one Wound before it drops, Very Resilient
+   *  two. It exists to bring a named Extra — the sergeant, the troll — closer
+   *  to the heroes without making them a Wild Card, so it is ignored on one:
+   *  a Wild Card already has three. */
+  resilient?: string;
 }): number {
   if (opts.override && opts.override > 0) return Math.floor(opts.override);
-  return (opts.wildCard ? 3 : 0) + extraWoundsFor(opts.size);
+  const resilient = opts.wildCard ? 0
+    : opts.resilient === 'veryResilient' ? 2 : opts.resilient === 'resilient' ? 1 : 0;
+  return (opts.wildCard ? 3 : 0) + extraWoundsFor(opts.size) + resilient;
 }

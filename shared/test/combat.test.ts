@@ -146,7 +146,7 @@ describe('SWADE creature abilities on an attack', () => {
       ...swade.defaultSheet(),
       attacks: [{ name: 'Bite', skill: 'Fighting', damage: '1d4!+2', range: 5, poison: true, poisonMod: -2, poisonEffect: 'incapacitated' }],
     }));
-    expect(a.poison).toEqual({ mod: -2, effect: 'incapacitated' });
+    expect(a.poison).toEqual({ mod: -2, effect: 'incapacitated', kind: 'poison' });
   });
 
   it('defaults an unspecified venom to a level of Fatigue', () => {
@@ -154,7 +154,15 @@ describe('SWADE creature abilities on an attack', () => {
       ...swade.defaultSheet(),
       attacks: [{ name: 'Sting', skill: 'Fighting', damage: '1d6!', range: 5, poison: true }],
     }));
-    expect(a.poison).toEqual({ mod: 0, effect: 'fatigue' });
+    expect(a.poison).toEqual({ mod: 0, effect: 'fatigue', kind: 'poison' });
+  });
+
+  it('reads an infectious bite as Infection, on the same machinery', () => {
+    const [a] = combatActions(swadePc({
+      ...swade.defaultSheet(),
+      attacks: [{ name: 'Claws', skill: 'Fighting', damage: '1d12!+1d8!', range: 5, infection: true, poisonMod: 0, poisonEffect: 'shaken' }],
+    }));
+    expect(a.poison).toEqual({ mod: 0, effect: 'shaken', kind: 'infection' });
   });
 
   it('gives the bestiary’s venomous creatures real poison, not 5e’s condition', () => {

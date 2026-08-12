@@ -477,9 +477,14 @@ describe('SWADE library & compendium', () => {
     expect(breath.onSave).toBe('half');
   });
 
-  it('undead carry their +2 Toughness as a real armor row; the ghost is immune to mundane damage', () => {
+  it('undead carry their +2 Toughness off the Undead flag, not a fake armor row', () => {
     const skeleton = NPCS_SWADE.find((n) => n.name === 'Skeleton')!;
-    expect(swadeToughness(skeleton.sheet)).toBe(2 + 3 + 2); // vigor d6 + resilience
+    expect(skeleton.sheet.undead).toBe(true);
+    expect(swadeToughness(skeleton.sheet)).toBe(2 + 3 + 2); // vigor d6 + Undead
+    // It is Toughness, not armour: nothing in the armour list stands in for
+    // it, so nothing that eats armour can eat this.
+    const armor = (skeleton.sheet.armor ?? []) as Array<{ name?: string }>;
+    expect(armor.some((a) => a.name === 'Undead')).toBe(false);
     expect(skeleton.sheet.resist).toBe('piercing');
     const ghost = NPCS_SWADE.find((n) => n.name === 'Ghost')!;
     expect(String(ghost.sheet.immune)).toContain('slashing');

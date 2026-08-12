@@ -206,6 +206,14 @@ const TERMS_SWN: Record<string, string> = {
 // ---------- SWADE sheet-only labels ----------
 
 const SWADE_SHEET: Record<string, string> = {
+  Construct: 'A robot, golem or elemental — never alive. Ignores a level of Wound penalties, +2 to recover from Shaken, takes no bonus damage from Called Shots, never Bleeds Out, and is mended with Repair rather than Healing.',
+  Undead: 'A zombie, skeleton or worse. +2 Toughness, +2 to recover from Shaken, ignores a level of Wound penalties, takes no bonus damage from Called Shots, never Bleeds Out, and only magical healing mends it.',
+  Resilient: 'An elite Extra: one Wound before it drops rather than none, or two for Very Resilient. Wild Cards cannot take it — they already carry three.',
+  Invulnerable: 'Nothing Wounds it. Blows still Shake and Stun it, but only what its Environmental Weakness names can actually hurt it — set that field to whatever the story says gets through.',
+  'Low Light Vision': 'Ignores the attack penalty for Dim and Dark illumination. Pitch darkness still blinds it — there is no light left to make the most of.',
+  Infravision: 'Sees by heat, halving illumination penalties when attacking something warm. A construct or an undead gives off nothing to see, and neither does a foe under cold mud.',
+  Swat: 'This attack ignores up to 4 points of Scale penalty against something smaller — the giant has learned to deal with pests. Only the attacks its description names.',
+  Infection: 'A hit that at least Shakes forces a Vigor roll, the same way venom does. What failing costs is set beside it — for a werewolf’s claws, becoming one.',
   Poison: 'This attack is venomous. It only tells if the hit at least Shakes — armour and a tough hide keep the venom out along with the fangs — and then the victim rolls Vigor against it.',
   'Poison str': 'How strong the venom is, as the modifier on the victim’s Vigor roll: −2 for something nasty, 0 for ordinary, +2 for a weak dose.',
   'Poison effect': 'What failing that Vigor roll costs: a level of Fatigue (two levels puts them out), Shaken, or straight to Incapacitated for something lethal.',

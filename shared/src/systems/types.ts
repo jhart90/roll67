@@ -123,12 +123,18 @@ export interface CombatAction {
   stowed?: true;
   /** SWADE: armor piercing — reduces the target's ranged-armor soak. */
   ap?: number;
+  /** SWADE: Swat — this attack ignores up to 4 points of Scale penalty
+   *  against something smaller. Per-attack, because the book grants it only
+   *  for the abilities a creature's own description names. */
+  swat?: boolean;
   /** SWADE: a Heavy Weapon — a cannon, a torpedo, a dragon's breath. The only
    *  thing that can hurt Heavy Armor, which every Gargantuan creature has. */
   heavy?: boolean;
-  /** SWADE: venomous. A hit that at least Shakes forces a Vigor roll at
-   *  `poisonMod` (the poison's strength); failing it costs `poisonEffect`. */
-  poison?: { mod: number; effect: 'fatigue' | 'shaken' | 'incapacitated' };
+  /** SWADE: venomous, or infectious. Both work the same way and the book
+   *  writes them the same way — a hit that at least Shakes forces a Vigor
+   *  roll at the given modifier, and failing it costs `effect`. `kind` only
+   *  decides what the chat card calls it. */
+  poison?: { mod: number; effect: 'fatigue' | 'shaken' | 'incapacitated' | 'paralyzed'; kind: 'poison' | 'infection' };
   /** SWADE: lobbed rather than fired (a grenade). Thrown weapons have no
    *  Extreme band — past Long they are simply out of range. */
   thrown?: boolean;

@@ -138,9 +138,35 @@ export function skillDie(sheet: SheetData, name: string): number {
   return row ? dieSides(str(row, 'die', 'd4')) : 0;
 }
 
+/**
+ * Robots, golems, elementals: things that were never alive. They are repaired
+ * rather than healed, and there is no Golden Hour on a golem.
+ */
+export function isConstruct(sheet: SheetData): boolean {
+  return sheet.construct === true;
+}
+
+/**
+ * Zombies, skeletons, and the rest of the physical horrors. Tougher than the
+ * living by two, and only magic mends them.
+ */
+export function isUndead(sheet: SheetData): boolean {
+  return sheet.undead === true;
+}
+
+/**
+ * What the two have in common, which is most of it: they ignore a level of
+ * Wound penalties, shrug off being Shaken more easily, take no extra damage
+ * from a Called Shot, and never Bleed Out — you cannot bleed what does not
+ * pump. Written once because the book writes it twice.
+ */
+export function isAbomination(sheet: SheetData): boolean {
+  return isConstruct(sheet) || isUndead(sheet);
+}
+
 /** Standard SWADE trait-roll penalty: −1 per Wound (max −3) and per Fatigue level. */
 export function woundPenalty(sheet: SheetData): number {
-  const wounds = Math.min(3, Math.max(0, num(sheet, 'wounds', 0)));
+  const wounds = Math.max(0, Math.min(3, num(sheet, 'wounds', 0)) - (isAbomination(sheet) ? 1 : 0));
   const fatigue = Math.min(2, Math.max(0, num(sheet, 'fatigue', 0)));
   return -(wounds + fatigue);
 }
@@ -156,9 +182,12 @@ function conditionTraitPenalty(sheet: SheetData): number {
 /** Itemized sources of the flat penalty traitExpr folds into every roll. */
 export function traitModWhy(sheet: SheetData): string[] {
   const out: string[] = [];
-  const wounds = Math.min(3, Math.max(0, num(sheet, 'wounds', 0)));
+  const carried = Math.min(3, Math.max(0, num(sheet, 'wounds', 0)));
+  const wounds = Math.max(0, carried - (isAbomination(sheet) ? 1 : 0));
   const fatigue = Math.min(2, Math.max(0, num(sheet, 'fatigue', 0)));
-  if (wounds > 0) out.push(`−${wounds} Wounds — −1 per wound carried`);
+  const kindWord = isUndead(sheet) ? 'Undead' : 'Construct';
+  if (wounds > 0) out.push(`−${wounds} Wounds — −1 per wound carried${isAbomination(sheet) ? `, less one it ignores as ${isUndead(sheet) ? 'an' : 'a'} ${kindWord}` : ''}`);
+  else if (carried > 0) out.push(`Wounds ignored — ${isUndead(sheet) ? 'an' : 'a'} ${kindWord} shrugs off the first level of penalties`);
   if (fatigue > 0) out.push(`−${fatigue} Fatigue — −1 per fatigue level`);
   const conds = conditionsOf(sheet);
   const dLike = DISTRACTED_LIKE.find((c) => conds.includes(c));
@@ -270,8 +299,11 @@ export function swadeParry(sheet: SheetData): number {
  *  Protection powers (+2 each while toggled on). */
 export function swadeToughness(sheet: SheetData): number {
   const vigor = dieSides(str(sheet, 'vigor', 'd6'));
+  // The Undead's +2 is Toughness, not armor: a bullet passing through a
+  // corpse simply does less to it than it would to a person.
   return 2 + Math.floor(vigor / 2) + equippedGearBonuses(sheet).armor
     + (sheet.armorActive === true ? 2 : 0) + (sheet.protectionActive === true ? 2 : 0)
+    + (isUndead(sheet) ? 2 : 0)
     + traitLineBonuses(sheet).toughness;
 }
 
@@ -396,6 +428,12 @@ const identityFields: FieldDef[] = [
   // The bestiary's three "is it that kind of thing" switches. Each one turns
   // off a rule the engine otherwise applies to everybody.
   { id: 'hardy', label: 'Hardy', type: 'checkbox', width: 'sixth', default: false },
+  { id: 'construct', label: 'Construct', type: 'checkbox', width: 'sixth', default: false },
+  { id: 'undead', label: 'Undead', type: 'checkbox', width: 'sixth', default: false },
+  // Elite Extras: one Wound before they drop, or two. Wild Cards cannot take
+  // it — they already have three.
+  { id: 'resilient', label: 'Resilient', type: 'select', width: 'sixth', default: '', options: ['', 'resilient', 'veryResilient'], optionLabels: { '': 'no', resilient: 'Resilient (+1 Wound)', veryResilient: 'Very Resilient (+2)' } },
+  { id: 'invulnerable', label: 'Invulnerable', type: 'checkbox', width: 'sixth', default: false },
   // Gargantuan things have it automatically; the box is for the armoured
   // thing that isn't Gargantuan, like a tank.
   { id: 'heavyArmor', label: 'Heavy Armor', type: 'checkbox', width: 'sixth', default: false },
@@ -431,6 +469,10 @@ const combatFields: FieldDef[] = [
 const sensesFields: FieldDef[] = [
   { id: 'visionRange', label: 'Vision range (hexes)', type: 'number', width: 'half', default: 10 },
   { id: 'darkvision', label: 'Low-light / infravision (hexes)', type: 'number', width: 'half', default: 0 },
+  // How far it sees in the dark is one question; what the dark COSTS it when
+  // it attacks is another, and these two answer the second.
+  { id: 'lowLightVision', label: 'Low Light Vision', type: 'checkbox', width: 'half', default: false },
+  { id: 'infravision', label: 'Infravision', type: 'checkbox', width: 'half', default: false },
 ];
 
 const coreTab: SheetTab = {
@@ -528,11 +570,13 @@ const gearTab: SheetTab = {
         { id: 'range', label: 'Range ft', type: 'number', width: 'sixth', default: 5 },
         { id: 'ap', label: 'AP', type: 'number', width: 'sixth', default: 0 },
         { id: 'heavy', label: 'Heavy', type: 'checkbox', width: 'sixth' },
+        { id: 'swat', label: 'Swat', type: 'checkbox', width: 'sixth' },
         // Venom. It only comes into play on a hit that at least Shakes, so
         // these three sit next to the damage they depend on.
         { id: 'poison', label: 'Poison', type: 'checkbox', width: 'sixth' },
+        { id: 'infection', label: 'Infection', type: 'checkbox', width: 'sixth' },
         { id: 'poisonMod', label: 'Poison str', type: 'number', width: 'sixth', default: 0 },
-        { id: 'poisonEffect', label: 'Poison effect', type: 'select', width: 'sixth', default: 'fatigue', options: ['fatigue', 'shaken', 'incapacitated'], optionLabels: { fatigue: 'Fatigue a level', shaken: 'Shaken', incapacitated: 'Incapacitated' } },
+        { id: 'poisonEffect', label: 'Poison effect', type: 'select', width: 'sixth', default: 'fatigue', options: ['fatigue', 'shaken', 'incapacitated', 'paralyzed'], optionLabels: { fatigue: 'Fatigue a level', shaken: 'Shaken', incapacitated: 'Incapacitated', paralyzed: 'Paralysed 2d6 rounds' } },
         { id: 'parryBonus', label: 'Parry mod', type: 'number', width: 'sixth', default: 0 },
         { id: 'wielded', label: 'Wielded', type: 'checkbox', width: 'sixth' },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },
@@ -689,6 +733,7 @@ export const swade: SystemSchema = {
       + (band.extraWounds ? ` · +${band.extraWounds} Wound${band.extraWounds === 1 ? '' : 's'}` : '');
     out.maxWoundsOverride = `carries ${swadeWoundCap({
       wildCard: sheet.wildCard !== false, size, override: num(sheet, 'maxWoundsOverride', 0),
+      resilient: str(sheet, 'resilient', ''),
     })} Wound(s)`;
     // Only when there IS cover: a badge reading "none" is noise on every
     // sheet in the campaign for the sake of the rare one that is behind a bar.

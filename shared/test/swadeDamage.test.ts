@@ -69,6 +69,32 @@ describe('swadeDamageOutcome', () => {
       expect(swadeDamageOutcome(7, 6, fresh).woundsDealt).toBe(0);
     });
   });
+
+  /**
+   * Invulnerability stops at the Wound. The blow still lands, still rattles,
+   * still counts as a hit — it simply cannot hurt the thing. Whether THIS
+   * blow is the exception is the caller's decision (it reads the creature's
+   * Environmental Weakness), so from here it is a plain switch.
+   */
+  describe('Invulnerable', () => {
+    const wc = { alreadyShaken: false, wildCard: true, currentWounds: 0 };
+
+    it('shakes but never wounds, however hard the hit', () => {
+      const r = swadeDamageOutcome(30, 6, { ...wc, invulnerable: true });
+      expect(r.shaken).toBe(true);
+      expect(r.woundsDealt).toBe(0);
+      expect(r.incapacitated).toBe(false);
+      expect(r.verdict).toMatch(/Invulnerable/);
+    });
+
+    it('does not stop a hit that misses Toughness from missing anyway', () => {
+      expect(swadeDamageOutcome(3, 6, { ...wc, invulnerable: true }).shaken).toBe(false);
+    });
+
+    it('is off for the one thing that does hurt it, and then it wounds normally', () => {
+      expect(swadeDamageOutcome(14, 6, { ...wc, invulnerable: false }).woundsDealt).toBe(2);
+    });
+  });
 });
 
 describe('soakSuccesses', () => {

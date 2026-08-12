@@ -49,6 +49,11 @@ export function swadeDamageOutcome(
      *  difference between an Extra who folds to two glancing blows and one
      *  who has to actually be hurt, so golems, oozes and the like have it. */
     hardy?: boolean;
+    /** Invulnerable to THIS hit: it can still be Shaken and Stunned, but
+     *  nothing about it can be Wounded. The caller decides — an invulnerable
+     *  creature struck by the one thing that does hurt it is not invulnerable
+     *  to that, and takes Wounds like anything else. */
+    invulnerable?: boolean;
   },
 ): SwadeHitResult {
   // An Extra's cap is 0: the first Wound takes them out. A Huge Extra's is 2,
@@ -68,14 +73,19 @@ export function swadeDamageOutcome(
   // Shaken is just Shaken again. Raises still wound a Hardy creature: Hardy
   // only spares it the wound it would take for being rattled twice.
   const doubleShakenWound = opts.alreadyShaken && !opts.hardy;
-  const woundsDealt = raises > 0 ? raises : (doubleShakenWound ? 1 : 0);
+  // Invulnerability stops at the Wound: the blow still rattles it, and a
+  // stained-glass god still cannot be cut with a sword.
+  const woundsDealt = opts.invulnerable ? 0 : (raises > 0 ? raises : (doubleShakenWound ? 1 : 0));
   const woundsAfter = Math.min(opts.currentWounds + woundsDealt, cap + 1);
   const incapacitated = woundsAfter > cap;
 
+  // Say WHY a blow that should have wounded cost nothing, or the table reads
+  // it as a bug. Invulnerability is named first: it is the bigger surprise.
   const verdict = woundsDealt > 0
     ? `${woundsDealt} Wound${woundsDealt === 1 ? '' : 's'}`
-    // Say WHY the second Shaken cost nothing, or the table reads it as a bug.
-    : (opts.alreadyShaken ? (opts.hardy ? 'Shaken (again — Hardy, no Wound)' : 'Shaken (again)') : 'Shaken');
+    : opts.invulnerable ? 'Shaken (Invulnerable — nothing here can Wound it)'
+      : opts.alreadyShaken ? (opts.hardy ? 'Shaken (again — Hardy, no Wound)' : 'Shaken (again)')
+        : 'Shaken';
   const stateNote = incapacitated ? 'INCAPACITATED'
     : woundsDealt > 0 ? `now ${woundsAfter} Wound${woundsAfter === 1 ? '' : 's'}, Shaken`
       : null;

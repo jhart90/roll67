@@ -60,7 +60,7 @@ describe('Scale difference on attacks', () => {
   });
 });
 
-import { hasHeavyArmor } from '../src/systems/swadeSize.js';
+import { hasHeavyArmor, swadeWoundCap } from '../src/systems/swadeSize.js';
 import { NPCS_SWADE } from '../src/data/npcsSwade.js';
 import { num } from '../src/systems/types.js';
 
@@ -105,6 +105,34 @@ describe('Heavy Armor', () => {
   });
 });
 
+/**
+ * Resilient exists to put a named Extra — the sergeant, the ogre — closer to
+ * the heroes without promoting them to a Wild Card. It stacks with Size,
+ * which is how a Huge troll ends up hard to put down for the right reasons.
+ */
+describe('Resilient and Very Resilient', () => {
+  it('buys an Extra one Wound, or two', () => {
+    expect(swadeWoundCap({ wildCard: false, size: 0 })).toBe(0);
+    expect(swadeWoundCap({ wildCard: false, size: 0, resilient: 'resilient' })).toBe(1);
+    expect(swadeWoundCap({ wildCard: false, size: 0, resilient: 'veryResilient' })).toBe(2);
+  });
+
+  it('stacks with the Wounds Size already grants', () => {
+    expect(swadeWoundCap({ wildCard: false, size: 8, resilient: 'resilient' })).toBe(3);
+  });
+
+  it('is ignored on a Wild Card, who already has three', () => {
+    expect(swadeWoundCap({ wildCard: true, size: 0, resilient: 'veryResilient' })).toBe(3);
+  });
+
+  it('reaches the creatures whose stat blocks claim it', () => {
+    for (const name of ['Troll', 'Ogre', 'Drake']) {
+      const npc = NPCS_SWADE.find((n) => n.name === name)!;
+      expect(npc.sheet.resilient, `${name} should be Resilient`).toBe('resilient');
+    }
+  });
+});
+
 describe('bestiary sizes', () => {
   it('gives every SWADE creature a Size', () => {
     for (const npc of NPCS_SWADE) {
@@ -128,7 +156,6 @@ describe('bestiary sizes', () => {
   });
 });
 
-import { swadeWoundCap } from '../src/systems/swadeSize.js';
 import { swadeDamageOutcome } from '../src/systems/swadeDamage.js';
 
 describe('wound cap from Size', () => {

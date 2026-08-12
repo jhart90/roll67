@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, hasHeavyArmor, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, MAX_WOUNDS, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
@@ -306,16 +306,20 @@ function startOfTurnRecovery(io: Server, campaignId: string, chIn: Character): v
  * this only decides when to ask and what to do with the answer.
  */
 function resolvePoison(
-  io: Server, campaignId: string, target: Character, poison: { mod: number; effect: string }, sourceLabel: string,
+  io: Server, campaignId: string, target: Character,
+  poison: { mod: number; effect: string; kind?: string }, sourceLabel: string,
 ): void {
   const fresh = characters.byId(target.id) ?? target;
   const br = roll(traitExpr(fresh.sheet, dieSides(String(fresh.sheet.vigor ?? 'd4')), poison.mod));
   const resisted = br.total >= 4;
   const effectWord = poison.effect === 'incapacitated' ? 'Incapacitated'
-    : poison.effect === 'shaken' ? 'Shaken' : 'a level of Fatigue';
+    : poison.effect === 'shaken' ? 'Shaken'
+      : poison.effect === 'paralyzed' ? 'Paralysed'
+        : 'a level of Fatigue';
+  const label = poison.kind === 'infection' ? 'Infection' : 'Poison';
   const msg = chat.add(campaignId, {
     userId: null, fromName: 'System', kind: 'roll', characterId: fresh.id,
-    text: `${fresh.name} — Poison (Vigor${fmtMod(poison.mod)}) from ${sourceLabel}: ${resisted ? 'shrugs it off' : `takes ${effectWord}`}`,
+    text: `${fresh.name} — ${label} (Vigor${fmtMod(poison.mod)}) from ${sourceLabel}: ${resisted ? 'shrugs it off' : `takes ${effectWord}`}`,
     roll: { ...br, outcome: resisted ? 'success' as const : 'failure' as const }, recipients: null,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
@@ -324,11 +328,18 @@ function resolvePoison(
     // Fatigue is a track, not a condition: two levels and they are out.
     const after = Math.min(2, num(fresh.sheet, 'fatigue', 0) + 1);
     persistSheet(io, campaignId, fresh, { fatigue: after });
-    postStatusLine(io, campaignId, `${fresh.name} is Fatigued by poison (${after} of 2).`);
-    if (after >= 2) applyConditionTo(io, campaignId, characters.byId(fresh.id) ?? fresh, 'incapacitated', 'poison');
+    postStatusLine(io, campaignId, `${fresh.name} is Fatigued by ${label.toLowerCase()} (${after} of 2).`);
+    if (after >= 2) applyConditionTo(io, campaignId, characters.byId(fresh.id) ?? fresh, 'incapacitated', label.toLowerCase());
     return;
   }
-  applyConditionTo(io, campaignId, fresh, poison.effect === 'shaken' ? 'shaken' : 'incapacitated', 'poison');
+  // Paralysis also Stuns, per the book: rigid AND rattled.
+  if (poison.effect === 'paralyzed') {
+    applyConditionTo(io, campaignId, fresh, 'stunned', label.toLowerCase());
+    applyConditionTo(io, campaignId, characters.byId(fresh.id) ?? fresh, 'paralyzed', label.toLowerCase());
+    postStatusLine(io, campaignId, `${fresh.name} is Paralysed — no action of any kind, even speech, for 2d6 rounds.`);
+    return;
+  }
+  applyConditionTo(io, campaignId, fresh, poison.effect === 'shaken' ? 'shaken' : 'incapacitated', label.toLowerCase());
 }
 
 /**
@@ -389,7 +400,8 @@ export function resolveStunRecovery(io: Server, campaignId: string, ch: Characte
 
 /** The Shaken recovery: Spirit vs 4 — success stands them back up. */
 export function resolveShakenRecovery(io: Server, campaignId: string, ch: Character): void {
-  const b = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4'))));
+  // A construct is +2 to come out of it: there is less of it to rattle.
+  const b = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.spirit ?? 'd4')), isConstruct(ch.sheet) ? 2 : 0));
   const recovered = b.total >= 4;
   if (recovered) {
     persistSheet(io, campaignId, ch, { conditions: conditionsOf(ch.sheet).filter((c) => c !== 'shaken') });
@@ -936,7 +948,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
             // no per-target card to put it on, so it goes out as its own line.
             // Without this the log jumps from one damage roll straight to
             // "X is Incapacitated" with nothing saying why.
-            const { note } = applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw', spec.attackerName);
+            const { note } = applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw', spec.attackerName, spec.damageType);
             const said = note.replace(/^\s*—\s*/, '').trim();
             if (said) postStatusLine(io, spec.campaignId, `${fresh.name}: ${said}`, spec.leadMessageId);
           }
@@ -1665,8 +1677,30 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             }
           }
           const base = map.grid.lighting === 'dim' ? -2 : map.grid.lighting === 'dark' ? -4 : -6;
-          const illum = lit === 'bright' ? 0 : lit === 'dim' ? -2 : base;
-          if (illum) { mod += illum; tags.push(`${illum} ${illum === -2 ? 'Dim light' : illum === -4 ? 'Darkness' : 'Pitch darkness'}`); }
+          let illum = lit === 'bright' ? 0 : lit === 'dim' ? -2 : base;
+          const illumWord = illum === -2 ? 'Dim light' : illum === -4 ? 'Darkness' : 'Pitch darkness';
+          // Low Light Vision ignores Dim and Dark outright — but not Pitch
+          // Darkness, where there is no light left to make the most of.
+          if (illum < 0 && illum > -6 && actor.sheet.lowLightVision === true) {
+            tags.push(`${illum} ${illumWord} ignored (Low Light Vision)`);
+            illum = 0;
+          } else if (illum < 0 && actor.sheet.infravision === true) {
+            // Infravision sees heat rather than light, so it halves the
+            // penalty — against something that gives off heat. A construct
+            // does not, which is exactly the clever trick the book invites
+            // players to pull with cold mud and a heat-filtering suit.
+            const warm = !targetChar || !(targetChar.system === 'swade' && isAbomination(targetChar.sheet));
+            if (warm) {
+              const halved = Math.ceil(illum / 2); // −4 → −2, −6 → −3
+              tags.push(`${halved} ${illumWord}, halved by Infravision`);
+              illum = halved;
+            } else {
+              tags.push(`${illum} ${illumWord} (Infravision finds no warmth here)`);
+            }
+          } else if (illum) {
+            tags.push(`${illum} ${illumWord}`);
+          }
+          mod += illum;
         }
         // Aim (earned by spending last turn on the 🎯 Aim action): negate up
         // to 4 points of range/cover penalties, else +2 flat.
@@ -1737,22 +1771,34 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // so the two never both apply — the book is explicit that the modifier
         // depends on "the Scale of the target itself, not the creature it's
         // part of". Stacking them charged the attacker twice for one Scale.
-        const scaleMod = p.calledShot ? 0 : sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
+        const rawScale = p.calledShot ? 0 : sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
+        // Swat: a creature that has learned to deal with things smaller than
+        // itself ignores up to 4 points of the Scale penalty — but only with
+        // the attacks its own description names, which is why it is a flag on
+        // the weapon row rather than on the creature.
+        const swatted = action.swat === true && rawScale < 0 ? Math.min(4, -rawScale) : 0;
+        const scaleMod = rawScale + swatted;
         if (scaleMod) {
           mod += scaleMod;
           tags.push(sizeAttackTag(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0))!);
         }
+        if (swatted) tags.push(`+${swatted} Swat`);
         // Called Shot: the Scale of the PART being aimed at, which the client
         // worked out from the defender's own Size once a target was picked —
         // a Huge creature's head is a bigger thing to hit than a person's.
         // Re-clamped here so a hand-typed modifier cannot invent one.
         if (p.calledShot) {
           const csPen = clampCalledShotPenalty(Number(p.calledShot.penalty) || 0);
-          const csDmg = Math.max(0, Math.min(8, Math.floor(Number(p.calledShot.damageBonus) || 0)));
+          // A Called Shot pays a to-hit penalty for extra damage to a vital
+          // spot. A skeleton has no vitals: the penalty still applies (the eye
+          // socket is still a small target) but the bonus does not, which is
+          // the book's way of saying stop aiming for its heart.
+          const noVitals = !!targetChar && targetChar.system === 'swade' && isAbomination(targetChar.sheet);
+          const csDmg = noVitals ? 0 : Math.max(0, Math.min(8, Math.floor(Number(p.calledShot.damageBonus) || 0)));
           const csLabel = String(p.calledShot.label || 'Called Shot').slice(0, 40);
           mod += csPen;
           dmgBonus += csDmg;
-          tags.push(calledShotTag(csLabel, csPen));
+          tags.push(calledShotTag(csLabel, csPen) + (noVitals && Number(p.calledShot.damageBonus) > 0 ? ' (no vitals — no bonus damage)' : ''));
         }
         if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
         else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
@@ -1993,7 +2039,19 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // SWADE healing isn't an amount at all: the Healing roll's own margin
       // is the result — a success mends one Wound, a raise two, a failure
       // none. `magnitude` here is that wound count, not points.
-      const woundsMended = action.healsWounds ? swadeWoundsHealed(hit, raise) : 0;
+      // A construct is repaired, not healed: the Healing skill has nothing to
+      // work on, and there is no Golden Hour on a golem. The roll still
+      // happens — the medic tried — it simply mends nothing, and the card
+      // says why so nobody spends a second action on it.
+      // A construct is repaired and an undead is mended by magic, so a
+      // Healing roll from a kit has nothing to work on either way. `arcane`
+      // marks the healing that does reach an undead — a power rather than a
+      // pair of hands.
+      const swadeTarget = targetChar?.system === 'swade';
+      const arcaneHeal = action.source === 'power' || action.source === 'spell';
+      const needsRepair = !!action.healsWounds && swadeTarget && isConstruct(targetChar!.sheet);
+      const needsMagic = !!action.healsWounds && swadeTarget && !arcaneHeal && isUndead(targetChar!.sheet);
+      const woundsMended = action.healsWounds && !needsRepair && !needsMagic ? swadeWoundsHealed(hit, raise) : 0;
       if (action.healsWounds) magnitude = woundsMended;
       const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
       const delta = action.effect === 'heal' ? applied : -applied;
@@ -2045,6 +2103,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
                 wildCard: targetChar.sheet.wildCard !== false,
                 size: num(targetChar.sheet, 'size', 0),
                 override: num(targetChar.sheet, 'maxWoundsOverride', 0),
+                resilient: str(targetChar.sheet, 'resilient', ''),
               }),
             });
             defenseTag = ` (Toughness ${toughness})`;
@@ -2062,7 +2121,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             // Re-read fresh: item/ammo consumption below may have already
             // patched this same sheet (when the actor heals themself).
             const fresh = characters.byId(targetId);
-            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name);
+            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name, action.damageType);
             floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType);
           };
         } else if (tgt.bar) {
@@ -2095,9 +2154,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // breakdown reads as a reward rather than a bug.
       const rollTag = crit ? ' (crit ×2 dice)' : raise && !action.healsWounds ? ' (raise +1d6)' : '';
       const amountRow = action.healsWounds
-        ? (woundsMended === 0
-          ? 'No Wounds mended'
-          : `Mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'}${raise ? ' (raise!)' : ''}`)
+        ? (needsRepair
+          ? 'No Wounds mended — a Construct is mended with Repair, not Healing'
+          : needsMagic
+            ? 'No Wounds mended — the Undead are mended by magic, not medicine'
+          : woundsMended === 0
+            ? 'No Wounds mended'
+            : `Mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'}${raise ? ' (raise!)' : ''}`)
         : action.effect === 'heal'
         ? `Heals ${applied}`
         : hit ? `${applied} damage${resistTag}` : 'No damage';
@@ -2247,7 +2310,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
                 if (!fresh) return;
                 const dmg = roll(action.amountExpr);
                 const amt = Math.max(0, dmg.total);
-                const { note } = applyHpDelta(io, d.campaignId, fresh, -amt, 'stray shot', actor.name);
+                const { note } = applyHpDelta(io, d.campaignId, fresh, -amt, 'stray shot', actor.name, action.damageType);
                 const strayMsg = chat.add(d.campaignId, {
                   userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
                   text: `💥 The shot goes wild — it hits ${pick.name} instead! ${amt} damage${note}`,
@@ -2272,7 +2335,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
               if (!fresh) return;
               const dmg = applyDamageDefenses(fresh.system, fresh.sheet, action.damageType, action.shockDamage!).amount;
               if (dmg <= 0) return;
-              applyHpDelta(io, d.campaignId, fresh, -dmg, `${action.label} (shock)`, actor.name);
+              applyHpDelta(io, d.campaignId, fresh, -dmg, `${action.label} (shock)`, actor.name, action.damageType);
               const after = characters.byId(targetId)!;
               const { hp, maxHp } = systemFor(after.system).hp(after.sheet);
               const shockMsg = chat.add(d.campaignId, {
@@ -2606,7 +2669,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         applications.push(() => {
           if (ch) {
             const fresh = characters.byId(ch.id);
-            if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt, action.spellName ?? action.label, actor.name);
+            if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt, action.spellName ?? action.label, actor.name, action.damageType);
           } else {
             const live = tokens.byId(tok.id);
             if (live?.bar) {
@@ -3045,6 +3108,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       wildCard: ch.sheet.wildCard !== false,
       size: num(ch.sheet, 'size', 0),
       override: num(ch.sheet, 'maxWoundsOverride', 0),
+      resilient: str(ch.sheet, 'resilient', ''),
     });
     if (woundsAfter <= soakCap) conds = conds.filter((c) => c !== 'incapacitated' && c !== 'bleeding');
     patch.conditions = conds;

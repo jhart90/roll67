@@ -612,6 +612,8 @@ interface GroupSaveSpec {
   /** When the source spell is concentration: the caster to record the
    *  inflicted conditions on, so ending concentration lifts them. */
   concentrationCasterId?: string;
+  /** Who set this off, so a kill is attributed to them and not to the spell. */
+  attackerName?: string;
   /**
    * The "casting" card this whole resolution belongs to. Every reversible
    * effect — damage, wounds, conditions — is appended to that message, so
@@ -825,7 +827,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
             // no per-target card to put it on, so it goes out as its own line.
             // Without this the log jumps from one damage roll straight to
             // "X is Incapacitated" with nothing saying why.
-            const { note } = applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw');
+            const { note } = applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw', spec.attackerName);
             const said = note.replace(/^\s*—\s*/, '').trim();
             if (said) postStatusLine(io, spec.campaignId, `${fresh.name}: ${said}`, spec.leadMessageId);
           }
@@ -1920,7 +1922,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             // Re-read fresh: item/ammo consumption below may have already
             // patched this same sheet (when the actor heals themself).
             const fresh = characters.byId(targetId);
-            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label);
+            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name);
             floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType);
           };
         } else if (tgt.bar) {
@@ -2093,7 +2095,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
                 if (!fresh) return;
                 const dmg = roll(action.amountExpr);
                 const amt = Math.max(0, dmg.total);
-                const { note } = applyHpDelta(io, d.campaignId, fresh, -amt, 'stray shot');
+                const { note } = applyHpDelta(io, d.campaignId, fresh, -amt, 'stray shot', actor.name);
                 const strayMsg = chat.add(d.campaignId, {
                   userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll',
                   text: `💥 The shot goes wild — it hits ${pick.name} instead! ${amt} damage${note}`,
@@ -2118,7 +2120,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
               if (!fresh) return;
               const dmg = applyDamageMultiplier(action.shockDamage!, damageMultiplier(fresh.sheet, action.damageType));
               if (dmg <= 0) return;
-              applyHpDelta(io, d.campaignId, fresh, -dmg, `${action.label} (shock)`);
+              applyHpDelta(io, d.campaignId, fresh, -dmg, `${action.label} (shock)`, actor.name);
               const after = characters.byId(targetId)!;
               const { hp, maxHp } = systemFor(after.system).hp(after.sheet);
               const shockMsg = chat.add(d.campaignId, {
@@ -2411,6 +2413,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (costUndo.length > 0) chat.appendUndo(lead, costUndo);
         runGroupSave(io, {
           campaignId: d.campaignId, userId: d.userId, username: d.username,
+          attackerName: actor.name,
           leadMessageId: lead,
           tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
           ...(evadeable ? { evasion: true } : {}),
@@ -2451,7 +2454,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         applications.push(() => {
           if (ch) {
             const fresh = characters.byId(ch.id);
-            if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt, action.spellName ?? action.label);
+            if (fresh) applyHpDelta(io, d.campaignId, fresh, -amt, action.spellName ?? action.label, actor.name);
           } else {
             const live = tokens.byId(tok.id);
             if (live?.bar) {

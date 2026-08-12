@@ -2574,6 +2574,9 @@ th > .term { border-bottom-style: dotted; }
 .action-term { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
 /* The verdict, under the dice rather than above them. */
 .roll-outcome { margin-top: 3px; font-size: 12px; font-weight: 700; }
+/* The same red a failed roll uses — being put out of the fight should
+   read as the failure it is, not as another stat on the line. */
+.roll-incap { color: var(--danger); font-style: italic; }
 .roll-card.crit .roll-outcome { color: var(--ok); }
 .roll-card.fumble .roll-outcome { color: var(--danger); }
 

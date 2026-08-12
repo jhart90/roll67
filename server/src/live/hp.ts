@@ -56,6 +56,10 @@ export function postConditionDiff(
 export function applyConditionTo(
   io: Server, campaignId: string, target: Character, conditionId: string, sourceLabel: string,
   concentrationCaster?: Character,
+  /** False applies the condition without announcing it. Used when a bigger
+   *  line is about to say the same thing better — being Shaken and then
+   *  Incapacitated by one blow is one event, not three. */
+  announce = true,
 ): Character | undefined {
   const label = getCondition(conditionId)?.label ?? conditionId;
   let caster = concentrationCaster;
@@ -66,7 +70,7 @@ export function applyConditionTo(
     // SWADE: a Stunned character also falls Prone.
     if (conditionId === 'stunned' && target.system === 'swade' && !next.includes('prone')) next.push('prone');
     persistSheet(io, campaignId, target, { conditions: next });
-    postStatusChange(io, campaignId, `${target.name} is now ${label}!`, sourceLabel);
+    if (announce) postStatusChange(io, campaignId, `${target.name} is now ${label}!`, sourceLabel);
   }
   if (caster) {
     const fresh = characters.byId(caster.id) ?? caster;
@@ -213,6 +217,9 @@ export function computeHpDelta(
  */
 export function applyHpDelta(
   io: Server, campaignId: string, character: Character, delta: number, sourceLabel?: string,
+  /** Who dealt it, for the line that announces a kill. Absent for damage with
+   *  no author — falling, a trap, the DM adjusting a bar by hand. */
+  attackerName?: string,
 ): { character: Character; note: string } {
   // SWADE characters use the real damage ladder — Shaken and Wounds against
   // Toughness — never the HP pool. Every damage/heal site funnels through
@@ -220,7 +227,7 @@ export function applyHpDelta(
   // heals alike.
   if (character.system === 'swade') {
     return delta < 0
-      ? applySwadeDamage(io, campaignId, character, -delta, sourceLabel)
+      ? applySwadeDamage(io, campaignId, character, -delta, sourceLabel, attackerName)
       : applySwadeHeal(io, campaignId, character, delta);
   }
   const { patch, note, status, concCheck } = computeHpDelta(character, delta);
@@ -370,6 +377,7 @@ function rollDisruption(io: Server, campaignId: string, ch: Character, sourceLab
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
+  attackerName?: string,
 ): { character: Character; note: string } {
   const derived = systemFor('swade').derive(character.sheet);
   const toughness = Number(derived.toughness) || 4;
@@ -395,15 +403,23 @@ function applySwadeDamage(
   rollDisruption(io, campaignId, cur, sourceLabel ?? 'damage');
   cur = characters.byId(cur.id) ?? cur;
   if (out.woundsDealt > 0) cur = persistSheet(io, campaignId, cur, { wounds: out.woundsAfter });
-  applyConditionTo(io, campaignId, cur, 'shaken', sourceLabel ?? 'damage');
+  // One blow that Shakes, Wounds and drops someone used to narrate itself
+  // three times over — "is now Shaken by X", "is now Incapacitated by X",
+  // "is Incapacitated!". It is one event. When it ends the fight, the steps
+  // go in quietly and a single line says what happened, and who did it.
+  const down = out.incapacitated;
+  applyConditionTo(io, campaignId, cur, 'shaken', sourceLabel ?? 'damage', undefined, !down);
   cur = characters.byId(cur.id) ?? cur;
-  if (out.incapacitated) {
-    applyConditionTo(io, campaignId, cur, 'incapacitated', sourceLabel ?? 'damage');
+  if (down) {
+    applyConditionTo(io, campaignId, cur, 'incapacitated', sourceLabel ?? 'damage', undefined, false);
     cur = characters.byId(cur.id) ?? cur;
     // An Extra that drops is out of the fight: empty its bar so the token
     // reads as down. A Wild Card keeps its pool — Soak may yet stand it up.
     if (!wildCard) cur = persistSheet(io, campaignId, cur, { hp: 0 });
-    postStatusLine(io, campaignId, `${cur.name} is Incapacitated!`);
+    const withWhat = sourceLabel ? ` with ${sourceLabel}` : '';
+    postStatusLine(io, campaignId, attackerName
+      ? `💀 ${attackerName} incapacitates ${cur.name}${withWhat}!`
+      : `💀 ${cur.name} is Incapacitated${withWhat}!`);
   }
 
   // Record the Soak while the wounds are fresh (any Wild Card with a Benny —

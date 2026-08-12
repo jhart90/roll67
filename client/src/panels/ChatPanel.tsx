@@ -254,7 +254,7 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
       </div>
       {/* Why it landed, last — the dice come first, the verdict reads as their
           conclusion rather than a spoiler above them. */}
-      {msg.outcomeNote && <div className="roll-outcome">{msg.outcomeNote}</div>}
+      {msg.outcomeNote && <div className="roll-outcome">{markIncapacitated(msg.outcomeNote)}</div>}
     </div>
   );
 }
@@ -409,6 +409,21 @@ function PostedCard({ card }: { card: SheetCard }) {
       {card.notes.map((n, i) => <div key={i} className="sc-notes">{n}</div>)}
     </div>
   );
+}
+
+/**
+ * INCAPACITATED is the one word in an outcome note that ends someone's fight,
+ * so it is picked out of the line rather than sitting flat in it — italic and
+ * in the same red the failed rolls use.
+ */
+function markIncapacitated(note: string) {
+  const parts = note.split(/(INCAPACITATED)/g);
+  if (parts.length === 1) return note;
+  return parts.map((part, i) => (
+    part === 'INCAPACITATED'
+      ? <em key={i} className="roll-incap">{part}</em>
+      : <span key={i}>{part}</span>
+  ));
 }
 
 export function ChatPanel() {

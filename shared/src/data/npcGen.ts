@@ -878,7 +878,7 @@ function resolveCreatureProfile(entry: NpcEntry): CreatureProfile {
 export function generateNpcFromModel(entry: NpcEntry, rng: RNG = Math.random): GeneratedNpc {
   const kind = npcKindForEntry(entry);
   const sheet: SheetData = structuredClone(entry.sheet);
-  const priorNotes = typeof sheet.notes === 'string' ? sheet.notes : '';
+  const priorNotes = typeof sheet.bioPublic === 'string' ? sheet.bioPublic : '';
 
   // HP/AC always exist on library sheets; ability scores only on 5e ones.
   const hp = jitter(Number(sheet.maxHp ?? sheet.hp ?? entry.hp), 0.15, rng, 1);
@@ -932,7 +932,7 @@ export function generateNpcFromModel(entry: NpcEntry, rng: RNG = Math.random): G
     name = `${pick(CREATURE_GIVEN, rng)} ${pick(CREATURE_EPITHET, rng)}`;
     notes = `A ${entry.name.toLowerCase()} known as ${name}. ${pick(CREATURE_FLAVOR, rng)}`;
   }
-  sheet.notes = priorNotes ? `${notes} ${priorNotes}` : notes;
+  sheet.bioPublic = priorNotes ? `${notes} ${priorNotes}` : notes;
   if (entry.system === 'dnd5e') sheet.backstory = notes;
   else if (entry.system === 'swn') sheet.goal = notes;
 

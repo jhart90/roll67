@@ -714,7 +714,9 @@ export function buildSwadeCharacterSheet(input: SwadeCreationInput): SheetData {
     input.concept.trim() ? `Concept: ${input.concept.trim()}.` : '',
     ancestryTraitNotes.length ? `Ancestry traits: ${ancestryTraitNotes.join(', ')}.` : '',
   ].filter(Boolean);
-  if (bioParts.length) sheet.notes = bioParts.join(' ');
+  // The creator's summary is a description of the character, so it belongs
+  // on the public profile rather than in a scratch field nobody reads.
+  if (bioParts.length) sheet.bioPublic = bioParts.join(' ');
 
   return sheet;
 }

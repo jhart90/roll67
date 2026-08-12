@@ -43,7 +43,9 @@ describe('generateNpcFromModel', () => {
     // Draconic names come from the dragon-specific pool, not the townsfolk first/last pools.
     expect(npc.name.length).toBeGreaterThan(0);
     expect(npc.name).not.toBe(model.name);
-    expect(String(npc.sheet.notes)).toContain('ancient red dragon');
+    // The generator's line now lands on the public bio: the scratch Notes
+    // field it used to share with the model's traits is gone from the sheet.
+    expect(String(npc.sheet.bioPublic)).toContain('ancient red dragon');
     expect(String(npc.sheet.backstory)).toContain('ancient red dragon');
   });
 

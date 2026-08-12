@@ -623,10 +623,6 @@ const powersTab: SheetTab = {
         { id: 'bioPublic', label: 'Profile / Bio (public-facing)', type: 'textarea', width: 'full' },
       ],
     },
-    {
-      kind: 'fields', id: 'notes', title: 'Notes',
-      fields: [{ id: 'notes', label: 'Notes', type: 'textarea' }],
-    },
   ],
 };
 

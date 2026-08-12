@@ -435,10 +435,6 @@ const psionicsTab: SheetTab = {
         { id: 'appearance', label: 'Appearance', type: 'text', width: 'third' },
       ],
     },
-    {
-      kind: 'fields', id: 'notes', title: 'Notes',
-      fields: [{ id: 'notes', label: 'Notes', type: 'textarea' }],
-    },
   ],
 };
 

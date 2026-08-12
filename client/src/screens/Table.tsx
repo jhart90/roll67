@@ -25,6 +25,7 @@ import { InitiativeRollPrompt } from '../table/InitiativeRollPrompt';
 import { SoakPrompt } from '../table/SoakPrompt';
 import { BennyMenu } from '../table/BennyMenu';
 import { KeyringMenu } from '../table/KeyringMenu';
+import { TimeMenu } from '../table/TimeMenu';
 import { CookPrompt } from '../table/CookPrompt';
 import { CalledShotPrompt } from '../table/CalledShotPrompt';
 import { BlastPrompt } from '../table/BlastPrompt';
@@ -36,7 +37,7 @@ import { RoundCardsOverlay } from '../table/RoundCardsOverlay';
 import { CountersOverlay } from '../table/CountersOverlay';
 import { RunPrompt } from '../table/RunPrompt';
 import { CrawlPrompt } from '../table/CrawlPrompt';
-import { AftermathPrompt } from '../table/AftermathPrompt';
+import { AftermathPrompt, HealingPrompt } from '../table/AftermathPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -480,11 +481,13 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <RunPrompt />
         <CrawlPrompt />
         <AftermathPrompt />
+        <HealingPrompt />
         <CookPrompt />
         <CalledShotPrompt />
         <BlastPrompt />
         <BennyMenu />
         <KeyringMenu />
+        <TimeMenu />
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />

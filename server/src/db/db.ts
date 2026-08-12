@@ -74,6 +74,10 @@ if (ensureColumn('tokens', 'conditions_json', 'conditions_json TEXT')) {
 // SWADE: the GM's own Benny pool — one per player character each session,
 // plus whatever the villains' Jokers pay in.
 ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0');
+// In-world elapsed seconds. Every time-based rule in SWADE — the Golden Hour,
+// Power Points coming back, Natural Healing — is measured against this rather
+// than against the wall clock, because a session is not a day.
+ensureColumn('campaigns', 'clock_seconds', 'clock_seconds INTEGER NOT NULL DEFAULT 0');
 ensureColumn('macros', 'color', 'color TEXT');
 ensureColumn('macros', 'character_id', 'character_id TEXT');
 ensureColumn('macros', 'rollable_id', 'rollable_id TEXT');

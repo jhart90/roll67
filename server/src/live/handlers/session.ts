@@ -76,6 +76,7 @@ export function buildCampaignState(campaignId: string, userId: string, username:
     handouts: handoutsVisibleTo(campaignId, userId, isDm),
     macros: macros.forUser(userId, campaignId),
     initiative: initiativeViewFor(initiative.get(campaignId), isDm, campaignId),
+    clockSeconds: campaigns.clockSeconds(campaignId),
     chatTail: chat.tailFor(campaignId, userId, username, isDm, CHAT_TAIL),
     // Loot/chests across every map: the DM gets all, a player only what
     // stands on ground they have actually seen (otherwise the world tab

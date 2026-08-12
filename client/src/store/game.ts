@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -284,6 +284,10 @@ interface GameState {
   crawlPrompt: CrawlPromptPayload | null;
   /** DM-only: the fight ended with Extras on the floor. Roll for them? */
   aftermathPrompt: AftermathPromptPayload | null;
+  /** In-world elapsed seconds — what the GM's time controls move. */
+  clockSeconds: number;
+  /** DM-only: who is due a natural healing roll after days passed. */
+  healingPrompt: HealingPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
   /** SWADE: your Stunned character may roll Vigor to come to. */
@@ -551,6 +555,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   runPrompt: null,
   crawlPrompt: null,
   aftermathPrompt: null,
+  clockSeconds: 0,
+  healingPrompt: null,
   rollStatsData: {},
   ironDice: null,
   publicSheets: {},
@@ -963,6 +969,7 @@ export function wireSocket(): void {
       handoutList: p.handouts,
       macroList: p.macros,
       initiativeState: p.initiative,
+      clockSeconds: p.clockSeconds ?? 0,
       chatLog: p.chatTail,
       mapObjects: mapObjectsById(p.mapObjects ?? []),
     });
@@ -1369,6 +1376,14 @@ export function wireSocket(): void {
 
   socket.on(S2C.AFTERMATH_PROMPT, (p: AftermathPromptPayload) => {
     useGameStore.setState({ aftermathPrompt: p });
+  });
+
+  socket.on(S2C.HEALING_PROMPT, (p: HealingPromptPayload) => {
+    useGameStore.setState({ healingPrompt: p });
+  });
+
+  socket.on(S2C.CLOCK, (p: ClockPayload) => {
+    useGameStore.setState({ clockSeconds: Math.max(0, p.seconds) });
   });
 
   let roundCardsSeq = 0;
@@ -1958,6 +1973,13 @@ export const intents = {
   /** Leap: free at 1″ (2″ off a run-up), or spend the action on Athletics. */
   jumpRoll: (tokenId: string, withRunUp: boolean, athletics: boolean) =>
     socket.emit(C2S.JUMP_ROLL, { tokenId, withRunUp, athletics }),
+  /** DM: move the in-world clock forward one step. */
+  advanceTime: (step: TimeStepId) => socket.emit(C2S.ADVANCE_TIME, { step }),
+  /** Answer the natural-healing prompt: roll for the wounded, or not yet. */
+  healingRoll: (roll: boolean) => {
+    socket.emit(C2S.HEALING_ROLL, { roll });
+    useGameStore.setState({ healingPrompt: null });
+  },
   /** Answer the aftermath prompt: roll for the fallen Extras, or let them go. */
   aftermathRoll: (roll: boolean) => {
     socket.emit(C2S.AFTERMATH_ROLL, { roll });

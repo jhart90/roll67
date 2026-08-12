@@ -2954,6 +2954,23 @@ th > .term { border-bottom-style: dotted; }
 
 /* Keyring / Key Manager — same clothes as the Benny chip, one shelf left. */
 .keyring-menu { position: fixed; right: 404px; bottom: 16px; z-index: 69; }
+/* The GM's clock, one shelf left of the keyring. Same chip, its own colour —
+   time is the DM's lever, not a player's. */
+.time-menu { position: fixed; right: 520px; bottom: 16px; z-index: 69; }
+.time-chip {
+  width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
+  background: var(--panel); border: 2px solid #9b8ad0; color: var(--text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: pointer;
+}
+.time-panel {
+  position: absolute; bottom: calc(100% + 8px); right: 0;
+  display: flex; flex-direction: column; gap: 6px; width: 240px;
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--panel); border: 2px solid #9b8ad0;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+.time-panel button { width: 100%; text-align: left; }
+.time-panel button:disabled { opacity: 0.45; cursor: not-allowed; }
 .keyring-chip {
   width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
   background: var(--panel); border: 2px solid #7fa8d9; color: var(--text);

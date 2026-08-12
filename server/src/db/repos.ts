@@ -195,6 +195,16 @@ export const campaigns = {
     stmt('UPDATE campaigns SET gm_bennies = ? WHERE id = ?').run(next, id);
     return next;
   },
+  /** In-world elapsed seconds — the clock the GM advances. */
+  clockSeconds(id: string): number {
+    const r = stmt('SELECT clock_seconds FROM campaigns WHERE id = ?').get(id) as { clock_seconds?: number } | undefined;
+    return Math.max(0, Number(r?.clock_seconds ?? 0));
+  },
+  setClockSeconds(id: string, seconds: number): number {
+    const next = Math.max(0, Math.floor(seconds));
+    stmt('UPDATE campaigns SET clock_seconds = ? WHERE id = ?').run(next, id);
+    return next;
+  },
   byInviteCode(code: string): CampaignInfo | undefined {
     const row = stmt('SELECT * FROM campaigns WHERE invite_code = ?').get(code.toUpperCase()) as CampaignRow | undefined;
     return row ? toCampaignInfo(row) : undefined;

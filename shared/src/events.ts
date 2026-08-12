@@ -143,6 +143,8 @@ export const C2S = {
   BENNY_AWARD: 'bennyAward',
   /** SWADE: a new session — Bennies are drawn afresh. */
   SESSION_START: 'sessionStart',
+  /** DM: move the in-world clock forward (a round, a minute, an hour, a day). */
+  ADVANCE_TIME: 'advanceTime',
   /** SWADE: a Bleeding Out player makes their start-of-turn Vigor roll. */
   BLEED_ROLL: 'bleedRoll',
   /** SWADE: a Shaken combatant makes their start-of-turn Spirit roll. */
@@ -163,6 +165,8 @@ export const C2S = {
   PRONE_MOVE: 'proneMove',
   /** SWADE: the DM's answer to the aftermath prompt. */
   AFTERMATH_ROLL: 'aftermathRoll',
+  /** SWADE: the DM's answer to the natural-healing prompt. */
+  HEALING_ROLL: 'healingRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
@@ -836,6 +840,10 @@ export const S2C = {
   CRAWL_PROMPT: 'crawlPrompt',
   /** SWADE: the fight is over and Extras are lying there — roll for them? */
   AFTERMATH_PROMPT: 'aftermathPrompt',
+  /** SWADE: days passed and someone is due a natural healing roll. */
+  HEALING_PROMPT: 'healingPrompt',
+  /** The in-world clock, after any change. */
+  CLOCK: 'clock',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
@@ -878,6 +886,8 @@ export interface CampaignStatePayload {
   handouts: Handout[];
   macros: Macro[];
   initiative: InitiativeState;
+  /** In-world elapsed seconds, so the GM's clock reads right on join. */
+  clockSeconds: number;
   chatTail: ChatMessage[];
   /** Loot/chest/shop markers across ALL maps (so the world tree can nest
    *  them under every map, not just the one being viewed). */
@@ -1214,6 +1224,25 @@ export interface JumpRollPayload { tokenId: string; withRunUp: boolean; athletic
 export interface AftermathPromptPayload { names: string[] }
 /** Roll Vigor for each of them, or let the wounds finish what they started. */
 export interface AftermathRollPayload { roll: boolean }
+/** DM-only: these wounded are due their natural healing roll. */
+export interface HealingPromptPayload { names: string[] }
+export interface HealingRollPayload { roll: boolean }
+
+/**
+ * The GM's time controls. A SWADE round is six seconds — the book's own
+ * figure, and ten rounds to the minute — so everything longer is a multiple
+ * of it and the whole clock stays in one unit.
+ */
+export const SECONDS_PER_ROUND = 6;
+export const TIME_STEPS = [
+  { id: 'round', label: '1 round', icon: '⚔️', seconds: SECONDS_PER_ROUND },
+  { id: 'minute', label: '1 minute', icon: '🕐', seconds: 60 },
+  { id: 'hour', label: '1 hour', icon: '🕰️', seconds: 3600 },
+  { id: 'day', label: '1 day', icon: '🌅', seconds: 86_400 },
+] as const;
+export type TimeStepId = (typeof TIME_STEPS)[number]['id'];
+export interface AdvanceTimePayload { step: TimeStepId }
+export interface ClockPayload { seconds: number }
 /** Their answer: get up, or stay down and crawl. */
 export interface ProneMovePayload { tokenId: string; mode: 'stand' | 'crawl' }
 export interface IronDicePayload {

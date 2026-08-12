@@ -1,6 +1,6 @@
 import type { Server } from 'socket.io';
 import { MAX_WOUNDS, S2C, addTally, isAbomination, swadeCritFail, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
-import { characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
+import { campaigns, characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
 import { broadcastWorldFolders } from './handlers/world.js';
@@ -477,7 +477,15 @@ function applySwadeDamage(
   // hurt (the book's own example).
   rollDisruption(io, campaignId, cur, sourceLabel ?? 'damage');
   cur = characters.byId(cur.id) ?? cur;
-  if (out.woundsDealt > 0) cur = persistSheet(io, campaignId, cur, { wounds: out.woundsAfter });
+  if (out.woundsDealt > 0) {
+    // Stamp WHEN these wounds were taken. The Healing skill only works
+    // within the Golden Hour — the hour after the injury — and without a
+    // mark on the sheet there is nothing for the clock to measure against.
+    cur = persistSheet(io, campaignId, cur, {
+      wounds: out.woundsAfter,
+      woundsAtSec: campaigns.clockSeconds(campaignId),
+    });
+  }
   // One blow that Shakes, Wounds and drops someone used to narrate itself
   // three times over — "is now Shaken by X", "is now Incapacitated by X",
   // "is Incapacitated!". It is one event. When it ends the fight, the steps

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SECONDS_PER_ROUND, TIME_STEPS } from '../src/events.js';
 import {
   durationLabel, durationRounds, isMaintained, tickPowers, toggleFor,
 } from '../src/systems/swadeDuration.js';
@@ -98,5 +99,32 @@ describe('every SWADE power carries a duration', () => {
     const bolt = powers.find((p) => p.name === 'Bolt');
     expect(bolt?.power?.duration).toBe('Instant');
     expect(isMaintained(bolt?.power?.duration)).toBe(false);
+  });
+});
+
+/**
+ * The GM's clock. A SWADE round is six seconds and ten rounds make a minute —
+ * the book's own figures — so every step is a whole number of rounds and the
+ * whole clock stays in one unit.
+ */
+describe('the time controls', () => {
+  const step = (id: string) => TIME_STEPS.find((t) => t.id === id)!;
+
+  it('makes a round six seconds', () => {
+    expect(SECONDS_PER_ROUND).toBe(6);
+    expect(step('round').seconds).toBe(6);
+  });
+
+  it('makes a minute ten rounds', () => {
+    expect(step('minute').seconds / SECONDS_PER_ROUND).toBe(10);
+  });
+
+  it('nests hour and day exactly', () => {
+    expect(step('hour').seconds).toBe(60 * step('minute').seconds);
+    expect(step('day').seconds).toBe(24 * step('hour').seconds);
+  });
+
+  it('keeps every step a whole number of rounds', () => {
+    for (const t of TIME_STEPS) expect(t.seconds % SECONDS_PER_ROUND).toBe(0);
   });
 });

@@ -1,13 +1,13 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SECONDS_PER_ROUND, TIME_STEPS, restRecovery, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type AftermathRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AdvanceTimePayload, type AftermathRollPayload, type HealingRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -765,6 +765,145 @@ interface GroupSaveSpec {
  * Returns null when the power does not go off, having already posted the card
  * and taken the one Power Point a failure costs. The caller stops there.
  */
+/** Who is owed a natural healing roll, waiting on the GM's yes. */
+const pendingNaturalHealing = new Map<string, string[]>();
+
+/**
+ * Natural Healing: a Vigor roll that mends a Wound, two on a raise, and a
+ * Critical Failure makes things worse. Rolled only when the GM says so — a
+ * week of downtime should not fire a dozen dice the moment the clock moves.
+ */
+function runNaturalHealing(io: Server, campaignId: string, shouldRoll: boolean): void {
+  const ids = pendingNaturalHealing.get(campaignId) ?? [];
+  pendingNaturalHealing.delete(campaignId);
+  if (!shouldRoll || ids.length === 0) return;
+  const clock = campaigns.clockSeconds(campaignId);
+  const lines: string[] = [];
+  for (const id of ids) {
+    const ch = characters.byId(id);
+    if (!ch || num(ch.sheet, 'wounds', 0) <= 0) continue;
+    const br = roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4'))));
+    const crit = critFailFor(io, campaignId, ch, br.dice);
+    const wounds = num(ch.sheet, 'wounds', 0);
+    // A Critical Failure is the wound going bad: infection, blood loss, the
+    // injury aggravated. One step the wrong way.
+    const next = crit ? wounds + 1 : br.total >= 8 ? wounds - 2 : br.total >= 4 ? wounds - 1 : wounds;
+    persistSheet(io, campaignId, ch, {
+      wounds: Math.max(0, next),
+      lastNaturalHealSec: clock,
+      // Mending resets the clock the Golden Hour runs on: what is left is a
+      // fresh state of the body, not the same hour-old injury.
+      ...(next < wounds ? { woundsAtSec: clock } : {}),
+    });
+    lines.push(crit ? `${ch.name} worsens (${br.total} — Critical Failure)`
+      : next < wounds ? `${ch.name} mends ${wounds - next} (${br.total})`
+        : `${ch.name} holds steady (${br.total})`);
+  }
+  postStatusLine(io, campaignId, `🌿 Natural healing — ${lines.join('; ')}.`);
+}
+
+/** "Day 3 · 14:22" — the in-world clock as the table reads it. */
+function clockLabel(seconds: number): string {
+  const day = Math.floor(seconds / 86_400) + 1;
+  const hh = String(Math.floor((seconds % 86_400) / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+  return `Day ${day} · ${hh}:${mm}`;
+}
+
+/**
+ * What the passing of time does to everyone's sheet.
+ *
+ * Every rule here answers the same question at a different magnitude — how
+ * much passed, and what has that mended or cost — so they live together and
+ * each decides for itself whether this passage is enough to matter to it.
+ * Anything that wants DICE is not here: rolls the GM did not ask for are
+ * noise, and those arrive as prompts (see the Aftermath prompt for the shape).
+ *
+ * Returns the lines for the report card, in the order they happened.
+ */
+function applyTimePassage(io: Server, campaignId: string, seconds: number, clockAfter: number): string[] {
+  const notes: string[] = [];
+  const hours = Math.floor(seconds / 3600);
+  const rounds = Math.floor(seconds / SECONDS_PER_ROUND);
+  const swadeChars = characters.forCampaign(campaignId).filter((c) => c.system === 'swade');
+
+  for (const ch of swadeChars) {
+    let cur = characters.byId(ch.id) ?? ch;
+
+    // Running powers burn down in rounds, whatever the scale — an hour is
+    // simply more rounds than any Duration survives.
+    const active = activePowersOf(cur.sheet);
+    if (active.length > 0) {
+      const longest = Math.max(...active.map((p) => p.rounds));
+      if (rounds >= longest) {
+        // Everything lapses at once rather than looping a thousand ticks.
+        const patch: SheetData = { activePowers: [] };
+        for (const p of active) {
+          const toggle = toggleFor(p.name);
+          if (toggle) patch[toggle] = false;
+        }
+        cur = persistSheet(io, campaignId, cur, patch);
+        notes.push(`${cur.name}: ${active.map((p) => p.name).join(', ')} run out.`);
+      } else {
+        for (let i = 0; i < rounds; i++) cur = expirePowerDurations(io, campaignId, cur);
+      }
+    }
+
+    // The turn-scoped states are over the moment anything else happens; out
+    // of combat there is no turn to end, so any passage of time ends them.
+    const fleeting = conditionsOf(cur.sheet).filter((c) => ['aiming', 'defending', 'distracted', 'vulnerable'].includes(c));
+    if (fleeting.length > 0) {
+      cur = persistSheet(io, campaignId, cur, {
+        conditions: conditionsOf(cur.sheet).filter((c) => !fleeting.includes(c)),
+      });
+    }
+
+    if (hours > 0) {
+      // Power Points come back at five an hour of rest. restRecovery has been
+      // sitting in the rules module without a caller since it was written —
+      // there was simply no clock to hang it on.
+      const regained = restRecovery(cur.sheet, hours);
+      if (regained > 0) {
+        cur = persistSheet(io, campaignId, cur, { pp: num(cur.sheet, 'pp', 0) + regained });
+        notes.push(`${cur.name} recovers ${regained} Power Point${regained === 1 ? '' : 's'}.`);
+      }
+      // The Golden Hour closing is worth announcing: it is the moment the
+      // party's medic stops being able to help and the question becomes who
+      // can cast, or who can wait five days.
+      const woundedAt = num(cur.sheet, 'woundsAtSec', -1);
+      if (woundedAt >= 0 && num(cur.sheet, 'wounds', 0) > 0
+        && clockAfter - woundedAt >= 3600 && clockAfter - woundedAt - seconds < 3600) {
+        notes.push(`The Golden Hour has closed on ${cur.name}'s wounds — only magic or natural healing now.`);
+      }
+      // An hour's rest clears ordinary Fatigue. Anything with a source that
+      // outlasts an hour — poison still in the blood, a disease — is the GM's
+      // to re-apply, which is the same call the book leaves them.
+      const fatigue = num(cur.sheet, 'fatigue', 0);
+      if (fatigue > 0) {
+        cur = persistSheet(io, campaignId, cur, { fatigue: 0 });
+        notes.push(`${cur.name} shakes off ${fatigue} level${fatigue === 1 ? '' : 's'} of Fatigue.`);
+      }
+    }
+  }
+  // A day or more: natural healing comes due every five days, and anything
+  // that regenerates slowly gets its once-a-day roll. Both are DICE, so this
+  // only reports who is owed one — the GM is asked before anything is rolled.
+  if (seconds >= 86_400) {
+    const owed = swadeChars.filter((c) => {
+      if (num(c.sheet, 'wounds', 0) <= 0) return false;
+      if (str(c.sheet, 'regeneration', '') === 'slow') return true;
+      const last = num(c.sheet, 'lastNaturalHealSec', num(c.sheet, 'woundsAtSec', 0));
+      return clockAfter - last >= 5 * 86_400;
+    });
+    if (owed.length > 0) {
+      pendingNaturalHealing.set(campaignId, owed.map((c) => c.id));
+      io.to(dmRoom(campaignId)).emit(S2C.HEALING_PROMPT, { names: owed.map((c) => c.name) });
+      notes.push(`${owed.map((c) => c.name).join(', ')} ${owed.length === 1 ? 'is' : 'are'} due a natural healing roll.`);
+    }
+  }
+  return notes;
+}
+
 /**
  * Aftermath: what became of the Extras left lying there.
  *
@@ -2307,7 +2446,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const arcaneHeal = action.source === 'power' || action.source === 'spell';
       const needsRepair = !!action.healsWounds && swadeTarget && isConstruct(targetChar!.sheet);
       const needsMagic = !!action.healsWounds && swadeTarget && !arcaneHeal && isUndead(targetChar!.sheet);
-      const woundsMended = action.healsWounds && !needsRepair && !needsMagic ? swadeWoundsHealed(hit, raise) : 0;
+      // The Golden Hour. The Healing skill treats an injury while it is still
+      // fresh; past that hour the body has done what it is going to do, and
+      // only magic or time mends it. Measured against the world's clock, not
+      // the wall's — which is what the GM's time controls move.
+      const woundedAt = swadeTarget ? num(targetChar!.sheet, 'woundsAtSec', -1) : -1;
+      const tooLate = !!action.healsWounds && !arcaneHeal && woundedAt >= 0
+        && campaigns.clockSeconds(d.campaignId) - woundedAt >= 3600;
+      const woundsMended = action.healsWounds && !needsRepair && !needsMagic && !tooLate
+        ? swadeWoundsHealed(hit, raise) : 0;
       if (action.healsWounds) magnitude = woundsMended;
       const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
       const delta = action.effect === 'heal' ? applied : -applied;
@@ -2414,6 +2561,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           ? 'No Wounds mended — a Construct is mended with Repair, not Healing'
           : needsMagic
             ? 'No Wounds mended — the Undead are mended by magic, not medicine'
+            : tooLate
+              ? 'No Wounds mended — the Golden Hour has passed; only magic or natural healing now'
           : woundsMended === 0
             ? 'No Wounds mended'
             : `Mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'}${raise ? ' (raise!)' : ''}`)
@@ -3827,6 +3976,51 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_SORT'));
+
+  /**
+   * The GM moves the world's clock forward.
+   *
+   * One intent for every scale, because every time-based rule in SWADE is the
+   * same question asked at a different magnitude: how much has passed, and
+   * what has that cost or mended. Each effect below decides for itself
+   * whether this passage is enough to matter to it.
+   *
+   * Rounds are refused while combat is running: the initiative tracker is
+   * already advancing them, and two things ticking durations means every
+   * power runs out twice as fast.
+   */
+  socket.on(C2S.ADVANCE_TIME, safe(socket, ({ step }: AdvanceTimePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM moves the clock.'); return; }
+    const spec = TIME_STEPS.find((t) => t.id === step);
+    if (!spec) return;
+    if (spec.id === 'round' && initiative.get(d.campaignId).active) {
+      emitError(socket, 'Combat is running — the initiative tracker advances rounds.');
+      return;
+    }
+    const before = campaigns.clockSeconds(d.campaignId);
+    const after = campaigns.setClockSeconds(d.campaignId, before + spec.seconds);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CLOCK, { seconds: after });
+    const notes = applyTimePassage(io, d.campaignId, spec.seconds, after);
+    const card: SheetCard = {
+      name: `⏱ ${spec.label} passes`,
+      theme: 'card-info',
+      chips: [{ text: clockLabel(after), tone: 'qty' }],
+      notes: notes.length ? notes : ['Nothing on anyone’s sheet was waiting on the clock.'],
+    };
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `⏱ ${spec.label} passes — ${clockLabel(after)}${notes.length ? `. ${notes.join(' ')}` : '.'}`,
+      card, roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'ADVANCE_TIME'));
+
+  socket.on(C2S.HEALING_ROLL, safe(socket, ({ roll: shouldRoll }: HealingRollPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    runNaturalHealing(io, d.campaignId, !!shouldRoll);
+  }, 'HEALING_ROLL'));
 
   socket.on(C2S.AFTERMATH_ROLL, safe(socket, ({ roll: shouldRoll }: AftermathRollPayload) => {
     const d = requireCampaign(socket);

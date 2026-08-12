@@ -52,6 +52,21 @@ export function BennyMenu() {
               <strong>Award Bennies</strong>
               <span className="dim">announced in chat</span>
             </div>
+            {/* Bennies are drawn at the start of a session and discarded at
+                the end. Without this the table drifts into a hoard or a
+                drought, and neither is the game the rules describe. */}
+            <button
+              className="benny-session"
+              title="Start a new session: every hero draws 3 Bennies (more with Luck), NPC Wild Cards take 2, Fatigue clears, and the GM's pool refills."
+              onClick={() => {
+                if (confirm('Start a new session? Every character’s Bennies are drawn afresh and Fatigue clears.')) {
+                  intents.startSession();
+                  setOpen(false);
+                }
+              }}
+            >
+              🌅 New session
+            </button>
             {wildCards.map((c) => (
               <button
                 key={c.id}

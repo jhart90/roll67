@@ -11,7 +11,7 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
-  swadeWoundsHealed, swadeRangeBand, swadeCritFail,
+  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBennyMax,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
   activationOutcome, backlashPatch, castingBlocker, swadeArcaneExpr, ACTIVATION_TN, FAILED_ACTIVATION_PP,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
@@ -635,10 +635,16 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
   }
   state.jokerDealt = false;
   const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean }> = [];
+  // Which sides drew a Joker this round — paid out after the whole deal, so
+  // the Bennies land once the table can see every card.
+  const jokerSides: boolean[] = [];
   for (const entry of state.entries) {
     if (entry.held) continue;
     const { card } = drawActionCard(state, sheetForToken(entry.tokenId));
-    if (card.rank === 15) state.jokerDealt = true;
+    if (card.rank === 15) {
+      state.jokerDealt = true;
+      jokerSides.push(entry.tokenId ? isPlayerSideToken(entry.tokenId) : false);
+    }
     state.drawCounter = (state.drawCounter ?? 0) + 1;
     entry.card = card;
     entry.value = card.rank;
@@ -660,6 +666,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     round: state.round,
     cards: dealt.filter((c) => !c.hidden).map(({ hidden: _h, ...rest }) => rest),
   });
+  for (const playerSide of jokerSides) jokersWild(io, campaignId, playerSide);
 }
 
 export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaignId: string): InitiativeState {
@@ -752,6 +759,49 @@ interface GroupSaveSpec {
  * Returns null when the power does not go off, having already posted the card
  * and taken the one Power Point a failure costs. The caller stops there.
  */
+/**
+ * Joker's Wild.
+ *
+ * A Joker is not just a good card. When a player character draws one, EVERY
+ * player character takes a Benny — the table's luck turns together, which is
+ * why the rule exists and why it lands better as a moment than as a bonus.
+ * When the other side draws one, the GM's pool takes one and every enemy Wild
+ * Card takes one, so a villain's Joker is felt the same way from the far side
+ * of the screen.
+ *
+ * The draw itself already grants the +2 and the free placement in the round;
+ * this is only the Bennies.
+ */
+function jokersWild(io: Server, campaignId: string, drawnByPlayerSide: boolean): void {
+  const all = characters.forCampaign(campaignId).filter((c) => c.system === 'swade');
+  if (drawnByPlayerSide) {
+    const heroes = all.filter((c) => c.ownerUserId);
+    for (const ch of heroes) {
+      persistSheet(io, campaignId, ch, { bennies: num(ch.sheet, 'bennies', 0) + 1 });
+    }
+    if (heroes.length > 0) {
+      postStatusLine(io, campaignId, `🃏 Joker's Wild! A Benny to every hero — ${heroes.map((h) => h.name).join(', ')}.`);
+    }
+    return;
+  }
+  const pool = campaigns.setGmBennies(campaignId, campaigns.gmBennies(campaignId) + 1);
+  // Enemy Wild Cards only: an Extra has no Bennies to hold.
+  const villains = all.filter((c) => !c.ownerUserId && c.sheet.wildCard !== false);
+  for (const ch of villains) {
+    persistSheet(io, campaignId, ch, { bennies: num(ch.sheet, 'bennies', 0) + 1 });
+  }
+  postStatusLine(io, campaignId,
+    `🃏 Joker's Wild for the other side — a Benny to the GM's pool (now ${pool})`
+    + (villains.length ? `, and one to ${villains.map((v) => v.name).join(', ')}.` : '.'));
+}
+
+/** Whose side is this combatant on? Owned by a player = the heroes' side. */
+function isPlayerSideToken(tokenId: string): boolean {
+  const tok = tokens.byId(tokenId);
+  const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+  return !!ch?.ownerUserId;
+}
+
 /** What each Benny buys, as the subheading the coin reveals. */
 const BENNY_REASON: Record<string, string> = {
   'recover-shaken': 'to Recover from Shaken',
@@ -3296,6 +3346,35 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     postStatusLine(io, d.campaignId, `🪙 The DM awards ${ch.name} a Benny!`);
   }, 'BENNY_AWARD'));
 
+  /**
+   * A new session. Bennies are drawn fresh at the start of one and discarded
+   * at the end — they are not a resource that carries over, and a table that
+   * never resets them slowly drifts into either poverty or a hoard.
+   *
+   * Heroes draw three plus their Luck Edges. NPC Wild Cards get the two the
+   * book allots them. The GM's own pool refills to one per player character.
+   * Fatigue clears too: it is the one condition the rules expect a night's
+   * rest to mend, and a new session is at least that.
+   */
+  socket.on(C2S.SESSION_START, safe(socket, () => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM starts a session.'); return; }
+    const campaign = campaigns.byId(d.campaignId)!;
+    if (campaign.system !== 'swade') { emitError(socket, 'Bennies are a SWADE thing.'); return; }
+    const all = characters.forCampaign(d.campaignId).filter((c) => c.system === 'swade');
+    const heroes = all.filter((c) => c.ownerUserId);
+    for (const ch of heroes) {
+      persistSheet(io, d.campaignId, ch, { bennies: swadeBennyMax(ch.sheet), fatigue: 0 });
+    }
+    for (const ch of all.filter((c) => !c.ownerUserId && c.sheet.wildCard !== false)) {
+      persistSheet(io, d.campaignId, ch, { bennies: 2, fatigue: 0 });
+    }
+    const pool = campaigns.setGmBennies(d.campaignId, heroes.length);
+    postStatusLine(io, d.campaignId,
+      `🪙 A new session begins. ${heroes.length} hero${heroes.length === 1 ? '' : 'es'} draw a fresh hand of Bennies;`
+      + ` the GM's pool holds ${pool}.`);
+  }, 'SESSION_START'));
+
   // The Benny menu: every automatable use from the SWADE Benny table. Soak
   // rides the existing SOAK_ROLL flow; everything else lands here.
   socket.on(C2S.BENNY_USE, safe(socket, ({ characterId, use }: BennyUsePayload) => {
@@ -3382,6 +3461,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (!state.deck || state.deck.length === 0) state.deck = shuffleDeck(buildDeck());
         const card = state.deck.shift()!;
         if (card.rank === 15) state.jokerDealt = true;
+        const redrawJoker = card.rank === 15;
         state.drawCounter = (state.drawCounter ?? 0) + 1;
         const currentId = state.entries[state.turnIdx]?.id;
         entry.card = card;
@@ -3394,6 +3474,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         initiative.set(d.campaignId, state);
         spendBenny();
         broadcastInitiative(io, d.campaignId);
+        // A Joker bought with a Benny still turns the whole table's luck.
+        if (redrawJoker) jokersWild(io, d.campaignId, !!ch.ownerUserId);
         const msg = chat.add(d.campaignId, {
           userId: d.userId, fromName: d.username, kind: 'system',
           text: `🂠 ${ch.name} spends a Benny to redraw — draws the ${cardName(card)} ${cardShort(card)}${card.rank === 15 ? ' — Joker! Act anywhere in the round, +2 to all trait rolls & damage.' : ''}`,
@@ -3710,6 +3792,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     const { card, discarded, plan } = drawActionCard(state, sheetForToken(pending.tokenId));
     if (card.rank === 15) state.jokerDealt = true;
+    const drewJoker = card.rank === 15;
     state.drawCounter = (state.drawCounter ?? 0) + 1;
     state.pendingDraws!.splice(idx, 1);
     state.entries.push({
@@ -3735,5 +3818,6 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(room).emit(S2C.CHAT, { msg });
     io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId: pending.tokenId, name: pending.name, card, byUserId: d.userId });
+    if (drewJoker) jokersWild(io, d.campaignId, isPlayerSideToken(pending.tokenId));
   }, 'INIT_CARD_DRAW'));
 }

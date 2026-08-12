@@ -164,6 +164,18 @@ export function isAbomination(sheet: SheetData): boolean {
   return isConstruct(sheet) || isUndead(sheet);
 }
 
+/**
+ * Bennies a character draws at the start of a session: the standard three,
+ * plus the Luck Edges. Great Luck supersedes Luck rather than stacking with
+ * it — it is the same Edge improved, and its own text says two extra, not
+ * three.
+ */
+export function swadeBennyMax(sheet: SheetData): number {
+  const edges = rows(sheet, 'edges').map((e) => str(e, 'name', '').toLowerCase());
+  const extra = edges.includes('great luck') ? 2 : edges.includes('luck') ? 1 : 0;
+  return 3 + extra;
+}
+
 /** Standard SWADE trait-roll penalty: −1 per Wound (max −3) and per Fatigue level. */
 export function woundPenalty(sheet: SheetData): number {
   const wounds = Math.max(0, Math.min(3, num(sheet, 'wounds', 0)) - (isAbomination(sheet) ? 1 : 0));

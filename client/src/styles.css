@@ -2909,6 +2909,9 @@ th > .term { border-bottom-style: dotted; }
 .benny-chip.open, .keyring-chip.open { background: var(--accent); color: #10131a; }
 .benny-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .benny-panel button { width: 100%; text-align: left; }
+/* The session button is a bigger deal than awarding one chip — it resets the
+   table — so it sits apart from the list of names above it. */
+.benny-session { margin-bottom: 6px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 
 /* Keyring / Key Manager — same clothes as the Benny chip, one shelf left. */
 .keyring-menu { position: fixed; right: 404px; bottom: 16px; z-index: 69; }

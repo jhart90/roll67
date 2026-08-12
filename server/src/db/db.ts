@@ -59,6 +59,9 @@ function ensureColumn(table: string, column: string, ddl: string): void {
   }
 }
 ensureColumn('campaign_members', 'map_id', 'map_id TEXT');
+// SWADE: the GM's own Benny pool — one per player character each session,
+// plus whatever the villains' Jokers pay in.
+ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0');
 ensureColumn('macros', 'color', 'color TEXT');
 ensureColumn('macros', 'character_id', 'character_id TEXT');
 ensureColumn('macros', 'rollable_id', 'rollable_id TEXT');

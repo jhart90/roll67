@@ -181,6 +181,20 @@ export const campaigns = {
     const row = stmt('SELECT * FROM campaigns WHERE id = ?').get(id) as CampaignRow | undefined;
     return row ? toCampaignInfo(row) : undefined;
   },
+  /**
+   * The GM's Benny pool. The book gives them one per player character each
+   * session, and the villains' Jokers pay into the same pot — so it belongs
+   * to the campaign rather than to any one NPC sheet.
+   */
+  gmBennies(id: string): number {
+    const r = stmt('SELECT gm_bennies FROM campaigns WHERE id = ?').get(id) as { gm_bennies?: number } | undefined;
+    return Math.max(0, Number(r?.gm_bennies ?? 0));
+  },
+  setGmBennies(id: string, n: number): number {
+    const next = Math.max(0, Math.floor(n));
+    stmt('UPDATE campaigns SET gm_bennies = ? WHERE id = ?').run(next, id);
+    return next;
+  },
   byInviteCode(code: string): CampaignInfo | undefined {
     const row = stmt('SELECT * FROM campaigns WHERE invite_code = ?').get(code.toUpperCase()) as CampaignRow | undefined;
     return row ? toCampaignInfo(row) : undefined;

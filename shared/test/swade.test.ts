@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty } from '../src/systems/swade.js';
+import { dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty, swadeBennyMax } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
 import { swadeWoundsHealed } from '../src/systems/swadeDamage.js';
 import { canTakeHindrance, hindrancePoints } from '../src/systems/swadeCreation.js';
@@ -497,6 +497,33 @@ describe('SWADE library & compendium', () => {
     const rolls = swade.rollables(npc.sheet);
     expect(rolls.find((r) => r.id === 'attack_0')).toBeDefined();
     for (const r of rolls) expect(() => roll(r.expr, seededRng(4))).not.toThrow();
+  });
+});
+
+/**
+ * Bennies are drawn at the start of a session, not accumulated: three, or
+ * more with the Luck Edges. The pip row used to hardcode "at least three",
+ * so a Lucky character's fourth chip had nowhere to sit.
+ */
+describe('the Benny hand', () => {
+  const withEdges = (...names: string[]) => ({ edges: names.map((name) => ({ name })) });
+
+  it('is three by default', () => {
+    expect(swadeBennyMax({})).toBe(3);
+    expect(swadeBennyMax(withEdges('Brawny', 'Alertness'))).toBe(3);
+  });
+
+  it('adds one for Luck and two for Great Luck', () => {
+    expect(swadeBennyMax(withEdges('Luck'))).toBe(4);
+    expect(swadeBennyMax(withEdges('Great Luck'))).toBe(5);
+  });
+
+  it('does not stack Great Luck on top of Luck — it supersedes it', () => {
+    expect(swadeBennyMax(withEdges('Luck', 'Great Luck'))).toBe(5);
+  });
+
+  it('reads the Edge however it is cased', () => {
+    expect(swadeBennyMax(withEdges('great luck'))).toBe(5);
   });
 });
 

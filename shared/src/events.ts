@@ -141,6 +141,8 @@ export const C2S = {
   BENNY_USE: 'bennyUse',
   /** SWADE: DM hands a character a Benny (announced in chat). */
   BENNY_AWARD: 'bennyAward',
+  /** SWADE: a new session — Bennies are drawn afresh. */
+  SESSION_START: 'sessionStart',
   /** SWADE: a Bleeding Out player makes their start-of-turn Vigor roll. */
   BLEED_ROLL: 'bleedRoll',
   /** SWADE: a Shaken combatant makes their start-of-turn Spirit roll. */
@@ -1151,6 +1153,8 @@ export type BennyUseId =
   | 'reroll-trait' | 'recover-shaken' | 'redraw-card' | 'reroll-damage' | 'regain-pp' | 'influence';
 export interface BennyUsePayload { characterId: string; use: BennyUseId }
 export interface BennyAwardPayload { characterId: string }
+/** Start a new session: every hero draws a fresh hand of Bennies. */
+export interface SessionStartPayload { confirm: true }
 export interface BleedRollPayload { characterId: string }
 export interface BleedPromptPayload { characterId: string; name: string }
 export interface ShakenRollPayload { characterId: string }

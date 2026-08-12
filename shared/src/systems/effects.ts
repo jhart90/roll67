@@ -261,6 +261,17 @@ export interface CombatResource {
   note?: string;
 }
 
+/**
+ * A local copy of swade.ts's Benny maximum, for the same reason as the SWN
+ * check below: swade.ts imports DAMAGE_TYPES from this file, so importing
+ * back would close the circle. Three, plus the Luck Edges.
+ */
+function swadeBennyCap(sheet: SheetData): number {
+  const edges = Array.isArray(sheet.edges) ? (sheet.edges as SheetData[]) : [];
+  const names = edges.map((e) => str(e, 'name', '').toLowerCase());
+  return 3 + (names.includes('great luck') ? 2 : names.includes('luck') ? 1 : 0);
+}
+
 // A tiny local copy of swn.ts's hasFocus check — can't import it directly,
 // since swn.ts itself imports DAMAGE_TYPES from this file (circular import).
 function focusAtLevel(sheet: SheetData, id: string, minLevel: number): boolean {
@@ -281,7 +292,9 @@ export function combatResources(system: GameSystem, sheet: SheetData): CombatRes
     // directly), so the pip row reads it as-is: pips lit = bennies in hand,
     // out of at least the standard starting three.
     const count = Math.max(0, num(sheet, 'bennies', 3));
-    const max = Math.max(3, count);
+    // Three, or more with the Luck Edges — and never fewer pips than the
+    // character is actually holding, since the GM can award past the cap.
+    const max = Math.max(swadeBennyCap(sheet), count);
     return [{
       id: 'bennies', name: 'Bennies', max, used: max - count, remaining: count,
       reset: 'long', note: 'reroll a trait roll, soak wounds, unshake…',

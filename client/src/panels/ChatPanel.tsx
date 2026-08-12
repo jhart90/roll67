@@ -311,27 +311,52 @@ function ChatFrom({ msg, playerHidden }: { msg: ChatMessage; playerHidden: boole
  * Failure cannot be rerolled). This only offers what that state already says
  * is available, so the menu can never promise something the server refuses.
  */
-function BennyRerollItems({ msg, onDone }: { msg: ChatMessage; onDone: () => void }) {
-  const you = useGameStore((s) => s.you);
+/**
+ * The character of YOURS that made this roll, if any — the one a Benny could
+ * be spent on. Lifted out of the menu items so the panel can ask the same
+ * question before it opens a menu at all: a menu with nothing in it reads as
+ * a broken menu, and that is exactly what a player saw when they right-
+ * clicked somebody else's roll.
+ *
+ * The card carries the character's NAME, not its id, so the match is by name
+ * among the characters you control. A collision would need two of your own
+ * characters sharing a name, and the server re-checks ownership and
+ * eligibility on the id we send regardless.
+ */
+function useOwnRollCharacter(msg: ChatMessage | null): Character | null {
   const asUser = useGameStore((s) => s.asUserId());
   const characters = useGameStore((s) => s.characters);
-  const bennyState = useGameStore((s) => s.bennyState);
   const system = useGameStore((s) => s.campaign?.system);
+  if (!msg || system !== 'swade' || msg.kind !== 'roll' || !msg.fromCharacter) return null;
+  return characters.find((c) => c.ownerUserId === asUser && c.name === msg.fromCharacter) ?? null;
+}
 
-  if (system !== 'swade' || !you || msg.kind !== 'roll' || !msg.fromCharacter) return null;
-  // The card carries the character's NAME, not its id — so match by name among
-  // the characters you actually control. A collision would have to be two of
-  // your own characters sharing a name, and the server re-checks ownership and
-  // eligibility on the id we send regardless.
-  const ch = characters.find((c) => c.ownerUserId === asUser && c.name === msg.fromCharacter);
-  if (!ch) return null;
-  if (num(ch.sheet, 'bennies', 0) < 1) return null;
+function BennyRerollItems({ ch, onDone }: { ch: Character; onDone: () => void }) {
+  const bennyState = useGameStore((s) => s.bennyState);
   const st = bennyState[ch.id];
-  if (!st?.canRerollTrait && !st?.canRerollDamage) return null;
+  const broke = num(ch.sheet, 'bennies', 0) < 1;
+
+  /**
+   * Why there is nothing to click.
+   *
+   * Saying it is the whole point. A menu that opens empty reads as a broken
+   * menu, and "no options" is never the real answer — the answer is that you
+   * are out of Bennies, or that the roll is too old, or that a Critical
+   * Failure is a Critical Failure and no chip changes that.
+   */
+  const nothing = broke
+    ? 'No Bennies left to spend.'
+    : st?.traitCritFail && !st?.canRerollDamage
+      ? 'A Critical Failure cannot be rerolled — not even with a Benny.'
+      : !st?.canRerollTrait && !st?.canRerollDamage
+        ? 'Nothing on this roll to spend a Benny on any more.'
+        : null;
+
+  if (nothing) return <div className="chat-menu-note dim">{nothing}</div>;
 
   return (
     <>
-      {st.canRerollTrait && (
+      {st!.canRerollTrait && (
         <button
           title="Reroll the whole trait test — wild die included — and keep whichever set you prefer."
           onClick={() => { intents.bennyUse(ch.id, 'reroll-trait'); onDone(); }}
@@ -339,13 +364,16 @@ function BennyRerollItems({ msg, onDone }: { msg: ChatMessage; onDone: () => voi
           🪙 Use Benny to re-roll a Trait test
         </button>
       )}
-      {st.canRerollDamage && (
+      {st!.canRerollDamage && (
         <button
           title="Reroll the damage from scratch and keep whichever total you prefer."
           onClick={() => { intents.bennyUse(ch.id, 'reroll-damage'); onDone(); }}
         >
           🪙 Use Benny to re-roll damage
         </button>
+      )}
+      {st!.traitCritFail && (
+        <div className="chat-menu-note dim">The trait roll was a Critical Failure — that one stands.</div>
       )}
       <hr />
     </>
@@ -455,6 +483,9 @@ export function ChatPanel() {
   }
 
   const menuMsg = menu ? chatLog.find((m) => m.id === menu.id) : null;
+  // Whether this message has anything to offer THIS viewer. A player looking
+  // at somebody else's roll gets no menu at all rather than an empty box.
+  const menuCh = useOwnRollCharacter(menuMsg ?? null);
 
   return (
     <div className="chat-panel">
@@ -463,9 +494,9 @@ export function ChatPanel() {
         {chatLog.length === 0 && <p className="dim">Say hi, or roll with /r 1d20+5</p>}
       </div>
 
-      {menu && menuMsg && (
+      {menu && menuMsg && (isDm || menuCh) && (
         <AnchoredMenu x={menu.x} y={menu.y} className="chat-context-menu" onClick={(e) => e.stopPropagation()}>
-          <BennyRerollItems msg={menuMsg} onDone={() => setMenu(null)} />
+          {menuCh && <BennyRerollItems ch={menuCh} onDone={() => setMenu(null)} />}
           {isDm && (menuMsg.hidden ? (
             <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>
           ) : (

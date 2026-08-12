@@ -538,10 +538,14 @@ function freshBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRol
 /** Tell the owner which Benny reroll buttons are currently live. */
 export function emitBennyState(io: Server, ch: Character): void {
   if (!ch.ownerUserId) return;
+  const trait = freshBennyRoll(ch.id, 'trait');
   io.to(userRoom(ch.ownerUserId)).emit(S2C.BENNY_STATE, {
     characterId: ch.id,
-    canRerollTrait: freshBennyRoll(ch.id, 'trait') !== null,
+    // A Critical Failure cannot be rerolled, so the offer is withdrawn — but
+    // the reason travels with it, or the menu just looks broken.
+    canRerollTrait: !!trait && !trait.critFail,
     canRerollDamage: freshBennyRoll(ch.id, 'damage') !== null,
+    ...(trait?.critFail ? { traitCritFail: true } : {}),
   });
 }
 

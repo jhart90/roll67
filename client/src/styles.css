@@ -961,6 +961,9 @@ button.link:hover { text-decoration: underline; }
   font-size: 13px;
 }
 .chat-context-menu button:hover { background: var(--accent); color: #10131a; }
+/* Why there is nothing to click. A menu that opens with no items reads as a
+   broken menu; the reason is always more useful than the silence. */
+.chat-menu-note { padding: 6px 10px; font-size: 11px; max-width: 220px; line-height: 1.35; }
 
 .chat-panel {
   display: flex;

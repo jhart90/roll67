@@ -1220,7 +1220,14 @@ export interface RollStatsGetPayload { characterId?: string | null }
 export interface RollStatsUserBlock { userId: string; username: string; summary: import('./systems/rollStats.js').RollStatsSummary }
 /** characterId null = account-wide stats for every member of this campaign. */
 export interface RollStatsPayload { characterId: string | null; users: RollStatsUserBlock[] }
-export interface BennyStatePayload { characterId: string; canRerollTrait: boolean; canRerollDamage: boolean }
+export interface BennyStatePayload {
+  characterId: string;
+  canRerollTrait: boolean;
+  canRerollDamage: boolean;
+  /** The last trait roll was a Critical Failure, which no Benny can buy back.
+   *  Sent so the menu can SAY that rather than simply offering nothing. */
+  traitCritFail?: boolean;
+}
 /** Set the color of the pips/numbers painted on your own dice ("#rrggbb", or null for automatic contrast). */
 export interface SetDiceTextColorPayload { color: string | null }
 /** Set your own presence-dot / chat-name color ("#rrggbb", or null for the deterministic default). */

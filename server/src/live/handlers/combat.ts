@@ -8,7 +8,7 @@ import {
   isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
-  swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
+  swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensCaughtInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
@@ -1725,8 +1725,6 @@ interface BlastOfferSpec {
   originHex: Hex;
   aimHex: Hex;
   map: MapDef;
-  srcPx: ReturnType<typeof hexToPixel>;
-  sightSegs: ReturnType<typeof sightSegments>;
   damageExpr: string;
   resume: (mod: BlastMod) => void;
 }
@@ -1739,11 +1737,9 @@ interface BlastOfferSpec {
  */
 function offerBlastChoice(spec: BlastOfferSpec): boolean {
   const { io, campaignId, map } = spec;
-  const caught = tokensInAoe(spec.aoe, spec.originHex, spec.aimHex, map.grid, tokens.forMap(map.id))
-    .filter((tid) => {
-      const t = tokens.byId(tid);
-      return !!t && !rayBlocked(spec.srcPx, hexToPixel({ q: t.q, r: t.r }, map.grid), spec.sightSegs);
-    });
+  // Exactly the set the blast will land on — same wall test, so nobody is
+  // asked whether they want to catch a grenade that cannot reach them.
+  const caught = tokensCaughtInAoe(spec.aoe, spec.originHex, spec.aimHex, map.grid, tokens.forMap(map.id), map);
 
   const state = initiative.get(campaignId);
   const candidates = new Map<string, BlastCandidate>();
@@ -3396,14 +3392,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const detonate = (mod: BlastMod): void => {
       const centre = mod.aimHex ?? p.aimHex;
       const damageExpr = mod.damageExpr ?? blastDamage;
-      // Reachability stays anchored on the thrower, exactly as it is for a
-      // throw that deviates: the wall test asks "could this have got to you",
-      // and the thrower is where it came from either way.
-      const geometricHitIds = tokensInAoe(aoe, originHex, centre, map.grid, tokens.forMap(src.mapId));
-      const hitIds = geometricHitIds.filter((tid) => {
-        const t = tokens.byId(tid);
-        return !!t && !rayBlocked(srcPx, hexToPixel({ q: t.q, r: t.r }, map.grid), sightSegs);
-      });
+      // Walls are measured from where the thing GOES OFF, not from the person
+      // who threw it — see aoeSourceHex. A grenade rolled around a corner
+      // catches the people the thrower cannot see, and one going off in the
+      // corridor leaves the sealed room next door alone.
+      const hitIds = tokensCaughtInAoe(aoe, originHex, centre, map.grid, tokens.forMap(src.mapId), map);
       if (hitIds.length === 0) { emitError(socket, `${action.label} caught no one in its area.`); return; }
 
       // SWADE Evasion: a telegraphed template attack (grenade blast, cone of
@@ -3506,7 +3499,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       io, campaignId: d.campaignId, label: castLabel,
       throwerName: actor.name, throwerHex: { q: src.q, r: src.r },
       aoe, originHex, aimHex: p.aimHex, map,
-      srcPx, sightSegs, damageExpr: blastDamage, resume: detonate,
+      damageExpr: blastDamage, resume: detonate,
     })) {
       detonate({});
     }

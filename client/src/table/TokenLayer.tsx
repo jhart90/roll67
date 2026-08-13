@@ -1,8 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
-import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, pointInAoe, pxPerFoot } from 'shared';
-import { clampToKnownWalls, intents, useGameStore } from '../store/game';
+import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, rayBlocked, sightSegments, tokensCaughtInAoe } from 'shared';
+import { clampToKnownWalls, intents, sightGeometry, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { mapPixelSize, useStage } from '../util/stage';
 import { worldDrag } from '../store/worldDrag';
@@ -495,25 +495,38 @@ export function TokenLayer() {
   const aoeHitIds = useMemo(() => {
     const aoe = aoeTargeting?.action.aoe;
     if (!aoe) return null;
-    const pxPerFt = pxPerFoot(map.grid);
-    const geo = { originPx: hexToPixel(aoeTargeting!.originHex, map.grid), aimPx: hexToPixel(aoeTargeting!.aimHex, map.grid) };
-    const hit = new Set<string>();
-    for (const t of Object.values(tokens)) {
-      // Tile-sized blasts (SWADE) hit by exact hex distance — mirror of the
-      // server's tokensInAoe, so the aiming preview never lies.
-      const inside = aoe.sizeHexes != null && (aoe.shape === 'sphere' || aoe.shape === 'cylinder')
-        ? hexDistance(aoeTargeting!.aimHex, { q: t.q, r: t.r }) <= aoe.sizeHexes
-        : pointInAoe(hexToPixel({ q: t.q, r: t.r }, map.grid), aoe, geo, pxPerFt);
-      if (inside) hit.add(t.id);
-    }
-    return hit;
+    // Exactly the server's own hit test, walls and all — a template drawn over
+    // a wall covers the hexes on both sides of it, and a preview that lit up
+    // the people through the stone would be promising a kill it cannot land.
+    return new Set(tokensCaughtInAoe(
+      aoe, aoeTargeting!.originHex, aoeTargeting!.aimHex, map.grid,
+      Object.values(tokens).map((t) => ({ id: t.id, q: t.q, r: t.r })),
+      sightGeometry(),
+    ));
   }, [aoeTargeting, tokens, map.grid]);
+
+  // Whoever is shooting cannot shoot through a wall — the server refuses it
+  // outright, so a ring that offered the shot was offering an error message.
+  // Built once per aim rather than per token: the segment list is the same for
+  // every candidate, only the ray changes.
+  const sightSegs = useMemo(() => {
+    if (!targeting || !src) return null;
+    const geo = sightGeometry();
+    if (!geo) return null;
+    return sightSegments(geo.walls, geo.doors, hexToPixel({ q: src.q, r: src.r }, map.grid));
+  }, [targeting, src?.q, src?.r, map.grid]);
 
   function stateFor(t: TokenView): TargetState {
     if (aoeTargeting) return aoeHitIds?.has(t.id) ? 'valid' : 'invalid';
     if (!targeting || !src) return 'off';
     const reach = rangeHexes + (t.size >= 3 ? 1 : 0);
     const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= reach;
+    const outOfSight = !!sightSegs && t.id !== src.id && rayBlocked(
+      hexToPixel({ q: src.q, r: src.r }, map.grid),
+      hexToPixel({ q: t.q, r: t.r }, map.grid),
+      sightSegs,
+    );
+    if (outOfSight) return 'invalid';
     const selfBlocked = targeting.action.effect === 'damage' && t.id === src.id;
     // Wound-mending gear lists only the people who track Wounds. Every token
     // reaching this client is one it has already discovered, so the visible

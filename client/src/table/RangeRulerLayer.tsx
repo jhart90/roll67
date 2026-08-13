@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Hex } from 'shared';
-import { hexDistance, hexToPixel, pixelToHex, swadeRangeBand } from 'shared';
-import { useGameStore } from '../store/game';
+import { hexDistance, hexToPixel, pixelToHex, rayBlocked, sightSegments, swadeRangeBand } from 'shared';
+import { sightGeometry, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
 /**
@@ -64,18 +64,25 @@ export function RangeRulerLayer() {
     aiming: active.adv === 'adv',
     thrown: action.thrown === true,
   });
-  const color = BAND_COLOR[reading.band] ?? BAND_COLOR.out;
   const from = hexToPixel({ q: src.q, r: src.r }, grid);
   const to = hexToPixel(aim, grid);
+  // A wall ends the conversation before the range band gets a say: the server
+  // refuses a shot it cannot see, so the ruler says so at the tip rather than
+  // quoting a penalty for a shot that will never be rolled.
+  const geo = sightGeometry();
+  const blocked = !!geo && rayBlocked(from, to, sightSegments(geo.walls, geo.doors, from));
+  const color = blocked ? BAND_COLOR.out : BAND_COLOR[reading.band] ?? BAND_COLOR.out;
 
   // The roll this action actually makes, so the penalty names the right skill.
   const skillName = action.thrown ? 'Athletics (Throwing)' : 'Shooting';
-  const lines = [
-    `${dist} ${dist === 1 ? 'tile' : 'tiles'} / ${dist * feetPerHex} ft`,
-    reading.label,
-    ...(reading.penalty !== 0 ? [`${reading.penalty} to ${skillName}`] : []),
-    ...(!reading.reachable ? [reading.reason ?? 'Out of range'] : []),
-  ];
+  const lines = blocked
+    ? [`${dist} ${dist === 1 ? 'tile' : 'tiles'} / ${dist * feetPerHex} ft`, 'No line of sight', 'A wall is in the way']
+    : [
+      `${dist} ${dist === 1 ? 'tile' : 'tiles'} / ${dist * feetPerHex} ft`,
+      reading.label,
+      ...(reading.penalty !== 0 ? [`${reading.penalty} to ${skillName}`] : []),
+      ...(!reading.reachable ? [reading.reason ?? 'Out of range'] : []),
+    ];
 
   // Keep the label clear of the ruler's tip and on the far side from the
   // shooter, so it never sits under the cursor.

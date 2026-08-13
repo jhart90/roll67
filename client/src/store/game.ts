@@ -1627,6 +1627,34 @@ function isRollCommand(text: string): boolean {
  * yet is not clamped either — an empty list means "nothing discovered", not
  * "nowhere is blocked", so the server stays the only authority in the dark.
  */
+/**
+ * The walls this client is entitled to reason about.
+ *
+ * The DM holds the map's real geometry; a player holds only the fragments
+ * they have discovered, which is exactly the set they are allowed to know
+ * about. Both are enough to answer "can I shoot that" the way the server
+ * will, and neither tells anybody anything they had not already seen.
+ *
+ * Null when there is nothing to test against — a fresh map, a player who has
+ * explored nothing — and callers then fall back to the bare geometry rather
+ * than inventing walls.
+ */
+export function sightGeometry(): { walls: Wall[]; doors: Door[] } | null {
+  const s = useGameStore.getState();
+  if (s.isDm() && !s.viewingAs && s.dmGeometry) {
+    return { walls: s.dmGeometry.walls, doors: s.dmGeometry.doors };
+  }
+  if (s.knownWalls.length === 0 && s.knownDoors.length === 0) return null;
+  // Each remembered fragment is its own two-point wall, keeping the type it
+  // was seen as — a window stays see-through rather than becoming stone.
+  return {
+    walls: s.knownWalls.map((seg, i) => ({
+      id: `known-${i}`, points: [seg.a, seg.b], type: seg.type ?? 'solid',
+    })),
+    doors: s.knownDoors,
+  };
+}
+
 export function clampToKnownWalls(tokenId: string, to: Hex, drag = false): Hex | null {
   const s = useGameStore.getState();
   const from = s.tokens[tokenId];

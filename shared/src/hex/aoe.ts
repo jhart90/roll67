@@ -3,7 +3,8 @@
 // pixels via the map's grid scale, so the same math works for any shape or
 // size a spell declares without per-spell special-casing.
 
-import type { AoeSpec, GridConfig, Hex, Point } from '../types.js';
+import type { AoeSpec, Door, GridConfig, Hex, Point, Wall } from '../types.js';
+import { rayBlocked, sightSegments } from '../vision/raycast.js';
 import { hexToPixel } from './pixel.js';
 import { hexDistance } from './coords.js';
 
@@ -148,4 +149,52 @@ export function tokensInAoe<T extends { id: string; q: number; r: number }>(
   const geo: AoeGeometry = { originPx: hexToPixel(originHex, grid), aimPx: hexToPixel(aimHex, grid) };
   const pxPerFt = pxPerFoot(grid);
   return tokens.filter((t) => pointInAoe(hexToPixel({ q: t.q, r: t.r }, grid), spec, geo, pxPerFt)).map((t) => t.id);
+}
+
+/**
+ * Where the effect actually comes FROM, which is what walls are measured
+ * against.
+ *
+ * A burst goes off at the point it lands: the fireball, the grenade, the
+ * shell. Whether it reaches you is a question about the wall between you and
+ * the bang, not about the wall between you and whoever threw it — that is
+ * what lets a grenade rolled around a corner catch the people the thrower
+ * cannot see, and what stops one going off in a corridor from hurting the
+ * room next door.
+ *
+ * A cone, a line or a cube erupts from the caster instead, so for those the
+ * origin IS the caster and nothing changes.
+ */
+export function aoeSourceHex(spec: AoeSpec, originHex: Hex, aimHex: Hex): Hex {
+  return spec.shape === 'sphere' || spec.shape === 'cylinder' ? aimHex : originHex;
+}
+
+/**
+ * Every token the shape covers AND can actually reach through the walls.
+ *
+ * The geometry alone is a lie in any building: a template drawn over a wall
+ * covers the hexes on both sides of it, and without this a blast killed
+ * people through stone. Callers that have no wall data (a preview on a map
+ * still loading) pass none and get the bare geometry, which is the old
+ * behaviour and never worse than it.
+ */
+export function tokensCaughtInAoe<T extends { id: string; q: number; r: number }>(
+  spec: AoeSpec,
+  originHex: Hex,
+  aimHex: Hex,
+  grid: GridConfig,
+  tokens: T[],
+  sight: { walls: Wall[]; doors: Door[] } | null,
+): string[] {
+  const ids = tokensInAoe(spec, originHex, aimHex, grid, tokens);
+  if (!sight || (sight.walls.length === 0 && sight.doors.length === 0)) return ids;
+  const from = hexToPixel(aoeSourceHex(spec, originHex, aimHex), grid);
+  const segs = sightSegments(sight.walls, sight.doors, from);
+  if (segs.length === 0) return ids;
+  const byId = new Map(tokens.map((t) => [t.id, t]));
+  return ids.filter((id) => {
+    const t = byId.get(id);
+    if (!t) return false;
+    return !rayBlocked(from, hexToPixel({ q: t.q, r: t.r }, grid), segs);
+  });
 }

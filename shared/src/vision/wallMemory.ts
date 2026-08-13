@@ -28,6 +28,14 @@ export interface KnownWallSegment {
   wallId: string;
   a: Point;
   b: Point;
+  /**
+   * What KIND of wall it is. Not a leak: this fragment is already proof the
+   * wall is there, and whether the bit in front of you is stone or glass is
+   * the most obvious thing about it. The client needs it to answer "can I
+   * shoot through that" the same way the server does — a window that a client
+   * had to assume was solid would refuse shots the server would allow.
+   */
+  type?: Wall['type'];
 }
 
 /**
@@ -53,7 +61,7 @@ const SAMPLES_PER_HEX = 6;
  * exists to prevent. A seam is cosmetic; a leak is not.
  */
 function clipSegment(
-  wallId: string, a: Point, b: Point, grid: GridConfig, seen: (hex: Hex) => boolean,
+  wallId: string, type: Wall['type'], a: Point, b: Point, grid: GridConfig, seen: (hex: Hex) => boolean,
 ): KnownWallSegment[] {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -72,22 +80,23 @@ function clipSegment(
       if (runStart === null) runStart = t;
       lastKnown = t;
     } else if (runStart !== null) {
-      push(out, wallId, a, dx, dy, runStart, lastKnown);
+      push(out, wallId, type, a, dx, dy, runStart, lastKnown);
       runStart = null;
     }
   }
-  if (runStart !== null) push(out, wallId, a, dx, dy, runStart, lastKnown);
+  if (runStart !== null) push(out, wallId, type, a, dx, dy, runStart, lastKnown);
   return out;
 }
 
 function push(
-  out: KnownWallSegment[], wallId: string, a: Point, dx: number, dy: number, t0: number, t1: number,
+  out: KnownWallSegment[], wallId: string, type: Wall['type'], a: Point, dx: number, dy: number, t0: number, t1: number,
 ): void {
   if (t1 - t0 <= 1e-6) return;
   out.push({
     wallId,
     a: { x: a.x + dx * t0, y: a.y + dy * t0 },
     b: { x: a.x + dx * t1, y: a.y + dy * t1 },
+    ...(type ? { type } : {}),
   });
 }
 
@@ -104,7 +113,7 @@ export function knownWallSegments(
   const out: KnownWallSegment[] = [];
   for (const wall of walls) {
     for (let i = 1; i < wall.points.length; i++) {
-      out.push(...clipSegment(wall.id, wall.points[i - 1]!, wall.points[i]!, grid, seen));
+      out.push(...clipSegment(wall.id, wall.type, wall.points[i - 1]!, wall.points[i]!, grid, seen));
     }
   }
   return out;

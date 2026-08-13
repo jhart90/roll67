@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { pointInAoe, pxPerFoot, tokensInAoe } from '../src/hex/aoe.js';
+import { aoeSourceHex, pointInAoe, pxPerFoot, tokensCaughtInAoe, tokensInAoe } from '../src/hex/aoe.js';
 import { hexToPixel } from '../src/hex/pixel.js';
-import type { AoeSpec, GridConfig } from '../src/types.js';
+import type { AoeSpec, GridConfig, Wall } from '../src/types.js';
 
 const GRID: GridConfig = {
   hexSize: 40, originX: 0, originY: 0, cols: 100, rows: 100, gridEnabled: true, lighting: 'dark', feetPerHex: 5,
@@ -97,5 +97,65 @@ describe('tokensInAoe', () => {
     // The same physical hexSize covers fewer real feet per hex when feetPerHex is small,
     // so a fixed-size AoE (in feet) should cover proportionally more hexes on the finer grid.
     expect(pxPerFoot(fine)).toBeGreaterThan(pxPerFoot(coarse));
+  });
+});
+
+describe('walls and blasts', () => {
+  /** A wall standing between hex (2,0) and hex (4,0), across the line of fire. */
+  function wallBetween(aHex: { q: number; r: number }, bHex: { q: number; r: number }): Wall {
+    const a = hexToPixel(aHex, GRID);
+    const b = hexToPixel(bHex, GRID);
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    // Perpendicular to the line between them, long enough to cross it.
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = (-dy / len) * 200;
+    const py = (dx / len) * 200;
+    return { id: 'w', points: [{ x: mx + px, y: my + py }, { x: mx - px, y: my - py }], type: 'solid' };
+  }
+
+  const spec: AoeSpec = { shape: 'sphere', sizeFt: 40 };
+  const origin = { q: 0, r: 0 };
+  const centre = { q: 3, r: 0 };
+  const tokens = [{ id: 'near', q: 3, r: 0 }, { id: 'farSide', q: 5, r: 0 }];
+
+  it('catches everyone the shape covers when there is nothing in the way', () => {
+    const hit = tokensCaughtInAoe(spec, origin, centre, GRID, tokens, { walls: [], doors: [] });
+    expect(hit).toContain('near');
+    expect(hit).toContain('farSide');
+  });
+
+  it('does not reach through a wall', () => {
+    const walls = [wallBetween({ q: 3, r: 0 }, { q: 5, r: 0 })];
+    const hit = tokensCaughtInAoe(spec, origin, centre, GRID, tokens, { walls, doors: [] });
+    expect(hit).toContain('near');
+    expect(hit).not.toContain('farSide');
+  });
+
+  it('sees through a window, which is the point of a window', () => {
+    const walls = [{ ...wallBetween({ q: 3, r: 0 }, { q: 5, r: 0 }), type: 'window' as const }];
+    const hit = tokensCaughtInAoe(spec, origin, centre, GRID, tokens, { walls, doors: [] });
+    expect(hit).toContain('farSide');
+  });
+
+  it('measures from where it went off, not from who threw it', () => {
+    // The wall sits between the THROWER and both targets; the blast landed on
+    // the far side of it, among them. Everyone near the bang still gets it.
+    const walls = [wallBetween({ q: 0, r: 0 }, { q: 3, r: 0 })];
+    const hit = tokensCaughtInAoe(spec, origin, centre, GRID, tokens, { walls, doors: [] });
+    expect(hit).toContain('near');
+    expect(hit).toContain('farSide');
+  });
+
+  it('…but a cone still comes from the caster', () => {
+    expect(aoeSourceHex({ shape: 'cone', sizeFt: 15 }, origin, centre)).toEqual(origin);
+    expect(aoeSourceHex({ shape: 'sphere', sizeFt: 20 }, origin, centre)).toEqual(centre);
+  });
+
+  it('falls back to bare geometry when the caller has no wall data', () => {
+    const hit = tokensCaughtInAoe(spec, origin, centre, GRID, tokens, null);
+    expect(hit).toContain('farSide');
   });
 });

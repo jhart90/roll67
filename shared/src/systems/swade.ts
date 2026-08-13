@@ -383,6 +383,24 @@ function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number;
 }
 
 /**
+ * Does the die at `i` show a NATURAL 1 — the only kind that can damn a roll?
+ *
+ * An exploding die reaches us flattened into one entry per throw, so a Wild
+ * Die that went 6 → 6 → 1 is three entries and the last of them reads `1`.
+ * That die did not roll a 1. It rolled thirteen. Only a die that was a whole
+ * throw by itself can be a fumble, so anything continuing an ace — the entry
+ * after one flagged `ace` — is not a 1 no matter what it shows.
+ *
+ * The dice of a chain always sit next to each other in the array, which is the
+ * same adjacency the dice renderer already uses to make a bonus die wait for
+ * the die that spawned it.
+ */
+export function swadeNaturalOne(dice: DieRoll[], i: number): boolean {
+  const d = dice[i];
+  return !!d && d.value === 1 && !d.ace && !(i > 0 && dice[i - 1].ace === true);
+}
+
+/**
  * Snake eyes: the trait die AND the Wild Die both showing a natural 1. This is
  * SWADE's Critical Failure for a Wild Card, and the whole rule is readable from
  * the dice alone — which is what lets the client light it up without ever being
@@ -392,9 +410,8 @@ function traitLineBonuses(sheet: SheetData): { parry: number; toughness: number;
  * the target number, so it can never be part of a failure.
  */
 export function swadeSnakeEyes(dice: DieRoll[]): boolean {
-  const traitOne = dice.some((d) => !d.wild && !d.raise && d.value === 1);
-  const wildOne = dice.some((d) => d.wild && d.value === 1);
-  return traitOne && wildOne;
+  const ones = dice.filter((d, i) => !d.raise && swadeNaturalOne(dice, i));
+  return ones.some((d) => !d.wild) && ones.some((d) => d.wild);
 }
 
 /**
@@ -412,7 +429,7 @@ export function swadeSnakeEyes(dice: DieRoll[]): boolean {
  */
 export function swadeCritFail(dice: DieRoll[], wildCard: boolean, confirm?: () => number): boolean {
   if (wildCard) return swadeSnakeEyes(dice);
-  const naturalOne = dice.some((d) => !d.wild && !d.raise && d.value === 1);
+  const naturalOne = dice.some((d, i) => !d.wild && !d.raise && swadeNaturalOne(dice, i));
   if (!naturalOne) return false;
   return confirm ? confirm() === 1 : false;
 }

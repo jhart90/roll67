@@ -35,6 +35,29 @@ describe('swadeSnakeEyes', () => {
   it('is false for an empty roll', () => {
     expect(swadeSnakeEyes([])).toBe(false);
   });
+
+  it('does not count the 1 that ENDS an ace chain — that die rolled 13, not 1', () => {
+    // A jump: trait d6 came up 1, Wild Die went 6 → 6 → 1 for thirteen. The
+    // roll succeeded handsomely, and for a while this called it a fumble.
+    expect(swadeSnakeEyes([
+      d(1),
+      d(6, { wild: true, ace: true }), d(6, { wild: true, ace: true }), d(1, { wild: true }),
+    ])).toBe(false);
+  });
+
+  it('…nor the trait die that aced into one', () => {
+    expect(swadeSnakeEyes([
+      d(6, { ace: true }), d(1),
+      d(1, { wild: true }),
+    ])).toBe(false);
+  });
+
+  it('still fires when both arms genuinely fumble beside an aced third die', () => {
+    expect(swadeSnakeEyes([
+      d(6, { ace: true }), d(4),          // some other die, aced and done
+      d(1), d(1, { wild: true }),
+    ])).toBe(true);
+  });
 });
 
 describe('swadeCritFail', () => {
@@ -66,6 +89,12 @@ describe('swadeCritFail', () => {
 
   it("does not let an Extra's raise die damn them", () => {
     expect(swadeCritFail([d(5), d(1, { raise: true })], false, () => 1)).toBe(false);
+  });
+
+  it("does not damn an Extra whose die aced into a 1", () => {
+    let rolled = 0;
+    expect(swadeCritFail([d(6, { ace: true }), d(1)], false, () => { rolled++; return 1; })).toBe(false);
+    expect(rolled).toBe(0);
   });
 
   it('never asks for a confirming die on a Wild Card', () => {

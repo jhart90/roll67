@@ -6,7 +6,7 @@
 
 import {
   ACE_STYLE_DEFAULT, BENNY_FLIP_FADE_MS, BENNY_FLIP_FLY_MS, BENNY_FLIP_MS,
-  type AceStyle, type DieRoll,
+  swadeNaturalOne, type AceStyle, type DieRoll,
 } from 'shared';
 
 // ---------- tiny vector / quaternion math ----------
@@ -308,6 +308,11 @@ function shade(rgb: [number, number, number], k: number): string {
   return `rgb(${Math.round(rgb[0] * k)}, ${Math.round(rgb[1] * k)}, ${Math.round(rgb[2] * k)})`;
 }
 
+/** Blend one colour into another, `t` of the way across. */
+function mixRgb(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
 function luminance(rgb: [number, number, number]): number {
   return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
 }
@@ -320,6 +325,12 @@ export interface DieSim {
   targetFace: Face;
   rgb: [number, number, number];
   textColor: string;
+  /** The blood red a guilty die bleeds into on a Critical Failure — see `critAt`. */
+  critRgb?: [number, number, number];
+  /** ms at which that bleed starts. Absent for every die that isn't guilty. */
+  critAt?: number;
+  /** Pip colour to switch to once it has bled, kept legible against the red. */
+  critTextColor?: string;
   size: number;
   start: { x: number; y: number };
   target: { x: number; y: number };
@@ -488,6 +499,8 @@ function scatterTargets(n: number, w: number, h: number): Array<{ x: number; y: 
 /** The two 1s of a Critical Failure wear this instead of their role colour —
  *  a deep arterial red no player palette can be mistaken for. */
 export const CRIT_FAIL_DIE_COLOR = '#8d0f14';
+/** How long a guilty die takes to bleed from its own colour into that red. */
+const CRIT_BLEED_MS = 260;
 
 /**
  * Pick the wall this die caroms off, and where on it. Only walls the die is
@@ -555,6 +568,8 @@ export function buildSims(
     return { delay, dur };
   });
   const fade = fadeTimes(dice, settleAt);
+  // When the whole throw is over and its verdict is finally nobody's secret.
+  const allLanded = Math.max(0, ...settleAt);
   return dice.map((die, i) => {
     const target = targets[i];
     // Enter from the left or right edge, biased low, like a real throw.
@@ -573,8 +588,14 @@ export function buildSims(
     // On a Critical Failure the guilty dice — the 1s themselves — go blood
     // red, so the reason is legible on the felt rather than only in the
     // banner. Every other die in the roll keeps its own colour.
-    const damning = critFail && die.value === 1 && !die.raise;
-    const rgb = hexToRgb(damning ? CRIT_FAIL_DIE_COLOR : palette
+    //
+    // The red waits for the LAST die in the roll to land, for the same reason
+    // the losing arm's grey-out waits: a die that flies in already red has
+    // announced the verdict before the dice that decide it have been thrown.
+    // And a 1 that continues an ace is no 1 at all — that die rolled its max
+    // and kept going — so it is never one of the guilty.
+    const damning = critFail && !die.raise && swadeNaturalOne(dice, i);
+    const rgb = hexToRgb(palette
       ? (die.raise ? palette.raise : die.wild ? palette.wild : palette.trait)
       : (customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3'));
     // Pips have to stay legible against whatever colour the player picked.
@@ -589,6 +610,7 @@ export function buildSims(
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
       textColor: die.raise ? '#ffffff' : palette ? contrasting : (customTextColor ?? contrasting),
+      ...(damning ? { critRgb: hexToRgb(CRIT_FAIL_DIE_COLOR), critAt: allLanded, critTextColor: '#f4f6fb' } : {}),
       size,
       start, target,
       ...(wall ? { via: wall.via, viaAt: wall.viaAt } : {}),
@@ -1295,9 +1317,18 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number, onAce?
     .filter((f): f is NonNullable<typeof f> => f !== null)
     .sort((a, b) => a.depth - b.depth);
 
+  // A guilty die bleeds red only once the LAST die of the roll has landed —
+  // until then it is an ordinary die, because until then the roll could still
+  // go either way and nothing on the felt should say otherwise.
+  const critT = sim.critAt === undefined || !sim.critRgb
+    ? 0
+    : Math.max(0, Math.min(1, (tMs - sim.critAt) / CRIT_BLEED_MS));
+  const body = critT > 0 && sim.critRgb ? mixRgb(sim.rgb, sim.critRgb, critT) : sim.rgb;
+  const ink = critT >= 0.5 && sim.critTextColor ? sim.critTextColor : sim.textColor;
+
   for (const { f, normal, pts } of faces) {
     const lambert = 0.52 + 0.48 * Math.max(0, dot(normal, LIGHT));
-    ctx.fillStyle = shade(sim.rgb, lambert);
+    ctx.fillStyle = shade(body, lambert);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
@@ -1325,7 +1356,7 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number, onAce?
         // the face's own radius is 1/k of a model unit here.
         sim.faceArt(ctx, Number(f.label), 24 / f.textSize);
       } else if (sim.die.sides === 6) {
-        drawPips(ctx, Number(f.label), sim.textColor);
+        drawPips(ctx, Number(f.label), ink);
       } else {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -1336,7 +1367,7 @@ function drawDie(ctx: CanvasRenderingContext2D, sim: DieSim, tMs: number, onAce?
           label = f === sim.targetFace ? String(sim.die.value) : String((Number(f.label) % 10) * 10).padStart(2, '0');
         }
         ctx.font = `800 ${label.length >= 3 ? 18 : 24}px system-ui, sans-serif`;
-        ctx.fillStyle = sim.textColor;
+        ctx.fillStyle = ink;
         ctx.fillText(label, 0, 1.5);
       }
       ctx.restore();

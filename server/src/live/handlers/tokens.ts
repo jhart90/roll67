@@ -3,7 +3,7 @@ import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
   playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type GridConfig, type Hex, type JumpRollPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
+  type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
 import { assets, campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
@@ -339,6 +339,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         dest = stop;
       }
     }
+    // A rider goes where the horse goes. Their own legs are not in play until
+    // they get off, so this is refused rather than silently dragging them out
+    // of the saddle — dismounting is a decision, not a side effect of a drag.
+    if (token.mountedOn) {
+      const mount = tokens.byId(token.mountedOn);
+      socket.emit(S2C.TOKEN_UPSERTED, { token });
+      emitError(socket, `${token.name} is riding${mount ? ` ${mount.name}` : ''} — dismount first, or move the mount.`);
+      return;
+    }
+
     // SWADE combat movement: Pace is a real per-turn budget (1 hex = 1").
     // Standing from Prone costs 2" first; pushing past Pace automatically
     // rolls the d6 running die, once per turn.
@@ -408,6 +418,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     }
     const fromHex = { q: token.q, r: token.r };
     tokens.move(tokenId, dest.q, dest.r);
+    // Anyone in the saddle travels with it, to the same hex.
+    for (const rider of tokens.forMap(token.mapId).filter((t) => t.mountedOn === tokenId)) {
+      tokens.move(rider.id, dest.q, dest.r);
+      for (const s2 of socketsSeeingToken(io, d.campaignId, tokens.byId(rider.id)!)) {
+        s2.emit(S2C.TOKEN_MOVED, { tokenId: rider.id, q: dest.q, r: dest.r });
+      }
+    }
     const moved = tokens.byId(tokenId)!;
     // Tell everyone who could already see it where it went; vision sync
     // handles reveals/hides for everyone else (and fog for the mover).
@@ -435,6 +452,74 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
    * standing is free but the 2″ it costs belongs to a move that actually
    * happens.
    */
+  /**
+   * Get on, or get off.
+   *
+   * Only a token the DM has marked rideable can be mounted — nothing is a
+   * mount by default, or every crate on the map would be a horse. The rider
+   * moves to the mount's hex and stays there: from here their movement is the
+   * mount's, and MOVE_TOKEN refuses to let them walk off on their own.
+   */
+  socket.on(C2S.MOUNT_TOKEN, safe(socket, ({ tokenId, mountId }: MountTokenPayload) => {
+    const d = requireCampaign(socket);
+    const token = tokens.byId(tokenId);
+    if (!token) return;
+    const character = token.characterId ? characters.byId(token.characterId) : undefined;
+    if (!canMoveToken(d.role, d.userId, token, character)) {
+      emitError(socket, 'That is not yours to move.');
+      return;
+    }
+    const map = maps.byId(token.mapId);
+    if (!map || map.campaignId !== d.campaignId) return;
+
+    if (!mountId) {
+      if (!token.mountedOn) return;
+      const mount = tokens.byId(token.mountedOn);
+      tokens.update(tokenId, { mountedOn: null });
+      // Step off onto the nearest free hex rather than standing inside the
+      // horse. Failing that, stay put — a rider with nowhere to go is a
+      // problem for the table, not a reason to refuse the dismount.
+      if (mount) {
+        const taken = new Set(tokens.forMap(token.mapId)
+          .filter((t) => t.id !== tokenId)
+          .map((t) => packHex({ q: t.q, r: t.r })));
+        const spot = firstFreeHex({ q: mount.q, r: mount.r }, taken, map.grid);
+        tokens.move(tokenId, spot.q, spot.r);
+      }
+      const off = tokens.byId(tokenId)!;
+      io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: off });
+      for (const s2 of socketsSeeingToken(io, d.campaignId, off)) {
+        s2.emit(S2C.TOKEN_MOVED, { tokenId, q: off.q, r: off.r });
+      }
+      postStatusLine(io, d.campaignId, `${token.name} dismounts${mount ? ` from ${mount.name}` : ''}.`);
+      syncMapVision(io, d.campaignId, token.mapId);
+      return;
+    }
+
+    const mount = tokens.byId(mountId);
+    if (!mount || mount.mapId !== token.mapId) return;
+    if (!mount.mountable) {
+      emitError(socket, `${mount.name} is not something anyone can ride. The DM marks a token rideable in its inspector.`);
+      return;
+    }
+    if (mount.id === token.id) return;
+    // A mount already carrying someone is taken; and a mount cannot itself be
+    // riding something else, or the two would drag each other around.
+    const rider = tokens.forMap(token.mapId).find((t) => t.mountedOn === mount.id && t.id !== token.id);
+    if (rider) { emitError(socket, `${mount.name} is already carrying ${rider.name}.`); return; }
+    if (mount.mountedOn) { emitError(socket, `${mount.name} is riding something else.`); return; }
+
+    tokens.update(tokenId, { mountedOn: mount.id });
+    tokens.move(tokenId, mount.q, mount.r);
+    const up = tokens.byId(tokenId)!;
+    io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: up });
+    for (const s2 of socketsSeeingToken(io, d.campaignId, up)) {
+      s2.emit(S2C.TOKEN_MOVED, { tokenId, q: up.q, r: up.r });
+    }
+    postStatusLine(io, d.campaignId, `${token.name} mounts ${mount.name}.`);
+    syncMapVision(io, d.campaignId, token.mapId);
+  }, 'MOUNT_TOKEN'));
+
   socket.on(C2S.PRONE_MOVE, safe(socket, ({ tokenId, mode }: ProneMovePayload) => {
     const d = requireCampaign(socket);
     const token = tokens.byId(tokenId);

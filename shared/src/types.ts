@@ -326,6 +326,13 @@ export interface Token {
    *  a player is not sent other people's sheets, and being able to see that
    *  the ogre is Shaken is the whole point of the badge. */
   conditions?: string[] | null;
+  /** The DM has marked this token as something that can be ridden. Nothing is
+   *  mountable by default: a mount is a deliberate designation, not a property
+   *  every token quietly has. */
+  mountable?: boolean;
+  /** For a RIDER: the token carrying them. They share its hex, move where it
+   *  moves, and cannot walk off on their own until they dismount. */
+  mountedOn?: string | null;
   /** When this token was moved onto the visible layer. Players fade it in over
    *  REVEAL_FADE_MS from this moment; null once the fade is ancient history. */
   revealedAt?: number | null;

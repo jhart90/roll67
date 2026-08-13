@@ -1724,6 +1724,8 @@ export const intents = {
   }) => socket.emit(C2S.CREATE_TOKEN, payload),
   deleteToken: (tokenId: string) => socket.emit(C2S.DELETE_TOKEN, { tokenId }),
   updateToken: (tokenId: string, patch: Record<string, unknown>) => socket.emit(C2S.UPDATE_TOKEN, { tokenId, patch }),
+  /** Climb onto a mount the DM marked rideable, or dismount (mountId null). */
+  mountToken: (tokenId: string, mountId: string | null) => socket.emit(C2S.MOUNT_TOKEN, { tokenId, mountId }),
   /** `drag` marks a deliberate drag-and-drop; keyboard steps leave it off so
    *  they always collide with walls. */
   moveToken: (tokenId: string, q: number, r: number, drag = false) => {

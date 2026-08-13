@@ -137,7 +137,11 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // The hex the token is drawn at: the prediction wins until it is resolved.
   const shown = predicted ? hexToPixel(predicted, map.grid) : home;
   const pos = dragPos ?? shown;
-  const radius = map.grid.hexSize * 0.72 * token.size;
+  // A rider shares its mount's hex, so drawing both at full size would hide
+  // one under the other. The rider rides smaller and sits up and to the right,
+  // which reads as "on that" rather than "next to that" at any zoom.
+  const riding = !!token.mountedOn;
+  const radius = map.grid.hexSize * 0.72 * token.size * (riding ? 0.55 : 1);
   // Token art reads better with a little more presence than the flat colour
   // discs, so it renders 20% larger than the hex-derived radius. Everything
   // that isn't art keeps the original size.
@@ -308,7 +312,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
 
   return (
     <g
-      transform={`translate(${pos.x}, ${pos.y})`}
+      transform={`translate(${pos.x + (riding ? radius * 0.85 : 0)}, ${pos.y - (riding ? radius * 0.85 : 0)})`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { TokenShape } from 'shared';
-import { num, systemFor } from 'shared';
+import { hexDistance, num, systemFor } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
@@ -31,6 +31,8 @@ export function TokenInspector() {
   const { progress, upload } = useUploadProgress();
 
   const isDm = useGameStore((s) => s.isDm());
+
+  const tokenMap = useGameStore((s) => s.tokens);
   if (!token || !you || !campaign) return null;
   // A player gets this panel only for a token they control, and only to
   // recolour it — the server enforces the same limit, this just avoids
@@ -234,6 +236,50 @@ export function TokenInspector() {
             Editing {character.name}&rsquo;s sheet.
           </span>
         )}
+        {/* Getting on and off. Offered here rather than as a drag gesture: a
+            drag that sometimes means "move" and sometimes means "mount" is a
+            drag nobody trusts. */}
+        {(() => {
+          const others = Object.values(tokenMap).filter((t) => t.id !== token.id);
+          const carrier = token.mountedOn ? others.find((t) => t.id === token.mountedOn) : null;
+          if (carrier) {
+            return (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <button className="link" onClick={() => intents.mountToken(token.id, null)}>
+                  🐎 Dismount from {carrier.name}
+                </button>
+              </div>
+            );
+          }
+          // Only mounts the DM has marked, on this map, not already carrying
+          // somebody, and standing within reach.
+          const rideable = others.filter((t) => t.mountable
+            && !others.some((o) => o.mountedOn === t.id)
+            && hexDistance({ q: t.q, r: t.r }, { q: token.q, r: token.r }) <= 1);
+          if (rideable.length === 0) return null;
+          return (
+            <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {rideable.map((m) => (
+                <button key={m.id} className="link" onClick={() => intents.mountToken(token.id, m.id)}>
+                  🐎 Mount {m.name}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+        {/* Nothing is rideable until the DM says so — otherwise every crate,
+            corpse and campfire on the map is a horse. */}
+        <label className="checkbox" style={{ gridColumn: '1 / -1' }}>
+          <input
+            type="checkbox"
+            checked={token.mountable === true}
+            onChange={(e) => intents.updateToken(token.id, { mountable: e.target.checked })}
+          />
+          <span>
+            Can be ridden
+            <span className="dim"> — riders share its hex and move with it</span>
+          </span>
+        </label>
       </div>
         </>
       )}

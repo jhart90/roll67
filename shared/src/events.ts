@@ -163,6 +163,8 @@ export const C2S = {
   JUMP_ROLL: 'jumpRoll',
   /** SWADE: answer the crawl prompt — stand up, or stay down. */
   PRONE_MOVE: 'proneMove',
+  /** Climb onto a mount the DM has marked rideable, or get off it. */
+  MOUNT_TOKEN: 'mountToken',
   /** SWADE: the DM's answer to the aftermath prompt. */
   AFTERMATH_ROLL: 'aftermathRoll',
   /** SWADE: the DM's answer to the natural-healing prompt. */
@@ -1245,6 +1247,8 @@ export interface AdvanceTimePayload { step: TimeStepId }
 export interface ClockPayload { seconds: number }
 /** Their answer: get up, or stay down and crawl. */
 export interface ProneMovePayload { tokenId: string; mode: 'stand' | 'crawl' }
+/** Ride `mountId`, or dismount when it is null. */
+export interface MountTokenPayload { tokenId: string; mountId: string | null }
 export interface IronDicePayload {
   /** SHA-256 of the ACTIVE secret seed — published before its rolls happen. */
   commit: string;

@@ -73,6 +73,11 @@ if (ensureColumn('tokens', 'conditions_json', 'conditions_json TEXT')) {
 }
 // SWADE: the GM's own Benny pool — one per player character each session,
 // plus whatever the villains' Jokers pay in.
+// Mounts. A token can only be ridden if the DM says so — nothing is mountable
+// by default, or every crate and corpse on the map would be a horse.
+ensureColumn('tokens', 'mountable', 'mountable INTEGER NOT NULL DEFAULT 0');
+// …and this is the rider's link to the mount carrying them.
+ensureColumn('tokens', 'mounted_on', 'mounted_on TEXT');
 ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0');
 // In-world elapsed seconds. Every time-based rule in SWADE — the Golden Hour,
 // Power Points coming back, Natural Healing — is measured against this rather

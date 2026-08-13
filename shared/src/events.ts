@@ -320,7 +320,7 @@ export interface CreateTokenPayload {
 export interface DeleteTokenPayload { tokenId: string }
 export interface UpdateTokenPayload {
   tokenId: string;
-  patch: Partial<Pick<Token, 'name' | 'layer' | 'size' | 'shape' | 'color' | 'vision' | 'bar' | 'light' | 'characterId'>> & {
+  patch: Partial<Pick<Token, 'name' | 'layer' | 'size' | 'shape' | 'color' | 'vision' | 'bar' | 'light' | 'characterId' | 'mountable' | 'maxRiders' | 'driverTokenId'>> & {
     artAssetId?: string | null;
   };
 }

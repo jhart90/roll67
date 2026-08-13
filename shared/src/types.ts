@@ -335,6 +335,10 @@ export interface Token {
   mountedOn?: string | null;
   /** Seats on a mountable token: one for a horse, a whole crew for a boat. */
   maxRiders?: number;
+  /** Which rider has the wheel — the DM's pick among those aboard. Its Parry
+   *  and every control roll it owes read off this one. Null falls back to
+   *  whoever climbed on first, which is usually right and always something. */
+  driverTokenId?: string | null;
   /** When this token was moved onto the visible layer. Players fade it in over
    *  REVEAL_FADE_MS from this moment; null once the fade is ancient history. */
   revealedAt?: number | null;

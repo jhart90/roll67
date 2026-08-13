@@ -476,6 +476,12 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       if (!token.mountedOn) return;
       const mount = tokens.byId(token.mountedOn);
       tokens.update(tokenId, { mountedOn: null });
+      // Stepping off hands the wheel back: the next one aboard drives until
+      // the DM says otherwise.
+      if (mount && mount.driverTokenId === tokenId) {
+        tokens.update(mount.id, { driverTokenId: null });
+        io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(mount.id)! });
+      }
       // Step off onto the nearest free hex rather than standing inside the
       // horse. Failing that, stay put — a rider with nowhere to go is a
       // problem for the table, not a reason to refuse the dismount.

@@ -4,6 +4,7 @@ import {
   AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SECONDS_PER_ROUND, TIME_STEPS, restRecovery,
   CHASE_TRACK_DEFAULT, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
   opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
+  bumpResult, chaseCritFailure, complicationFor, isComplicationCard, type ChaseTravel,
   isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
@@ -591,6 +592,8 @@ function finishTurnTransition(io: Server, campaignId: string, state: InitiativeS
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
   if (ch?.system === 'swade') startOfTurnRecovery(io, campaignId, ch);
+  // …and whatever the Club they were dealt has waiting for them.
+  resolveChaseComplication(io, campaignId, state);
 }
 
 /**
@@ -685,6 +688,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     cards: dealt.filter((c) => !c.hidden).map(({ hidden: _h, ...rest }) => rest),
   });
   for (const j of jokerDraws) jokersWild(io, campaignId, j.name, j.playerSide, j.hidden);
+  flagChaseComplications(io, campaignId, state);
 }
 
 export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaignId: string): InitiativeState {
@@ -1793,13 +1797,17 @@ function vehicleUnder(tok: Token | null | undefined): Character | null {
 }
 
 /**
- * Whoever has the wheel of a vehicle token: the first rider aboard. The
- * fiction of who is driving is the table's, but SOMETHING has to answer for
+ * Whoever has the wheel of a vehicle token: the rider the DM named, or the
+ * first one aboard when nobody has been named. SOMETHING has to answer for
  * the vehicle's Parry and its control rolls, and "the first one on" is both
- * stable and usually right — the driver gets in first.
+ * stable and usually right — the driver gets in first. A named driver who has
+ * since fallen off is ignored rather than obeyed.
  */
 function driverOf(vehicleTokenId: string, mapId: string): Character | null {
-  const rider = tokens.forMap(mapId).find((t) => t.mountedOn === vehicleTokenId);
+  const vehicle = tokens.byId(vehicleTokenId);
+  const riders = tokens.forMap(mapId).filter((t) => t.mountedOn === vehicleTokenId);
+  const named = vehicle?.driverTokenId ? riders.find((t) => t.id === vehicle.driverTokenId) : undefined;
+  const rider = named ?? riders[0];
   const ch = rider?.characterId ? characters.byId(rider.characterId) : undefined;
   return ch ?? null;
 }
@@ -1834,6 +1842,136 @@ function maneuverMods(
   const bonus = speedBonus(me.topSpeed, chase.participants.filter((p) => p !== me).map((p) => p.topSpeed));
   if (bonus > 0) { mod += bonus; tags.push(`+${bonus} Speed`); }
   return { mod, tags };
+}
+
+/** How a participant is travelling, which decides what a disaster looks like. */
+function travelOf(p: ChaseParticipant): ChaseTravel {
+  const tok = p.tokenId ? tokens.byId(p.tokenId) : null;
+  if (vehicleUnder(tok)) return 'vehicle';
+  return tok?.mountedOn ? 'mounted' : 'foot';
+}
+
+/**
+ * A Bump: knocked back cards, and out of the chase entirely if that carries
+ * them off the back of the track. The chase does not wait for anybody.
+ */
+function bumpParticipant(
+  io: Server, campaignId: string, chase: ChaseState, p: ChaseParticipant, cards: number, why: string,
+): void {
+  if (cards <= 0) return;
+  const out = bumpResult(p.cardIdx, cards);
+  p.cardIdx = out.cardIdx;
+  if (out.leftBehind) {
+    chase.participants = chase.participants.filter((x) => x !== p);
+    postStatusLine(io, campaignId, `🏁 ${p.name} is bumped off the back of the track — ${why}, and the chase leaves them behind.`);
+    return;
+  }
+  postStatusLine(io, campaignId,
+    `${p.name} is bumped back ${cards} Chase Card${cards === 1 ? '' : 's'} — ${why}.`);
+}
+
+/**
+ * A Critical Failure while manoeuvring, routed by what they are travelling in:
+ * a vehicle goes Out of Control, a rider fights to stay on, and someone on
+ * their own two feet goes down. All three lose ground.
+ */
+function runChaseCritFailure(
+  io: Server, campaignId: string, chase: ChaseState, p: ChaseParticipant, ch: Character | undefined,
+): void {
+  const travel = travelOf(p);
+  const out = chaseCritFailure(travel);
+  postStatusLine(io, campaignId, `💀 Critical Failure — ${p.name}: ${out.label}.`);
+  bumpParticipant(io, campaignId, chase, p, out.bumpCards, 'a Critical Failure');
+  const tok = p.tokenId ? tokens.byId(p.tokenId) : null;
+  if (out.outOfControl) {
+    const vehicle = vehicleUnder(tok);
+    if (vehicle) resolveOutOfControl(io, campaignId, vehicle);
+    return;
+  }
+  if (out.ridingCheck && ch) {
+    const br = roll(traitExpr(ch.sheet, skillDie(ch.sheet, 'Riding')));
+    const stayed = br.total >= 4;
+    postStatusLine(io, campaignId, `${p.name} grabs for the reins — Riding ${br.total} vs 4: ${stayed ? 'stays on.' : 'is thrown!'}`);
+    if (!stayed && tok) {
+      const mount = tok.mountedOn ? tokens.byId(tok.mountedOn) : null;
+      tokens.update(tok.id, { mountedOn: null });
+      if (mount?.driverTokenId === tok.id) tokens.update(mount.id, { driverTokenId: null });
+      const off = tokens.byId(tok.id)!;
+      io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: off });
+      applyConditionTo(io, campaignId, characters.byId(ch.id) ?? ch, 'prone', 'thrown from the saddle');
+      chase.participants = chase.participants.filter((x) => x !== p);
+      postStatusLine(io, campaignId, `${p.name} is out of the chase, on the ground and watching it go.`);
+    }
+    return;
+  }
+  if (out.prone && ch) applyConditionTo(io, campaignId, characters.byId(ch.id) ?? ch, 'prone', 'went down at a run');
+}
+
+/**
+ * A Club in the Action Card hand is a Complication: something has gone wrong
+ * — an obstacle, a stall, mud — and how bad it is comes off the CHASE card
+ * they happen to be standing on. Flagged as the cards are dealt so the table
+ * can see it coming, and rolled for when their turn arrives.
+ */
+function flagChaseComplications(io: Server, campaignId: string, state: InitiativeState): void {
+  const chase = state.chase;
+  if (!chase) return;
+  for (const p of chase.participants) {
+    const entry = state.entries.find((e) => e.id === p.entryId);
+    if (!isComplicationCard(entry?.card)) { delete p.complication; continue; }
+    const standing = chase.track[p.cardIdx];
+    if (!standing) { delete p.complication; continue; }
+    p.complication = complicationFor(standing);
+    if (!entry?.hidden) {
+      postStatusLine(io, campaignId, `♣️ ${p.name} draws a Complication — ${p.complication.label}.`);
+    }
+  }
+}
+
+/**
+ * The Complication itself, rolled at the start of the turn it is hanging over.
+ * A maneuvering roll at whatever the chase card underneath them is worth:
+ * make it and it was nothing, miss it and you lose ground — and on the two
+ * black suits, missing it is a Critical Failure outright.
+ */
+function resolveChaseComplication(io: Server, campaignId: string, state: InitiativeState): void {
+  const chase = state.chase;
+  if (!chase) return;
+  const entry = state.entries[state.turnIdx];
+  const p = entry ? chase.participants.find((x) => x.entryId === entry.id) : undefined;
+  const comp = p?.complication;
+  if (!p || !comp) return;
+  delete p.complication;
+  const tok = p.tokenId ? tokens.byId(p.tokenId) : null;
+  const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+  const sheet = ch?.sheet ?? {};
+  const mods = maneuverMods(chase, p, ch);
+  const br = roll(traitExpr(sheet, skillDie(sheet, p.maneuverSkill), mods.mod + comp.mod));
+  const ok = br.total >= 4;
+  const tags = [...mods.tags, comp.label];
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', fromCharacter: ch?.name ?? p.name, characterId: ch?.id ?? null,
+    kind: 'roll',
+    text: `♣️ ${p.name} — ${p.maneuverSkill} against a Complication [${tags.join(', ')}]: `
+      + (ok ? 'drives through it.' : 'caught by it.'),
+    roll: { ...br, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+    callout: { what: `${p.maneuverSkill} — Complication`, tone: 'trait' },
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+  if (ok) return;
+  // The consequence waits for the dice that dealt it to land.
+  setTimeout(() => {
+    const live = initiative.get(campaignId);
+    const chaseNow = live.chase;
+    const pNow = chaseNow?.participants.find((x) => x.entryId === p.entryId);
+    if (!chaseNow || !pNow) return;
+    bumpParticipant(io, campaignId, chaseNow, pNow, comp.bumpCards, 'a Complication');
+    const critical = comp.failureIsCritical
+      || (ch ? swadeCritFail(br.dice, ch.sheet.wildCard !== false) : false);
+    if (critical) runChaseCritFailure(io, campaignId, chaseNow, pNow, ch ? characters.byId(ch.id) ?? ch : undefined);
+    initiative.set(campaignId, live);
+    broadcastInitiative(io, campaignId);
+  }, diceSettleDelayMs(br.dice));
 }
 
 /** The Toughness a collision meets: a hull's plated number, or a body's. */
@@ -4012,6 +4150,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // Re-sorting must not steal the current combatant's turn.
         const keep = state.entries.findIndex((e) => e.id === currentId);
         if (keep >= 0) state.turnIdx = keep;
+        flagChaseComplications(io, d.campaignId, state);
         initiative.set(d.campaignId, state);
         spendBenny();
         broadcastInitiative(io, d.campaignId);
@@ -4329,6 +4468,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       callout: { what: `${me.maneuverSkill} — Change Position`, tone: 'trait' },
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    // Manoeuvring badly wrong is its own disaster, and what kind depends on
+    // what you are travelling in.
+    if (!out.success && ch && critFailFor(io, d.campaignId, ch, br.dice)) {
+      setTimeout(() => {
+        const live = initiative.get(d.campaignId);
+        const pNow = live.chase?.participants.find((x) => x.entryId === me.entryId);
+        if (!live.chase || !pNow) return;
+        runChaseCritFailure(io, d.campaignId, live.chase, pNow, characters.byId(ch.id) ?? ch);
+        initiative.set(d.campaignId, live);
+        broadcastInitiative(io, d.campaignId);
+      }, diceSettleDelayMs(br.dice));
+    }
   }, 'CHASE_MOVE'));
 
   /**
@@ -4415,6 +4566,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       if (vehicle) resolveOutOfControl(io, d.campaignId, vehicle);
       else if (ch) applyConditionTo(io, d.campaignId, ch, 'distracted', 'thrown off their stride');
     };
+    /**
+     * A maneuvering roll of this actor's that went badly wrong. Routed by what
+     * they are travelling in, and only ever after its own dice have landed.
+     */
+    const critCheck = (br: ReturnType<typeof roll>) => {
+      if (!myChar || !critFailFor(io, d.campaignId, myChar, br.dice)) return;
+      setTimeout(() => {
+        const live = initiative.get(d.campaignId);
+        const pNow = live.chase?.participants.find((x) => x.entryId === me.entryId);
+        if (!live.chase || !pNow) return;
+        runChaseCritFailure(io, d.campaignId, live.chase, pNow, characters.byId(myChar.id) ?? myChar);
+        initiative.set(d.campaignId, live);
+        broadcastInitiative(io, d.campaignId);
+      }, diceSettleDelayMs(br.dice));
+    };
 
     if (action === 'evade') {
       me.evading = true;
@@ -4436,6 +4602,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         `${me.name} — ${me.maneuverSkill} to hold ${myVehicle.name} steady${tags.length ? ` [${tags.join(', ')}]` : ''}: `
         + (ok ? 'smooth as glass — nobody aboard suffers Unstable Platform this round.' : 'the ride stays rough (−2 to shoot from it).'),
         br, ok);
+      if (!ok) critCheck(br);
       return;
     }
 
@@ -4457,6 +4624,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         `${me.name} — ${me.maneuverSkill} to break off${tags.length ? ` [${tags.join(', ')}]` : ''}: `
         + (ok ? 'gone — out of the chase.' : 'still in it.'),
         br, ok);
+      if (!ok) critCheck(br);
       if (ok && chase.participants.length < 2) {
         delete state.chase;
         initiative.set(d.campaignId, state);
@@ -4484,6 +4652,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       postRollCard(targetChar, target.name, `${target.maneuverSkill} — holding the line`,
         `${target.name} refuses to give way${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}: ${theirs.br.total}`,
         theirs.br, !out.success);
+      if (!out.success) critCheck(mine.br);
       if (out.success) {
         target.cardIdx = clampToTrack(target.cardIdx - 1, chase.track.length);
         postStatusLine(io, d.campaignId, `${target.name} is forced back a Chase Card.`);
@@ -4513,7 +4682,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       postRollCard(targetChar, target.name, `${target.maneuverSkill} — swinging clear`,
         `${target.name} tries to swing clear${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}: ${theirs.br.total}`,
         theirs.br, !out.success);
-      if (!out.success) return;
+      if (!out.success) { critCheck(mine.br); return; }
       const rammer = myVehicle ?? myChar ?? null;
       const victim = targetVehicle ?? targetChar ?? null;
       const dmg = ramDamage(
@@ -4804,6 +4973,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // by who drew first (lower drawSeq). Whoever is up next is always row 0.
     state.entries.sort(compareCardEntries);
     state.turnIdx = 0;
+    flagChaseComplications(io, d.campaignId, state);
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
 

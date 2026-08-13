@@ -65,6 +65,9 @@ export function ChaseTrack() {
                     {p.name}
                     {p.evading && <span title="Evading — −2 to attacks against them, and to their own."> 〰️</span>}
                     {p.steadied && <span title="Held steady — no Unstable Platform penalty for anyone aboard."> 🎯</span>}
+                    {p.complication && (
+                      <span title={`Complication waiting on their turn — ${p.complication.label}`}> ♣️</span>
+                    )}
                   </span>
                 ))}
               </div>

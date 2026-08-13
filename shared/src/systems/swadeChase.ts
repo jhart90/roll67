@@ -49,6 +49,8 @@ export interface ChaseParticipant {
   evading?: boolean;
   /** Their driver held the vehicle steady: no Unstable Platform aboard. */
   steadied?: boolean;
+  /** Dealt a Club: trouble waiting to be rolled for at the start of their turn. */
+  complication?: Complication;
   color?: string | null;
 }
 
@@ -265,6 +267,11 @@ export interface Complication {
   label: string;
 }
 
+/** A Club in the hand is a Complication; every other suit is a clean round. */
+export function isComplicationCard(actionCard: PlayingCard | null | undefined): boolean {
+  return !!actionCard && actionCard.rank !== 15 && actionCard.suit === 'clubs';
+}
+
 export function complicationFor(chaseCard: PlayingCard): Complication {
   if (chaseCard.rank === 15) {
     return { mod: 2, failureIsCritical: false, bumpCards: 2, label: 'Joker — +2, but a failure Bumps you two cards' };
@@ -275,4 +282,67 @@ export function complicationFor(chaseCard: PlayingCard): Complication {
     case 'diamonds': return { mod: -2, failureIsCritical: false, bumpCards: 1, label: 'Diamonds — −2; failure Bumps you' };
     default: return { mod: -2, failureIsCritical: true, bumpCards: 0, label: 'Clubs — −2, and failure is a Critical Failure' };
   }
+}
+
+// ---------- being Bumped, and going badly wrong ----------
+
+export interface BumpResult {
+  cardIdx: number;
+  /** Bumped clean off the back of the track — the chase has left them behind. */
+  leftBehind: boolean;
+}
+
+/**
+ * A Bump: knocked back so many Chase Cards. Falling off the back of the laid
+ * out track is the end of it for them — the chase has gone on without them,
+ * which is what makes the rear of the track a real place and a Complication
+ * at the back worth dreading.
+ */
+export function bumpResult(cardIdx: number, cards: number): BumpResult {
+  const next = cardIdx - Math.max(0, cards);
+  return next < 0 ? { cardIdx: 0, leftBehind: true } : { cardIdx: next, leftBehind: false };
+}
+
+/** How a participant is travelling — which decides what a disaster looks like. */
+export type ChaseTravel = 'vehicle' | 'mounted' | 'foot';
+
+export interface ChaseCritFailure {
+  travel: ChaseTravel;
+  label: string;
+  /** Cards lost on top of everything else. */
+  bumpCards: number;
+  /** The machine goes Out of Control — the book's own 2d6 table. */
+  outOfControl: boolean;
+  /** Stay on, or be thrown: a Riding roll decides. */
+  ridingCheck: boolean;
+  /** Straight onto the ground. */
+  prone: boolean;
+}
+
+/**
+ * A Critical Failure in a chase, routed by what you are travelling in.
+ *
+ * Rather than three invented tables, each route hands the disaster to a rule
+ * that already exists: a vehicle goes Out of Control on the book's own 2d6
+ * table, a rider makes a Riding roll or is thrown, and someone on their own
+ * two feet simply goes down. All three lose ground, because whatever else
+ * happened, the chase did not wait.
+ */
+export function chaseCritFailure(travel: ChaseTravel): ChaseCritFailure {
+  if (travel === 'vehicle') {
+    return {
+      travel, label: 'The wheel gets away from them', bumpCards: 1,
+      outOfControl: true, ridingCheck: false, prone: false,
+    };
+  }
+  if (travel === 'mounted') {
+    return {
+      travel, label: 'The mount bolts', bumpCards: 1,
+      outOfControl: false, ridingCheck: true, prone: false,
+    };
+  }
+  return {
+    travel, label: 'They go down hard', bumpCards: 1,
+    outOfControl: false, ridingCheck: false, prone: true,
+  };
 }

@@ -80,6 +80,10 @@ ensureColumn('tokens', 'mountable', 'mountable INTEGER NOT NULL DEFAULT 0');
 ensureColumn('tokens', 'mounted_on', 'mounted_on TEXT');
 // How many riders a mount carries: one for a horse, a crew for a boat.
 ensureColumn('tokens', 'max_riders', 'max_riders INTEGER NOT NULL DEFAULT 1');
+// Who has the wheel. A boat with six aboard needs one of them to answer for
+// its Parry and its control rolls, and the DM decides which — blank means the
+// first one who climbed on.
+ensureColumn('tokens', 'driver_token_id', 'driver_token_id TEXT');
 ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0');
 // In-world elapsed seconds. Every time-based rule in SWADE — the Golden Hour,
 // Power Points coming back, Natural Healing — is measured against this rather

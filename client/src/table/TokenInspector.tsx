@@ -294,6 +294,24 @@ export function TokenInspector() {
             />
           </label>
         )}
+        {/* Who has the wheel. A boat with six aboard still owes one Parry and
+            one control roll, and they come off this rider. */}
+        {token.mountable === true && (() => {
+          const riders = Object.values(tokenMap).filter((t) => t.mountedOn === token.id);
+          if (riders.length === 0) return null;
+          return (
+            <label>
+              Driver
+              <select
+                value={token.driverTokenId && riders.some((r) => r.id === token.driverTokenId) ? token.driverTokenId : ''}
+                onChange={(e) => intents.updateToken(token.id, { driverTokenId: e.target.value || null })}
+              >
+                <option value="">{riders[0].name} (first aboard)</option>
+                {riders.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </label>
+          );
+        })()}
       </div>
         </>
       )}

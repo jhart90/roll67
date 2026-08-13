@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BOARD_MOD, CHASE_ACTIONS, CHASE_INCREMENTS, boardOutcome, canFlee, chaseAction, changePosition,
-  chaseIncrement, chaseRangeYards, clampToTrack, complicationFor, fleePenalty, opposedManeuver,
-  ramDamage, speedBonus,
+  BOARD_MOD, CHASE_ACTIONS, CHASE_INCREMENTS, boardOutcome, bumpResult, canFlee, chaseAction,
+  chaseCritFailure, changePosition, chaseIncrement, chaseRangeYards, clampToTrack, complicationFor,
+  fleePenalty, isComplicationCard, opposedManeuver, ramDamage, speedBonus,
 } from '../src/systems/swadeChase.js';
 import { vehicleParry } from '../src/systems/swadeVehicles.js';
 import type { PlayingCard } from '../src/systems/cards.js';
@@ -161,7 +161,46 @@ describe("a vehicle's Parry", () => {
   });
 });
 
+describe('being Bumped', () => {
+  it('costs you the cards it says', () => {
+    expect(bumpResult(5, 1)).toMatchObject({ cardIdx: 4, leftBehind: false });
+    expect(bumpResult(5, 2)).toMatchObject({ cardIdx: 3, leftBehind: false });
+  });
+
+  it('leaves you behind when it pushes you off the back of the track', () => {
+    expect(bumpResult(0, 1)).toMatchObject({ leftBehind: true });
+    expect(bumpResult(1, 2)).toMatchObject({ leftBehind: true });
+  });
+
+  it('is survivable right at the rear if it costs nothing', () => {
+    expect(bumpResult(0, 0)).toMatchObject({ cardIdx: 0, leftBehind: false });
+  });
+});
+
+describe('a Critical Failure in a chase', () => {
+  it('hands the disaster to whatever you are travelling in', () => {
+    expect(chaseCritFailure('vehicle')).toMatchObject({ outOfControl: true, ridingCheck: false, prone: false });
+    expect(chaseCritFailure('mounted')).toMatchObject({ outOfControl: false, ridingCheck: true, prone: false });
+    expect(chaseCritFailure('foot')).toMatchObject({ outOfControl: false, ridingCheck: false, prone: true });
+  });
+
+  it('costs ground however it happened — the chase did not wait', () => {
+    for (const travel of ['vehicle', 'mounted', 'foot'] as const) {
+      expect(chaseCritFailure(travel).bumpCards).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('Complications', () => {
+  it('are dealt by Clubs and nothing else', () => {
+    expect(isComplicationCard(card('clubs'))).toBe(true);
+    expect(isComplicationCard(card('spades'))).toBe(false);
+    expect(isComplicationCard(card('hearts'))).toBe(false);
+    // A Joker has no suit and is nobody's bad news.
+    expect(isComplicationCard({ rank: 15, suit: null })).toBe(false);
+    expect(isComplicationCard(null)).toBe(false);
+  });
+
   it('reads its stakes off the suit of the card you are standing on', () => {
     expect(complicationFor(card('spades'))).toMatchObject({ mod: 0, failureIsCritical: true });
     expect(complicationFor(card('hearts'))).toMatchObject({ mod: 0, failureIsCritical: false, bumpCards: 1 });

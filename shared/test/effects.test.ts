@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyDamageDefenses, applyDamageMultiplier, attackAdvantage, conditionCombat, conditionsFor, conditionsOf,
-  critDamageExpr, damageMultiplier, multiplierLabel,
+  critDamageExpr, damageMultiplier, multiplierLabel, CONDITIONS, CONDITION_COLORS,
 } from '../src/systems/effects.js';
 
 describe('damage types & resistance', () => {
@@ -138,5 +138,21 @@ describe('attack advantage resolution', () => {
     expect(attackAdvantage(null, ['invisible'], [], false)).toBe('adv');
     // ...and a blinded invisible attacker cancels back to normal.
     expect(attackAdvantage(null, ['invisible', 'blinded'], [], false)).toBe(null);
+  });
+});
+
+describe('condition colours', () => {
+  it('gives every condition one, so none of them falls back to plain grey', () => {
+    const missing = CONDITIONS.filter((c) => !CONDITION_COLORS[c.id]).map((c) => c.id);
+    expect(missing, 'conditions with no colour').toEqual([]);
+  });
+
+  it('gives each one a pair — one for the dark log, one for the light', () => {
+    for (const c of CONDITIONS) {
+      const pair = CONDITION_COLORS[c.id]!;
+      expect(pair.on, `${c.id}.on`).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(pair.alt, `${c.id}.alt`).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(pair.on).not.toBe(pair.alt);
+    }
   });
 });

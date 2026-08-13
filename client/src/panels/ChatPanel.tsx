@@ -455,7 +455,7 @@ function Message({ msg, isDm, hl, onMenu }: {
         : msg.card ? (
           <>
             {msg.outcomeNote && <div className="chat-card-lead">{msg.outcomeNote}</div>}
-            <PostedCard card={msg.card} />
+            <PostedCard card={msg.card} hl={hl} />
           </>
         )
           : msg.roll ? <RollCard msg={msg} hl={hl} /> : <div className="chat-text"><Highlighted text={msg.text} hl={hl} /></div>}
@@ -469,18 +469,25 @@ function Message({ msg, isDm, hl, onMenu }: {
  * There is nothing here to tick, edit, reorder or post — a posted card is a
  * statement about what someone is carrying, not a copy of their sheet.
  */
-function PostedCard({ card }: { card: SheetCard }) {
+function PostedCard({ card, hl }: { card: SheetCard; hl: NameHighlights }) {
+  // A card is chat too: every name and every condition on it is picked out the
+  // same way it would be in a sentence, so "Shaken" is the same yellow
+  // wherever the log says it.
   return (
     <div className={`sheet-card chat-card${card.theme ? ` ${card.theme}` : ''}`}>
       <div className="sheet-card-head">
-        <span className="sc-title">{card.name}</span>
+        <span className="sc-title"><Highlighted text={card.name} hl={hl} /></span>
       </div>
       {card.chips.length > 0 && (
         <div className="sc-chips">
-          {card.chips.map((c, i) => <span key={i} className={`sc-chip tone-${c.tone}`} title={c.title}>{c.text}</span>)}
+          {card.chips.map((c, i) => (
+            <span key={i} className={`sc-chip tone-${c.tone}`} title={c.title}>
+              <Highlighted text={c.text} hl={hl} />
+            </span>
+          ))}
         </div>
       )}
-      {card.notes.map((n, i) => <div key={i} className="sc-notes">{n}</div>)}
+      {card.notes.map((n, i) => <div key={i} className="sc-notes"><Highlighted text={n} hl={hl} /></div>)}
     </div>
   );
 }

@@ -1040,40 +1040,78 @@ function aftermathForExtras(io: Server, campaignId: string, shouldRoll: boolean)
   if (downed.length === 0) return;
   const survivors: string[] = [];
   const lost: string[] = [];
-  for (const ch of downed) {
-    // Skipped: the wounds finish what they started, no dice.
-    const survived = shouldRoll && roll(traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')))).total >= 4;
-    if (survived) {
-      survivors.push(ch.name);
-    } else {
-      lost.push(ch.name);
-      persistSheet(io, campaignId, ch, { conditions: [...conditionsOf(ch.sheet), 'dead'] });
-    }
-  }
-  // One card for the lot. A dozen separate roll cards for nameless Extras is
-  // the bookkeeping this is meant to spare the table, not perform for them.
-  const card: SheetCard = {
-    name: '⚔️ Aftermath',
-    theme: lost.length > survivors.length ? 'card-bad' : 'card-info',
-    chips: [
-      { text: `${downed.length} Extra${downed.length === 1 ? '' : 's'} down`, tone: 'qty' },
-      ...(survivors.length ? [{ text: `${survivors.length} pulled through`, tone: 'bonus' }] : []),
-      ...(lost.length ? [{ text: `${lost.length} died of their wounds`, tone: 'penalty' }] : []),
-    ],
-    notes: [
-      ...(survivors.length ? [`Survived, and need seeing to — or guarding: ${survivors.join(', ')}.`] : []),
-      ...(lost.length ? [`Did not: ${lost.join(', ')}.`] : []),
-      shouldRoll
-        ? 'Each Incapacitated Extra rolled Vigor once the fighting stopped.'
-        : 'The DM waved the rolls: none of the fallen were going to get up.',
-    ],
+
+  /** The card that closes the whole business, once every die has landed. */
+  const summarise = () => {
+    const card: SheetCard = {
+      name: '⚔️ Aftermath',
+      theme: lost.length > survivors.length ? 'card-bad' : 'card-info',
+      chips: [
+        { text: `${downed.length} Extra${downed.length === 1 ? '' : 's'} down`, tone: 'qty' },
+        ...(survivors.length ? [{ text: `${survivors.length} pulled through`, tone: 'bonus' }] : []),
+        ...(lost.length ? [{ text: `${lost.length} died of their wounds`, tone: 'penalty' }] : []),
+      ],
+      notes: [
+        ...(survivors.length ? [`Survived, and need seeing to — or guarding: ${survivors.join(', ')}.`] : []),
+        ...(lost.length ? [`Did not: ${lost.join(', ')}.`] : []),
+        shouldRoll
+          ? 'Each Incapacitated Extra rolled Vigor against TN 4 once the fighting stopped.'
+          : 'The DM waved the rolls: none of the fallen were going to get up.',
+      ],
+    };
+    const msg = chat.add(campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `⚔️ Aftermath — ${survivors.length} of ${downed.length} downed Extras pulled through.`,
+      card, roll: null, recipients: null,
+    });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
   };
-  const msg = chat.add(campaignId, {
-    userId: null, fromName: 'System', kind: 'system',
-    text: `⚔️ Aftermath — ${survivors.length} of ${downed.length} downed Extras pulled through.`,
-    card, roll: null, recipients: null,
-  });
-  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+
+  const kill = (ch: Character) => {
+    lost.push(ch.name);
+    const fresh = characters.byId(ch.id) ?? ch;
+    persistSheet(io, campaignId, fresh, { conditions: [...conditionsOf(fresh.sheet), 'dead'] });
+  };
+
+  // Waved off: no dice, one card, done.
+  if (!shouldRoll) {
+    for (const ch of downed) kill(ch);
+    summarise();
+    return;
+  }
+
+  /**
+   * One at a time, and each one visibly.
+   *
+   * These rolls decide whether a person on the floor gets up, and rolling
+   * them all in a silent loop behind a summary card told the table the
+   * outcome without ever showing them the dice. So each Extra rolls its own
+   * Vigor on screen, its own card says what it needed and what it got, and
+   * the next one does not start until that throw has landed.
+   */
+  let i = 0;
+  const step = (): void => {
+    if (i >= downed.length) { summarise(); return; }
+    const ch = characters.byId(downed[i]!.id) ?? downed[i]!;
+    i++;
+    const vigor = dieSides(String(ch.sheet.vigor ?? 'd4'));
+    const expr = traitExpr(ch.sheet, vigor);
+    const br = roll(expr);
+    const survived = br.total >= 4;
+    if (survived) survivors.push(ch.name); else kill(ch);
+    const msg = chat.add(campaignId, {
+      userId: null, fromName: 'System', fromCharacter: ch.name, characterId: ch.id,
+      kind: 'roll',
+      text: `⚔️ ${ch.name} — Vigor vs 4 to survive their wounds: `
+        + (survived ? 'pulls through, and is still down but alive.' : 'dies of their wounds.'),
+      roll: { ...br, outcome: survived ? 'success' as const : 'failure' as const },
+      recipients: null,
+      callout: { what: 'Vigor — Aftermath (TN 4)', tone: 'recover' },
+    });
+    io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+    setTimeout(step, diceSettleDelayMs(br.dice));
+  };
+  step();
 }
 
 /**

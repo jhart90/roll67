@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, vehicleWoundCap, WRECK_DAMAGE, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, vehicleWoundCap, WRECK_DAMAGE, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetCard, type SheetData } from 'shared';
 import { campaigns, characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -28,6 +28,81 @@ function postStatusChange(io: Server, campaignId: string, statusLine: string, ca
   postStatusLine(io, campaignId, combined);
 }
 
+/**
+ * A change of state, as a card.
+ *
+ * What a token IS right now decides what it may do next, so it is the one
+ * thing in the log nobody can afford to skim past — and a grey sentence in a
+ * column of grey sentences is exactly what gets skimmed past. Everything that
+ * changed lands on ONE card, in the condition's own colour, because being
+ * Shaken and Prone and Distracted from the same blow is one event.
+ */
+/**
+ * State changes waiting to be posted, keyed by who they happened to.
+ *
+ * One blow can leave someone Shaken AND Prone, and the rules apply those as
+ * two separate calls a line apart. Three cards for one punch is worse than
+ * the sentences they replaced, so everything landing on one person in the
+ * same tick is collected here and posted as a single card once the stack
+ * unwinds.
+ */
+const pendingState = new Map<string, { subject: string; gained: string[]; lost: string[]; causes: string[] }>();
+
+export function postStateCard(
+  io: Server, campaignId: string, subject: string,
+  gained: string[], lost: string[], cause: string | null,
+): void {
+  if (gained.length === 0 && lost.length === 0) return;
+  const key = `${campaignId}::${subject}`;
+  const open = pendingState.get(key);
+  if (open) {
+    // Same person, same tick: fold it in rather than starting a second card.
+    for (const id of gained) if (!open.gained.includes(id)) open.gained.push(id);
+    for (const id of lost) if (!open.lost.includes(id)) open.lost.push(id);
+    if (cause && !open.causes.includes(cause)) open.causes.push(cause);
+    return;
+  }
+  pendingState.set(key, { subject, gained: [...gained], lost: [...lost], causes: cause ? [cause] : [] });
+  queueMicrotask(() => {
+    const batch = pendingState.get(key);
+    pendingState.delete(key);
+    if (batch) flushStateCard(io, campaignId, batch);
+  });
+}
+
+function flushStateCard(
+  io: Server, campaignId: string,
+  batch: { subject: string; gained: string[]; lost: string[]; causes: string[] },
+): void {
+  const { subject, gained, lost } = batch;
+  const cause = batch.causes.length ? batch.causes.join(', ') : null;
+  const label = (id: string) => getCondition(id)?.label ?? id;
+  const card: SheetCard = {
+    name: `${subject}`,
+    theme: gained.length > 0 ? 'card-bad' : 'card-good',
+    chips: [
+      ...gained.map((id) => ({
+        text: label(id), tone: 'penalty',
+        title: getCondition(id)?.desc ?? undefined,
+      })),
+      ...lost.map((id) => ({
+        text: `no longer ${label(id)}`, tone: 'bonus',
+        title: getCondition(id)?.desc ?? undefined,
+      })),
+    ],
+    notes: cause ? [cause] : [],
+  };
+  const parts: string[] = [];
+  if (gained.length) parts.push(`is now ${gained.map(label).join(', ')}`);
+  if (lost.length) parts.push(`is no longer ${lost.map(label).join(', ')}`);
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', kind: 'system',
+    text: `${subject} ${parts.join('; ')}${cause ? ` — ${cause}` : ''}`,
+    card, roll: null, recipients: null,
+  });
+  io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+}
+
 /** Diff two condition-id lists and post a status-change pair for every
  *  condition that was added or removed. Used for manual sheet edits (toggling
  *  a condition checkbox), where -- unlike a spell or an HP-driven change --
@@ -35,16 +110,12 @@ function postStatusChange(io: Server, campaignId: string, statusLine: string, ca
 export function postConditionDiff(
   io: Server, campaignId: string, characterName: string, before: string[], after: string[], actorName: string,
 ): void {
-  for (const id of after) {
-    if (before.includes(id)) continue;
-    const label = getCondition(id)?.label ?? id;
-    postStatusLine(io, campaignId, `${characterName} is now ${label} by ${actorName}`);
-  }
-  for (const id of before) {
-    if (after.includes(id)) continue;
-    const label = getCondition(id)?.label ?? id;
-    postStatusLine(io, campaignId, `${characterName} is no longer ${label} by ${actorName}`);
-  }
+  postStateCard(
+    io, campaignId, characterName,
+    after.filter((id) => !before.includes(id)),
+    before.filter((id) => !after.includes(id)),
+    actorName,
+  );
 }
 
 /**
@@ -70,7 +141,7 @@ export function applyConditionTo(
     // SWADE: a Stunned character also falls Prone.
     if (conditionId === 'stunned' && target.system === 'swade' && !next.includes('prone')) next.push('prone');
     persistSheet(io, campaignId, target, { conditions: next });
-    if (announce) postStatusChange(io, campaignId, `${target.name} is now ${label}!`, sourceLabel);
+    if (announce) postStateCard(io, campaignId, target.name, [conditionId], [], sourceLabel);
   }
   if (caster) {
     const fresh = characters.byId(caster.id) ?? caster;

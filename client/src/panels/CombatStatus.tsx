@@ -1,5 +1,5 @@
 import type { Character, SheetData } from 'shared';
-import { bool, combatResources, conditionDesc, conditionsFor, conditionsOf, resetsCleared } from 'shared';
+import { CONDITION_COLORS, bool, combatResources, conditionDesc, conditionsFor, conditionsOf, resetsCleared } from 'shared';
 import { intents } from '../store/game';
 import { Term } from '../util/Term';
 
@@ -72,17 +72,26 @@ export function CombatStatus({ character, editable }: { character: Character; ed
       )}
 
       <div className="cs-conditions">
-        {list.map((c) => (
-          <Term key={c.id} desc={conditionDesc(c, character.system)}>
-            <button
-              className={`cs-cond ${active.includes(c.id) ? 'on' : ''}`}
-              disabled={!editable}
-              onClick={() => toggle(c.id)}
-            >
-              {c.icon} {c.label}
-            </button>
-          </Term>
-        ))}
+        {list.map((c) => {
+          // An active condition wears its OWN colour, the same one the chat
+          // log gives it: yellow rattled, blue-grey held, red dying. A row of
+          // identical accent-coloured buttons made the sheet say "something
+          // is wrong" without saying what.
+          const on = active.includes(c.id);
+          const pair = CONDITION_COLORS[c.id];
+          return (
+            <Term key={c.id} desc={conditionDesc(c, character.system)}>
+              <button
+                className={`cs-cond ${on ? 'on' : ''}`}
+                style={on && pair ? { background: pair.alt, borderColor: pair.on, color: '#f4f6fb' } : undefined}
+                disabled={!editable}
+                onClick={() => toggle(c.id)}
+              >
+                {c.icon} {c.label}
+              </button>
+            </Term>
+          );
+        })}
       </div>
 
       {resources.length > 0 && (

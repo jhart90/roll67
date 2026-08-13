@@ -4636,34 +4636,53 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return { br: roll(traitExpr(tsheet, skillDie(tsheet, skill), tb.mod)), tags: tb.tags };
     };
     const commit = () => { initiative.set(d.campaignId, state); broadcastInitiative(io, d.campaignId); };
+    /**
+     * One roll card. `ok` may be null for a roll whose verdict is not in yet —
+     * an opposed roll is only half the story until the other half is thrown,
+     * and a card that came up green before its opponent had rolled was
+     * announcing a result nobody had seen.
+     */
     const postRollCard = (
       who: Character | undefined, name: string, what: string, text: string,
-      br: ReturnType<typeof roll>, ok: boolean,
+      br: ReturnType<typeof roll>, ok: boolean | null,
     ) => {
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: who?.name ?? name,
         characterId: who?.id ?? null, kind: 'roll', text,
-        roll: { ...br, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+        roll: { ...br, ...(ok === null ? {} : { outcome: ok ? 'success' as const : 'failure' as const }) },
+        recipients: null,
         callout: { what, tone: 'trait' },
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     };
     /**
-     * The roll a driver makes to keep hold of it after being forced or rammed.
+     * Keeping hold of what you are travelling in, after being forced or rammed.
+     *
+     * This is the VEHICLE rule and nothing more: a machine shoved hard enough
+     * goes Out of Control unless its driver holds it. So a driver rolls, a
+     * rider fights the reins, and somebody on their own two feet rolls
+     * nothing — two runners shouldering each other owe no control roll to
+     * anything, and asking for one was inventing a rule.
+     *
      * Posted as a line rather than an animated card: one action should not
      * queue five throws on everybody's screen, and the throw that mattered was
      * the one that put them in this position.
      */
     const controlCheck = (p: ChaseParticipant, ch: Character | undefined, vehicle: Character | null, mod: number) => {
+      const travel = travelOf(p);
+      if (travel === 'foot') return;
+      const skill = travel === 'mounted' ? 'Riding' : p.maneuverSkill;
       const psheet = ch?.sheet ?? {};
       const mods = maneuverMods(chase, p, ch);
-      const br = roll(traitExpr(psheet, skillDie(psheet, p.maneuverSkill), mods.mod + mod));
+      const br = roll(traitExpr(psheet, skillDie(psheet, skill), mods.mod + mod));
       const held = br.total >= 4;
+      const what = vehicle ? vehicle.name : 'their mount';
       postStatusLine(io, d.campaignId,
-        `${p.name} fights for control — ${p.maneuverSkill} ${br.total} vs 4${mod ? ` (${mod})` : ''}: ${held ? 'held it.' : 'lost it!'}`);
+        `${p.name} fights to keep hold of ${what} — ${skill} ${br.total} vs 4${mod ? ` (${mod})` : ''}: `
+        + (held ? 'held it.' : travel === 'vehicle' ? 'lost it — Out of Control!' : 'the mount shies under them.'));
       if (held) return;
-      if (vehicle) resolveOutOfControl(io, d.campaignId, vehicle);
-      else if (ch) applyConditionTo(io, d.campaignId, ch, 'distracted', 'thrown off their stride');
+      if (travel === 'vehicle' && vehicle) resolveOutOfControl(io, d.campaignId, vehicle);
+      else if (ch) applyConditionTo(io, d.campaignId, ch, 'distracted', 'fighting a bolting mount');
     };
     /**
      * A maneuvering roll of this actor's that went badly wrong. Routed by what
@@ -4742,27 +4761,34 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const theirs = rollTheirs();
       const out = opposedManeuver(mine.br.total, theirs.br.total);
       me.actedThisTurn = true;
+      // Both rolls go up before either verdict does — an opposed roll is not
+      // decided until the second die lands.
       postRollCard(myChar, me.name, `${me.maneuverSkill} — Force`,
-        `${me.name} crowds ${target.name}${mine.tags.length ? ` [${mine.tags.join(', ')}]` : ''}: `
-        + (out.success
-          ? `${mine.br.total} beats ${theirs.br.total}${out.raise ? ' with a raise!' : ''}`
-          : `${mine.br.total} against ${theirs.br.total} — held off`),
-        mine.br, out.success);
+        `${me.name} crowds ${target.name}${mine.tags.length ? ` [${mine.tags.join(', ')}]` : ''}`,
+        mine.br, null);
       postRollCard(targetChar, target.name, `${target.maneuverSkill} — holding the line`,
-        `${target.name} refuses to give way${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}: ${theirs.br.total}`,
-        theirs.br, !out.success);
-      if (!out.success) critCheck(mine.br);
-      if (out.success) {
-        target.cardIdx = clampToTrack(target.cardIdx - 1, chase.track.length);
-        postStatusLine(io, d.campaignId, `${target.name} is forced back a Chase Card.`);
-      }
+        `${target.name} refuses to give way${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}`,
+        theirs.br, null);
       commit();
-      // The fight for control comes AFTER the dice that caused it have landed,
-      // like every other consequence in this file.
-      if (out.success) {
-        setTimeout(() => controlCheck(target, characters.byId(targetChar?.id ?? '') ?? targetChar, targetVehicle, out.raise ? -2 : 0),
-          diceSettleDelayMs(theirs.br.dice));
-      }
+      // The verdict — and the ground it costs — waits for the second roll's
+      // dice to land. Reading "9 beats 3" while the 3 is still in the air is
+      // being told the ending first.
+      setTimeout(() => {
+        postStatusLine(io, d.campaignId, out.success
+          ? `↔️ ${me.name} ${mine.br.total} beats ${target.name} ${theirs.br.total}`
+            + `${out.raise ? ' with a raise' : ''} — ${target.name} is forced back a Chase Card.`
+          : `↔️ ${me.name} ${mine.br.total} against ${target.name} ${theirs.br.total} — held off.`);
+        if (!out.success) return;
+        const live = initiative.get(d.campaignId);
+        const tNow = live.chase?.participants.find((x) => x.entryId === target.entryId);
+        if (live.chase && tNow) {
+          tNow.cardIdx = clampToTrack(tNow.cardIdx - 1, live.chase.track.length);
+          initiative.set(d.campaignId, live);
+          broadcastInitiative(io, d.campaignId);
+          controlCheck(tNow, characters.byId(targetChar?.id ?? '') ?? targetChar, targetVehicle, out.raise ? -2 : 0);
+        }
+      }, diceSettleDelayMs(theirs.br.dice));
+      if (!out.success) critCheck(mine.br);
       return;
     }
 
@@ -4772,27 +4798,67 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       const out = opposedManeuver(mine.br.total, theirs.br.total);
       me.actedThisTurn = true;
       commit();
+      // Neither card names a winner: the second roll decides it, and the line
+      // below says so once both have landed. A card that came up green before
+      // its opponent had thrown was telling the table the ending first.
       postRollCard(myChar, me.name, `${me.maneuverSkill} — Ram`,
-        `${me.name} rams ${target.name}${mine.tags.length ? ` [${mine.tags.join(', ')}]` : ''}: `
-        + (out.success
-          ? `${mine.br.total} beats ${theirs.br.total} — impact!`
-          : `${mine.br.total} against ${theirs.br.total} — swerved past`),
-        mine.br, out.success);
+        `${me.name} rams ${target.name}${mine.tags.length ? ` [${mine.tags.join(', ')}]` : ''}`,
+        mine.br, null);
       postRollCard(targetChar, target.name, `${target.maneuverSkill} — swinging clear`,
-        `${target.name} tries to swing clear${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}: ${theirs.br.total}`,
-        theirs.br, !out.success);
-      if (!out.success) { critCheck(mine.br); return; }
+        `${target.name} tries to swing clear${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}`,
+        theirs.br, null);
+      if (!out.success) {
+        // Same patience as the impact below: the miss is announced once the
+        // dice that decided it have stopped.
+        setTimeout(() => postStatusLine(io, d.campaignId,
+          `💥 ${me.name} ${mine.br.total} against ${target.name} ${theirs.br.total} — swerved clear, no impact.`),
+        diceSettleDelayMs(theirs.br.dice));
+        critCheck(mine.br);
+        return;
+      }
       const rammer = myVehicle ?? myChar ?? null;
       const victim = targetVehicle ?? targetChar ?? null;
+      const rammerTough = collisionToughness(rammer);
+      const victimTough = collisionToughness(victim);
       const dmg = ramDamage(
-        { toughness: collisionToughness(rammer), size: num(rammer?.sheet ?? {}, 'size', 0) },
-        { toughness: collisionToughness(victim), size: num(victim?.sheet ?? {}, 'size', 0) },
+        { toughness: rammerTough, size: num(rammer?.sheet ?? {}, 'size', 0) },
+        { toughness: victimTough, size: num(victim?.sheet ?? {}, 'size', 0) },
       );
+      // The arithmetic, in full. A collision does damage equal to how solid
+      // the thing that hit you was, shifted by the Scale between you — and
+      // that is a rule nobody can check against a bare "18 damage".
+      const gapText = (n: number) => `${n >= 0 ? '+' : '−'} ${Math.abs(n)} Scale`;
+      const ramCard: SheetCard = {
+        name: `💥 ${me.name} rams ${target.name}`,
+        theme: 'card-bad',
+        chips: [
+          {
+            text: `${dmg.toTarget} to ${target.name}`, tone: 'penalty',
+            title: `${me.name}'s Toughness ${rammerTough} ${gapText(dmg.scaleGap)} = ${dmg.toTarget}`,
+          },
+          {
+            text: `${dmg.toRammer} back to ${me.name}`, tone: 'penalty',
+            title: `${target.name}'s Toughness ${victimTough} ${gapText(-dmg.scaleGap)} = ${dmg.toRammer}`,
+          },
+          ...(dmg.tag ? [{ text: dmg.tag, tone: 'qty' }] : []),
+        ],
+        notes: [
+          `${target.name} takes ${rammerTough} (${me.name}'s Toughness) ${gapText(dmg.scaleGap)} = ${dmg.toTarget}`,
+          `${me.name} takes ${victimTough} (${target.name}'s Toughness) ${gapText(-dmg.scaleGap)} = ${dmg.toRammer}`,
+          'Each of you takes the other one — how solid the thing that hit you was, shifted by the difference in Scale. A ram is never free.',
+          'Both figures are raw damage: Toughness, armour and Soak still stand between it and a Wound.',
+        ],
+      };
       // The impact lands only once the dice that decided it have finished —
       // a token must never take damage before the table has seen why.
       setTimeout(() => {
-        postStatusLine(io, d.campaignId,
-          `💥 ${me.name} into ${target.name}${dmg.tag ? ` — ${dmg.tag}` : ''}: ${dmg.toTarget} damage to ${target.name}, ${dmg.toRammer} back.`);
+        const ramMsg = chat.add(d.campaignId, {
+          userId: d.userId, fromName: d.username, fromCharacter: myChar?.name ?? me.name,
+          characterId: myChar?.id ?? null, kind: 'system',
+          text: `💥 ${me.name} ${mine.br.total} beats ${target.name} ${theirs.br.total} — impact!`,
+          card: ramCard, roll: null, recipients: null,
+        });
+        io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: ramMsg });
         const v = victim ? characters.byId(victim.id) ?? victim : null;
         const r = rammer ? characters.byId(rammer.id) ?? rammer : null;
         if (v && dmg.toTarget > 0) applyHpDelta(io, d.campaignId, v, -dmg.toTarget, 'a ram', me.name);

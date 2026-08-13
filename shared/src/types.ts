@@ -457,8 +457,9 @@ export interface SheetCard {
   /** The item's name — the card's title. */
   name: string;
   /** Chips in the order the card shows them, each with the tone that
-   *  colours it (see ChipTone in the sheet renderer). */
-  chips: { text: string; tone: string }[];
+   *  colours it (see ChipTone in the sheet renderer). `title` is the hover
+   *  text — where a chip is the ANSWER, this is the working behind it. */
+  chips: { text: string; tone: string; title?: string }[];
   /** Free-text lines below the chips. */
   notes: string[];
   /** Card theme: 'card-good' (edges), 'card-bad' (hindrances),

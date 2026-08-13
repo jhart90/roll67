@@ -477,7 +477,7 @@ function PostedCard({ card }: { card: SheetCard }) {
       </div>
       {card.chips.length > 0 && (
         <div className="sc-chips">
-          {card.chips.map((c, i) => <span key={i} className={`sc-chip tone-${c.tone}`}>{c.text}</span>)}
+          {card.chips.map((c, i) => <span key={i} className={`sc-chip tone-${c.tone}`} title={c.title}>{c.text}</span>)}
         </div>
       )}
       {card.notes.map((n, i) => <div key={i} className="sc-notes">{n}</div>)}

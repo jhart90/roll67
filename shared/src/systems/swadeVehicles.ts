@@ -155,3 +155,32 @@ export function rollVehicleCrit(rng: () => number = Math.random, opts: { rerollC
   if (roll === 11) return { roll, label: 'Weapon', effect: 'A random weapon is destroyed (Chassis instead if it has none).', weaponHit: true };
   return { roll, label: 'System', effect: 'An electronic or auxiliary system is knocked out (Chassis if it has none worth naming).' };
 }
+
+// ---------- wrecks, and putting them back together ----------
+
+/**
+ * What a wreck does to the people inside it. A machine coming apart around
+ * you is violence like any other, so it goes through the ordinary damage
+ * ladder — Soak, Bennies, Toughness and all — rather than being a special
+ * kind of death that ignores everything a character has.
+ */
+export const WRECK_DAMAGE = '2d6';
+
+/**
+ * Hours of work to mend one Wound on a vehicle. Repairs are not a rest: a
+ * hull does not knit itself overnight, somebody has to be under it with a
+ * spanner, and the time is what makes a wrecked getaway car a problem for
+ * the story rather than a bill.
+ */
+export const REPAIR_HOURS_PER_WOUND = 2;
+
+/** How many repair attempts a stretch of downtime affords. */
+export function repairAttempts(hours: number, wounds: number): number {
+  return Math.max(0, Math.min(Math.floor(hours / REPAIR_HOURS_PER_WOUND), Math.max(0, wounds)));
+}
+
+/** A Repair roll: a success mends one Wound, a raise two. */
+export function repairOutcome(total: number): number {
+  if (total >= 8) return 2;
+  return total >= 4 ? 1 : 0;
+}

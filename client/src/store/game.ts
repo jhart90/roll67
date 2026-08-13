@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type ChaseIncrementId, type ChaseActionId, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -290,6 +290,8 @@ interface GameState {
   healingPrompt: HealingPromptPayload | null;
   /** DM-only: a vehicle hit hard enough to threaten control. */
   vehicleOocPrompt: VehicleOocPromptPayload | null;
+  /** DM-only: damaged machines, and the downtime that could mend them. */
+  repairPrompt: RepairPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
   /** SWADE: your Stunned character may roll Vigor to come to. */
@@ -559,6 +561,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aftermathPrompt: null,
   clockSeconds: 0,
   healingPrompt: null,
+  repairPrompt: null,
   vehicleOocPrompt: null,
   rollStatsData: {},
   ironDice: null,
@@ -1389,6 +1392,10 @@ export function wireSocket(): void {
     useGameStore.setState({ vehicleOocPrompt: p });
   });
 
+  socket.on(S2C.REPAIR_PROMPT, (p: RepairPromptPayload) => {
+    useGameStore.setState({ repairPrompt: p });
+  });
+
   socket.on(S2C.CLOCK, (p: ClockPayload) => {
     useGameStore.setState({ clockSeconds: Math.max(0, p.seconds) });
   });
@@ -2004,6 +2011,11 @@ export const intents = {
   healingRoll: (roll: boolean) => {
     socket.emit(C2S.HEALING_ROLL, { roll });
     useGameStore.setState({ healingPrompt: null });
+  },
+  /** Answer the repair prompt: spend the downtime under the machines, or not. */
+  repairRoll: (roll: boolean) => {
+    socket.emit(C2S.REPAIR_ROLL, { roll });
+    useGameStore.setState({ repairPrompt: null });
   },
   /** Answer the aftermath prompt: roll for the fallen Extras, or let them go. */
   aftermathRoll: (roll: boolean) => {

@@ -88,3 +88,33 @@ export function VehicleOocPrompt() {
     </div>
   );
 }
+
+/**
+ * Hours have passed and something in the party's hands is damaged.
+ *
+ * A Wound on a hull is two hours under it with a spanner and a Repair roll —
+ * so the amount of downtime is the number of attempts, and the clock is what
+ * turns a wrecked getaway car into a problem for the story. Asked rather than
+ * rolled, like every other handful of dice the GM did not call for.
+ */
+export function RepairPrompt() {
+  const prompt = useGameStore((s) => s.repairPrompt);
+  if (!prompt) return null;
+  const n = prompt.names.length;
+  return (
+    <div className="soak-prompt">
+      <strong>🔧 {n} damaged {n === 1 ? 'machine' : 'machines'}, and {prompt.hours} hour{prompt.hours === 1 ? '' : 's'} to work</strong>
+      <span className="dim" style={{ fontSize: 12 }}>
+        {prompt.names.join(', ')}. Two hours a Wound: the best Repair in the party rolls, mending
+        one Wound on a success and two on a raise — and a Critical Failure breaks something else
+        getting at it. A wreck stops being a wreck once its Wounds come back under the cap.
+      </span>
+      <div className="row">
+        <button className="primary" style={{ width: 'auto' }} onClick={() => intents.repairRoll(true)}>
+          🔧 Spend the time on repairs
+        </button>
+        <button onClick={() => intents.repairRoll(false)}>Leave them broken</button>
+      </div>
+    </div>
+  );
+}

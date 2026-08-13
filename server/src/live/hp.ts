@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, vehicleWoundCap, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, vehicleWoundCap, WRECK_DAMAGE, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { campaigns, characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -462,6 +462,37 @@ export function takeOocOffer(characterId: string): boolean {
  * Critical Hits table — the wheels, the engine, the crew inside; and past
  * its cap the vehicle is not Incapacitated but WRECKED.
  */
+/**
+ * A vehicle stops being a vehicle.
+ *
+ * Being inside a machine as it comes apart is violence like any other, so the
+ * people aboard take it through the ordinary ladder — Toughness, Soak, the
+ * Benny they were saving — rather than through some special rule that ignores
+ * everything a character has. Riders are thrown clear onto the ground, which
+ * is also the only thing that stops a wreck dragging them around the map.
+ */
+function wreckVehicle(io: Server, campaignId: string, vehicle: Character, cause?: string): void {
+  postStatusLine(io, campaignId, `💥 ${vehicle.name} is WRECKED${cause ? ` by ${cause}` : ''}!`);
+  for (const vt of tokens.forCharacter(vehicle.id)) {
+    const riders = tokens.forMap(vt.mapId).filter((t) => t.mountedOn === vt.id);
+    if (riders.length === 0) continue;
+    postStatusLine(io, campaignId,
+      `${riders.length} aboard ${vehicle.name} ${riders.length === 1 ? 'is' : 'are'} thrown clear as it goes — ${WRECK_DAMAGE} each.`);
+    for (const rider of riders) {
+      tokens.update(rider.id, { mountedOn: null });
+      io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(rider.id)! });
+      const ch = rider.characterId ? characters.byId(rider.characterId) : undefined;
+      if (!ch) continue;
+      applyHpDelta(io, campaignId, ch, -roll(WRECK_DAMAGE).total, `the wreck of ${vehicle.name}`);
+      const after = characters.byId(ch.id);
+      if (after) applyConditionTo(io, campaignId, after, 'prone', 'thrown clear of a wreck');
+    }
+    tokens.update(vt.id, { driverTokenId: null });
+    io.to(dmRoom(campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(vt.id)! });
+    syncMapVision(io, campaignId, vt.mapId);
+  }
+}
+
 function applyVehicleDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
 ): { character: Character; note: string } {
@@ -489,7 +520,7 @@ function applyVehicleDamage(
       cur = persistSheet(io, campaignId, cur, {
         conditions: [...conditionsOf(cur.sheet).filter((c) => c !== 'incapacitated'), 'incapacitated'],
       });
-      postStatusLine(io, campaignId, `💥 ${cur.name} is WRECKED${sourceLabel ? ` by ${sourceLabel}` : ''}!`);
+      wreckVehicle(io, campaignId, cur, sourceLabel);
       return { character: cur, note: ` — ${bits.join('; ')} — WRECKED (${damage} vs Toughness ${toughness})` };
     }
   } else {
@@ -520,7 +551,7 @@ export function resolveOutOfControl(io: Server, campaignId: string, ch: Characte
       cur = persistSheet(io, campaignId, cur, {
         conditions: [...conditionsOf(cur.sheet).filter((c) => c !== 'incapacitated'), 'incapacitated'],
       });
-      postStatusLine(io, campaignId, `💥 ${cur.name} is WRECKED by the collision!`);
+      wreckVehicle(io, campaignId, cur, 'the collision');
     }
   }
   for (let i = 0; i < out.crits; i++) {

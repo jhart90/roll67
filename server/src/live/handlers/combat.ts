@@ -5,13 +5,13 @@ import {
   CHASE_TRACK_DEFAULT, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
   opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
   bumpResult, chaseCritFailure, complicationFor, isComplicationCard, type ChaseTravel,
-  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -791,6 +791,75 @@ interface GroupSaveSpec {
  */
 /** Who is owed a natural healing roll, waiting on the GM's yes. */
 const pendingNaturalHealing = new Map<string, string[]>();
+/** …and which machines are owed time under a spanner. */
+const pendingRepairs = new Map<string, { ids: string[]; hours: number }>();
+
+/**
+ * Who in this campaign is best placed to fix a machine: the highest Repair
+ * die among the player characters, because the party mechanic is a person,
+ * not a seat. Falls back to whoever is aboard it, so an NPC crew can still
+ * patch their own boat.
+ */
+function bestMechanic(campaignId: string, vehicle: Character): Character | null {
+  const pool = characters.forCampaign(campaignId)
+    .filter((c) => c.system === 'swade' && !isVehicle(c.sheet) && c.ownerUserId);
+  const aboard = tokens.forCharacter(vehicle.id).flatMap((vt) =>
+    tokens.forMap(vt.mapId).filter((t) => t.mountedOn === vt.id)
+      .flatMap((t) => (t.characterId ? [characters.byId(t.characterId)] : [])))
+    .filter((c): c is Character => !!c);
+  const candidates = pool.length > 0 ? pool : aboard;
+  if (candidates.length === 0) return null;
+  return candidates.reduce((best, c) =>
+    skillDie(c.sheet, 'Repair') > skillDie(best.sheet, 'Repair') ? c : best);
+}
+
+/**
+ * Repairs. A Wound on a hull is two hours under it with a spanner and a
+ * Repair roll: a success mends one, a raise two, and a Critical Failure means
+ * something else has been broken getting at it. Wrecked is not final — it is
+ * a long job, and the wreck stops being a wreck the moment its Wounds come
+ * back under the cap.
+ *
+ * Like natural healing, this is dice the GM did not ask for, so it asks.
+ */
+function runRepairs(io: Server, campaignId: string, shouldRoll: boolean): void {
+  const pending = pendingRepairs.get(campaignId);
+  pendingRepairs.delete(campaignId);
+  if (!shouldRoll || !pending) return;
+  const lines: string[] = [];
+  for (const id of pending.ids) {
+    let veh = characters.byId(id);
+    if (!veh) continue;
+    const mechanic = bestMechanic(campaignId, veh);
+    if (!mechanic) { lines.push(`${veh.name}: nobody to work on it`); continue; }
+    const cap = vehicleWoundCap(veh.sheet);
+    let mended = 0;
+    let worsened = 0;
+    const attempts = repairAttempts(pending.hours, num(veh.sheet, 'wounds', 0));
+    for (let i = 0; i < attempts; i++) {
+      const wounds = num(veh.sheet, 'wounds', 0);
+      if (wounds <= 0) break;
+      const br = roll(traitExpr(mechanic.sheet, skillDie(mechanic.sheet, 'Repair')));
+      const crit = critFailFor(io, campaignId, mechanic, br.dice);
+      const fixed = crit ? -1 : repairOutcome(br.total);
+      if (fixed === 0) continue;
+      const next = Math.max(0, Math.min(wounds - fixed, cap + 1));
+      const patch: SheetData = { wounds: next };
+      // Back under the cap and it is a vehicle again rather than a wreck.
+      if (next <= cap && conditionsOf(veh.sheet).includes('incapacitated')) {
+        patch.conditions = conditionsOf(veh.sheet).filter((c) => c !== 'incapacitated');
+      }
+      veh = persistSheet(io, campaignId, veh, patch);
+      if (fixed > 0) mended += fixed; else worsened += 1;
+    }
+    lines.push(mended || worsened
+      ? `${veh.name}: ${mechanic.name} mends ${mended}${worsened ? `, breaks ${worsened} more` : ''} (now ${num(veh.sheet, 'wounds', 0)} of ${cap})`
+      : `${veh.name}: ${mechanic.name} gets nowhere`);
+  }
+  if (lines.length === 0) return;
+  postStatusLine(io, campaignId,
+    `🔧 ${pending.hours} hour${pending.hours === 1 ? '' : 's'} of repairs — ${lines.join('; ')}.`);
+}
 
 /**
  * Natural Healing: a Vigor roll that mends a Wound, two on a raise, and a
@@ -907,6 +976,17 @@ function applyTimePassage(io: Server, campaignId: string, seconds: number, clock
         cur = persistSheet(io, campaignId, cur, { fatigue: 0 });
         notes.push(`${cur.name} shakes off ${fatigue} level${fatigue === 1 ? '' : 's'} of Fatigue.`);
       }
+    }
+  }
+  // Hours of downtime are also hours somebody could spend under a damaged
+  // machine. Offered rather than rolled, for the same reason healing is.
+  if (hours >= REPAIR_HOURS_PER_WOUND) {
+    const broken = characters.forCampaign(campaignId)
+      .filter((c) => c.system === 'swade' && isVehicle(c.sheet) && num(c.sheet, 'wounds', 0) > 0);
+    if (broken.length > 0) {
+      pendingRepairs.set(campaignId, { ids: broken.map((c) => c.id), hours });
+      io.to(dmRoom(campaignId)).emit(S2C.REPAIR_PROMPT, { names: broken.map((c) => c.name), hours });
+      notes.push(`${broken.map((c) => c.name).join(', ')} could be worked on — ${REPAIR_HOURS_PER_WOUND} hours a Wound.`);
     }
   }
   // A day or more: natural healing comes due every five days, and anything
@@ -1842,6 +1922,17 @@ function maneuverMods(
   const bonus = speedBonus(me.topSpeed, chase.participants.filter((p) => p !== me).map((p) => p.topSpeed));
   if (bonus > 0) { mod += bonus; tags.push(`+${bonus} Speed`); }
   return { mod, tags };
+}
+
+/**
+ * The wreck under a participant, if what they are riding has stopped being a
+ * vehicle. A wreck does not manoeuvre, and saying so is kinder than letting
+ * someone roll Driving for a thing lying on its roof.
+ */
+function wreckUnder(p: ChaseParticipant): Character | null {
+  const tok = p.tokenId ? tokens.byId(p.tokenId) : null;
+  const v = vehicleUnder(tok);
+  return v && conditionsOf(v.sheet).includes('incapacitated') ? v : null;
 }
 
 /** How a participant is travelling, which decides what a disaster looks like. */
@@ -4331,6 +4422,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     runNaturalHealing(io, d.campaignId, !!shouldRoll);
   }, 'HEALING_ROLL'));
 
+  socket.on(C2S.REPAIR_ROLL, safe(socket, ({ roll: shouldRoll }: RepairRollPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    runRepairs(io, d.campaignId, !!shouldRoll);
+  }, 'REPAIR_ROLL'));
+
   socket.on(C2S.AFTERMATH_ROLL, safe(socket, ({ roll: shouldRoll }: AftermathRollPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
@@ -4431,6 +4528,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return;
     }
     if (me.movedThisTurn) { emitError(socket, `${me.name} has already changed position this turn.`); return; }
+    const wreck = wreckUnder(me);
+    if (wreck) { emitError(socket, `${wreck.name} is a wreck — it is not going anywhere.`); return; }
 
     if (mode === 'dropBack') {
       me.cardIdx = clampToTrack(me.cardIdx - 1, chase.track.length);
@@ -4506,6 +4605,13 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return;
     }
     if (me.actedThisTurn) { emitError(socket, `${me.name} has already spent this turn's action.`); return; }
+    // Boarding and leaping clear are exactly what you do FROM a wreck; the
+    // rest of the list needs a machine that still works.
+    const myWreck = wreckUnder(me);
+    if (myWreck && action !== 'board' && action !== 'evade') {
+      emitError(socket, `${myWreck.name} is a wreck — it is not going anywhere.`);
+      return;
+    }
 
     const target = targetEntryId ? chase.participants.find((p) => p.entryId === targetEntryId) ?? null : null;
     if (spec.reach !== null) {

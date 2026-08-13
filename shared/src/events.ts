@@ -179,6 +179,8 @@ export const C2S = {
   HEALING_ROLL: 'healingRoll',
   /** SWADE: the DM answers a vehicle's Out of Control threat. */
   VEHICLE_OOC_ROLL: 'vehicleOocRoll',
+  /** SWADE: the DM's answer to the vehicle-repair prompt. */
+  REPAIR_ROLL: 'repairRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
@@ -856,6 +858,8 @@ export const S2C = {
   HEALING_PROMPT: 'healingPrompt',
   /** SWADE: a vehicle was hit hard enough to threaten control. */
   VEHICLE_OOC_PROMPT: 'vehicleOocPrompt',
+  /** SWADE: hours passed with damaged vehicles in the party's hands. */
+  REPAIR_PROMPT: 'repairPrompt',
   /** The in-world clock, after any change. */
   CLOCK: 'clock',
   /** Lifetime roll statistics for the requested scope. */
@@ -1271,6 +1275,10 @@ export interface HealingRollPayload { roll: boolean }
 /** DM-only: this vehicle's driver owes a maneuvering roll or it goes Out of
  *  Control. `roll: false` means the driver held it. */
 export interface VehicleOocPromptPayload { characterId: string; name: string }
+/** DM-only: these machines are damaged and the clock has moved far enough to
+ *  do something about it. `hours` is the downtime that just passed. */
+export interface RepairPromptPayload { names: string[]; hours: number }
+export interface RepairRollPayload { roll: boolean }
 export interface VehicleOocRollPayload { characterId: string; roll: boolean }
 
 /**

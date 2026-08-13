@@ -38,7 +38,7 @@ import { CountersOverlay } from '../table/CountersOverlay';
 import { ChaseTrack } from '../table/ChaseTrack';
 import { RunPrompt } from '../table/RunPrompt';
 import { CrawlPrompt } from '../table/CrawlPrompt';
-import { AftermathPrompt, HealingPrompt, VehicleOocPrompt } from '../table/AftermathPrompt';
+import { AftermathPrompt, HealingPrompt, RepairPrompt, VehicleOocPrompt } from '../table/AftermathPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -484,6 +484,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <CrawlPrompt />
         <AftermathPrompt />
         <HealingPrompt />
+        <RepairPrompt />
         <VehicleOocPrompt />
         <CookPrompt />
         <CalledShotPrompt />

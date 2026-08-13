@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isVehicle, maneuveringSkillFor, rollOutOfControl, rollVehicleCrit,
+  repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND,
   vehicleHandling, vehicleSeats, vehicleTopSpeed, vehicleWoundCap,
 } from '../src/systems/swadeVehicles.js';
 import { swadeToughness, swade } from '../src/systems/swade.js';
@@ -98,5 +99,26 @@ describe('the Vehicle Critical Hits table', () => {
     // Scripted to land on Crew (4+5), then reroll to Chassis (3+4).
     const r = rollVehicleCrit(faces(4, 5, 3, 4), { rerollCrew: true });
     expect(r.label).toBe('Chassis');
+  });
+});
+
+describe('repairs', () => {
+  it('is two hours a Wound, and downtime is how many tries you get', () => {
+    expect(REPAIR_HOURS_PER_WOUND).toBe(2);
+    expect(repairAttempts(1, 3)).toBe(0);   // not long enough to start
+    expect(repairAttempts(2, 3)).toBe(1);
+    expect(repairAttempts(9, 3)).toBe(3);
+  });
+
+  it('never offers more attempts than there are Wounds to mend', () => {
+    expect(repairAttempts(100, 2)).toBe(2);
+    expect(repairAttempts(100, 0)).toBe(0);
+  });
+
+  it('mends one on a success and two on a raise', () => {
+    expect(repairOutcome(3)).toBe(0);
+    expect(repairOutcome(4)).toBe(1);
+    expect(repairOutcome(7)).toBe(1);
+    expect(repairOutcome(8)).toBe(2);
   });
 });

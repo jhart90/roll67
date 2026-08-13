@@ -31,7 +31,7 @@ function SelfProfileMenu({ userId, username, playerColor }: { userId: string; us
       <div className="dice-color-row">
         <span className="dim" style={{ fontSize: 11 }}>Color:</span>
         {/* The same wheel the pinned pills offer — one palette across the app.
-            Nobody has to reset to the automatic colour: it is what you get
+            Nobody has to reset to the automatic color: it is what you get
             until you pick, and picking one of these IS the choice. */}
         <div className="player-colors">
           {WHEEL_COLORS.map((c) => (

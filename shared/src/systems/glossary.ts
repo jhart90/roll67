@@ -70,6 +70,11 @@ const SWADE_ANCESTRIES: Record<string, string> = {
 const SWADE_CONCEPTS: Record<string, string> = {
   Size: 'How big it is, and the whole Size Table in one number. Size IS the Toughness bonus. It also sets the Scale band — Tiny −6, Very Small −4, Small −2, Normal 0, Large +2, Huge +4, Gargantuan +6 — and when two different Scales fight, the smaller adds the difference to its attacks and the larger subtracts it. Large and up carry extra Wounds. 0 is an adult human.',
   'Wound cap': 'How many Wounds this creature carries before it is Incapacitated. The greyed number in the box is what it works out to on its own: three for a Wild Card, none for an Extra — who drops at the first Wound — plus Size (Large +1, Huge +2, Gargantuan +3). Type over it to override that outright, for a boss who should simply take more punishment than its Size says; clear the box to hand it back.',
+  'Trait die color': 'This character’s own trait dice, whatever color you normally throw. Leave it blank and they use your setting from the dice panel — the point is that somebody running four characters can tell at a glance whose roll is in the air.',
+  'Trait die pip color': 'The numbers and pips painted on this character’s trait dice. Blank picks whichever of black or white reads against the face color, which is nearly always right.',
+  'Wild Die color': 'This character’s own Wild Die. Blank uses your own setting.',
+  'Wild Die pip color': 'The numbers painted on this character’s Wild Die. Blank picks whatever stays legible on it.',
+  'Ace animation': 'How this character’s exploding dice celebrate — flash, flames, confetti and the rest. Blank uses whatever you picked for yourself.',
   Scale: 'The band this creature’s Size falls in, and what that is worth when the two sides of a fight are different sizes: the smaller adds the difference to its attacks, the larger subtracts it. Tiny −6, Very Small −4, Small −2, Normal 0, Large +2, Huge +4, Gargantuan +6.',
   Cover: 'Cover this character has that the MAP cannot see — furniture, a crowd, a raised shield. Light −2, Medium −4, Heavy −6, Near Total −8, applied to melee and ranged attacks against them. The map keeps working out its own cover from walls; an attack uses whichever of the two protects the target more, so claiming light here never strips away medium cover the map can see.',
   'Wild Card': 'A hero or major character: rolls a d6 Wild Die alongside every Trait roll (keep the better), takes three Wounds before going down, and holds Bennies.',
@@ -411,7 +416,7 @@ const COMMON: Record<string, string> = {
 export const NON_RULES_LABELS = new Set(
   ['+', '±', 'Age', 'Appearance', 'Description', 'Detail / portrait', 'Eyes', 'Hair', 'Height',
     'Item', 'Name', 'Notes', 'Notes (RoF…)', 'Profile / Bio (public-facing)', 'Qty', 'Skin',
-    'Source', 'Token colour', 'Token image', 'Type', 'Use',
+    'Source', 'Token color', 'Token image', 'Type', 'Use',
   ].map((s) => s.toLowerCase()),
 );
 

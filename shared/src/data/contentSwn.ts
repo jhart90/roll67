@@ -128,7 +128,7 @@ const GEAR: G[] = [
   ['Navcomp', 'Gear', 'Assists spike drilling and system navigation'],
   ['Translator Bug', 'Gear', 'Real-time translation of known languages'],
   ['Bioscanner', 'Gear', 'Detects life signs through light cover'],
-  ['Holo Projector', 'Gear', 'Full-colour projected imagery'],
+  ['Holo Projector', 'Gear', 'Full-color projected imagery'],
   ['Binoculars (Smart)', 'Gear', 'Range-finding magnified optics'],
   ['Tent (Survival)', 'Gear', 'Two-person shelter for harsh worlds'],
   ['Powered Toolkit', 'Gear', 'Heavy repair rig for vehicles and ships'],

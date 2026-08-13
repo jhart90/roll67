@@ -60,11 +60,11 @@ const CONDITION_RE = new RegExp(
 const CONDITION_BY_LABEL = new Map(CONDITION_LABELS.map((c) => [c.label.toLowerCase(), c.id]));
 
 /**
- * A condition wherever the log names it: bold, and in its own colour.
+ * A condition wherever the log names it: bold, and in its own color.
  *
  * "Training Dummy is now Shaken" is a line the table has to find in a wall of
  * grey text, usually in a hurry and usually while something else is on fire.
- * Colour makes it a glance instead of a read, and the colours are grouped by
+ * Color makes it a glance instead of a read, and the colors are grouped by
  * meaning — yellow rattled, blue-grey held, purple senses, red dying — so the
  * log teaches its own vocabulary.
  */
@@ -76,12 +76,12 @@ function ConditionWord({ label, alt }: { label: string; alt: boolean }) {
 }
 
 /**
- * Bolds any mentioned token name (coloured if that token is player-controlled)
+ * Bolds any mentioned token name (colored if that token is player-controlled)
  * and any condition. Names win where the two collide: a character called
  * Shaken is still a person.
  */
 function Highlighted({ text, hl }: { text: string; hl: NameHighlights }) {
-  // Which of each condition's two colours to use. The pastels that carry a
+  // Which of each condition's two colors to use. The pastels that carry a
   // dark panel wash out entirely on the light theme's cool grey, so the
   // deeper, more saturated pair takes over there.
   const alt = useGameStore((s) => s.uiTheme) === 'light';
@@ -217,9 +217,9 @@ function DiceEquation({ r, why, fromUserId }: {
   const modTitle = lines.length
     ? `This modifier combines:\n• ${lines.join('\n• ')}`
     : fallbackWhy(system);
-  // Paint each die the same colour it wore on the table: SWADE tells trait /
+  // Paint each die the same color it wore on the table: SWADE tells trait /
   // Wild Die / raise apart by hue from the roller's palette; other systems
-  // use the roller's single custom colour or the by-size default.
+  // use the roller's single custom color or the by-size default.
   const dieFill = (d: DieRoll): string => (system === 'swade'
     ? (d.raise ? member?.diceRaiseColor ?? DICE_ROLE_DEFAULTS.raise
       : d.wild ? member?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild
@@ -329,7 +329,7 @@ function ActionTerm({ name }: { name: string }) {
  * character, not the account.
  *
  * Deliberately the same dim grey as the timestamp beside it: the byline is
- * metadata, and colouring it per-player put a row of competing brights above
+ * metadata, and coloring it per-player put a row of competing brights above
  * every message, pulling the eye off the roll cards that actually matter. Who
  * is who is still legible from the presence dots and the token rings.
  */

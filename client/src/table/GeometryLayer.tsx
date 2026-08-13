@@ -5,9 +5,9 @@ import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
-// A window/one-way/stained-glass wall's colour MEANS something — it says
+// A window/one-way/stained-glass wall's color MEANS something — it says
 // which kind it is — so only the plain solid wall follows the viewer's own
-// setting. Recolouring the others would cost information to gain taste.
+// setting. Recoloring the others would cost information to gain taste.
 const WALL_STROKE: Record<string, string> = { solid: '#d26c6c', window: '#6cd2c8', oneway: '#e8a54b', stainedglass: '#d26cd2' };
 
 /** A light marker: selectable, draggable, and right-clickable (DM), in both the
@@ -170,7 +170,7 @@ const DoorPiece = memo(function DoorPiece({ door, mapId, tool, selected, isDm }:
   // Gates get a blue palette (always see-through) instead of the normal
   // door's green/orange (blocks sight too, when closed).
   const mapColors = useGameStore((s) => s.mapColors);
-  // A gate keeps its blue: that colour says WHICH KIND of door this is, and
+  // A gate keeps its blue: that color says WHICH KIND of door this is, and
   // is not the viewer's to repaint. An ordinary door is theirs.
   const color = isGate ? (door.open ? '#8ad2e8' : '#4b8fc9')
     : (door.open ? mapColors.doorOpen : mapColors.doorClosed);
@@ -270,7 +270,7 @@ export function GeometryLayer() {
   const wallRainbow = useGameStore((s) => s.wallRainbow);
   const doorType = useGameStore((s) => s.doorType);
 
-  // Open and closed doors are two different facts, so they get two colours.
+  // Open and closed doors are two different facts, so they get two colors.
 
   // Cancel drafts when the tool changes.
   useEffect(() => {
@@ -577,7 +577,7 @@ export function GeometryLayer() {
       ))}
 
       {/* Selection ring on the label being edited, so the toolbar's size and
-          colour controls have a visible subject. */}
+          color controls have a visible subject. */}
       {isDm && tool === 'text' && (() => {
         const sel = (map.texts ?? []).find((t) => t.id === selectedTextId);
         if (!sel) return null;

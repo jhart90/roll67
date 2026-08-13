@@ -27,7 +27,7 @@ export interface FieldDef {
   /**
    * A column the sheet works out rather than stores: it renders as static
    * text and is never editable. Returns the text, an optional tooltip, and
-   * an optional tone the renderer can colour ('warn' for something the
+   * an optional tone the renderer can color ('warn' for something the
    * player should notice, like a skill that has outgrown its attribute).
    */
   compute?: (row: SheetData, sheet: SheetData) => { text: string; title?: string; tone?: 'warn' };

@@ -1,5 +1,5 @@
-// The colour helpers now live in shared, so the server can pick a new token's
-// starting colour with the same rule the client renders it by. Re-exported
+// The color helpers now live in shared, so the server can pick a new token's
+// starting color with the same rule the client renders it by. Re-exported
 // here to keep the many existing client imports pointing at one place.
 export { defaultColorFor, inkOnDark, playerColorFor } from 'shared';
 

@@ -4,7 +4,7 @@ import type {
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   Counter, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, RollCalloutInfo, Token, Wall, WorldFolder,
 } from 'shared';
-import { isCounterPosition, statEntriesFromDice, type AceStyle, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
+import { isAceStyle, isCounterPosition, statEntriesFromDice, type AceStyle, type DiceLook, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
 /** SWADE's dice roles, and the column each one persists to. */
@@ -72,7 +72,7 @@ export const users = {
   setDiceTextColor(userId: string, color: string | null): void {
     stmt('UPDATE users SET dice_text_color = ? WHERE id = ?').run(color, userId);
   },
-  /** SWADE's per-role dice colours. The column is picked from a fixed map, so
+  /** SWADE's per-role dice colors. The column is picked from a fixed map, so
    *  an unknown role can never reach the SQL. */
   setDiceRoleColor(userId: string, role: DiceRole, color: string | null): void {
     const col = DICE_ROLE_COLUMNS[role];
@@ -1109,7 +1109,7 @@ export const macros = {
       'SELECT id, user_id AS userId, action_id AS actionId, rollable_id AS rollableId FROM macros WHERE character_id = ?',
     ).all(characterId) as { id: string; userId: string; actionId: string | null; rollableId: string | null }[];
   },
-  /** Repoint one macro's bindings without touching its name, colour or owner. */
+  /** Repoint one macro's bindings without touching its name, color or owner. */
   setBinding(id: string, actionId: string | null, rollableId: string | null): void {
     stmt('UPDATE macros SET action_id = ?, rollable_id = ? WHERE id = ?').run(actionId, rollableId, id);
   },
@@ -1198,7 +1198,7 @@ export const rollableTables = {
 // ---------- chat ----------
 
 interface ChatRow {
-  id: number; user_id: string | null; from_name: string; from_character: string | null; action_name: string | null; outcome_note: string | null; kind: ChatKind; text: string;
+  id: number; user_id: string | null; from_name: string; from_character: string | null; character_id: string | null; action_name: string | null; outcome_note: string | null; kind: ChatKind; text: string;
   roll_json: string | null; recipients_json: string | null; hidden: number; created_at: number;
   card_json: string | null; callout_json: string | null; thread_id: number | null;
 }
@@ -1216,6 +1216,7 @@ function toChatMsg(r: ChatRow): ChatMessage {
     fromUserId: r.user_id,
     fromName: r.from_name,
     fromCharacter: r.from_character,
+    characterId: r.character_id ?? null,
     actionName: r.action_name,
     outcomeNote: r.outcome_note,
     text: r.text,
@@ -1436,6 +1437,28 @@ export const rollStats = {
   },
 };
 
+/**
+ * The dice this character throws, where its sheet says anything at all.
+ * Null when every slot is blank, which is every sheet nobody has touched —
+ * and then the roller's own settings stand, exactly as before.
+ */
+function diceLookFor(characterId: string): DiceLook | null {
+  const row = stmt('SELECT sheet_json FROM characters WHERE id = ?').get(characterId) as { sheet_json: string } | undefined;
+  if (!row) return null;
+  const sheet = safeParse<Record<string, unknown>>(row.sheet_json, {});
+  const pick = (key: string): string | undefined => {
+    const v = sheet[key];
+    return typeof v === 'string' && v.trim() ? v : undefined;
+  };
+  const look: DiceLook = {};
+  const trait = pick('diceTraitColor'); if (trait) look.trait = trait;
+  const wild = pick('diceWildColor'); if (wild) look.wild = wild;
+  const traitText = pick('diceTraitTextColor'); if (traitText) look.traitText = traitText;
+  const wildText = pick('diceWildTextColor'); if (wildText) look.wildText = wildText;
+  const ace = pick('diceAceStyle'); if (ace && isAceStyle(ace)) look.ace = ace;
+  return Object.keys(look).length > 0 ? look : null;
+}
+
 export const chat = {
   add(campaignId: string, msg: {
     userId: string | null; fromName: string; fromCharacter?: string | null; actionName?: string | null; outcomeNote?: string | null; kind: ChatKind; text: string;
@@ -1465,17 +1488,25 @@ export const chat = {
       }
       rollStats.record(campaignId, uid, chId, msg.roll.dice);
     }
+    // A character with dice of its own sends them along with the roll, so
+    // every screen throws the same dice — including the screens that have
+    // never been shown that character's sheet.
+    let callout = msg.callout ?? null;
+    if (msg.roll && msg.characterId) {
+      const look = diceLookFor(msg.characterId);
+      if (look) callout = { what: callout?.what ?? msg.roll.expression, ...(callout?.tone ? { tone: callout.tone } : {}), look };
+    }
     const info = stmt(
-      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, callout_json, thread_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+      `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, character_id, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, callout_json, thread_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     ).run(
-      campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null,
+      campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null, msg.characterId ?? null,
       msg.actionName ?? null, msg.outcomeNote ?? null, msg.kind, msg.text,
       msg.roll ? JSON.stringify(msg.roll) : null,
       msg.recipients ? JSON.stringify(msg.recipients) : null,
       undo ? JSON.stringify(undo) : null,
       msg.card ? JSON.stringify(msg.card) : null,
-      msg.callout ? JSON.stringify(msg.callout) : null,
+      callout ? JSON.stringify(callout) : null,
       msg.threadId ?? null,
       at,
     );

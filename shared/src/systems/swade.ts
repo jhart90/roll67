@@ -7,7 +7,7 @@
 // standard −1/level penalty into every trait roll.
 
 import type { DieRoll, Hex, SheetData, VisionStats } from '../types.js';
-import { CONCEPT_MAX_LEN } from '../types.js';
+import { ACE_STYLES, CONCEPT_MAX_LEN } from '../types.js';
 import { hexDistance } from '../hex/coords.js';
 import {
   fmtMod, num, rows, str,
@@ -803,8 +803,35 @@ const powersTab: SheetTab = {
       fields: [
         { id: 'tokenImage', label: 'Token image', type: 'image', width: 'half' },
         { id: 'detailImage', label: 'Detail / portrait', type: 'image', width: 'half' },
-        { id: 'tokenColor', label: 'Token colour', type: 'color', width: 'half' },
+        { id: 'tokenColor', label: 'Token color', type: 'color', width: 'half' },
         { id: 'bioPublic', label: 'Profile / Bio (public-facing)', type: 'textarea', width: 'full' },
+      ],
+    },
+    {
+      /**
+       * This character's own dice.
+       *
+       * A player running four characters, or a DM running forty, throws the
+       * same dice for all of them — so the table cannot tell whose roll is in
+       * the air from the felt alone. Set any of these and this character's
+       * dice use it; leave one blank and it falls back to whatever that
+       * roller picked in their own dice settings, which is what makes an
+       * untouched sheet behave exactly as it always did.
+       */
+      kind: 'fields', id: 'diceLook', title: 'Dice (overrides your own settings)',
+      fields: [
+        { id: 'diceTraitColor', label: 'Trait die color', type: 'color', width: 'third' },
+        { id: 'diceTraitTextColor', label: 'Trait die pip color', type: 'color', width: 'third' },
+        { id: 'diceWildColor', label: 'Wild Die color', type: 'color', width: 'third' },
+        { id: 'diceWildTextColor', label: 'Wild Die pip color', type: 'color', width: 'third' },
+        {
+          id: 'diceAceStyle', label: 'Ace animation', type: 'select', width: 'third', default: '',
+          options: ['', ...ACE_STYLES],
+          optionLabels: {
+            '': 'Use my own setting', flash: 'Flash', explosion: 'Explosion', flames: 'Flames',
+            disco: 'Disco', rainbow: 'Rainbow', smoke: 'Smoke', water: 'Water', confetti: 'Confetti',
+          },
+        },
       ],
     },
   ],

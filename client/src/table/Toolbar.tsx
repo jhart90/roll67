@@ -148,12 +148,12 @@ export function Toolbar() {
             <button
               className={`roll-pill ${disabled ? 'pill-disabled' : ''}`}
               // The label used to be hardcoded near-black, which was safe while
-              // every colour on offer was a pastel. Black is on offer now, so
+              // every color on offer was a pastel. Black is on offer now, so
               // the text has to follow the background's luminance.
               style={m.color
                 ? { background: m.color, color: readableOn(m.color) }
                 // Pre-dating the palette: a dark panel needs light text, not
-                // the near-black the stylesheet assumes for a coloured pill.
+                // the near-black the stylesheet assumes for a colored pill.
                 : { background: 'var(--panel-2)', color: 'var(--text)' }}
               disabled={disabled}
               onClick={() => intents.runMacro(m.id)}

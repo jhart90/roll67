@@ -135,9 +135,9 @@ export function DieShape({
   /** Optional face value rendered in the middle. */
   value?: number | string;
   dim?: boolean;
-  /** Override the body colour (e.g. previewing a player's dice palette). */
+  /** Override the body color (e.g. previewing a player's dice palette). */
   fill?: string;
-  /** Override the pip/number colour; defaults to ink that contrasts the body. */
+  /** Override the pip/number color; defaults to ink that contrasts the body. */
   textFill?: string;
 }) {
   // d4 numbers sit lower (triangle); coin/kite slightly high-center.

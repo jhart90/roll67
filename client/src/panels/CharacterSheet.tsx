@@ -15,7 +15,7 @@ import { RollStatsTab } from './RollStats';
 import { NotesTab } from './NotesTab';
 import { ConfirmButton } from '../util/ConfirmButton';
 
-/** The neutral token colour a sheet shows before anyone picks one. */
+/** The neutral token color a sheet shows before anyone picks one. */
 const DEFAULT_TOKEN_COLOR = '#6c9bd2';
 
 /** Synthetic tab ids for views that aren't part of the system schema. */
@@ -41,8 +41,8 @@ function FieldInput({
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
   onEditImage?: (fieldId: string) => void;
-  /** What this character's colour actually is when the sheet hasn't set one:
-   *  their player's own colour. Showing the app default here would lie. */
+  /** What this character's color actually is when the sheet hasn't set one:
+   *  their player's own color. Showing the app default here would lie. */
   inheritedColor?: string;
 }) {
   const value = sheet[field.id];
@@ -85,7 +85,7 @@ function FieldInput({
             disabled={readOnly}
             onChange={(e) => onPatch({ [field.id]: e.target.value })}
           />
-          <span className="dim">{current}{inherited ? ' · from your player colour' : ''}</span>
+          <span className="dim">{current}{inherited ? ' · from your player color' : ''}</span>
         </span>
       </label>
     );
@@ -257,7 +257,7 @@ const ALWAYS_SHOW = new Set(['damage', 'die', 'severity']);
  *  checkbox on the card itself rather than buried in the editor, because it
  *  is the one field that changes constantly during play. */
 /**
- * Cards that are always-on parts of the character read in their own colour,
+ * Cards that are always-on parts of the character read in their own color,
  * matching what "equipped" already means elsewhere: green for an advantage
  * you have (an Edge, a wielded weapon), red for something working against you.
  */
@@ -282,7 +282,7 @@ const chipLabel = (label: string) => label.replace(/\s*\(.*?\)/g, '').trim();
 /**
  * Every fact on a card gets a tone, so a glance separates a damage die from a
  * range from a penalty. Tones are semantic, not decorative: the same kind of
- * fact wears the same colour on every card in every system.
+ * fact wears the same color on every card in every system.
  */
 type ChipTone =
   | 'damage' | 'skill' | 'range' | 'ammo' | 'bonus' | 'penalty'
@@ -1144,7 +1144,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
   const schema = systemFor(character.system);
   const derived = schema.derive(character.sheet);
   const editable = canEditCharacter(you.role, you.userId, character);
-  // A character with no colour of its own wears its player's colour.
+  // A character with no color of its own wears its player's color.
   const owner = members.find((m) => m.userId === character.ownerUserId);
   const inheritedColor = owner ? playerColorFor(owner) : undefined;
   // A vehicle renders the machine's tab set: Handling and Top Speed, not

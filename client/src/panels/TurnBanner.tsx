@@ -6,9 +6,9 @@ import { playerColorFor, readableOn } from '../util/playerColor';
  * most-asked question is "wait, whose go is it?".
  */
 /**
- * The colour the top bar wears while someone is up, plus the text colour that
+ * The color the top bar wears while someone is up, plus the text color that
  * stays legible on it. Exported so the bar itself can take the fill — the
- * banner alone is a small target, and the whole bar changing colour is
+ * banner alone is a small target, and the whole bar changing color is
  * impossible to miss from across a table.
  */
 export function useTurnTint(): { bg: string; fg: string } | null {
@@ -18,8 +18,8 @@ export function useTurnTint(): { bg: string; fg: string } | null {
   const current = state.entries[state.turnIdx];
   if (!current) return null;
   const member = current.ownerUserId ? members.find((m) => m.userId === current.ownerUserId) : undefined;
-  // A player's combatant wears their colour; a DM-run one wears its own token
-  // colour, so a fight full of NPCs still changes hue turn to turn instead of
+  // A player's combatant wears their color; a DM-run one wears its own token
+  // color, so a fight full of NPCs still changes hue turn to turn instead of
   // sitting on one anonymous grey. Grey only survives as a last resort.
   const bg = member ? playerColorFor(member) : (current.color || '#3a3f4d');
   return { bg, fg: readableOn(bg) };

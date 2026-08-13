@@ -8,7 +8,7 @@ import { mapPixelSize, useStage } from '../util/stage';
 import { worldDrag } from '../store/worldDrag';
 import { FlashHalo } from './FlashHalo';
 
-/** How much larger a token with custom art renders than a plain colour disc. */
+/** How much larger a token with custom art renders than a plain color disc. */
 const ART_SCALE = 1.2;
 
 /** How long a piece takes to fade in after the DM reveals it on a scene. */
@@ -148,7 +148,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     : Object.values(s.tokens).filter((t) => t.mountedOn === token.mountedOn)
       .map((t) => t.id).sort().indexOf(token.id));
   const radius = map.grid.hexSize * 0.72 * token.size * (riding ? 0.55 : 1);
-  // Token art reads better with a little more presence than the flat colour
+  // Token art reads better with a little more presence than the flat color
   // discs, so it renders 20% larger than the hex-derived radius. Everything
   // that isn't art keeps the original size.
   const drawR = token.artUrl ? radius * ART_SCALE : radius;
@@ -353,7 +353,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       )}
       {isOriginal && token.artUrl ? (
         // The art at its own aspect ratio, full-bleed, outlined once in the
-        // token's colour. No clip: the whole uploaded image IS the token.
+        // token's color. No clip: the whole uploaded image IS the token.
         <>
           <image
             href={token.artUrl}

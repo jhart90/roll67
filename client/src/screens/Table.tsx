@@ -359,7 +359,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               type="color"
               className="dice-color-custom"
               value={textStyle.color}
-              title="Custom colour"
+              title="Custom color"
               onChange={(e) => applyTextStyle({ color: e.target.value })}
             />
             <span className="dim" style={{ fontSize: 11 }}>click map to place · right-click a label to remove</span>

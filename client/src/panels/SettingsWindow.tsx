@@ -6,8 +6,8 @@ import { WHEEL_COLORS } from '../util/palette';
  * Everything about how the game looks and sounds to YOU.
  *
  * Nothing here is campaign state — two people at the same table can run
- * different themes and different wall colours without arguing about it. What
- * IS shared with another surface (the volume sliders, your token colour) reads
+ * different themes and different wall colors without arguing about it. What
+ * IS shared with another surface (the volume sliders, your token color) reads
  * and writes the same store fields those surfaces do, so the two can never
  * disagree: there is one value, shown twice.
  */
@@ -82,15 +82,15 @@ export function SettingsWindow() {
         <span className="settings-label" />
         <span className="settings-value">
           <button className="link" onClick={() => setColors({ ...MAP_COLORS_DEFAULT })}>
-            reset map colours
+            reset map colors
           </button>
         </span>
       </div>
 
-      {/* Your token colour — the same account setting the pill at the bottom
+      {/* Your token color — the same account setting the pill at the bottom
           of the screen edits, through the same intent, so they always agree. */}
       <div className="settings-row">
-        <span className="settings-label">Your colour</span>
+        <span className="settings-label">Your color</span>
         <span className="settings-value settings-swatches">
           {WHEEL_COLORS.map((c) => (
             <button

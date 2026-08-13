@@ -125,10 +125,10 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
 
-/* A colour input is a SWATCH, not a text field, and the blanket rule above
-   ruins it: full width plus 8px of padding leaves the colour showing as a
+/* A color input is a SWATCH, not a text field, and the blanket rule above
+   ruins it: full width plus 8px of padding leaves the color showing as a
    thin line inside a big empty box. Reset it once, here, so every picker in
-   the app shows the colour it is set to — the character sheet used to carry
+   the app shows the color it is set to — the character sheet used to carry
    a local fix for exactly this, which meant every OTHER picker was broken. */
 input[type="color"] {
   width: 44px;
@@ -142,17 +142,17 @@ input[type="color"] {
   cursor: pointer;
 }
 /* The swatch itself fills the control — without these the browser leaves its
-   own inset padding around it and the colour still reads as a stripe. */
+   own inset padding around it and the color still reads as a stripe. */
 input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
 input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
 input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
 
 /* A checkbox is a BOX, and the blanket rule above ruined it the same way it
-   ruined the colour picker: display:block plus width:100% turned every tick
+   ruined the color picker: display:block plus width:100% turned every tick
    box into a full-width bar sitting on its own line ABOVE the words it was
    meant to tick, drawn in whatever the operating system felt like. Reset it
    once, here, and draw our own — a small rounded square that lights up in the
-   accent colour, matching the hand-built ones the sheet already uses. */
+   accent color, matching the hand-built ones the sheet already uses. */
 input[type="checkbox"], input[type="radio"] {
   appearance: none;
   -webkit-appearance: none;
@@ -642,7 +642,7 @@ button.link:hover { text-decoration: underline; }
 }
 .error-toast { background: var(--danger); color: #10131a; font-weight: 600; }
 /* Something worked. Deliberately not red — an upload that succeeded should
-   not wear the same colour as one that failed. */
+   not wear the same color as one that failed. */
 .info-toast { background: var(--accent); color: #10131a; font-weight: 600; }
 
 /* ---------- combat status (conditions, death saves, reaction/reroll) ---------- */
@@ -781,7 +781,7 @@ button.link:hover { text-decoration: underline; }
 .chase-controls:empty { display: none; }
 .chase-controls button { padding: 2px 8px; font-size: 11px; }
 
-/* Colour by what KIND of roll is in the air, so the table can read the stakes
+/* Color by what KIND of roll is in the air, so the table can read the stakes
    before the dice land: red for an attack, orange for the damage that follows
    it, blue for a roll made in defence, green for shaking something off. */
 .roll-callout.tone-attack     { border-color: #d2564f; }
@@ -965,10 +965,10 @@ button.link:hover { text-decoration: underline; }
   border-color: color-mix(in srgb, #4a7fc2 50%, var(--border));
 }
 .sheet-card.card-info .sc-title { color: #b9d3f2; }
-/* Major and Minor share the severity colour, so Major carries the weight. */
+/* Major and Minor share the severity color, so Major carries the weight. */
 .sc-chip.chip-major { font-weight: 800; letter-spacing: 0.02em; }
 
-/* Chip tones: the same kind of fact wears the same colour everywhere. */
+/* Chip tones: the same kind of fact wears the same color everywhere. */
 .sc-chip.tone-damage   { color: #f0a5a0; border-color: #c2564f55; background: #c2564f14; }
 .sc-chip.tone-skill    { color: #a8c8f0; border-color: #5b86c255; background: #5b86c214; }
 .sc-chip.tone-range    { color: #9fd8d2; border-color: #479e9455; background: #479e9414; }
@@ -985,7 +985,7 @@ button.link:hover { text-decoration: underline; }
    where-you're-from sinks back toward the card. */
 .nameplate-badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 /* Every wash here is mixed from currentColor, never a hardcoded white: the
-   card's text colour flips to near-black on a pale token colour (readableOn),
+   card's text color flips to near-black on a pale token color (readableOn),
    and a white-on-white badge would have disappeared with it. */
 .np-badge {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
@@ -1122,7 +1122,7 @@ button.link:hover { text-decoration: underline; }
   gap: 8px;
 }
 .chat-msg.whisper { background: rgba(176, 108, 210, 0.08); border-radius: 6px; padding: 4px 6px; }
-/* A condition named in the log. The colour comes from the shared palette (one
+/* A condition named in the log. The color comes from the shared palette (one
    place, so chat and any future surface agree); this only carries the weight
    and a hair of letter-spacing so it reads as a STATE rather than a word. */
 .chat-condition { font-weight: 700; letter-spacing: 0.01em; }
@@ -1959,13 +1959,13 @@ button.link:hover { text-decoration: underline; }
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
-  /* Wide enough for the colour wheel's eight fixed 18px columns plus this
+  /* Wide enough for the color wheel's eight fixed 18px columns plus this
      padding — the grid does not squeeze, so a narrower menu would overflow. */
   min-width: 200px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   z-index: 40;
 }
-/* The player-colour wheel, in the same eight-per-row grid the pinned-pill
+/* The player-color wheel, in the same eight-per-row grid the pinned-pill
    picker uses — it is the same palette, so it should read the same way. */
 .player-colors { display: grid; grid-template-columns: repeat(8, 18px); gap: 3px; }
 .presence-menu-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
@@ -2126,7 +2126,7 @@ button.link:hover { text-decoration: underline; }
 .action-btn.heal { border-left-color: var(--ok); }
 .action-btn.damage { border-left-color: var(--danger); }
 /* Not in hand: still listed so a forgotten tick box doesn't read as a missing
-   weapon, but drained of colour so it never competes with what you can
+   weapon, but drained of color so it never competes with what you can
    actually do. Applies to both lists built off the attacks rows — the action
    pane (.action-btn) and the Attacks group in the rolls column (.roll-btn) —
    which must look the same or they disagree about what you're holding. The
@@ -2568,7 +2568,7 @@ th > .term { border-bottom-style: dotted; }
   from { opacity: 0; transform: translateX(-50%) scale(1.5); }
   to { opacity: 1; transform: translateX(-50%) scale(1); }
 }
-/* Someone who has asked not to be moved gets the colour without the motion. */
+/* Someone who has asked not to be moved gets the color without the motion. */
 @media (prefers-reduced-motion: reduce) {
   .dice-overlay.critfail { animation: none; }
   .dice-critfail-banner { animation: none; }
@@ -2610,7 +2610,7 @@ th > .term { border-bottom-style: dotted; }
   flex-wrap: wrap;
   margin-top: 8px;
 }
-/* Bounce share: sits in the same row rhythm as the colour pickers. */
+/* Bounce share: sits in the same row rhythm as the color pickers. */
 .dice-bounce-slider { flex: 1 1 90px; min-width: 80px; margin: 0; padding: 0; accent-color: var(--accent); }
 .dice-bounce-val { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
 /* Fixed so the row doesn't jump as the option name changes length either. */
@@ -2707,8 +2707,8 @@ th > .term { border-bottom-style: dotted; }
 }
 .turn-banner strong { font-size: 14px; }
 .turn-banner-sub { font-size: 10px; opacity: 0.8; }
-/* While someone is up the whole bar wears their colour, so the flanking
-   controls have to inherit the readable text colour rather than keep theirs. */
+/* While someone is up the whole bar wears their color, so the flanking
+   controls have to inherit the readable text color rather than keep theirs. */
 .topbar.in-combat button, .topbar.in-combat .link,
 .topbar.in-combat select, .topbar.in-combat .dim { color: inherit; }
 .topbar.in-combat .link { text-decoration: underline; }
@@ -2752,12 +2752,12 @@ th > .term { border-bottom-style: dotted; }
 }
 
 /* Edges and Hindrances. Solid, self-contained chips rather than washes of the
-   card colour: a green tint over a green token is no colour at all, and these
+   card color: a green tint over a green token is no color at all, and these
    have to stay green-means-good / red-means-bad on every card. */
 .nameplate-pills { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
 /* Small and muted: a character can carry a lot of these, and at full
    saturation a dozen of them shouted over the name. Still solid rather than a
-   tint of the card — a green wash over a green token is no colour at all —
+   tint of the card — a green wash over a green token is no color at all —
    just dialled well back, with the ink lifted off pure white to match. */
 .np-pill {
   display: inline-block; font-size: 9px; font-weight: 500; line-height: 1.5;
@@ -2862,7 +2862,7 @@ th > .term { border-bottom-style: dotted; }
 }
 .public-sheet-blurb { margin: 0 0 8px; white-space: pre-wrap; line-height: 1.5; }
 
-/* Sheet colour picker (token colour). */
+/* Sheet color picker (token color). */
 .sheet-field.color-field .color-row { display: flex; align-items: center; gap: 8px; }
 .sheet-field.color-field .dim { font-size: 11px; font-variant-numeric: tabular-nums; }
 .public-sheet-bio h4 { margin: 8px 0 2px; }
@@ -3014,7 +3014,7 @@ th > .term { border-bottom-style: dotted; }
 /* A grid, not a flex row: the tick boxes have to line up in one column no
    matter how long the names are, and a name that wraps must not drag its box
    out of that column. Every property the global `label` rule sets (block
-   display, a 12px bottom margin, the dim colour) is overridden here — that
+   display, a 12px bottom margin, the dim color) is overridden here — that
    rule is written for form fields stacked in a panel, not menu rows. */
 .counter-share-row {
   display: grid; grid-template-columns: 14px 1fr 6px;
@@ -3099,7 +3099,7 @@ th > .term { border-bottom-style: dotted; }
 
 /* Keyring / Key Manager — same clothes as the Benny chip, one shelf left. */
 .keyring-menu { position: fixed; right: 404px; bottom: 16px; z-index: 69; }
-/* The GM's clock, one shelf left of the keyring. Same chip, its own colour —
+/* The GM's clock, one shelf left of the keyring. Same chip, its own color —
    time is the DM's lever, not a player's. */
 .time-menu { position: fixed; right: 520px; bottom: 16px; z-index: 69; }
 .time-chip {

@@ -35,7 +35,7 @@ export function TokenInspector() {
   const tokenMap = useGameStore((s) => s.tokens);
   if (!token || !you || !campaign) return null;
   // A player gets this panel only for a token they control, and only to
-  // recolour it — the server enforces the same limit, this just avoids
+  // recolor it — the server enforces the same limit, this just avoids
   // showing controls that would be rejected.
   const mine = !!character && character.ownerUserId === you.userId;
   if (!isDm && !mine) return null;

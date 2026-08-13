@@ -88,13 +88,13 @@ function assetUrl(assetId: string): string | null {
   return a ? `/uploads/${a.id}.${a.ext}` : null;
 }
 
-/** A colour deliberately chosen on the character sheet, if it's a valid one. */
+/** A color deliberately chosen on the character sheet, if it's a valid one. */
 function sheetTokenColor(character?: { sheet: Record<string, unknown> }): string | undefined {
   const c = character?.sheet.tokenColor;
   return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : undefined;
 }
 
-/** The colour a member is shown in everywhere else, so a new token matches. */
+/** The color a member is shown in everywhere else, so a new token matches. */
 function colorForOwner(campaignId: string, userId: string): string {
   const m = campaigns.members(campaignId).find((x) => x.userId === userId);
   return m ? playerColorFor(m) : '#6c9bd2';
@@ -133,8 +133,8 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         const look = character ? tokenLookFor(character) : { size: 1, shape: 'circle' as TokenShape };
         return { size: payload.size ?? look.size, shape: payload.shape ?? look.shape };
       })(),
-      // A token starts in the colour its SHEET asks for; failing that, the
-      // colour of whoever will control it — the linked character's owner, or
+      // A token starts in the color its SHEET asks for; failing that, the
+      // color of whoever will control it — the linked character's owner, or
       // the DM placing it. One less thing to set by hand, and the map reads as
       // "whose is whose" straight away.
       color: payload.color
@@ -174,13 +174,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     const map = maps.byId(token.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown token.');
     if (d.role !== 'dm') {
-      // A player may recolour a token they control, and nothing else — colour
+      // A player may recolor a token they control, and nothing else — color
       // is theirs to pick, but size, vision and HP stay the DM's.
       const ch = token.characterId ? characters.byId(token.characterId) : undefined;
       const mine = !!ch && ch.ownerUserId === d.userId;
       const onlyColor = Object.keys(patch).length === 1 && typeof patch.color === 'string';
       if (!mine || !onlyColor) {
-        emitError(socket, mine ? 'You can only change that token’s colour.' : 'Only the DM can edit tokens.');
+        emitError(socket, mine ? 'You can only change that token’s color.' : 'Only the DM can edit tokens.');
         return;
       }
     }
@@ -202,7 +202,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         }
       }
     }
-    // Art and colour are ONE setting per character, wherever they're edited.
+    // Art and color are ONE setting per character, wherever they're edited.
     // Changing either on a token writes it back to the sheet (both the asset
     // id and the URL the sheet's image field renders) and repaints that
     // character's tokens on every other map, so no two copies can disagree.

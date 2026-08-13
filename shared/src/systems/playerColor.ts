@@ -12,7 +12,7 @@ export function defaultColorFor(userId: string): string {
 
 /** The color actually shown for a member: their custom pick, else the
  *  deterministic default. Single source of truth for the presence dot, chat
- *  name highlighting, the turn banner, and a new token's starting colour —
+ *  name highlighting, the turn banner, and a new token's starting color —
  *  which is why it lives in shared rather than the client. */
 export function playerColorFor(member: Pick<MemberInfo, 'userId' | 'playerColor'>): string {
   return member.playerColor ?? defaultColorFor(member.userId);
@@ -27,15 +27,15 @@ export function luminance(hex: string): number {
 }
 
 /**
- * The same colour, lifted until it can be seen as INK on a dark panel.
+ * The same color, lifted until it can be seen as INK on a dark panel.
  *
- * A token colour is chosen to read as a filled SHAPE against a lit map, where
+ * A token color is chosen to read as a filled SHAPE against a lit map, where
  * near-black is a perfectly good pick. As a glyph on dark chrome it vanishes,
  * so anything under the floor gets brightened.
  *
  * Brightened by scaling the channels up together, not by blending toward
  * white: a dark red scaled becomes a bright red, whereas a dark red mixed with
- * white becomes pink-grey — the hue is the whole point of showing the colour
+ * white becomes pink-grey — the hue is the whole point of showing the color
  * at all, and a white blend is what destroys it first.
  */
 export function inkOnDark(hex: string, floor = 0.16): string {
@@ -50,7 +50,7 @@ export function inkOnDark(hex: string, floor = 0.16): string {
   const scaled = rgb.map((c) => Math.min(255, c * (255 / Math.max(...rgb))));
   const out = toHex(scaled);
   if (luminance(out) >= floor) return out;
-  // A saturated colour whose brightest channel is still dim (a deep pure blue)
+  // A saturated color whose brightest channel is still dim (a deep pure blue)
   // can top out below the floor; lift the rest of the way with white.
   const mix = Math.min(0.6, (floor - luminance(out)) / floor);
   return toHex(scaled.map((c) => c + (255 - c) * mix));

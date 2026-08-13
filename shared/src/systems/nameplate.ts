@@ -13,8 +13,8 @@ import { rankForAdvances } from './swadeAdvancement.js';
  *
  * The picture is the TOKEN's art: the nameplate labels the piece on the map,
  * so it should show the same face — the token's own art, or the token image
- * set on the sheet, and only failing both the detail portrait. The colour is
- * simply the token's colour — one setting, not two that can disagree.
+ * set on the sheet, and only failing both the detail portrait. The color is
+ * simply the token's color — one setting, not two that can disagree.
  */
 export function nameplateFor(character: Character, tokenColor: string, tokenArtUrl: string | null): TokenNameplate {
   const sheet = character.sheet;

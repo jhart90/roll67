@@ -45,7 +45,7 @@ export interface MemberInfo {
    *  same way on every screen at the table. */
   diceBouncePct: number | null;
   /** How this member's aced dice celebrate. Null = the default. Rides with the
-   *  roller for the same reason the colours and the bounce do. */
+   *  roller for the same reason the colors and the bounce do. */
   diceAceStyle: AceStyle | null;
 }
 
@@ -418,7 +418,7 @@ export interface DieRoll {
    *  Rendered in raise green so it reads as earned, not part of the base. */
   raise?: boolean;
   /** A Wild Die — the second arm of SWADE's `best(trait!, 1d6!)`. Rendered in
-   *  the roller's own colour so the two arms are told apart by hue rather than
+   *  the roller's own color so the two arms are told apart by hue rather than
    *  by dimming the loser, which would spoil aces that have yet to be thrown. */
   wild?: boolean;
   /** Which arm of a `best(...)` this die belongs to. Lets the renderer work out
@@ -457,7 +457,7 @@ export interface SheetCard {
   /** The item's name — the card's title. */
   name: string;
   /** Chips in the order the card shows them, each with the tone that
-   *  colours it (see ChipTone in the sheet renderer). `title` is the hover
+   *  colors it (see ChipTone in the sheet renderer). `title` is the hover
    *  text — where a chip is the ANSWER, this is the working behind it. */
   chips: { text: string; tone: string; title?: string }[];
   /** Free-text lines below the chips. */
@@ -469,7 +469,7 @@ export interface SheetCard {
 
 /**
  * What the banner over the map says while this roll's dice are in the air:
- * what is being rolled, and a tone to colour it by. WHO is rolling comes from
+ * what is being rolled, and a tone to color it by. WHO is rolling comes from
  * the message itself — the character, or the account for a bare /r.
  *
  * Set by whichever handler knows what the roll MEANS. A roll that sets none
@@ -478,7 +478,23 @@ export interface SheetCard {
  */
 export type RollCalloutTone =
   | 'attack' | 'damage' | 'save' | 'trait' | 'recover' | 'fear' | 'benny' | 'initiative' | 'neutral';
-export interface RollCalloutInfo { what: string; tone?: RollCalloutTone }
+/**
+ * A character's own dice, as sent with the roll.
+ *
+ * It travels WITH the message rather than being looked up per client, for the
+ * same reason the bounce does: a player watching a DM's monster roll has never
+ * been shown that monster's sheet, and dice that looked one way on one screen
+ * and another way on the next would not be the same dice. Every slot is
+ * optional — an absent one means "whatever the roller normally throws".
+ */
+export interface DiceLook {
+  trait?: string;
+  wild?: string;
+  traitText?: string;
+  wildText?: string;
+  ace?: AceStyle;
+}
+export interface RollCalloutInfo { what: string; tone?: RollCalloutTone; look?: DiceLook }
 
 export interface ChatMessage {
   id: number;
@@ -488,6 +504,9 @@ export interface ChatMessage {
   /** Set when the message came from a character rather than the account:
    *  chat shows "Character (Player)". Null for plain talk and system lines. */
   fromCharacter?: string | null;
+  /** Which character, where the name alone would not say: two tokens can
+   *  carry the same name, and a character's own dice settings hang off this. */
+  characterId?: string | null;
   /** The action this message is about (a weapon, spell or power). Rendered as
    *  a hoverable term, so it stays out of . */
   actionName?: string | null;
@@ -552,7 +571,7 @@ export interface InitiativeEntry {
    *  their own sheets - so it rides along on the entry. Null for NPCs. */
   ownerUserId?: string | null;
   ownerName?: string | null;
-  /** The token's colour — what the turn banner wears, so a DM-run combatant
+  /** The token's color — what the turn banner wears, so a DM-run combatant
    *  gets its own identity rather than a default grey. */
   color?: string | null;
   /** SWADE card mode: draw order (earlier draw wins rank ties). */

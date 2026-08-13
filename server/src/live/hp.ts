@@ -34,7 +34,7 @@ function postStatusChange(io: Server, campaignId: string, statusLine: string, ca
  * What a token IS right now decides what it may do next, so it is the one
  * thing in the log nobody can afford to skim past — and a grey sentence in a
  * column of grey sentences is exactly what gets skimmed past. Everything that
- * changed lands on ONE card, in the condition's own colour, because being
+ * changed lands on ONE card, in the condition's own color, because being
  * Shaken and Prone and Distracted from the same blow is one event.
  */
 /**

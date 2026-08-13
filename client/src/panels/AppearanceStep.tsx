@@ -51,10 +51,10 @@ const SHAPES: Array<{ id: TokenShape; label: string }> = [
 ];
 
 /**
- * Two d6 glyphs showing faces 1 and 6, live in the colours currently picked —
+ * Two d6 glyphs showing faces 1 and 6, live in the colors currently picked —
  * so the pickers below have an immediate "this is what the table will see".
  * In SWADE the pair is the trait die and the Wild Die; elsewhere both wear
- * the single custom colour.
+ * the single custom color.
  */
 function DicePreview() {
   const you = useGameStore((s) => s.you);
@@ -164,7 +164,7 @@ export function AppearanceStep({ value, onChange }: {
         </>
       )}
       <p className="dim" style={{ fontSize: 11 }}>
-        Dice colours apply to every roll you make; you can change them any time from the 🎲 panel.
+        Dice colors apply to every roll you make; you can change them any time from the 🎲 panel.
       </p>
     </div>
   );

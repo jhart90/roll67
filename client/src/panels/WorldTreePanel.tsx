@@ -32,7 +32,7 @@ interface TreeNode {
   tokenCharacterId?: string | null;
   /** A player runs this one — light-blue silhouette rather than DM grey. */
   playerRun?: boolean;
-  /** The token colour this character/token wears on the map, when it has one.
+  /** The token color this character/token wears on the map, when it has one.
    *  Paints the silhouette, so the tree matches the pieces at a glance. */
   color?: string;
   /** For map nodes: a scene, and whether a details preview exists. */
@@ -81,9 +81,9 @@ function buildNodes(
   // token a second node would list everyone twice, once in the DM's folder
   // and once under the map.
   const tokenHome = new Map<string, { mapId: string; playerRun: boolean }>();
-  // The colour each character's piece actually wears. Read off the TOKEN, not
-  // the sheet: the sheet's colour field is blank for most PCs and the real
-  // colour is inherited from the player, which the server has already resolved
+  // The color each character's piece actually wears. Read off the TOKEN, not
+  // the sheet: the sheet's color field is blank for most PCs and the real
+  // color is inherited from the player, which the server has already resolved
   // onto the token. A character with pieces on several maps takes the first.
   const colorOfCharacter = new Map<string, string>();
   for (const t of Object.values(allTokens)) {
@@ -118,7 +118,7 @@ function buildNodes(
       playerRun: c.ownerUserId != null,
       tokenMapId: tokenHome.get(c.id)?.mapId,
       tokenCharacterId: c.id,
-      // The sheet's own colour field is the fallback when no piece of theirs
+      // The sheet's own color field is the fallback when no piece of theirs
       // is on the table yet; it is blank for most PCs, hence the `undefined`.
       color: colorOfCharacter.get(c.id) ?? (str(c.sheet, 'color', '') || undefined),
     });
@@ -620,9 +620,9 @@ export function WorldTreePanel() {
           </span>
           <span
             className={`wt-icon${node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? ' wt-tok-player' : ' wt-tok-dm') : ''}`}
-            // The silhouette wears the piece's own colour, so scanning the tree
+            // The silhouette wears the piece's own color, so scanning the tree
             // and scanning the map are the same act. Lifted off pure black
-            // first: a colour picked to read as a filled shape on a lit map can
+            // first: a color picked to read as a filled shape on a lit map can
             // be invisible as a glyph on dark chrome. Without one the class
             // above still says party-blue or DM-grey.
             style={node.color ? { color: inkOnDark(node.color) } : undefined}

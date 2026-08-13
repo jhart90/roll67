@@ -1,9 +1,9 @@
 /**
- * Per-viewer appearance: the UI theme, and the colours the map's geometry is
+ * Per-viewer appearance: the UI theme, and the colors the map's geometry is
  * drawn in.
  *
  * All of it is LOCAL. Two people at the same table can run different themes
- * and different wall colours without arguing, and none of it touches the
+ * and different wall colors without arguing, and none of it touches the
  * campaign — this is how you like to look at the game, not part of the game.
  * Stored in localStorage so it survives a reload, applied as CSS variables so
  * every existing rule picks it up without being rewritten.
@@ -62,7 +62,7 @@ export interface MapColors {
   doorOpenOpacity: number;
 }
 
-/** The colours the app shipped with, so "reset" has something to mean. */
+/** The colors the app shipped with, so "reset" has something to mean. */
 export const MAP_COLORS_DEFAULT: MapColors = {
   wall: '#d8574f',
   wallOpacity: 0.85,

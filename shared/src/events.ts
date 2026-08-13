@@ -1124,7 +1124,7 @@ export interface DirectoryPayload {
     /** The map this token stands on, so the tree can nest it there. */
     mapId?: string;
     characterId?: string | null;
-    /** True when a player runs this character — drives the silhouette colour
+    /** True when a player runs this character — drives the silhouette color
      *  (light blue for the party, grey for whatever the DM is running). */
     playerRun?: boolean;
   }>;
@@ -1151,7 +1151,7 @@ export interface MemberPresencePayload {
 }
 /** Set your own 3D-dice color ("#rrggbb", or null for the defaults). */
 export interface SetDiceColorPayload { color: string | null }
-/** SWADE dice roles, each with its own colour slot. */
+/** SWADE dice roles, each with its own color slot. */
 export type DiceRole = 'trait' | 'wild' | 'raise';
 /** Set one slot of your SWADE dice palette ("#rrggbb", or null for its default). */
 export interface SetDiceRoleColorPayload { role: DiceRole; color: string | null }

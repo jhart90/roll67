@@ -122,6 +122,9 @@ ensureColumn('users', 'dice_color', 'dice_color TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 // Chat shows "Character (Player)" for anything a character did.
 ensureColumn('chat_messages', 'from_character', 'from_character TEXT');
+// WHICH character, not just their name — two tokens can share one. The dice
+// overlay reads a character's own dice colors off this.
+ensureColumn('chat_messages', 'character_id', 'character_id TEXT');
 ensureColumn('chat_messages', 'action_name', 'action_name TEXT');
 ensureColumn('chat_messages', 'outcome_note', 'outcome_note TEXT');
 // A sheet card posted into the log, rendered as the card rather than a sentence.
@@ -129,7 +132,7 @@ ensureColumn('chat_messages', 'card_json', 'card_json TEXT');
 // The cast card a message belongs to, so hiding the card hides the whole
 // resolution — every roll, every impact — rather than one line of it.
 ensureColumn('chat_messages', 'thread_id', 'thread_id INTEGER');
-// SWADE colours dice by their role in the roll rather than by die size, so it
+// SWADE colors dice by their role in the roll rather than by die size, so it
 // gets its own three-slot palette. Null in any slot falls back to the default.
 ensureColumn('users', 'dice_trait_color', 'dice_trait_color TEXT');
 ensureColumn('users', 'dice_wild_color', 'dice_wild_color TEXT');

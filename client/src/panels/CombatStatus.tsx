@@ -73,9 +73,9 @@ export function CombatStatus({ character, editable }: { character: Character; ed
 
       <div className="cs-conditions">
         {list.map((c) => {
-          // An active condition wears its OWN colour, the same one the chat
+          // An active condition wears its OWN color, the same one the chat
           // log gives it: yellow rattled, blue-grey held, red dying. A row of
-          // identical accent-coloured buttons made the sheet say "something
+          // identical accent-colored buttons made the sheet say "something
           // is wrong" without saying what.
           const on = active.includes(c.id);
           const pair = CONDITION_COLORS[c.id];

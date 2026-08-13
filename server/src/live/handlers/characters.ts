@@ -174,7 +174,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     // assembled sheet — merged over the defaults, not replacing them, so any
     // field the wizard didn't touch still gets the system's normal default.
     if (payload.sheetPatch) Object.assign(sheet, payload.sheetPatch);
-    // A character's colour starts as their player's own colour — the same one
+    // A character's color starts as their player's own color — the same one
     // their pill and dice wear — unless the creator explicitly picked one.
     if (typeof sheet.tokenColor !== 'string' && owner) {
       const m = campaigns.members(d.campaignId).find((x) => x.userId === owner);
@@ -457,9 +457,9 @@ function applyCharacterPatch(
   const artId = typeof (patch as Record<string, unknown>).tokenImageAssetId === 'string'
     ? (patch as Record<string, string>).tokenImageAssetId
     : undefined;
-  // Token colour lives on the SHEET now (the old right-click picker is gone),
+  // Token color lives on the SHEET now (the old right-click picker is gone),
   // so picking one there repaints every one of this character's tokens — and
-  // with it their nameplate, which takes its colour from the token.
+  // with it their nameplate, which takes its color from the token.
   const rawColor = (patch as Record<string, unknown>).tokenColor;
   const color = typeof rawColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor : undefined;
   const touchedMaps = new Set<string>();

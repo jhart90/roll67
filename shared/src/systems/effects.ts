@@ -174,11 +174,11 @@ export const CONDITIONS: ConditionDef[] = [
 const CONDITION_MAP = new Map(CONDITIONS.map((c) => [c.id, c]));
 
 /**
- * The colour a condition is written in wherever it is named — the chat log,
+ * The color a condition is written in wherever it is named — the chat log,
  * chiefly, where "is now Shaken" should be findable at a glance in a wall of
  * text rather than read for.
  *
- * Two colours each, because the log is not one colour: `on` is for the dark
+ * Two colors each, because the log is not one color: `on` is for the dark
  * panel most messages sit on, `alt` for the lighter/tinted rows (whispers,
  * highlighted mentions, a light theme). Both are picked to clear 4.5:1
  * against their own background, which is why Blinded is not the near-black

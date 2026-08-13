@@ -6,7 +6,7 @@ import { mapPixelSize, useStage } from '../util/stage';
 
 /**
  * While a SWADE shooter is picking a target — or a thrower is placing a blast
- * — a ruler runs from their token to the cursor, coloured by the range band
+ * — a ruler runs from their token to the cursor, colored by the range band
  * it currently falls in, with the distance, the band, and the penalty at its
  * tip. The bands come from shared/systems/swadeRange.ts, the same function
  * the server uses to score the shot, so the ruler can never promise a

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ACE_STYLE_DEFAULT, DICE_BOUNCE_PCT_DEFAULT, swadeSnakeEyes, type AceStyle, type DieRoll } from 'shared';
+import { ACE_STYLE_DEFAULT, DICE_BOUNCE_PCT_DEFAULT, isAceStyle, swadeSnakeEyes, type AceStyle, type DiceLook, type DieRoll, type SheetData } from 'shared';
 import { diceAnimationFinished, overlayMounted, overlayUnmounted, useGameStore } from '../store/game';
 import { buildSims, drawFrame, simsSettleTime, DICE_ROLE_DEFAULTS, type DicePalette, type PlayBounds } from './dice3d';
 
@@ -126,24 +126,59 @@ export function playAceSound(style: AceStyle): void {
   audio.play().catch(() => undefined);
 }
 
+/** A character's dice overrides read straight off their sheet — the fallback
+ *  for rolls posted before the look started riding along with them. */
+function sheetLook(sheet: SheetData | undefined): DiceLook | null {
+  if (!sheet) return null;
+  const pick = (k: string) => (typeof sheet[k] === 'string' && (sheet[k] as string).trim() ? sheet[k] as string : undefined);
+  const look: DiceLook = {};
+  const trait = pick('diceTraitColor'); if (trait) look.trait = trait;
+  const wild = pick('diceWildColor'); if (wild) look.wild = wild;
+  const traitText = pick('diceTraitTextColor'); if (traitText) look.traitText = traitText;
+  const wildText = pick('diceWildTextColor'); if (wildText) look.wildText = wildText;
+  const ace = pick('diceAceStyle'); if (ace && isAceStyle(ace)) look.ace = ace;
+  return Object.keys(look).length > 0 ? look : null;
+}
+
 export function DiceOverlay() {
   const anim = useGameStore((s) => s.diceAnim);
   const ending = useGameStore((s) => s.diceAnimEnding);
   const members = useGameStore((s) => s.members);
+  const characters = useGameStore((s) => s.characters);
   const system = useGameStore((s) => s.campaign?.system);
   if (!anim) return null;
   const member = anim.byUserId ? members.find((m) => m.userId === anim.byUserId) : undefined;
+  /**
+   * The character's own look, where they have one.
+   *
+   * Somebody running four characters throws the same dice for all of them,
+   * and from the felt alone the table cannot tell whose roll is in the air.
+   * A sheet may say otherwise field by field — anything it leaves blank falls
+   * straight through to the roller's own settings, so an untouched sheet
+   * behaves exactly as it always did.
+   */
+  const look = anim.look
+    // Older messages predate the look riding along; fall back to the sheet,
+    // which every DM has and which is right for their own rolls.
+    ?? (anim.characterId ? sheetLook(characters.find((c) => c.id === anim.characterId)?.sheet) : null);
+  const own = (key: keyof NonNullable<typeof look>): string | null => {
+    const v = look?.[key];
+    return typeof v === 'string' && v.trim() ? v : null;
+  };
   const color = member?.diceColor ?? null;
   const textColor = member?.diceTextColor ?? null;
   // Only SWADE distinguishes trait / Wild Die / raise; every other system keeps
-  // the by-size colours and the single-colour override.
+  // the by-size colors and the single-color override.
   const palette: DicePalette | null = system === 'swade'
     ? {
-      trait: member?.diceTraitColor ?? DICE_ROLE_DEFAULTS.trait,
-      wild: member?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild,
+      trait: own('trait') ?? member?.diceTraitColor ?? DICE_ROLE_DEFAULTS.trait,
+      wild: own('wild') ?? member?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild,
       raise: member?.diceRaiseColor ?? DICE_ROLE_DEFAULTS.raise,
+      traitText: own('traitText') ?? member?.diceTextColor ?? null,
+      wildText: own('wildText') ?? member?.diceTextColor ?? null,
     }
     : null;
+  const aceStyle = look?.ace ?? member?.diceAceStyle ?? ACE_STYLE_DEFAULT;
   return (
     <DiceCanvas
       key={anim.id}
@@ -157,10 +192,10 @@ export function DiceOverlay() {
       palette={palette}
       ending={ending}
       critFail={system === 'swade' && swadeSnakeEyes(anim.dice)}
-      // The ROLLER's setting, not the watcher's — same as their dice colours,
+      // The ROLLER's setting, not the watcher's — same as their dice colors,
       // so a player's throw looks the same on every screen at the table.
       bouncePct={member?.diceBouncePct ?? DICE_BOUNCE_PCT_DEFAULT}
-      aceStyle={member?.diceAceStyle ?? ACE_STYLE_DEFAULT}
+      aceStyle={aceStyle}
     />
   );
 }

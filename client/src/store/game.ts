@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -267,7 +267,13 @@ interface GameState {
   /** Live 3D dice animation for the latest roll. */
   diceAnim: {
     id: number; dice: DieRoll[]; byName: string; byUserId: string | null; total: number; expression: string;
-    /** The banner over the map: who is rolling, what for, and its colour. */
+    /** Whose dice these are, when a character rolled them: their sheet may
+     *  override the roller's own colors and ace animation. */
+    characterId: string | null;
+    /** …and the overrides themselves, sent with the roll so every screen
+     *  throws the same dice — see DiceLook. */
+    look: DiceLook | null;
+    /** The banner over the map: who is rolling, what for, and its color. */
     who: string; what: string; tone: RollCalloutTone;
   } | null;
   /** True once the settled dice have had their sit time and may fade out. */
@@ -1257,7 +1263,9 @@ export function wireSocket(): void {
           dice: shown,
           anim: {
             id, dice: shown, byName: msg.fromName,
-            byUserId: msg.fromUserId, total: msg.roll.total, expression: msg.roll.expression,
+            byUserId: msg.fromUserId, characterId: msg.characterId ?? null,
+            look: msg.callout?.look ?? null,
+            total: msg.roll.total, expression: msg.roll.expression,
             // Whoever the dice belong to: the character if there is one, the
             // account otherwise — a bare /r is the player rolling, not a token.
             who: msg.fromCharacter || msg.fromName,

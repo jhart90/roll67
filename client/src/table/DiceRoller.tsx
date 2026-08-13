@@ -83,9 +83,9 @@ export function DiceTextColorPicker() {
 }
 
 /**
- * SWADE colours dice by their role in the roll — trait die, Wild Die, and the
+ * SWADE colors dice by their role in the roll — trait die, Wild Die, and the
  * bonus die a raise earns — so each gets its own slot. Shown only for SWADE;
- * every other system uses the single-colour picker above.
+ * every other system uses the single-color picker above.
  */
 const DICE_ROLES: Array<{ role: DiceRole; label: string; hint: string }> = [
   { role: 'trait', label: 'Trait', hint: 'Your skill or attribute die' },
@@ -121,7 +121,7 @@ export function SwadeDicePalettePicker() {
               type="color"
               className="dice-color-custom"
               value={current ?? DICE_ROLE_DEFAULTS[role]}
-              title={`Custom ${label.toLowerCase()} colour`}
+              title={`Custom ${label.toLowerCase()} color`}
               onChange={(e) => intents.setDiceRoleColor(role, e.target.value)}
             />
           </div>
@@ -166,16 +166,16 @@ const ACE_STYLE_LABELS: Record<AceStyle, string> = {
   flash: 'Flash — a golden halo and sparks (the classic)',
   explosion: 'Explosion — a shockwave ring and flying debris',
   flames: 'Flames — tongues of fire and drifting embers',
-  disco: 'Disco — sweeping coloured beams and glitter',
-  rainbow: 'Rainbow — a seven-colour arc encircling the die',
+  disco: 'Disco — sweeping colored beams and glitter',
+  rainbow: 'Rainbow — a seven-color arc encircling the die',
   smoke: 'Smoke — grey puffs billowing up and thinning out',
   water: 'Water — a splash crown, spreading ripples and falling droplets',
-  confetti: 'Confetti — a burst of coloured paper that flutters off the bottom of the screen',
+  confetti: 'Confetti — a burst of colored paper that flutters off the bottom of the screen',
 };
 
 /**
  * How YOUR aced dice celebrate. Saved to the account and sent with presence
- * like the colours and the bounce, so an ace looks the same on every screen at
+ * like the colors and the bounce, so an ace looks the same on every screen at
  * the table rather than however each watcher happens to like other people's.
  */
 export function DiceAceStylePicker() {

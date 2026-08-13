@@ -72,7 +72,7 @@ function evalNode(node: DiceNode, rng: RNG, allDice: DieRoll[]): EvalResult {
       arms.forEach((arm, armIdx) => {
         for (const die of arm.dice) {
           // Arms past the first are the Wild Die in SWADE's best(trait, wild).
-          // Tagging them lets the renderer tell the arms apart by colour; it
+          // Tagging them lets the renderer tell the arms apart by color; it
           // must not lean on `kept`, which is only known once every arm has
           // finished acing and would give away rolls still to come.
           const tagged = { ...die, arm: armIdx, ...(armIdx > 0 ? { wild: true } : {}) };

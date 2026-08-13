@@ -290,7 +290,7 @@ function targetOrientation(geom: DieGeometry, value: number): Quat {
 // ---------- colors ----------
 
 // Bold, tropical-bright per-size palette — dice should read from across the
-// table, not blend into the felt. Pip colour stays luminance-picked, so the
+// table, not blend into the felt. Pip color stays luminance-picked, so the
 // hot yellows get dark ink and the deep blues get white.
 export const DEFAULT_DIE_COLORS: Record<number, string> = {
   2: '#ffc93c', 4: '#ff3d57', 6: '#0aa8ff', 8: '#2fe04a',
@@ -308,7 +308,7 @@ function shade(rgb: [number, number, number], k: number): string {
   return `rgb(${Math.round(rgb[0] * k)}, ${Math.round(rgb[1] * k)}, ${Math.round(rgb[2] * k)})`;
 }
 
-/** Blend one colour into another, `t` of the way across. */
+/** Blend one color into another, `t` of the way across. */
 function mixRgb(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
@@ -329,7 +329,7 @@ export interface DieSim {
   critRgb?: [number, number, number];
   /** ms at which that bleed starts. Absent for every die that isn't guilty. */
   critAt?: number;
-  /** Pip colour to switch to once it has bled, kept legible against the red. */
+  /** Pip color to switch to once it has bled, kept legible against the red. */
   critTextColor?: string;
   size: number;
   start: { x: number; y: number };
@@ -393,7 +393,7 @@ export function aceEffectMs(style: AceStyle): number {
 /** Stagger between dice thrown in the same wave. */
 const WAVE_STAGGER_MS = 110;
 /**
- * SWADE colours dice by their role in the roll instead of by die size, because
+ * SWADE colors dice by their role in the roll instead of by die size, because
  * the arms of a `best(trait!, wild!)` have to be told apart while they are
  * still bouncing. Defaults below; each slot is overridable per player.
  * Trait black is a shade off pure black so bevels and shadow still read.
@@ -402,7 +402,16 @@ const WAVE_STAGGER_MS = 110;
  *  identical at every table, so it is not player-customisable. */
 export const RAISE_GREEN = '#0de323'; // rgb(13,227,35)
 export const DICE_ROLE_DEFAULTS = { trait: '#ffffff', wild: '#8b5cf6', raise: RAISE_GREEN };
-export type DicePalette = { trait: string; wild: string; raise: string };
+/**
+ * SWADE tells its dice apart by their ROLE in the roll, not by size. The two
+ * text slots are optional: a die whose pip color nobody has chosen picks
+ * whichever of black or white reads against the face it is painted on, which
+ * is nearly always the right answer and always a legible one.
+ */
+export type DicePalette = {
+  trait: string; wild: string; raise: string;
+  traitText?: string | null; wildText?: string | null;
+};
 
 /** How long the grey-out takes, and how far down it goes. */
 const FADE_MS = 400;
@@ -496,10 +505,10 @@ function scatterTargets(n: number, w: number, h: number): Array<{ x: number; y: 
   return placed;
 }
 
-/** The two 1s of a Critical Failure wear this instead of their role colour —
+/** The two 1s of a Critical Failure wear this instead of their role color —
  *  a deep arterial red no player palette can be mistaken for. */
 export const CRIT_FAIL_DIE_COLOR = '#8d0f14';
-/** How long a guilty die takes to bleed from its own colour into that red. */
+/** How long a guilty die takes to bleed from its own color into that red. */
 const CRIT_BLEED_MS = 260;
 
 /**
@@ -580,14 +589,14 @@ export function buildSims(
     };
     const geom = geometryFor(die.sides);
     // With a role palette (SWADE) dice are told apart by hue: raise, Wild Die,
-    // and trait each get their own colour. Never by dimming the losing arm —
+    // and trait each get their own color. Never by dimming the losing arm —
     // `kept` is only known once every arm has finished acing, so fading it
     // would announce the result of dice that have not been thrown yet.
-    // Without a palette, every other system keeps the by-size colours and the
-    // player's own single-colour override.
+    // Without a palette, every other system keeps the by-size colors and the
+    // player's own single-color override.
     // On a Critical Failure the guilty dice — the 1s themselves — go blood
     // red, so the reason is legible on the felt rather than only in the
-    // banner. Every other die in the roll keeps its own colour.
+    // banner. Every other die in the roll keeps its own color.
     //
     // The red waits for the LAST die in the roll to land, for the same reason
     // the losing arm's grey-out waits: a die that flies in already red has
@@ -598,7 +607,7 @@ export function buildSims(
     const rgb = hexToRgb(palette
       ? (die.raise ? palette.raise : die.wild ? palette.wild : palette.trait)
       : (customColor ?? DEFAULT_DIE_COLORS[die.sides] ?? '#9aa1b3'));
-    // Pips have to stay legible against whatever colour the player picked.
+    // Pips have to stay legible against whatever color the player picked.
     const contrasting = luminance(rgb) > 0.45 ? '#10131a' : '#f4f6fb';
     const size = die.sides === 20 ? 44 : die.sides === 2 ? 38 : 41;
     // Every die takes its own chance, so a handful scatters off different
@@ -609,7 +618,9 @@ export function buildSims(
     return {
       die, geom, rgb,
       targetFace: geom.faces[targetFaceIndex(geom, die.value)],
-      textColor: die.raise ? '#ffffff' : palette ? contrasting : (customTextColor ?? contrasting),
+      textColor: die.raise ? '#ffffff'
+        : palette ? ((die.wild ? palette.wildText : palette.traitText) || contrasting)
+          : (customTextColor ?? contrasting),
       ...(damning ? { critRgb: hexToRgb(CRIT_FAIL_DIE_COLOR), critAt: allLanded, critTextColor: '#f4f6fb' } : {}),
       size,
       start, target,
@@ -864,7 +875,7 @@ export function drawAceEffect(
 
   if (style === 'flames') {
     // The die is engulfed, not merely singed. Three shells of fire radiating
-    // in EVERY direction, each with its own colour, reach, tongue count and
+    // in EVERY direction, each with its own color, reach, tongue count and
     // clock — and each beating a third of a cycle behind the one outside it,
     // so they rise and fall in succession rather than pulsing as one blob.
     //
@@ -873,7 +884,7 @@ export function drawAceEffect(
     const prevOp = ctx.globalCompositeOperation;
     ctx.globalCompositeOperation = 'lighter';
     const LAYERS = [
-      // reach  tongues  width  flicker  spin   root colour        tip colour
+      // reach  tongues  width  flicker  spin   root color        tip color
       { len: 2.20, n: 10, w: 0.34, flick: 5.0, spin: 1.30, hot: '255, 78, 8', tip: '255, 146, 34' },
       { len: 1.55, n: 8, w: 0.42, flick: 6.8, spin: -1.05, hot: '255, 142, 20', tip: '255, 210, 92' },
       { len: 0.95, n: 6, w: 0.54, flick: 8.6, spin: 1.75, hot: '255, 220, 130', tip: '255, 252, 228' },
@@ -934,7 +945,7 @@ export function drawAceEffect(
   }
 
   if (style === 'disco') {
-    // The die IS the mirror ball: a slow turn throwing dots of coloured light
+    // The die IS the mirror ball: a slow turn throwing dots of colored light
     // out across the room around it. The sparkles carry this one — the beams
     // are just the haze they travel through — so there are a lot of them, and
     // the whole rig turns lazily rather than spinning.

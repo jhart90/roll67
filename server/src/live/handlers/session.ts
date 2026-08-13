@@ -218,7 +218,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     broadcastPresence(io, d.campaignId);
   }, 'SET_DICE_TEXT_COLOR'));
 
-  // SWADE colours dice by their role in the roll (trait / Wild Die / raise
+  // SWADE colors dice by their role in the roll (trait / Wild Die / raise
   // bonus) rather than by die size, so each role gets its own slot.
   socket.on(C2S.SET_DICE_ROLE_COLOR, safe(socket, ({ role, color }: SetDiceRoleColorPayload) => {
     const d = sdata(socket);
@@ -243,7 +243,7 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
   }, 'SET_DICE_BOUNCE'));
 
   // How YOUR aced dice celebrate. Stored on the account and sent with presence
-  // for the same reason the colours and the bounce share are: an ace should
+  // for the same reason the colors and the bounce share are: an ace should
   // look the same on every screen at the table, not however each watcher
   // happens to like other people's dice.
   socket.on(C2S.SET_DICE_ACE_STYLE, safe(socket, ({ style }: SetDiceAceStylePayload) => {

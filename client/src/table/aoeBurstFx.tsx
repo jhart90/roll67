@@ -72,7 +72,7 @@ export function AoeBurst({ burst, grid }: { burst: AoeBurstState; grid: GridConf
     // A grenade, a fireball or a smoke bomb is drawn with the dice's own Ace
     // animation, scaled to the template — the same function, so the two can
     // never drift apart. Anything with no matching Ace style keeps the plain
-    // coloured shockwave.
+    // colored shockwave.
     const ace = aceStyleForBurst(burst);
     return (
       <>

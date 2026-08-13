@@ -488,34 +488,61 @@ function linkedAttrCell(row: SheetData, sheet: SheetData): { text: string; title
 // ---------- Tab 1: Core ----------
 
 const identityFields: FieldDef[] = [
-  { id: 'concept', label: 'Concept', type: 'text', width: 'third', maxLength: CONCEPT_MAX_LEN },
+  // The concept is a sentence, not a word — "Famed pirate of the East Indies,
+  // hunted by the Company" does not fit in a third of a row, and truncating
+  // the one field that says who this person IS reads as an afterthought.
+  { id: 'concept', label: 'Concept', type: 'text', width: 'full', maxLength: CONCEPT_MAX_LEN },
   { id: 'ancestry', label: 'Ancestry', type: 'text', width: 'third', suggestions: ANCESTRIES_SWADE },
   { id: 'rank', label: 'Rank', type: 'select', width: 'third', options: RANKS_SWADE, default: 'Novice' },
+  // Advances sit beside Rank because Rank IS advances: it is the number that
+  // moves the word next to it from Novice to Legendary.
   { id: 'advances', label: 'Advances', type: 'number', width: 'sixth', default: 0 },
   { id: 'wildCard', label: 'Wild Card', type: 'checkbox', width: 'sixth', default: true },
+];
+
+/**
+ * Special Abilities: what this creature IS, as opposed to what it can do.
+ *
+ * Every switch here turns a general rule off for one creature — Hardy ignores
+ * a second Shaken, a Construct feels no Called Shot, Fearless cannot be
+ * intimidated — and the three pick-lists at the bottom answer the same
+ * question about damage. They belong together and at the END of the tab: a
+ * player reads their attributes and skills every session and touches none of
+ * this, while the DM building a troll touches nothing else.
+ */
+const specialAbilityFields: FieldDef[] = [
   // Size is the single number the whole Size Table hangs off: it IS the
   // Toughness bonus, it decides the Scale band that modifies attacks either
   // way, and past Size 4 it adds Wounds. 0 is an adult human.
   { id: 'size', label: 'Size', type: 'number', width: 'sixth', default: 0 },
   // Blank/0 = derive from Wild Card status and Size. Set it to override.
   { id: 'maxWoundsOverride', label: 'Wound cap', type: 'number', width: 'sixth', default: 0 },
-  // The bestiary's three "is it that kind of thing" switches. Each one turns
-  // off a rule the engine otherwise applies to everybody.
+  // Elite Extras: one Wound before they drop, or two. Wild Cards cannot take
+  // it — they already have three.
+  { id: 'resilient', label: 'Resilient', type: 'select', width: 'third', default: '', options: ['', 'resilient', 'veryResilient'], optionLabels: { '': 'no', resilient: 'Resilient (+1 Wound)', veryResilient: 'Very Resilient (+2)' } },
+  // Only Fast is offered. Slow Regeneration is a natural healing roll once a
+  // day, and this app has no day clock to hang one on — a switch that never
+  // fires is worse than a line in the DM's notes, which is where it lives.
+  { id: 'regeneration', label: 'Regeneration', type: 'select', width: 'third', default: '', options: ['', 'fast'], optionLabels: { '': 'none', fast: 'Fast (Vigor each turn)' } },
+  // The bestiary's "is it that kind of thing" switches. Each one turns off a
+  // rule the engine otherwise applies to everybody.
   { id: 'hardy', label: 'Hardy', type: 'checkbox', width: 'sixth', default: false },
   { id: 'construct', label: 'Construct', type: 'checkbox', width: 'sixth', default: false },
   { id: 'undead', label: 'Undead', type: 'checkbox', width: 'sixth', default: false },
-  // Elite Extras: one Wound before they drop, or two. Wild Cards cannot take
-  // it — they already have three.
-  { id: 'resilient', label: 'Resilient', type: 'select', width: 'sixth', default: '', options: ['', 'resilient', 'veryResilient'], optionLabels: { '': 'no', resilient: 'Resilient (+1 Wound)', veryResilient: 'Very Resilient (+2)' } },
   { id: 'invulnerable', label: 'Invulnerable', type: 'checkbox', width: 'sixth', default: false },
   // Gargantuan things have it automatically; the box is for the armoured
   // thing that isn't Gargantuan, like a tank.
   { id: 'heavyArmor', label: 'Heavy Armor', type: 'checkbox', width: 'sixth', default: false },
   { id: 'fearless', label: 'Fearless', type: 'checkbox', width: 'sixth', default: false },
-  // Only Fast is offered. Slow Regeneration is a natural healing roll once a
-  // day, and this app has no day clock to hang one on — a switch that never
-  // fires is worse than a line in the DM's notes, which is where it lives.
-  { id: 'regeneration', label: 'Regeneration', type: 'select', width: 'sixth', default: '', options: ['', 'fast'], optionLabels: { '': 'none', fast: 'Fast (Vigor each turn)' } },
+  // The bestiary's three defence lines, under the book's own names. Each is a
+  // pick-list rather than free text: a typo used to mean a creature quietly
+  // resisted nothing, since these are matched against an attack's damage type
+  // and only an exact match counts.
+  { id: 'resist', label: 'Environmental Resistance', type: 'multiselect', width: 'full', default: '', options: [...ENVIRONMENTAL_TYPES] },
+  { id: 'vulnerable', label: 'Environmental Weakness', type: 'multiselect', width: 'full', default: '', options: [...ENVIRONMENTAL_TYPES] },
+  // Immunity is not limited to the environmental list: a creature can be
+  // immune to a kind of attack as well as to a substance.
+  { id: 'immune', label: 'Immunity', type: 'multiselect', width: 'full', default: '', options: [...DAMAGE_TYPES] },
 ];
 
 const attributeFields: FieldDef[] = ATTRIBUTES_SWADE.map((a) => ({
@@ -529,15 +556,6 @@ const combatFields: FieldDef[] = [
   { id: 'fatigue', label: 'Fatigue (0–2)', type: 'number', width: 'sixth', default: 0 },
   { id: 'pace', label: 'Pace', type: 'number', width: 'sixth', default: 6 },
   { id: 'runningDie', label: 'Running die', type: 'select', width: 'sixth', options: TRAIT_DICE, default: 'd6' },
-  // The bestiary's three defence lines, under the book's own names. Each is a
-  // pick-list rather than free text: a typo used to mean a creature quietly
-  // resisted nothing, since these are matched against an attack's damage type
-  // and only an exact match counts.
-  { id: 'resist', label: 'Environmental Resistance', type: 'multiselect', width: 'full', default: '', options: [...ENVIRONMENTAL_TYPES] },
-  { id: 'vulnerable', label: 'Environmental Weakness', type: 'multiselect', width: 'full', default: '', options: [...ENVIRONMENTAL_TYPES] },
-  // Immunity is not limited to the environmental list: a creature can be
-  // immune to a kind of attack as well as to a substance.
-  { id: 'immune', label: 'Immunity', type: 'multiselect', width: 'full', default: '', options: [...DAMAGE_TYPES] },
 ];
 
 const sensesFields: FieldDef[] = [
@@ -584,6 +602,27 @@ const coreTab: SheetTab = {
       ],
     },
     {
+      // Last on the tab on purpose: a player reads their attributes and skills
+      // every session and touches none of this, while the DM building a troll
+      // touches nothing else.
+      kind: 'fields', id: 'specialAbilities', title: 'Special Abilities', fields: specialAbilityFields,
+    },
+  ],
+};
+
+// ---------- Tab 2: Traits, Edges & Hindrances ----------
+
+/**
+ * Everything a character HAS as opposed to what they can roll. All three
+ * lists carry the same live modifier columns, so a taken Edge actually moves
+ * the sheet rather than sitting there as a reminder — and all three had been
+ * pushing the Core tab three screens long between them.
+ */
+const traitsTab: SheetTab = {
+  id: 'traits',
+  title: 'Traits, Edges & Hindrances',
+  sections: [
+    {
       // Racial abilities from an ancestry live here as first-class traits
       // with the same live modifier columns as Edges — never disguised as
       // gear or armor rows.
@@ -629,7 +668,7 @@ const coreTab: SheetTab = {
   ],
 };
 
-// ---------- Tab 2: Gear & Combat ----------
+// ---------- Tab 3: Gear & Combat ----------
 
 const gearTab: SheetTab = {
   id: 'gear',
@@ -823,7 +862,7 @@ const vehicleCoreTab: SheetTab = {
 export const swade: SystemSchema = {
   id: 'swade',
   name: 'Savage Worlds (SWADE)',
-  tabs: [coreTab, gearTab, powersTab],
+  tabs: [coreTab, traitsTab, gearTab, powersTab],
   vehicleTabs: [vehicleCoreTab],
 
   defaultSheet(): SheetData {

@@ -206,14 +206,14 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled {
    them lines up down the panel. The three labels that deliberately hide their
    input to draw a control of their own are left alone — they are already a
    row, and forcing this one on them would break their layout. */
-label:has(> input[type="checkbox"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row),
-label:has(> input[type="radio"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row) {
+label:has(> input[type="checkbox"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row):not(.checkbox),
+label:has(> input[type="radio"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row):not(.checkbox) {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-label:has(> input[type="checkbox"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row) > input,
-label:has(> input[type="radio"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row) > input {
+label:has(> input[type="checkbox"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row):not(.checkbox) > input,
+label:has(> input[type="radio"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row):not(.checkbox) > input {
   order: 99;
   margin-left: auto;
 }
@@ -1358,9 +1358,14 @@ button.link:hover { text-decoration: underline; }
 }
 .sheet-name:hover, .sheet-name:focus { border-color: var(--border); background: var(--panel-2); }
 
-.sheet-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 12px; }
+/* Six tabs, one of them a sentence long — the row scrolls sideways rather
+   than squeezing every title until none of them is readable. */
+.sheet-tabs {
+  display: flex; border-bottom: 1px solid var(--border); padding: 0 12px;
+  overflow-x: auto; scrollbar-width: thin;
+}
 .sheet-tabs button {
-  background: none; border: none; border-radius: 0;
+  background: none; border: none; border-radius: 0; flex: none; white-space: nowrap;
   padding: 8px 14px; color: var(--text-dim); font-size: 13px;
 }
 .sheet-tabs button.active { color: var(--text); border-bottom: 2px solid var(--accent); }
@@ -1384,7 +1389,15 @@ button.link:hover { text-decoration: underline; }
 .sheet-field.w-third { width: calc(33.3% - 6px); }
 .sheet-field.w-sixth { width: calc(16.6% - 7px); }
 .sheet-field input, .sheet-field select { margin: 0; padding: 6px 8px; }
-.sheet-field.checkbox { flex-direction: row; align-items: center; gap: 6px; padding-top: 14px; }
+/* A sheet flag ("Hardy", "Fearless") is a sixth of a row wide, so its box
+   stays beside the word rather than being flung to the far edge of the column
+   the way a full-width row's box is. The box itself is the app's own — see the
+   checkbox reset at the top of this file. */
+.sheet-field.checkbox {
+  flex-direction: row; align-items: center; gap: 7px;
+  padding-top: 14px; cursor: pointer; color: var(--text);
+}
+.sheet-field.checkbox:hover input[type="checkbox"] { border-color: var(--accent); }
 
 /* Multi-select: what has been picked reads as chips, and the dropdown beside
    them offers only what is left, so the control shrinks as it fills up. */

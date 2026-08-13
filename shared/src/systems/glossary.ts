@@ -69,7 +69,8 @@ const SWADE_ANCESTRIES: Record<string, string> = {
 
 const SWADE_CONCEPTS: Record<string, string> = {
   Size: 'How big it is, and the whole Size Table in one number. Size IS the Toughness bonus. It also sets the Scale band — Tiny −6, Very Small −4, Small −2, Normal 0, Large +2, Huge +4, Gargantuan +6 — and when two different Scales fight, the smaller adds the difference to its attacks and the larger subtracts it. Large and up carry extra Wounds. 0 is an adult human.',
-  'Wound cap': 'How many Wounds this creature carries before it is Incapacitated. Blank (0) derives it: three for a Wild Card, none for an Extra — who drops at the first Wound — plus Size (Large +1, Huge +2, Gargantuan +3). Set a number to override that outright, for a boss who should simply take more punishment than its Size says.',
+  'Wound cap': 'How many Wounds this creature carries before it is Incapacitated. The greyed number in the box is what it works out to on its own: three for a Wild Card, none for an Extra — who drops at the first Wound — plus Size (Large +1, Huge +2, Gargantuan +3). Type over it to override that outright, for a boss who should simply take more punishment than its Size says; clear the box to hand it back.',
+  Scale: 'The band this creature’s Size falls in, and what that is worth when the two sides of a fight are different sizes: the smaller adds the difference to its attacks, the larger subtracts it. Tiny −6, Very Small −4, Small −2, Normal 0, Large +2, Huge +4, Gargantuan +6.',
   Cover: 'Cover this character has that the MAP cannot see — furniture, a crowd, a raised shield. Light −2, Medium −4, Heavy −6, Near Total −8, applied to melee and ranged attacks against them. The map keeps working out its own cover from walls; an attack uses whichever of the two protects the target more, so claiming light here never strips away medium cover the map can see.',
   'Wild Card': 'A hero or major character: rolls a d6 Wild Die alongside every Trait roll (keep the better), takes three Wounds before going down, and holds Bennies.',
   'Wild Die': 'The extra d6 Wild Cards roll with every Trait roll — keep the higher of the two dice. Both dice can ace (explode).',
@@ -223,7 +224,7 @@ const SWADE_SHEET: Record<string, string> = {
   '…of which Armor': 'The plated share of the Toughness beside it — the (37) in an Abrams’ 57 (37). A Crew critical hit subtracts this before the remainder reaches whoever is inside.',
   Crew: 'Hands needed to run it. Crew plus Passengers is how many riders its token seats.',
   Passengers: 'Seats beyond the crew.',
-  'Wreck cap': 'Wounds before it is Wrecked: 3, plus what its Size band grants (Large 4, Huge 5, Gargantuan 6). Blank derives it; set it to override.',
+  'Wreck cap': 'Wounds before it is Wrecked: 3, plus what its Size band grants (Large 4, Huge 5, Gargantuan 6). The greyed number in the box is what it works out to on its own; type over it to override, or clear the box to hand it back.',
   'Guidance hits': 'Guidance/Traction critical hits taken — each is −1 Handling.',
   'Locomotion hits': 'Locomotion critical hits taken — each is −10% of base Top Speed.',
   Features: 'The vehicle’s notes off the book page: Tracked, Hover, Night Vision and so on. Descriptive here; Heavy Armor is the checkbox beside it, which is mechanical.',

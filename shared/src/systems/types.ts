@@ -35,6 +35,18 @@ export interface FieldDef {
    *  Used where something downstream has a fixed amount of room for the value
    *  (see CONCEPT_MAX_LEN and the nameplate). */
   maxLength?: number;
+  /**
+   * Where this field's derived value goes.
+   *
+   * The default is a badge beside the label — good for a note about what a
+   * number MEANS. But where the derived value is what the field would hold if
+   * nobody touched it, a badge is the wrong shape: it wraps onto its own line,
+   * shoves the input out of step with its neighbours, and still leaves the box
+   * looking empty. 'placeholder' puts the worked-out value INSIDE the empty
+   * box instead, where it reads as "this is what you have unless you say
+   * otherwise" — and typing over it is how you say otherwise.
+   */
+  derivedAs?: 'badge' | 'placeholder';
 }
 
 export interface FieldsSection {

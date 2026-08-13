@@ -46,7 +46,12 @@ function FieldInput({
   inheritedColor?: string;
 }) {
   const value = sheet[field.id];
-  const derivedBadge = derived[field.id] !== undefined ? String(derived[field.id]) : null;
+  const derivedText = derived[field.id] !== undefined ? String(derived[field.id]) : null;
+  // A derived value shown INSIDE the empty box rather than on a badge beside
+  // the label — see FieldDef.derivedAs. It is what the field holds until
+  // somebody types over it, so that is where it belongs.
+  const derivedPlaceholder = field.derivedAs === 'placeholder' ? derivedText : null;
+  const derivedBadge = field.derivedAs === 'placeholder' ? null : derivedText;
 
   if (field.type === 'image') {
     const url = typeof value === 'string' ? value : '';
@@ -179,7 +184,10 @@ function FieldInput({
       <input
         type={field.type === 'number' ? 'number' : 'text'}
         key={`${field.id}-${String(value)}`}
-        defaultValue={value === undefined || value === null ? '' : String(value)}
+        // A field standing at its derived value shows nothing of its own, so
+        // the placeholder can be read: 0 in an override box means "not set".
+        defaultValue={value === undefined || value === null || (derivedPlaceholder && value === 0) ? '' : String(value)}
+        placeholder={derivedPlaceholder ?? undefined}
         readOnly={readOnly}
         maxLength={field.type === 'number' ? undefined : field.maxLength}
         list={listId}

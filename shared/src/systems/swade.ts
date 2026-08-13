@@ -516,7 +516,7 @@ const specialAbilityFields: FieldDef[] = [
   // way, and past Size 4 it adds Wounds. 0 is an adult human.
   { id: 'size', label: 'Size', type: 'number', width: 'sixth', default: 0 },
   // Blank/0 = derive from Wild Card status and Size. Set it to override.
-  { id: 'maxWoundsOverride', label: 'Wound cap', type: 'number', width: 'sixth', default: 0 },
+  { id: 'maxWoundsOverride', label: 'Wound cap', type: 'number', width: 'sixth', default: 0, derivedAs: 'placeholder' },
   // Elite Extras: one Wound before they drop, or two. Wild Cards cannot take
   // it — they already have three.
   { id: 'resilient', label: 'Resilient', type: 'select', width: 'third', default: '', options: ['', 'resilient', 'veryResilient'], optionLabels: { '': 'no', resilient: 'Resilient (+1 Wound)', veryResilient: 'Very Resilient (+2)' } },
@@ -578,6 +578,7 @@ const coreTab: SheetTab = {
       kind: 'derived', id: 'derivedStats', title: 'Derived (TN 4; attacks target Parry)',
       items: [
         { key: 'parry', label: 'Parry' },
+        { key: 'scaleBand', label: 'Scale' },
         { key: 'toughness', label: 'Toughness (incl. armor)' },
         { key: 'toughnessRanged', label: 'Toughness vs ranged' },
         { key: 'pace', label: 'Pace' },
@@ -835,7 +836,7 @@ const vehicleCoreTab: SheetTab = {
         { id: 'crew', label: 'Crew', type: 'number', width: 'sixth', default: 1 },
         { id: 'passengers', label: 'Passengers', type: 'number', width: 'sixth', default: 0 },
         { id: 'wounds', label: 'Wounds', type: 'number', width: 'sixth', default: 0 },
-        { id: 'maxWoundsOverride', label: 'Wreck cap', type: 'number', width: 'sixth', default: 0 },
+        { id: 'maxWoundsOverride', label: 'Wreck cap', type: 'number', width: 'sixth', default: 0, derivedAs: 'placeholder' },
         { id: 'guidanceHits', label: 'Guidance hits', type: 'number', width: 'sixth', default: 0 },
         { id: 'locomotionHits', label: 'Locomotion hits', type: 'number', width: 'sixth', default: 0 },
         { id: 'vehicleFeatures', label: 'Features', type: 'multiselect', width: 'full', default: '', options: [
@@ -891,6 +892,7 @@ export const swade: SystemSchema = {
       out.vehicleTopSpeedNow = `${vehicleTopSpeed(sheet)} mph`;
       out.vehicleSeats = vehicleSeats(sheet);
       out.vehicleWreck = `${vehicleWoundCap(sheet)} Wounds`;
+      out.maxWoundsOverride = vehicleWoundCap(sheet);
       out.vehicleToughness = `${num(sheet, 'vehicleToughness', 8)} (${num(sheet, 'vehicleArmor', 0)})`;
       return out;
     }
@@ -907,12 +909,17 @@ export const swade: SystemSchema = {
     // Everything the Size Table gives this creature, on the Size field.
     const size = num(sheet, 'size', 0);
     const band = scaleBand(size);
-    out.size = `${band.label} · Scale ${band.scale >= 0 ? '+' : '−'}${Math.abs(band.scale)}`
-      + (band.extraWounds ? ` · +${band.extraWounds} Wound${band.extraWounds === 1 ? '' : 's'}` : '');
-    out.maxWoundsOverride = `carries ${swadeWoundCap({
+    // What the Size number MEANS reads in the Derived list with the rest of
+    // the worked-out numbers. As a badge on the field itself it wrapped onto
+    // its own line and shoved the input out of step with every neighbour.
+    out.scaleBand = `${band.label} ${band.scale >= 0 ? '+' : '−'}${Math.abs(band.scale)}`;
+    // The cap this creature has unless somebody overrides it — shown INSIDE
+    // the empty override box (see FieldDef.derivedAs), so the field says what
+    // it holds and typing over it is how you change it.
+    out.maxWoundsOverride = swadeWoundCap({
       wildCard: sheet.wildCard !== false, size, override: num(sheet, 'maxWoundsOverride', 0),
       resilient: str(sheet, 'resilient', ''),
-    })} Wound(s)`;
+    });
     // Only when there IS cover: a badge reading "none" is noise on every
     // sheet in the campaign for the sake of the rare one that is behind a bar.
     const cov = str(sheet, 'cover', 'none');

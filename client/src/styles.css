@@ -147,6 +147,77 @@ input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
 input[type="color"]::-webkit-color-swatch { border: none; border-radius: 3px; }
 input[type="color"]::-moz-color-swatch { border: none; border-radius: 3px; }
 
+/* A checkbox is a BOX, and the blanket rule above ruined it the same way it
+   ruined the colour picker: display:block plus width:100% turned every tick
+   box into a full-width bar sitting on its own line ABOVE the words it was
+   meant to tick, drawn in whatever the operating system felt like. Reset it
+   once, here, and draw our own — a small rounded square that lights up in the
+   accent colour, matching the hand-built ones the sheet already uses. */
+input[type="checkbox"], input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-block;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:hover, input[type="radio"]:hover { border-color: var(--accent); }
+input[type="checkbox"]:checked, input[type="radio"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+/* The tick: two borders of a rotated rectangle, the same trick .sc-box uses. */
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 1px;
+  width: 4px; height: 8px;
+  border: solid #0d1117;
+  border-width: 0 2px 2px 0;
+  transform: rotate(42deg);
+}
+input[type="radio"]:checked::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #0d1117;
+}
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+input[type="checkbox"]:disabled, input[type="radio"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* …and a label that CONTAINS one is a ROW, not a stack: the thing being
+   ticked reads on the left and its box sits at the right edge, so a column of
+   them lines up down the panel. The three labels that deliberately hide their
+   input to draw a control of their own are left alone — they are already a
+   row, and forcing this one on them would break their layout. */
+label:has(> input[type="checkbox"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row),
+label:has(> input[type="radio"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+label:has(> input[type="checkbox"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row) > input,
+label:has(> input[type="radio"]):not(.toggle-switch):not(.sc-equip):not(.counter-share-row) > input {
+  order: 99;
+  margin-left: auto;
+}
+
 button {
   padding: 8px 14px;
   background: var(--panel-2);
@@ -427,7 +498,7 @@ button.link:hover { text-decoration: underline; }
 .grid-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .grid-field { margin: 0; }
 .check-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.check-row input { width: auto; margin: 0; }
+.check-row input { margin: 0; }
 .upload-label input[type='file'] { font-size: 12px; }
 
 .char-list { list-style: none; padding: 0; margin: 0 0 12px; }
@@ -491,6 +562,15 @@ button.link:hover { text-decoration: underline; }
 .chest-items li:last-child { border-bottom: none; }
 .chest-item-name { flex: 1; font-size: 13px; font-weight: 500; }
 .chest-item-desc { font-size: 11px; color: var(--text-dim); }
+/* The lock toggle on a chest or door: its own row, boxed like the fields
+   above it so it does not read as a stray tick in the middle of a form. */
+.mo-lock {
+  margin: 10px 0; padding: 7px 10px; border-radius: 6px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  font-size: 13px; color: var(--text); cursor: pointer; user-select: none;
+}
+.mo-lock:hover { border-color: var(--accent); }
+.mo-lock > span { flex: 1; }
 
 /* Toggle switch — replaces checkboxes for binary on/off controls */
 .toggle-switch {
@@ -1305,7 +1385,6 @@ button.link:hover { text-decoration: underline; }
 .sheet-field.w-sixth { width: calc(16.6% - 7px); }
 .sheet-field input, .sheet-field select { margin: 0; padding: 6px 8px; }
 .sheet-field.checkbox { flex-direction: row; align-items: center; gap: 6px; padding-top: 14px; }
-.sheet-field.checkbox input { width: auto; }
 
 /* Multi-select: what has been picked reads as chips, and the dropdown beside
    them offers only what is left, so the control shrinks as it fills up. */
@@ -2117,9 +2196,19 @@ button.link:hover { text-decoration: underline; }
 .lu-hp, .lu-asi { display: flex; flex-direction: column; gap: 6px; }
 .lu-hp { flex-direction: row; align-items: center; gap: 14px; flex-wrap: wrap; }
 .lu-skills { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+/* A list of things to tick — who is in the chase, which skills to take. One
+   row each, name left and box right, tight enough to read as a list rather
+   than as a column of separate form fields. */
+.lu-picks { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
+.lu-pick {
+  margin: 0; padding: 5px 8px; border-radius: 5px;
+  font-size: 13px; color: var(--text); cursor: pointer; user-select: none;
+}
+.lu-pick:hover { background: rgba(255, 255, 255, 0.06); }
+.lu-pick > span { flex: 1; }
 .lu-skill { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 6px; border-radius: 5px; }
 .lu-skill.on { background: var(--panel-2); }
-.lu-skill input { width: auto; margin: 0; }
+.lu-skill input { margin: 0; }
 .lu-features { margin: 4px 0 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
 
 /* guided character creator (SWADE / SWN) */
@@ -2136,7 +2225,7 @@ button.link:hover { text-decoration: underline; }
 .swc-trait.on { background: var(--panel-2); border-color: var(--accent); }
 .swc-trait.drawback .swc-trait-cost { color: #7ec98a; }
 .swc-trait-head { display: flex; align-items: center; gap: 6px; }
-.swc-trait-head input { width: auto; margin: 0; }
+.swc-trait-head input { margin: 0; }
 .swc-trait-name { flex: 1; font-weight: 600; }
 .swc-trait-cost { font-weight: 700; }
 .swc-trait-desc { font-size: 11px; }
@@ -2392,7 +2481,7 @@ th > .term { border-bottom-style: dotted; }
 .jukebox-master { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
 .jukebox-master input[type=range] { flex: 1; margin: 0; padding: 0; }
 .loop-toggle { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 12px; }
-.loop-toggle input { width: auto; margin: 0; }
+.loop-toggle input { margin: 0; }
 .track-list { list-style: none; padding: 0; margin: 8px 0; }
 .track-list li { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-bottom: 1px solid var(--panel-2); }
 .track-list li.active { background: rgba(108, 155, 210, 0.14); border-radius: 6px; }
@@ -3303,7 +3392,6 @@ th > .term { border-bottom-style: dotted; }
 .cover-row { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 11px; }
 .cover-row select { flex: 1; margin: 0; padding: 3px 6px; font-size: 12px; }
 
-
 /* ---------- settings window ---------- */
 
 .settings-head {
@@ -3340,7 +3428,6 @@ th > .term { border-bottom-style: dotted; }
    the map's SVG, so it pans and zooms with everything else. */
 .aoe-burst-ace { pointer-events: none; }
 
-
 /* ---------- incapacitation ledger (Stats tab) ---------- */
 
 /* Ledger first, dice under it: what came of the rolls is the headline, and
@@ -3370,7 +3457,6 @@ th > .term { border-bottom-style: dotted; }
 .incap-name { overflow-wrap: anywhere; min-width: 0; }
 .incap-count { flex: none; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .incap-empty { font-size: 11px; margin: 0; }
-
 
 /* ---------- Benny coin ---------- */
 

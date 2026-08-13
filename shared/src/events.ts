@@ -116,6 +116,12 @@ export const C2S = {
   INIT_PREV: 'initPrev',
   INIT_SORT: 'initSort',
   INIT_CLEAR: 'initClear',
+  /** SWADE: start a chase — lay out the Chase Card track. */
+  CHASE_START: 'chaseStart',
+  /** SWADE: tear the track down; the fight (if any) carries on. */
+  CHASE_END: 'chaseEnd',
+  /** SWADE: Change Position, or drop back, on the chase track. */
+  CHASE_MOVE: 'chaseMove',
   INIT_SET_ACTIVE: 'initSetActive',
   INIT_ROLL_MAP: 'initRollMap',
   /** SWADE: DM deals a fresh action deck — everyone owes a card draw. */
@@ -1228,6 +1234,23 @@ export interface CrawlPromptPayload { tokenId: string; name: string; crawlPace: 
 export interface JumpRollPayload { tokenId: string; withRunUp: boolean; athletics: boolean }
 /** DM-only: the fight ended with this many Incapacitated Extras on the floor. */
 export interface AftermathPromptPayload { names: string[] }
+/** Start a chase between these tokens at this scale. */
+export interface ChaseStartPayload {
+  tokenIds: string[];
+  incrementId: import('./systems/swadeChase.js').ChaseIncrementId;
+  /** How many Chase Cards to lay out. */
+  trackLength?: number;
+}
+/**
+ * Move on the track. `mode` is how: a free maneuvering roll, the same roll as
+ * an action for +2, or dropping back without rolling at all.
+ */
+export interface ChaseMovePayload {
+  entryId: string;
+  mode: 'free' | 'action' | 'dropBack';
+  /** Which way, for a roll that succeeds (or how far back to drop). */
+  direction: 'forward' | 'back';
+}
 /** Roll Vigor for each of them, or let the wounds finish what they started. */
 export interface AftermathRollPayload { roll: boolean }
 /** DM-only: these wounded are due their natural healing roll. */

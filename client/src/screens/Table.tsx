@@ -35,6 +35,7 @@ import { StunPrompt } from '../table/StunPrompt';
 import { IncapPrompt } from '../table/IncapPrompt';
 import { RoundCardsOverlay } from '../table/RoundCardsOverlay';
 import { CountersOverlay } from '../table/CountersOverlay';
+import { ChaseTrack } from '../table/ChaseTrack';
 import { RunPrompt } from '../table/RunPrompt';
 import { CrawlPrompt } from '../table/CrawlPrompt';
 import { AftermathPrompt, HealingPrompt, VehicleOocPrompt } from '../table/AftermathPrompt';
@@ -470,6 +471,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <Toolbar />
         <InitiativeFloat />
         <CardDrawOverlay />
+        <ChaseTrack />
         <RoundCardsOverlay />
         <CountersOverlay />
         <InitiativeRollPrompt />

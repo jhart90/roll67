@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type ChaseIncrementId, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -1917,6 +1917,14 @@ export const intents = {
   bennyUse: (characterId: string, use: BennyUseId) => socket.emit(C2S.BENNY_USE, { characterId, use }),
   /** DM: hand a character a Benny (announced in chat). */
   awardBenny: (characterId: string) => socket.emit(C2S.BENNY_AWARD, { characterId }),
+  /** DM: lay out a chase track between these tokens. */
+  chaseStart: (tokenIds: string[], incrementId: ChaseIncrementId, trackLength?: number) =>
+    socket.emit(C2S.CHASE_START, { tokenIds, incrementId, trackLength }),
+  /** DM: tear the track down. */
+  chaseEnd: () => socket.emit(C2S.CHASE_END, {}),
+  /** Change Position (free, or as an action for +2), or drop back. */
+  chaseMove: (entryId: string, mode: 'free' | 'action' | 'dropBack', direction: 'forward' | 'back') =>
+    socket.emit(C2S.CHASE_MOVE, { entryId, mode, direction }),
   /** DM: start a new session — every hero draws a fresh hand of Bennies. */
   startSession: () => socket.emit(C2S.SESSION_START, { confirm: true }),
   /** Fetch lifetime roll stats (account-wide, or one character's). */

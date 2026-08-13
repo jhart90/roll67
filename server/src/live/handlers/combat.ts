@@ -1,13 +1,14 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
-  AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SECONDS_PER_ROUND, TIME_STEPS, restRecovery, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SECONDS_PER_ROUND, TIME_STEPS, restRecovery,
+  CHASE_TRACK_DEFAULT, chaseIncrement, changePosition, clampToTrack, speedBonus, isVehicle, maneuveringSkillFor, vehicleHandling, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type AdvanceTimePayload, type AftermathRollPayload, type HealingRollPayload, type VehicleOocRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseParticipant, type HealingRollPayload, type VehicleOocRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -573,6 +574,8 @@ function processTurnTransition(io: Server, campaignId: string, state: Initiative
  *  redeal re-sorts the entries, so indexes into the old order go stale. */
 function finishTurnTransition(io: Server, campaignId: string, state: InitiativeState, prev: Character | undefined): void {
   resetSwadeTurnMoves(campaignId);
+  // Change Position is once per turn, so a new turn hands it back.
+  if (state.chase) for (const p of state.chase.participants) p.movedThisTurn = false;
   swadeActionCounts.delete(campaignId);
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
@@ -681,11 +684,17 @@ export function initiativeViewFor(state: InitiativeState, isDm: boolean, campaig
     ...(state.cardMode ? { deckRemaining: deck?.length ?? 0 } : {}),
   };
   if (isDm) return view;
+  // A combatant the party cannot see must not announce itself on the chase
+  // track either — the track is public, its hidden riders are not.
+  const hiddenIds = new Set(view.entries.filter((e) => e.hidden).map((e) => e.id));
   return {
     ...view,
     entries: view.entries.filter((e) => !e.hidden),
     pendingDraws: view.pendingDraws?.filter((p) => !p.hidden),
     pendingRolls: view.pendingRolls?.filter((p) => !p.hidden),
+    ...(view.chase ? {
+      chase: { ...view.chase, participants: view.chase.participants.filter((p) => !hiddenIds.has(p.entryId)) },
+    } : {}),
   };
 }
 
@@ -4040,6 +4049,149 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     aftermathForExtras(io, d.campaignId, !!shouldRoll);
   }, 'AFTERMATH_ROLL'));
+
+  /**
+   * Start a chase.
+   *
+   * The track is a row of Chase Cards from a SECOND deck — it is scenery for
+   * distance, not initiative, and drawing it from the action deck would foul
+   * both. Everyone starts on the rearmost card; who is really ahead is the
+   * GM's to arrange with a few Change Positions before the first round.
+   *
+   * A chase does not replace the fight. It deals Action Cards and runs on
+   * this same tracker, which is exactly why a chase can contain attacks,
+   * powers and Tests — the track only answers "how far apart is everyone".
+   */
+  socket.on(C2S.CHASE_START, safe(socket, ({ tokenIds, incrementId, trackLength }: ChaseStartPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM starts a chase.'); return; }
+    const state = initiative.get(d.campaignId);
+    const length = Math.max(3, Math.min(20, trackLength ?? CHASE_TRACK_DEFAULT));
+    const track = shuffleDeck(buildDeck()).slice(0, length);
+
+    const participants: ChaseParticipant[] = [];
+    for (const tokenId of tokenIds) {
+      const tok = tokens.byId(tokenId);
+      if (!tok) continue;
+      const ch = tok.characterId ? characters.byId(tok.characterId) : undefined;
+      // Everyone in the chase needs a slot in the turn order; add anyone the
+      // DM picked who is not already in it.
+      let entry = state.entries.find((e) => e.tokenId === tokenId);
+      if (!entry) {
+        entry = {
+          id: newId(), tokenId, name: tok.name, value: 0, hidden: tok.layer === 'gm',
+          ownerUserId: ch?.ownerUserId ?? null, color: tok.color ?? null,
+        };
+        state.entries.push(entry);
+      }
+      // What they are travelling IN decides both the skill and the Top Speed:
+      // the vehicle they are aboard if any, otherwise their own legs.
+      const mount = tok.mountedOn ? tokens.byId(tok.mountedOn) : null;
+      const mountCh = mount?.characterId ? characters.byId(mount.characterId) : undefined;
+      const vehicleSheet = mountCh && isVehicle(mountCh.sheet) ? mountCh.sheet
+        : ch && isVehicle(ch.sheet) ? ch.sheet : null;
+      participants.push({
+        entryId: entry.id, tokenId, name: tok.name, cardIdx: 0,
+        maneuverSkill: vehicleSheet ? maneuveringSkillFor(vehicleSheet) : mount ? 'Riding' : 'Athletics',
+        topSpeed: vehicleSheet ? num(vehicleSheet, 'topSpeed', 0) : 0,
+        color: tok.color ?? null,
+      });
+    }
+    if (participants.length === 0) { emitError(socket, 'Pick at least one token for the chase.'); return; }
+
+    state.chase = { incrementId, track, participants };
+    state.active = true;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    postStatusLine(io, d.campaignId,
+      `🏁 A chase begins — ${participants.length} in it, ${length} Chase Cards laid out, ${chaseIncrement(incrementId)} yards a card.`);
+  }, 'CHASE_START'));
+
+  socket.on(C2S.CHASE_END, safe(socket, () => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const state = initiative.get(d.campaignId);
+    if (!state.chase) return;
+    delete state.chase;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    postStatusLine(io, d.campaignId, '🏁 The chase is over.');
+  }, 'CHASE_END'));
+
+  /**
+   * Change Position, or drop back.
+   *
+   * The roll is the participant's own maneuvering skill — Driving at the
+   * wheel, Boating at the tiller, Athletics on foot — plus the vehicle's
+   * Handling, plus the Speed Bonus for having the better machine, plus 2 if
+   * they spend their ACTION on it rather than taking it free. Success moves
+   * one card, a raise two.
+   *
+   * Dropping back needs no roll and is the reason a chase has a rear:
+   * anyone may fall away deliberately, and then may not manoeuvre again.
+   */
+  socket.on(C2S.CHASE_MOVE, safe(socket, ({ entryId, mode, direction }: ChaseMovePayload) => {
+    const d = requireCampaign(socket);
+    const state = initiative.get(d.campaignId);
+    const chase = state.chase;
+    if (!chase) { emitError(socket, 'No chase is running.'); return; }
+    const me = chase.participants.find((p) => p.entryId === entryId);
+    if (!me) return;
+    const tok = me.tokenId ? tokens.byId(me.tokenId) : null;
+    const ch = tok?.characterId ? characters.byId(tok.characterId) : undefined;
+    if (d.role !== 'dm' && !(ch && ch.ownerUserId === d.userId)) {
+      emitError(socket, 'That is not yours to drive.');
+      return;
+    }
+    if (me.movedThisTurn) { emitError(socket, `${me.name} has already changed position this turn.`); return; }
+
+    if (mode === 'dropBack') {
+      me.cardIdx = clampToTrack(me.cardIdx - 1, chase.track.length);
+      me.movedThisTurn = true;
+      initiative.set(d.campaignId, state);
+      broadcastInitiative(io, d.campaignId);
+      postStatusLine(io, d.campaignId, `${me.name} drops back a Chase Card — no roll, and no more manoeuvring this turn.`);
+      return;
+    }
+
+    // The vehicle under them, if any: its Handling rides every roll.
+    const mount = tok?.mountedOn ? tokens.byId(tok.mountedOn) : null;
+    const mountCh = mount?.characterId ? characters.byId(mount.characterId) : undefined;
+    const vehicleSheet = mountCh && isVehicle(mountCh.sheet) ? mountCh.sheet
+      : ch && isVehicle(ch.sheet) ? ch.sheet : null;
+
+    const tags: string[] = [];
+    let mod = 0;
+    if (vehicleSheet) {
+      const h = vehicleHandling(vehicleSheet);
+      if (h !== 0) { mod += h; tags.push(`${h > 0 ? '+' : ''}${h} Handling`); }
+    }
+    const bonus = speedBonus(me.topSpeed, chase.participants.filter((p) => p !== me).map((p) => p.topSpeed));
+    if (bonus > 0) { mod += bonus; tags.push(`+${bonus} Speed`); }
+    if (mode === 'action') { mod += 2; tags.push('+2 as an action'); }
+
+    const sheet = ch?.sheet ?? {};
+    const br = roll(traitExpr(sheet, skillDie(sheet, me.maneuverSkill), mod));
+    const out = changePosition(br.total);
+    const step = direction === 'forward' ? 1 : -1;
+    if (out.success) me.cardIdx = clampToTrack(me.cardIdx + step * out.cards, chase.track.length);
+    me.movedThisTurn = true;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+
+    const where = direction === 'forward' ? 'ahead' : 'back';
+    const text = `${me.name} — ${me.maneuverSkill} to Change Position${tags.length ? ` [${tags.join(', ')}]` : ''}: `
+      + (out.success
+        ? `${out.cards} card${out.cards === 1 ? '' : 's'} ${where}${out.raise ? ' (raise!)' : ''}`
+        : 'no ground gained');
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, fromCharacter: ch?.name ?? me.name,
+      characterId: ch?.id ?? null, kind: 'roll', text,
+      roll: { ...br, outcome: out.success ? 'success' as const : 'failure' as const }, recipients: null,
+      callout: { what: `${me.maneuverSkill} — Change Position`, tone: 'trait' },
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'CHASE_MOVE'));
 
   socket.on(C2S.INIT_CLEAR, safe(socket, () => {
     const d = requireCampaign(socket);

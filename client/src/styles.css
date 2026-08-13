@@ -658,6 +658,49 @@ button.link:hover { text-decoration: underline; }
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.94); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
+.chase-track {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  z-index: 88; pointer-events: none;
+  display: flex; flex-direction: column; gap: 4px; align-items: center;
+  max-width: 94%;
+}
+.chase-track .chase-head,
+.chase-track .chase-cards,
+.chase-track .chase-controls { pointer-events: auto; }
+.chase-head {
+  display: flex; align-items: baseline; gap: 8px; font-size: 12px;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(12, 14, 20, 0.86); border: 1px solid var(--border);
+}
+.chase-cards { display: flex; gap: 4px; overflow-x: auto; max-width: 100%; padding: 2px; }
+.chase-card {
+  min-width: 62px; padding: 4px 5px 5px; border-radius: 8px;
+  background: rgba(12, 14, 20, 0.86); border: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+/* The card's own suit, so the track reads as cards rather than as slots —
+   Complications key off these, so they have to be legible. */
+.chase-card.red .cc-face { color: #e0656a; }
+.chase-card.black .cc-face { color: #c9cede; }
+.cc-face { font-size: 13px; font-weight: 700; line-height: 1; }
+.cc-riders { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.cc-chip {
+  font-size: 10px; font-weight: 600; text-align: center;
+  padding: 1px 4px; border-radius: 4px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Whoever's turn it is, so the track answers "who is up" without a glance
+   across at the initiative list. */
+.cc-chip.up { background: var(--accent); color: #10131a; }
+.chase-controls {
+  display: flex; gap: 6px; align-items: center; font-size: 12px;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(12, 14, 20, 0.86); border: 1px solid var(--border);
+}
+.chase-controls:empty { display: none; }
+.chase-controls button { padding: 2px 8px; font-size: 11px; }
+
 /* Colour by what KIND of roll is in the air, so the table can read the stakes
    before the dice land: red for an attack, orange for the damage that follows
    it, blue for a roll made in defence, green for shaking something off. */

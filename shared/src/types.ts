@@ -590,6 +590,10 @@ export interface InitiativeState {
   /** Non-card systems: combatants the DM has called on who still owe their
    *  own initiative roll. Each player rolls for their own character. */
   pendingRolls?: PendingInitiative[];
+  /** SWADE chase: the Chase Card track and who stands where on it. A chase
+   *  IS the combat — it deals Action Cards and runs on this same tracker —
+   *  so it lives here rather than in a parallel system of its own. */
+  chase?: import('./systems/swadeChase.js').ChaseState;
 }
 
 // ---------- Drawings, pings, measurement ----------

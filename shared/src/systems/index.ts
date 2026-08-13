@@ -36,6 +36,7 @@ export {
   swadeSnakeEyes, swadeCritFail, isConstruct, isUndead, isAbomination, swadeBennyMax,
 } from './swade.js';
 export * from './swadeVehicles.js';
+export * from './swadeChase.js';
 export * from './swadeCreation.js';
 export * from './swnCreation.js';
 

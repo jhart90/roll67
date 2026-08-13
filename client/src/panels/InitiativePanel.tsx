@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { intents, useGameStore } from '../store/game';
 import { CardChip } from '../util/PlayingCardView';
 import { SavePrompt } from './SavePrompt';
+import { ChasePrompt } from './ChasePrompt';
 import { FearPrompt } from './FearPrompt';
 
 export function InitiativePanel() {
@@ -11,6 +12,7 @@ export function InitiativePanel() {
   const map = useGameStore((s) => s.map);
   const campaign = useGameStore((s) => s.campaign);
   const [saving, setSaving] = useState(false);
+  const [chasing, setChasing] = useState(false);
   const [fearing, setFearing] = useState(false);
 
   const isDm = useGameStore((s) => s.isDm());
@@ -117,10 +119,14 @@ export function InitiativePanel() {
             </>
           )}
           <button onClick={() => setSaving(true)}>⚑ Call for save</button>
+          {swade && (state.chase
+            ? <button title="Tear down the Chase Card track; the fight carries on" onClick={() => intents.chaseEnd()}>🏁 End chase</button>
+            : <button title="Lay out a Chase Card track — a chase IS the combat, and deals Action Cards as usual" onClick={() => setChasing(true)}>🏁 Start a chase</button>)}
           {swade && <button title="Spirit roll against something horrific, with the Fear Table for failures" onClick={() => setFearing(true)}>😱 Call for Fear</button>}
         </div>
       )}
       {saving && <SavePrompt onClose={() => setSaving(false)} />}
+      {chasing && <ChasePrompt onClose={() => setChasing(false)} />}
       {fearing && <FearPrompt onClose={() => setFearing(false)} />}
 
       {isDm && state.entries.length > 0 && (

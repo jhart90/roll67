@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHASE_INCREMENTS, canFlee, changePosition, chaseIncrement, chaseRangeYards,
-  clampToTrack, complicationFor, fleePenalty, speedBonus,
+  BOARD_MOD, CHASE_ACTIONS, CHASE_INCREMENTS, boardOutcome, canFlee, chaseAction, changePosition,
+  chaseIncrement, chaseRangeYards, clampToTrack, complicationFor, fleePenalty, opposedManeuver,
+  ramDamage, speedBonus,
 } from '../src/systems/swadeChase.js';
+import { vehicleParry } from '../src/systems/swadeVehicles.js';
 import type { PlayingCard } from '../src/systems/cards.js';
 
 const at = (cardIdx: number) => ({
@@ -78,6 +80,84 @@ describe('Fleeing', () => {
     expect(fleePenalty(5)).toBe(-2);
     expect(fleePenalty(6)).toBe(0);
     expect(fleePenalty(9)).toBe(0);
+  });
+});
+
+describe('the chase maneuvers', () => {
+  it('knows which ones need somebody to do them to, and how far they reach', () => {
+    expect(chaseAction('ram')?.reach).toBe(0);     // your own card only
+    expect(chaseAction('force')?.reach).toBe(1);   // …or the one next to it
+    expect(chaseAction('board')?.reach).toBe(0);
+    expect(chaseAction('evade')?.reach).toBeNull();
+    expect(chaseAction('flee')?.reach).toBeNull();
+    expect(chaseAction('holdSteady')?.reach).toBeNull();
+  });
+
+  it('offers every one of them exactly once', () => {
+    expect(new Set(CHASE_ACTIONS.map((a) => a.id)).size).toBe(CHASE_ACTIONS.length);
+  });
+});
+
+describe('opposed maneuvering', () => {
+  it('gives ties to the defender', () => {
+    expect(opposedManeuver(7, 7).success).toBe(false);
+    expect(opposedManeuver(8, 7).success).toBe(true);
+  });
+
+  it('calls four over a raise', () => {
+    expect(opposedManeuver(10, 7)).toMatchObject({ success: true, raise: false });
+    expect(opposedManeuver(11, 7)).toMatchObject({ success: true, raise: true });
+  });
+});
+
+describe('Ramming', () => {
+  const car = { toughness: 10, size: 4 };   // Large, Scale +2
+  const bike = { toughness: 6, size: 0 };   // Normal, Scale 0
+
+  it('hurts both of you — a ram is never free', () => {
+    const even = ramDamage(bike, { toughness: 8, size: 0 });
+    expect(even.toTarget).toBe(6);
+    expect(even.toRammer).toBe(8);
+    expect(even.scaleGap).toBe(0);
+    expect(even.tag).toBeNull();
+  });
+
+  it('lets the bigger machine drive through the smaller one', () => {
+    const hit = ramDamage(car, bike);
+    expect(hit.toTarget).toBe(12);   // 10 + 2 Scale
+    expect(hit.toRammer).toBe(4);    // 6 − 2 Scale
+    expect(hit.tag).toContain('Scale');
+  });
+
+  it('…and punishes the smaller one for trying it the other way round', () => {
+    const hit = ramDamage(bike, car);
+    expect(hit.toTarget).toBe(4);    // 6 − 2
+    expect(hit.toRammer).toBe(12);   // 10 + 2
+  });
+
+  it('never deals negative damage, however lopsided', () => {
+    const hit = ramDamage({ toughness: 2, size: 20 }, { toughness: 1, size: -4 });
+    expect(hit.toRammer).toBe(0);
+  });
+});
+
+describe('Boarding', () => {
+  it('is a −2 leap that only a Critical Failure turns into the road', () => {
+    expect(BOARD_MOD).toBe(-2);
+    expect(boardOutcome(4, false)).toBe('aboard');
+    expect(boardOutcome(3, false)).toBe('held');
+    expect(boardOutcome(12, true)).toBe('fallen');
+  });
+});
+
+describe("a vehicle's Parry", () => {
+  it('is 2 plus half the die at the wheel', () => {
+    expect(vehicleParry(6)).toBe(5);
+    expect(vehicleParry(12)).toBe(8);
+  });
+
+  it('is a flat 2 when nobody is driving — a parked car is a barn door', () => {
+    expect(vehicleParry(0)).toBe(2);
   });
 });
 

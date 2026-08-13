@@ -1,4 +1,5 @@
-import { CHASE_INCREMENTS, cardShort, chaseIncrement, isRedCard } from 'shared';
+import { useState } from 'react';
+import { CHASE_ACTIONS, CHASE_INCREMENTS, cardShort, chaseIncrement, isRedCard, type ChaseActionId } from 'shared';
 import { intents, useGameStore } from '../store/game';
 
 /**
@@ -19,6 +20,9 @@ export function ChaseTrack() {
   const characters = useGameStore((s) => s.characters);
   const tokens = useGameStore((s) => s.tokens);
   const turnEntryId = useGameStore((s) => s.initiativeState.entries[s.initiativeState.turnIdx]?.id ?? null);
+  // A targeted maneuver is picked in two taps: the action, then who it lands
+  // on. Only the ones actually in reach are offered.
+  const [aiming, setAiming] = useState<ChaseActionId | null>(null);
   if (!chase) return null;
 
   const yards = chaseIncrement(chase.incrementId);
@@ -59,6 +63,8 @@ export function ChaseTrack() {
                       + (p.cardIdx === lead ? ' · in the lead' : ` · ${(lead - p.cardIdx) * yards} yards behind the leader`)}
                   >
                     {p.name}
+                    {p.evading && <span title="Evading — −2 to attacks against them, and to their own."> 〰️</span>}
+                    {p.steadied && <span title="Held steady — no Unstable Platform penalty for anyone aboard."> 🎯</span>}
                   </span>
                 ))}
               </div>
@@ -69,23 +75,54 @@ export function ChaseTrack() {
       {/* Controls for whoever is up: the maneuver is once per turn, so the
           buttons vanish the moment it is spent rather than failing on click. */}
       <div className="chase-controls">
-        {chase.participants.filter((p) => p.entryId === turnEntryId && mine(p.tokenId)).map((p) => (
-          <span key={p.entryId} className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {p.movedThisTurn ? (
-              <span className="dim">{p.name} has manoeuvred this turn.</span>
-            ) : (
-              <>
-                <span className="dim">{p.name} ({p.maneuverSkill}):</span>
-                <button title="Free action: a maneuvering roll moves you one card, two on a raise."
-                  onClick={() => intents.chaseMove(p.entryId, 'free', 'forward')}>▶ Gain a card</button>
-                <button title="Spend your ACTION on it instead for +2 to the roll."
-                  onClick={() => intents.chaseMove(p.entryId, 'action', 'forward')}>▶▶ …as an action (+2)</button>
-                <button title="Fall back deliberately — no roll, but no more manoeuvring this turn."
-                  onClick={() => intents.chaseMove(p.entryId, 'dropBack', 'back')}>◀ Drop back</button>
-              </>
-            )}
-          </span>
-        ))}
+        {chase.participants.filter((p) => p.entryId === turnEntryId && mine(p.tokenId)).map((p) => {
+          const spec = aiming ? CHASE_ACTIONS.find((a) => a.id === aiming) ?? null : null;
+          const inReach = spec && spec.reach !== null
+            ? chase.participants.filter((q) => q.entryId !== p.entryId && Math.abs(q.cardIdx - p.cardIdx) <= spec.reach!)
+            : [];
+          return (
+            <span key={p.entryId} className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {p.movedThisTurn ? (
+                <span className="dim">{p.name} has manoeuvred this turn.</span>
+              ) : (
+                <>
+                  <span className="dim">{p.name} ({p.maneuverSkill}):</span>
+                  <button title="Free action: a maneuvering roll moves you one card, two on a raise."
+                    onClick={() => intents.chaseMove(p.entryId, 'free', 'forward')}>▶ Gain a card</button>
+                  <button title="Spend your ACTION on it instead for +2 to the roll."
+                    onClick={() => intents.chaseMove(p.entryId, 'action', 'forward')}>▶▶ …as an action (+2)</button>
+                  <button title="Fall back deliberately — no roll, but no more manoeuvring this turn."
+                    onClick={() => intents.chaseMove(p.entryId, 'dropBack', 'back')}>◀ Drop back</button>
+                </>
+              )}
+              {/* The turn's ACTION, which is a separate budget from the free
+                  maneuver above — you may do both in one turn. */}
+              {p.actedThisTurn ? (
+                <span className="dim">· action spent</span>
+              ) : spec ? (
+                <>
+                  <span className="dim">· {spec.label} whom?</span>
+                  {inReach.map((q) => (
+                    <button key={q.entryId} onClick={() => { intents.chaseAction(p.entryId, spec.id, q.entryId); setAiming(null); }}>
+                      {spec.icon} {q.name}
+                    </button>
+                  ))}
+                  {inReach.length === 0 && <span className="dim">nobody in reach.</span>}
+                  <button className="link" onClick={() => setAiming(null)}>cancel</button>
+                </>
+              ) : (
+                CHASE_ACTIONS.map((a) => (
+                  <button
+                    key={a.id} title={a.hint}
+                    onClick={() => (a.reach === null ? intents.chaseAction(p.entryId, a.id) : setAiming(a.id))}
+                  >
+                    {a.icon} {a.label}
+                  </button>
+                ))
+              )}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

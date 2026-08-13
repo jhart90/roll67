@@ -2,13 +2,15 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SECONDS_PER_ROUND, TIME_STEPS, restRecovery,
-  CHASE_TRACK_DEFAULT, chaseIncrement, changePosition, clampToTrack, speedBonus, isVehicle, maneuveringSkillFor, vehicleHandling, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  CHASE_TRACK_DEFAULT, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
+  opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
+  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseParticipant, type HealingRollPayload, type VehicleOocRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -574,8 +576,17 @@ function processTurnTransition(io: Server, campaignId: string, state: Initiative
  *  redeal re-sorts the entries, so indexes into the old order go stale. */
 function finishTurnTransition(io: Server, campaignId: string, state: InitiativeState, prev: Character | undefined): void {
   resetSwadeTurnMoves(campaignId);
-  // Change Position is once per turn, so a new turn hands it back.
-  if (state.chase) for (const p of state.chase.participants) p.movedThisTurn = false;
+  // Change Position is once per turn, so a new turn hands it back — and with
+  // it the turn's chase action. Evading and a steadied wheel are both "until
+  // your next turn", so they lapse on the same edge.
+  if (state.chase) {
+    for (const p of state.chase.participants) {
+      p.movedThisTurn = false;
+      p.actedThisTurn = false;
+      p.evading = false;
+      p.steadied = false;
+    }
+  }
   swadeActionCounts.delete(campaignId);
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
@@ -1764,6 +1775,118 @@ function activatePsychicPower(
   return { actor: persistSheet(io, campaignId, actor, actorPatch), undo };
 }
 
+// ---------- chases ----------
+
+/**
+ * The machine a token is aboard: what it is mounted on, or itself when the
+ * token IS the machine. Everything a chase asks about a participant — the
+ * skill they manoeuvre with, the Handling under them, what a ram costs them —
+ * comes off this one answer.
+ */
+function vehicleUnder(tok: Token | null | undefined): Character | null {
+  if (!tok) return null;
+  const mount = tok.mountedOn ? tokens.byId(tok.mountedOn) : null;
+  const mountCh = mount?.characterId ? characters.byId(mount.characterId) : undefined;
+  if (mountCh && isVehicle(mountCh.sheet)) return mountCh;
+  const own = tok.characterId ? characters.byId(tok.characterId) : undefined;
+  return own && isVehicle(own.sheet) ? own : null;
+}
+
+/**
+ * Whoever has the wheel of a vehicle token: the first rider aboard. The
+ * fiction of who is driving is the table's, but SOMETHING has to answer for
+ * the vehicle's Parry and its control rolls, and "the first one on" is both
+ * stable and usually right — the driver gets in first.
+ */
+function driverOf(vehicleTokenId: string, mapId: string): Character | null {
+  const rider = tokens.forMap(mapId).find((t) => t.mountedOn === vehicleTokenId);
+  const ch = rider?.characterId ? characters.byId(rider.characterId) : undefined;
+  return ch ?? null;
+}
+
+/**
+ * A vehicle's Parry: 2 + half its driver's maneuvering die. Empty, it is 2 —
+ * a parked car is a barn door, which is exactly right.
+ */
+function vehicleParryOf(vehicleTok: Token, vehicleChar: Character): number {
+  const driver = driverOf(vehicleTok.id, vehicleTok.mapId);
+  const skill = maneuveringSkillFor(vehicleChar.sheet);
+  return vehicleParry(driver ? skillDie(driver.sheet, skill) : 0);
+}
+
+/**
+ * Everything that rides a maneuvering roll no matter what it is for: the
+ * Handling of the machine under them, and the Speed Bonus for having the
+ * better one. Change Position, Force, Ram, Hold Steady and Flee all roll the
+ * same skill against the same conditions, so they all come through here.
+ */
+function maneuverMods(
+  chase: ChaseState, me: ChaseParticipant, ch: Character | undefined,
+): { mod: number; tags: string[] } {
+  const tags: string[] = [];
+  let mod = 0;
+  const tok = me.tokenId ? tokens.byId(me.tokenId) : null;
+  const vehicle = vehicleUnder(tok) ?? (ch && isVehicle(ch.sheet) ? ch : null);
+  if (vehicle) {
+    const h = vehicleHandling(vehicle.sheet);
+    if (h !== 0) { mod += h; tags.push(`${h > 0 ? '+' : ''}${h} Handling`); }
+  }
+  const bonus = speedBonus(me.topSpeed, chase.participants.filter((p) => p !== me).map((p) => p.topSpeed));
+  if (bonus > 0) { mod += bonus; tags.push(`+${bonus} Speed`); }
+  return { mod, tags };
+}
+
+/** The Toughness a collision meets: a hull's plated number, or a body's. */
+function collisionToughness(ch: Character | null): number {
+  if (!ch) return 4;
+  return isVehicle(ch.sheet)
+    ? num(ch.sheet, 'vehicleToughness', 8)
+    : Number(systemFor(ch.system).derive(ch.sheet).toughness) || num(ch.sheet, 'toughness', 4);
+}
+
+/**
+ * What a running chase has to say about an attack between two of the people
+ * in it. Null when no chase is on, or when either end of the attack is not
+ * part of it — a bystander shooting at a passing car is an ordinary shot at
+ * an ordinary distance.
+ *
+ * The gap is the whole point: in a chase the TRACK is the distance, not the
+ * map. Two cars a card apart are as far apart as that chase says they are,
+ * however close their tokens happen to be sitting on the scenery.
+ */
+function chaseAttackContext(campaignId: string, srcTokenId: string, tgtTokenId: string): {
+  gapCards: number; yards: number; targetEvading: boolean;
+} | null {
+  const chase = initiative.get(campaignId).chase;
+  if (!chase) return null;
+  const a = chase.participants.find((p) => p.tokenId === srcTokenId);
+  const b = chase.participants.find((p) => p.tokenId === tgtTokenId);
+  if (!a || !b) return null;
+  return {
+    gapCards: Math.abs(a.cardIdx - b.cardIdx),
+    yards: chaseRangeYards(a, b, chase.incrementId),
+    targetEvading: b.evading === true,
+  };
+}
+
+/**
+ * What the chase costs the SHOOTER, whoever they are shooting at. Kept apart
+ * from the pair above because both of these follow the attacker out of the
+ * chase: someone hanging off a speeding car is on a poor firing platform even
+ * when the thing they are shooting at is standing still on the pavement.
+ */
+function chaseSelfContext(campaignId: string, srcTokenId: string): { evading: boolean; unstable: boolean } {
+  const chase = initiative.get(campaignId).chase;
+  const me = chase?.participants.find((p) => p.tokenId === srcTokenId);
+  if (!me) return { evading: false, unstable: false };
+  // Unstable Platform: shooting from a moving vehicle is a poor idea unless
+  // its driver has spent the turn on nothing but keeping it smooth.
+  return {
+    evading: me.evading === true,
+    unstable: !!vehicleUnder(tokens.byId(srcTokenId)) && !me.steadied,
+  };
+}
+
 export function registerCombatHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.COMBAT_ACTION, safe(socket, (p: CombatActionPayload) => {
     const d = requireCampaign(socket);
@@ -1822,7 +1945,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // Range: convert the action's feet to hexes for this map's scale.
     const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
     const rangeHexes = action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(action.rangeFt / feetPerHex));
-    const dist = hexDistance({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
+    // In a chase the TRACK is the distance. Both ends of the attack have to be
+    // in it — a bystander shooting at a passing car is an ordinary shot — and
+    // then the yards between their Chase Cards stand in for the map, which is
+    // what lets a chase run over any scenery at any scale.
+    const chaseCtx = chaseAttackContext(d.campaignId, src.id, tgt.id);
+    const chaseSelf = chaseSelfContext(d.campaignId, src.id);
+    const dist = chaseCtx
+      ? Math.max(0, Math.round((chaseCtx.yards * 3) / feetPerHex))
+      : hexDistance({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
+    // Melee in a chase reaches exactly one card: your own. Everything else is
+    // out of arm's reach however the tokens happen to be parked.
+    if (chaseCtx && !action.ranged && chaseCtx.gapCards > 0) {
+      emitError(socket, `${tgt.name} is ${chaseCtx.yards} yards up the chase — ${chaseCtx.gapCards} Chase Card${chaseCtx.gapCards === 1 ? '' : 's'} away. Close the gap first.`);
+      return;
+    }
     const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0);
     // SWADE range bands: the listed range is Short; Medium (−2) reaches 2×
     // and Long (−4) reaches 4×. Other systems keep the hard single limit — and
@@ -2204,6 +2341,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
         else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
         if (action.ranged && targetConditions.includes('prone')) { mod -= 2; tags.push('−2 vs Prone'); }
+        // Chase: evasive driving cuts both ways, and a moving vehicle is a
+        // poor firing platform unless its driver spent the turn steadying it.
+        if (chaseCtx?.targetEvading) { mod += EVADE_MOD; tags.push('−2 target is Evading'); }
+        if (chaseSelf.evading) { mod += EVADE_MOD; tags.push('−2 Evading'); }
+        if (action.ranged && chaseSelf.unstable) { mod += UNSTABLE_PLATFORM_MOD; tags.push('−2 Unstable Platform'); }
         if (mod) expr = mod > 0 ? `${expr}+${mod}` : `${expr}${mod}`;
         if (tags.length) advTag = ` [${tags.join(', ')}]`;
       } else if (netAdv) {
@@ -2242,9 +2384,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // faces Parry like a melee swing. A raise is still beating the number
       // by 4+.
       const swadeRangedTn = actor.system === 'swade' && action.ranged && action.fixedTn == null && dist > 1;
+      // A machine has no Fighting of its own, so its Parry is 2 + half the die
+      // its driver manoeuvres with. Without this a vehicle had no target
+      // number at all and every swing at one landed automatically.
+      const vehicleTn = targetChar && targetChar.system === 'swade' && isVehicle(targetChar.sheet)
+        ? vehicleParryOf(tgt, targetChar) : null;
       const ac = action.fixedTn
         ?? (swadeRangedTn ? 4
-          : targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0);
+          : vehicleTn
+          ?? (targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0));
       hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
       raise = hit && actor.system === 'swade' && ac > 0 && attackBreakdown.total >= ac + 4;
       // Say WHY it landed or didn't. A bare HIT/MISS makes the engine look
@@ -4154,20 +4302,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return;
     }
 
-    // The vehicle under them, if any: its Handling rides every roll.
-    const mount = tok?.mountedOn ? tokens.byId(tok.mountedOn) : null;
-    const mountCh = mount?.characterId ? characters.byId(mount.characterId) : undefined;
-    const vehicleSheet = mountCh && isVehicle(mountCh.sheet) ? mountCh.sheet
-      : ch && isVehicle(ch.sheet) ? ch.sheet : null;
-
-    const tags: string[] = [];
-    let mod = 0;
-    if (vehicleSheet) {
-      const h = vehicleHandling(vehicleSheet);
-      if (h !== 0) { mod += h; tags.push(`${h > 0 ? '+' : ''}${h} Handling`); }
-    }
-    const bonus = speedBonus(me.topSpeed, chase.participants.filter((p) => p !== me).map((p) => p.topSpeed));
-    if (bonus > 0) { mod += bonus; tags.push(`+${bonus} Speed`); }
+    // Handling under them and the Speed Bonus for the better machine ride
+    // every maneuvering roll; spending the ACTION on it adds the book's +2.
+    const { mod: baseMod, tags } = maneuverMods(chase, me, ch);
+    let mod = baseMod;
     if (mode === 'action') { mod += 2; tags.push('+2 as an action'); }
 
     const sheet = ch?.sheet ?? {};
@@ -4192,6 +4330,264 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'CHASE_MOVE'));
+
+  /**
+   * A chase maneuver: everything you can spend the turn's ACTION on while the
+   * track is out. Change Position is free and lives above; these cost the
+   * action, one per turn, which is why they are gated on `actedThisTurn`
+   * rather than on the free maneuver's own flag.
+   *
+   * Reach is checked here and not on the button: the client draws what it
+   * thinks is possible, but the track is the server's.
+   */
+  socket.on(C2S.CHASE_ACTION, safe(socket, ({ entryId, action, targetEntryId }: ChaseActionPayload) => {
+    const d = requireCampaign(socket);
+    const state = initiative.get(d.campaignId);
+    const chase = state.chase;
+    if (!chase) { emitError(socket, 'No chase is running.'); return; }
+    const me = chase.participants.find((p) => p.entryId === entryId);
+    const spec = chaseAction(action);
+    if (!me || !spec) return;
+    const myTok = me.tokenId ? tokens.byId(me.tokenId) : null;
+    const myChar = myTok?.characterId ? characters.byId(myTok.characterId) : undefined;
+    if (d.role !== 'dm' && !(myChar && myChar.ownerUserId === d.userId)) {
+      emitError(socket, 'That is not yours to drive.');
+      return;
+    }
+    if (me.actedThisTurn) { emitError(socket, `${me.name} has already spent this turn's action.`); return; }
+
+    const target = targetEntryId ? chase.participants.find((p) => p.entryId === targetEntryId) ?? null : null;
+    if (spec.reach !== null) {
+      if (!target || target === me) { emitError(socket, `${spec.label} needs someone to do it to.`); return; }
+      const gap = Math.abs(target.cardIdx - me.cardIdx);
+      if (gap > spec.reach) {
+        emitError(socket, `${target.name} is ${gap} Chase Card${gap === 1 ? '' : 's'} away — ${spec.label} reaches `
+          + (spec.reach === 0 ? 'only your own card.' : 'one card.'));
+        return;
+      }
+    }
+    const targetTok = target?.tokenId ? tokens.byId(target.tokenId) : null;
+    const targetChar = targetTok?.characterId ? characters.byId(targetTok.characterId) : undefined;
+    const myVehicle = vehicleUnder(myTok);
+    const targetVehicle = vehicleUnder(targetTok);
+
+    const sheet = myChar?.sheet ?? {};
+    const base = maneuverMods(chase, me, myChar);
+    /** This participant's maneuvering roll, with whatever this action adds. */
+    const rollMine = (extraMod = 0, extraTags: string[] = []) => ({
+      br: roll(traitExpr(sheet, skillDie(sheet, me.maneuverSkill), base.mod + extraMod)),
+      tags: [...base.tags, ...extraTags],
+    });
+    /** …and the other side's, for the opposed ones. */
+    const rollTheirs = () => {
+      const tsheet = targetChar?.sheet ?? {};
+      const tb = target ? maneuverMods(chase, target, targetChar) : { mod: 0, tags: [] as string[] };
+      const skill = target?.maneuverSkill ?? 'Athletics';
+      return { br: roll(traitExpr(tsheet, skillDie(tsheet, skill), tb.mod)), tags: tb.tags };
+    };
+    const commit = () => { initiative.set(d.campaignId, state); broadcastInitiative(io, d.campaignId); };
+    const postRollCard = (
+      who: Character | undefined, name: string, what: string, text: string,
+      br: ReturnType<typeof roll>, ok: boolean,
+    ) => {
+      const msg = chat.add(d.campaignId, {
+        userId: d.userId, fromName: d.username, fromCharacter: who?.name ?? name,
+        characterId: who?.id ?? null, kind: 'roll', text,
+        roll: { ...br, outcome: ok ? 'success' as const : 'failure' as const }, recipients: null,
+        callout: { what, tone: 'trait' },
+      });
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    };
+    /**
+     * The roll a driver makes to keep hold of it after being forced or rammed.
+     * Posted as a line rather than an animated card: one action should not
+     * queue five throws on everybody's screen, and the throw that mattered was
+     * the one that put them in this position.
+     */
+    const controlCheck = (p: ChaseParticipant, ch: Character | undefined, vehicle: Character | null, mod: number) => {
+      const psheet = ch?.sheet ?? {};
+      const mods = maneuverMods(chase, p, ch);
+      const br = roll(traitExpr(psheet, skillDie(psheet, p.maneuverSkill), mods.mod + mod));
+      const held = br.total >= 4;
+      postStatusLine(io, d.campaignId,
+        `${p.name} fights for control — ${p.maneuverSkill} ${br.total} vs 4${mod ? ` (${mod})` : ''}: ${held ? 'held it.' : 'lost it!'}`);
+      if (held) return;
+      if (vehicle) resolveOutOfControl(io, d.campaignId, vehicle);
+      else if (ch) applyConditionTo(io, d.campaignId, ch, 'distracted', 'thrown off their stride');
+    };
+
+    if (action === 'evade') {
+      me.evading = true;
+      me.actedThisTurn = true;
+      commit();
+      postStatusLine(io, d.campaignId,
+        `〰️ ${me.name} drives evasively — −2 to attacks against them until their next turn, and −2 to their own.`);
+      return;
+    }
+
+    if (action === 'holdSteady') {
+      if (!myVehicle) { emitError(socket, `${me.name} is not driving anything to hold steady.`); return; }
+      const { br, tags } = rollMine();
+      const ok = br.total >= 4;
+      if (ok) me.steadied = true;
+      me.actedThisTurn = true;
+      commit();
+      postRollCard(myChar, me.name, `${me.maneuverSkill} — Hold Steady`,
+        `${me.name} — ${me.maneuverSkill} to hold ${myVehicle.name} steady${tags.length ? ` [${tags.join(', ')}]` : ''}: `
+        + (ok ? 'smooth as glass — nobody aboard suffers Unstable Platform this round.' : 'the ride stays rough (−2 to shoot from it).'),
+        br, ok);
+      return;
+    }
+
+    if (action === 'flee') {
+      const others = chase.participants.filter((p) => p !== me);
+      if (others.length === 0) { emitError(socket, 'There is nobody left to flee from.'); return; }
+      const gap = Math.min(...others.map((p) => Math.abs(p.cardIdx - me.cardIdx)));
+      if (!canFlee(gap)) {
+        emitError(socket, `Too close to break off — ${gap} Chase Card${gap === 1 ? '' : 's'} clear, and fleeing needs four.`);
+        return;
+      }
+      const pen = fleePenalty(gap);
+      const { br, tags } = rollMine(pen, [pen ? `${pen} Flee at ${gap} cards` : 'clean away — no penalty']);
+      const ok = br.total >= 4;
+      me.actedThisTurn = true;
+      if (ok) chase.participants = chase.participants.filter((p) => p !== me);
+      commit();
+      postRollCard(myChar, me.name, `${me.maneuverSkill} — Flee`,
+        `${me.name} — ${me.maneuverSkill} to break off${tags.length ? ` [${tags.join(', ')}]` : ''}: `
+        + (ok ? 'gone — out of the chase.' : 'still in it.'),
+        br, ok);
+      if (ok && chase.participants.length < 2) {
+        delete state.chase;
+        initiative.set(d.campaignId, state);
+        broadcastInitiative(io, d.campaignId);
+        postStatusLine(io, d.campaignId, '🏁 Nobody left to chase — the track comes down.');
+      }
+      return;
+    }
+
+    // Everything past here is opposed, and the reach check above has already
+    // guaranteed a target.
+    if (!target) return;
+
+    if (action === 'force') {
+      const mine = rollMine();
+      const theirs = rollTheirs();
+      const out = opposedManeuver(mine.br.total, theirs.br.total);
+      me.actedThisTurn = true;
+      postRollCard(myChar, me.name, `${me.maneuverSkill} — Force`,
+        `${me.name} crowds ${target.name}${mine.tags.length ? ` [${mine.tags.join(', ')}]` : ''}: `
+        + (out.success
+          ? `${mine.br.total} beats ${theirs.br.total}${out.raise ? ' with a raise!' : ''}`
+          : `${mine.br.total} against ${theirs.br.total} — held off`),
+        mine.br, out.success);
+      postRollCard(targetChar, target.name, `${target.maneuverSkill} — holding the line`,
+        `${target.name} refuses to give way${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}: ${theirs.br.total}`,
+        theirs.br, !out.success);
+      if (out.success) {
+        target.cardIdx = clampToTrack(target.cardIdx - 1, chase.track.length);
+        postStatusLine(io, d.campaignId, `${target.name} is forced back a Chase Card.`);
+      }
+      commit();
+      // The fight for control comes AFTER the dice that caused it have landed,
+      // like every other consequence in this file.
+      if (out.success) {
+        setTimeout(() => controlCheck(target, characters.byId(targetChar?.id ?? '') ?? targetChar, targetVehicle, out.raise ? -2 : 0),
+          diceSettleDelayMs(theirs.br.dice));
+      }
+      return;
+    }
+
+    if (action === 'ram') {
+      const mine = rollMine();
+      const theirs = rollTheirs();
+      const out = opposedManeuver(mine.br.total, theirs.br.total);
+      me.actedThisTurn = true;
+      commit();
+      postRollCard(myChar, me.name, `${me.maneuverSkill} — Ram`,
+        `${me.name} rams ${target.name}${mine.tags.length ? ` [${mine.tags.join(', ')}]` : ''}: `
+        + (out.success
+          ? `${mine.br.total} beats ${theirs.br.total} — impact!`
+          : `${mine.br.total} against ${theirs.br.total} — swerved past`),
+        mine.br, out.success);
+      postRollCard(targetChar, target.name, `${target.maneuverSkill} — swinging clear`,
+        `${target.name} tries to swing clear${theirs.tags.length ? ` [${theirs.tags.join(', ')}]` : ''}: ${theirs.br.total}`,
+        theirs.br, !out.success);
+      if (!out.success) return;
+      const rammer = myVehicle ?? myChar ?? null;
+      const victim = targetVehicle ?? targetChar ?? null;
+      const dmg = ramDamage(
+        { toughness: collisionToughness(rammer), size: num(rammer?.sheet ?? {}, 'size', 0) },
+        { toughness: collisionToughness(victim), size: num(victim?.sheet ?? {}, 'size', 0) },
+      );
+      // The impact lands only once the dice that decided it have finished —
+      // a token must never take damage before the table has seen why.
+      setTimeout(() => {
+        postStatusLine(io, d.campaignId,
+          `💥 ${me.name} into ${target.name}${dmg.tag ? ` — ${dmg.tag}` : ''}: ${dmg.toTarget} damage to ${target.name}, ${dmg.toRammer} back.`);
+        const v = victim ? characters.byId(victim.id) ?? victim : null;
+        const r = rammer ? characters.byId(rammer.id) ?? rammer : null;
+        if (v && dmg.toTarget > 0) applyHpDelta(io, d.campaignId, v, -dmg.toTarget, 'a ram', me.name);
+        if (r && dmg.toRammer > 0) applyHpDelta(io, d.campaignId, r, -dmg.toRammer, 'a ram', target.name);
+        controlCheck(target, characters.byId(targetChar?.id ?? '') ?? targetChar, targetVehicle, 0);
+        controlCheck(me, characters.byId(myChar?.id ?? '') ?? myChar, myVehicle, 0);
+      }, diceSettleDelayMs(theirs.br.dice));
+      return;
+    }
+
+    if (action === 'board') {
+      // You board the MACHINE, not the person: whatever they are riding, or
+      // them if they are the vehicle.
+      const boardTok = targetTok?.mountedOn ? tokens.byId(targetTok.mountedOn) : targetTok;
+      if (!myTok) return;
+      if (!boardTok || !boardTok.mountable) {
+        emitError(socket, `${target.name} is not riding anything you could board.`);
+        return;
+      }
+      if (boardTok.id === myTok.mountedOn) { emitError(socket, `${me.name} is already aboard ${boardTok.name}.`); return; }
+      const br = roll(traitExpr(sheet, skillDie(sheet, 'Athletics'), BOARD_MOD));
+      const critFail = myChar ? critFailFor(io, d.campaignId, myChar, br.dice) : false;
+      let out = boardOutcome(br.total, critFail);
+      const riders = tokens.forMap(myTok.mapId).filter((t) => t.mountedOn === boardTok.id && t.id !== myTok.id);
+      const seats = Math.max(1, boardTok.maxRiders ?? 1);
+      // Made the leap, but there is nowhere to land.
+      if (out === 'aboard' && riders.length >= seats) {
+        out = 'held';
+        postStatusLine(io, d.campaignId, `${boardTok.name} is full — ${seats} aboard already, and nowhere to land.`);
+      }
+      me.actedThisTurn = true;
+      postRollCard(myChar, me.name, 'Athletics — Board',
+        `${me.name} leaps for ${boardTok.name} [−2 Board]: `
+        + (out === 'aboard' ? 'aboard!' : out === 'held' ? 'thinks better of it and stays put.' : 'misses, and hits the road.'),
+        br, out === 'aboard');
+      if (out === 'aboard') {
+        tokens.update(myTok.id, { mountedOn: boardTok.id });
+        tokens.move(myTok.id, boardTok.q, boardTok.r);
+        const up = tokens.byId(myTok.id)!;
+        io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: up });
+        for (const s2 of socketsSeeingToken(io, d.campaignId, up)) {
+          s2.emit(S2C.TOKEN_MOVED, { tokenId: up.id, q: up.q, r: up.r });
+        }
+        // Aboard their machine, they travel with it from now on.
+        me.cardIdx = target.cardIdx;
+        syncMapVision(io, d.campaignId, myTok.mapId);
+      } else if (out === 'fallen') {
+        const fall = roll(FALL_FROM_VEHICLE_DAMAGE);
+        chase.participants = chase.participants.filter((p) => p !== me);
+        setTimeout(() => {
+          postStatusLine(io, d.campaignId,
+            `${me.name} hits the road at speed — ${FALL_FROM_VEHICLE_DAMAGE}: ${fall.total} damage.`);
+          const who = myChar ? characters.byId(myChar.id) ?? myChar : null;
+          if (who) {
+            applyHpDelta(io, d.campaignId, who, -fall.total, 'a fall from a moving vehicle');
+            applyConditionTo(io, d.campaignId, characters.byId(who.id) ?? who, 'prone', 'thrown from a vehicle');
+          }
+        }, diceSettleDelayMs(br.dice));
+      }
+      commit();
+      return;
+    }
+  }, 'CHASE_ACTION'));
 
   socket.on(C2S.INIT_CLEAR, safe(socket, () => {
     const d = requireCampaign(socket);

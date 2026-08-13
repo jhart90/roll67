@@ -122,6 +122,8 @@ export const C2S = {
   CHASE_END: 'chaseEnd',
   /** SWADE: Change Position, or drop back, on the chase track. */
   CHASE_MOVE: 'chaseMove',
+  /** SWADE: spend the turn's action on a chase maneuver — Force, Ram, Board… */
+  CHASE_ACTION: 'chaseAction',
   INIT_SET_ACTIVE: 'initSetActive',
   INIT_ROLL_MAP: 'initRollMap',
   /** SWADE: DM deals a fresh action deck — everyone owes a card draw. */
@@ -1250,6 +1252,16 @@ export interface ChaseMovePayload {
   mode: 'free' | 'action' | 'dropBack';
   /** Which way, for a roll that succeeds (or how far back to drop). */
   direction: 'forward' | 'back';
+}
+/**
+ * Spend the turn's action on a chase maneuver. `targetEntryId` is required by
+ * the ones that need somebody to do it to — Force, Ram and Board — and the
+ * server checks the reach itself rather than trusting the button that sent it.
+ */
+export interface ChaseActionPayload {
+  entryId: string;
+  action: import('./systems/swadeChase.js').ChaseActionId;
+  targetEntryId?: string;
 }
 /** Roll Vigor for each of them, or let the wounds finish what they started. */
 export interface AftermathRollPayload { roll: boolean }

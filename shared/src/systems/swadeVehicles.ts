@@ -48,6 +48,21 @@ export function vehicleTopSpeed(sheet: SheetData): number {
   return Math.max(0, Math.round(base - base * 0.1 * hits));
 }
 
+/**
+ * A vehicle's Parry: 2, plus half the die its DRIVER manoeuvres with.
+ *
+ * A machine has no Fighting skill of its own — what makes a car hard to hit
+ * at speed is the person at the wheel, so the number moves with them. An
+ * empty parked one is Parry 2, which is what makes a stationary vehicle a
+ * barn door, correctly.
+ *
+ * Takes the die's SIDES rather than the driver's sheet, because this module
+ * is imported by the SWADE schema and must not reach back into it.
+ */
+export function vehicleParry(driverManeuverDie: number): number {
+  return 2 + Math.floor(Math.max(0, driverManeuverDie) / 2);
+}
+
 /** "1+5" — crew, then the passengers it can carry beyond them. */
 export function vehicleSeats(sheet: SheetData): number {
   return Math.max(1, num(sheet, 'crew', 1) + num(sheet, 'passengers', 0));

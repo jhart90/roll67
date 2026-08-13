@@ -12,6 +12,7 @@
 // contain attacks, powers, Tests and everything else a round normally holds.
 
 import type { PlayingCard } from './cards.js';
+import { scaleFor, scaleLabel } from './swadeSize.js';
 
 /**
  * Yards per Chase Card, by what everyone is travelling in. The book gives
@@ -42,8 +43,12 @@ export interface ChaseParticipant {
   topSpeed: number;
   /** Already changed position this turn — the maneuver is once per turn. */
   movedThisTurn?: boolean;
+  /** Already spent this turn's ACTION on a chase maneuver. */
+  actedThisTurn?: boolean;
   /** Evading: −2 to attacks against them, and to their own attacks. */
   evading?: boolean;
+  /** Their driver held the vehicle steady: no Unstable Platform aboard. */
+  steadied?: boolean;
   color?: string | null;
 }
 
@@ -121,6 +126,130 @@ export function fleePenalty(cardsBetween: number): number {
 export function canFlee(cardsBetween: number): boolean {
   return cardsBetween >= 4;
 }
+
+// ---------- what else you can do with a turn in a chase ----------
+
+/**
+ * The chase maneuvers, beyond gaining ground.
+ *
+ * Every one of them costs the turn's ACTION (Change Position is the only
+ * free one, which is why it lives apart from these), and each is a different
+ * answer to the only question a chase asks: the gap. Evade widens nothing but
+ * makes you hard to hit; Force and Ram spend the gap you have; Flee ends the
+ * whole thing; Board throws a body across it.
+ */
+export const CHASE_ACTIONS = [
+  {
+    id: 'evade', label: 'Evade', icon: '〰️',
+    /** How many Chase Cards may lie between actor and target, or null for none. */
+    reach: null,
+    hint: 'Drive evasively: −2 to attacks against you until your next turn — and −2 to your own.',
+  },
+  {
+    id: 'holdSteady', label: 'Hold Steady', icon: '🎯',
+    reach: null,
+    hint: 'Spend the wheel on smooth driving: everyone aboard sheds the −2 for shooting from a moving vehicle.',
+  },
+  {
+    id: 'force', label: 'Force', icon: '↔️',
+    reach: 1,
+    hint: 'Crowd someone within a card: opposed maneuvering. Win and they lose ground and fight for control.',
+  },
+  {
+    id: 'ram', label: 'Ram', icon: '💥',
+    reach: 0,
+    hint: 'Hit something on your own card. Both of you take the other machine, and Scale decides who regrets it.',
+  },
+  {
+    id: 'board', label: 'Board', icon: '🪝',
+    reach: 0,
+    hint: 'Leap across to a vehicle on your card. Athletics at −2; a Critical Failure is the road.',
+  },
+  {
+    id: 'flee', label: 'Flee', icon: '🏳️',
+    reach: null,
+    hint: 'Break off entirely. Needs four cards of daylight, and the further ahead the easier.',
+  },
+] as const;
+export type ChaseActionId = (typeof CHASE_ACTIONS)[number]['id'];
+
+export function chaseAction(id: ChaseActionId) {
+  return CHASE_ACTIONS.find((a) => a.id === id) ?? null;
+}
+
+/** Evading cuts both ways: −2 to attacks against them AND to their own. */
+export const EVADE_MOD = -2;
+
+/**
+ * Unstable Platform: shooting from a moving vehicle is −2, because a car is
+ * not a firing range. Hold Steady is the driver's answer — a turn spent on
+ * nothing but smooth driving, which is why it costs an action nobody gets
+ * back.
+ */
+export const UNSTABLE_PLATFORM_MOD = -2;
+
+/** Boarding is a −2 Athletics roll: a moving vehicle is a poor place to jump from. */
+export const BOARD_MOD = -2;
+
+export interface OpposedOutcome { success: boolean; raise: boolean }
+
+/**
+ * An opposed maneuvering roll — Force and Ram both live on it. The book's
+ * general rule for opposed rolls: the actor must BEAT the defender, ties go
+ * to the defender, and four over is a raise.
+ */
+export function opposedManeuver(mine: number, theirs: number): OpposedOutcome {
+  return { success: mine > theirs, raise: mine >= theirs + 4 };
+}
+
+export interface RamResult {
+  /** Damage the rammed thing takes. */
+  toTarget: number;
+  /** …and what the rammer takes for its trouble. */
+  toRammer: number;
+  scaleGap: number;
+  tag: string | null;
+}
+
+/**
+ * Ramming: each machine takes the other one, and Scale decides who regrets
+ * it. The damage a collision does is how solid the thing that hit you was —
+ * its Toughness — shifted by the difference in Scale between them, added to
+ * what the bigger one deals and taken off what it suffers.
+ *
+ * That is why a lorry may drive through a bicycle and barely notice, and why
+ * ramming something enormous is a way to kill yourself. A ram is never free:
+ * even the winner takes a hit.
+ */
+export function ramDamage(
+  rammer: { toughness: number; size: number },
+  target: { toughness: number; size: number },
+): RamResult {
+  const gap = scaleFor(rammer.size) - scaleFor(target.size);
+  return {
+    toTarget: Math.max(0, Math.round(rammer.toughness + gap)),
+    toRammer: Math.max(0, Math.round(target.toughness - gap)),
+    scaleGap: gap,
+    tag: gap === 0 ? null
+      : `${gap > 0 ? '+' : '−'}${Math.abs(gap)} Scale (${scaleLabel(rammer.size)} into ${scaleLabel(target.size)})`,
+  };
+}
+
+export type BoardOutcome = 'aboard' | 'held' | 'fallen';
+
+/**
+ * The leap across. A success puts them aboard; an ordinary failure just means
+ * they thought better of it and stayed where they were, which is the merciful
+ * reading and the one that keeps players willing to try. Only a Critical
+ * Failure puts them on the road at speed.
+ */
+export function boardOutcome(total: number, critFail: boolean): BoardOutcome {
+  if (critFail) return 'fallen';
+  return total >= 4 ? 'aboard' : 'held';
+}
+
+/** Damage for hitting the road at chase speed — the price of a botched board. */
+export const FALL_FROM_VEHICLE_DAMAGE = '2d6';
 
 /**
  * A Complication: an Action Card of Clubs means something has gone wrong —

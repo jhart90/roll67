@@ -599,6 +599,10 @@ export interface InitiativeState {
    *  IS the combat — it deals Action Cards and runs on this same tracker —
    *  so it lives here rather than in a parallel system of its own. */
   chase?: import('./systems/swadeChase.js').ChaseState;
+  /** The chase raised this tracker rather than joining a fight already in
+   *  progress — so calling the chase off puts the tracker away too, instead
+   *  of leaving a turn order ticking over a fight nobody started. */
+  chaseOwnsCombat?: boolean;
 }
 
 // ---------- Drawings, pings, measurement ----------

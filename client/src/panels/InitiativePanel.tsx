@@ -38,20 +38,25 @@ export function InitiativePanel() {
           <li key={e.id} className={`${i === state.turnIdx && state.active ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''}`}>
             {e.card ? (
               <CardChip card={e.card} />
+            ) : cardMode ? (
+              // In card mode the chip IS the reason this row sits where it
+              // does. An entry with no card yet showed a bare "0", which read
+              // as an initiative of nothing rather than as "still to draw".
+              <span className="init-value" title="Waiting on an Action Card — this row is unsorted until it draws.">🂠</span>
             ) : isDm ? (
               <input
                 key={`${e.id}:${e.value}`}
                 type="number"
                 className="init-value-input"
                 defaultValue={e.value}
-                title="Manually set this entry's initiative"
+                title="Initiative — the higher number acts first. Type to set it by hand."
                 onBlur={(ev) => {
                   const v = Number(ev.target.value);
                   if (!Number.isNaN(v) && v !== e.value) intents.initUpdate(e.id, { value: v });
                 }}
               />
             ) : (
-              <span className="init-value">{e.value}</span>
+              <span className="init-value" title="Initiative — the higher number acts first.">{e.value}</span>
             )}
             <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}</span>
             {isDm && (

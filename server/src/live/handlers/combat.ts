@@ -4443,6 +4443,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM starts a chase.'); return; }
     const state = initiative.get(d.campaignId);
+    const wasFighting = state.active;
     const length = Math.max(3, Math.min(20, trackLength ?? CHASE_TRACK_DEFAULT));
     const track = shuffleDeck(buildDeck()).slice(0, length);
 
@@ -4476,12 +4477,45 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     }
     if (participants.length === 0) { emitError(socket, 'Pick at least one token for the chase.'); return; }
 
+    // A chase runs on Action Cards like any other fight. Anyone it just added
+    // to the tracker has none yet, and an entry with no card sits at a bare
+    // "0" that says nothing about why it is where it is — so they draw one
+    // now, and the order becomes the order the cards say it is.
+    const dealing = state.entries.filter((e) => !e.card && !e.held);
+    if (dealing.length > 0) {
+      state.cardMode = true;
+      if (!state.deck || state.deck.length === 0) state.deck = shuffleDeck(buildDeck());
+      for (const entry of dealing) {
+        const { card } = drawActionCard(state, sheetForToken(entry.tokenId));
+        if (card.rank === 15) state.jokerDealt = true;
+        state.drawCounter = (state.drawCounter ?? 0) + 1;
+        entry.card = card;
+        entry.value = card.rank;
+        entry.drawSeq = state.drawCounter;
+      }
+      state.entries.sort(compareCardEntries);
+      state.turnIdx = 0;
+    }
+
     state.chase = { incrementId, track, participants };
     state.active = true;
+    // Remember whether this chase IS the fight. If it is, calling it off puts
+    // the tracker away too — a track torn down and a turn order still ticking
+    // over is a fight nobody started.
+    state.chaseOwnsCombat = !wasFighting;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
     postStatusLine(io, d.campaignId,
       `🏁 A chase begins — ${participants.length} in it, ${length} Chase Cards laid out, ${chaseIncrement(incrementId)} yards a card.`);
+    for (const entry of dealing) {
+      if (entry.hidden || !entry.card) continue;
+      postStatusLine(io, d.campaignId, `🂠 ${entry.name} draws the ${cardName(entry.card)} ${cardShort(entry.card)}.`);
+    }
+    for (const entry of dealing) {
+      if (entry.card?.rank === 15) {
+        jokersWild(io, d.campaignId, entry.name, entry.tokenId ? isPlayerSideToken(entry.tokenId) : false, !!entry.hidden);
+      }
+    }
   }, 'CHASE_START'));
 
   socket.on(C2S.CHASE_END, safe(socket, () => {
@@ -4489,10 +4523,22 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
     if (!state.chase) return;
+    const ownedCombat = state.chaseOwnsCombat === true;
     delete state.chase;
+    delete state.chaseOwnsCombat;
+    postStatusLine(io, d.campaignId, '🏁 The chase is over.');
+    // The chase was the whole fight: clearing the track clears the tracker
+    // with it, aftermath offer and all, exactly as ending combat would.
+    if (ownedCombat) {
+      initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
+      resetSwadeTurnMoves(d.campaignId);
+      swadeActionCounts.delete(d.campaignId);
+      broadcastInitiative(io, d.campaignId);
+      offerAftermath(io, d.campaignId);
+      return;
+    }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
-    postStatusLine(io, d.campaignId, '🏁 The chase is over.');
   }, 'CHASE_END'));
 
   /**

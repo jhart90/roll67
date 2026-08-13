@@ -31,6 +31,21 @@ function requireCampaign(socket: Socket) {
 interface Presentation { shopId: string; userIds: string[] | 'all'; }
 const presentations = new Map<string, Presentation>();
 
+/**
+ * The boxes on the ground that stand for a world folder.
+ *
+ * A chest is one thing wearing two records: a folder in the world tree, which
+ * is what holds its contents, and a map object, which is where it stands and
+ * what it is locked with. Anything that happens to one of them — a rename, a
+ * deletion — has to happen to the other, or the tree and the map start
+ * describing different chests.
+ */
+function linkedChests(campaignId: string, folderId: string) {
+  return maps.forCampaign(campaignId)
+    .flatMap((m) => mapObjects.forMap(m.id))
+    .filter((o) => o.kind === 'chest' && o.worldFolderId === folderId);
+}
+
 function isPresentedTo(campaignId: string, shopId: string, userId: string): boolean {
   const p = presentations.get(campaignId);
   if (!p || p.shopId !== shopId) return false;
@@ -299,6 +314,17 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const f = worldFolders.byId(folderId);
     if (!f || f.campaignId !== d.campaignId) return;
     worldFolders.update(folderId, fields);
+    // The chest on the ground wears this folder's name — they are one thing to
+    // everyone looking at them, so a rename in either place is a rename in both.
+    if (typeof fields.name === 'string' && fields.name.trim()) {
+      for (const obj of linkedChests(d.campaignId, folderId)) {
+        mapObjects.update(obj.id, { name: fields.name.trim() });
+        const updated = mapObjects.byId(obj.id)!;
+        for (const s2 of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) {
+          s2.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+        }
+      }
+    }
     broadcastWorldFolders(io, d.campaignId);
   }, 'UPDATE_WORLD_FOLDER'));
 
@@ -307,6 +333,13 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') return;
     const f = worldFolders.byId(folderId);
     if (!f || f.campaignId !== d.campaignId) return;
+    // Deleting the folder takes its box on the ground with it. Left behind, a
+    // linked chest is a lid over nothing: opening it looks for a folder that
+    // is not there any more, and no row in the tree admits it exists.
+    for (const obj of linkedChests(d.campaignId, folderId)) {
+      mapObjects.delete(obj.id);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_REMOVED, { objectId: obj.id });
+    }
     worldFolders.delete(folderId);
     broadcastWorldFolders(io, d.campaignId);
   }, 'DELETE_WORLD_FOLDER'));
@@ -340,15 +373,38 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const isLoot = f.displayKind === 'chest' || f.items.length > 0;
     worldFolders.update(folderId, { parentId: mapId, ...(isLoot ? { displayKind: 'chest' as const } : {}) });
 
-    // 1b. Create a chest MapObject linked to this folder (if one doesn't already exist).
+    // 1b. The box on the ground. A chest already has one — dropping it on a
+    // second map CARRIES it there rather than minting a copy, or the first map
+    // would be left with a lid over a folder that has gone somewhere else.
     const existingObjs = mapObjects.forMap(mapId);
-    const alreadyLinked = existingObjs.find((o) => o.worldFolderId === folderId);
-    if (isLoot && !alreadyLinked) {
+    const linked = linkedChests(d.campaignId, folderId);
+    if (isLoot) {
       const spawn = map.spawn ?? centerHex(map.grid);
       const occupied = new Set(existingObjs.map((o) => packHex({ q: o.q, r: o.r })));
       const hex = (q != null && r != null) ? { q, r } : firstFreeHex(spawn, occupied, map.grid);
-      const obj = mapObjects.create(mapId, 'chest', f.name, '', hex.q, hex.r, { worldFolderId: folderId });
-      for (const s of socketsSeeingHex(io, d.campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+      const already = linked.find((o) => o.mapId === mapId);
+      if (already) {
+        // Already on this map: just put it where it was dropped.
+        if (q != null && r != null) {
+          mapObjects.update(already.id, { q, r });
+          const moved = mapObjects.byId(already.id)!;
+          for (const s of socketsSeeingHex(io, d.campaignId, moved.mapId, moved.q, moved.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: moved });
+        }
+      } else if (linked.length > 0) {
+        const carried = linked[0];
+        mapObjects.update(carried.id, { mapId, q: hex.q, r: hex.r });
+        io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_REMOVED, { objectId: carried.id });
+        const moved = mapObjects.byId(carried.id)!;
+        for (const s of socketsSeeingHex(io, d.campaignId, moved.mapId, moved.q, moved.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: moved });
+        // Any further copies from before this rule existed are tidied away.
+        for (const stray of linked.slice(1)) {
+          mapObjects.delete(stray.id);
+          io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_REMOVED, { objectId: stray.id });
+        }
+      } else {
+        const obj = mapObjects.create(mapId, 'chest', f.name, '', hex.q, hex.r, { worldFolderId: folderId });
+        for (const s of socketsSeeingHex(io, d.campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+      }
     }
 
     // 2. Collect all character descendants recursively.

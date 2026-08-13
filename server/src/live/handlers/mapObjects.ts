@@ -10,6 +10,7 @@ import { sheetOpens, type LockTarget } from 'shared';
 import { campaignRoom, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { socketsSeeingHex, syncMapVision } from '../visionService.js';
 import { centerHex, hashStr, tokenLookFor, TOKEN_COLORS } from './tokens.js';
+import { broadcastWorldFolders } from './world.js';
 import { broadcastHandouts } from './table.js';
 
 function requireCampaign(socket: Socket) {
@@ -118,6 +119,17 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     mapObjects.update(objectId, patch);
     const updated = mapObjects.byId(objectId)!;
     for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    // A chest is one thing wearing two records — the folder in the world tree
+    // that holds its contents, and this box that stands on the ground. The
+    // tree row reads the folder's name, so a rename here that stopped at the
+    // object would rename a chest the DM could not see change.
+    if (typeof patch.name === 'string' && obj.worldFolderId) {
+      const folder = worldFolders.byId(obj.worldFolderId);
+      if (folder && folder.campaignId === d.campaignId && folder.name !== updated.name) {
+        worldFolders.update(folder.id, { name: updated.name });
+        broadcastWorldFolders(io, d.campaignId);
+      }
+    }
   }, 'UPDATE_MAP_OBJECT'));
 
   socket.on(C2S.DELETE_MAP_OBJECT, safe(socket, ({ objectId }: DeleteMapObjectPayload) => {

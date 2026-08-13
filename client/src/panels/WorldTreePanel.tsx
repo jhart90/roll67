@@ -168,8 +168,15 @@ function buildNodes(
   }
   // Loot & chests appear nested under whichever map they're placed on
   // (shop markers are skipped — the shop itself is already a tree node).
+  //
+  // A chest that stands for a world folder is skipped for the same reason: the
+  // folder IS that chest, and its contents hang underneath it. Listing both
+  // put two identical rows in the tree with a different window behind each —
+  // the folder's rename box, and the real chest with its lock and its loot.
+  const folderIds = new Set(folders.map((f) => f.id));
   for (const obj of mapObjects) {
     if (obj.kind === 'shop') continue;
+    if (obj.worldFolderId && folderIds.has(obj.worldFolderId)) continue;
     const sub = obj.items.length ? `${obj.items.length} item${obj.items.length === 1 ? '' : 's'}` : '';
     out.push({
       kind: 'mapobject', id: obj.id,
@@ -333,7 +340,15 @@ export function WorldTreePanel() {
       return;
     }
     if (node.kind === 'folder') {
-      if (isDm) setFolderEdit(node.id);
+      if (!isDm) return;
+      // A chest with a box standing on a map opens THAT — the window with the
+      // lock, the key, the contents and the compendium button, which is the
+      // one worth having. Rename, convert and delete are still a right-click
+      // away, so nothing the folder box offered has been lost.
+      const linked = Object.values(useGameStore.getState().mapObjects)
+        .find((o) => o.kind === 'chest' && o.worldFolderId === node.id);
+      if (linked) { useGameStore.getState().openObjectInspector(linked.id); return; }
+      setFolderEdit(node.id);
       return;
     }
     if (node.kind === 'light') {

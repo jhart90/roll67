@@ -1742,9 +1742,12 @@ export const mapObjects = {
       .run(id, mapId, name, description, kind, q, r, '[]', wfId, sId, range, now());
     return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, detail_asset_id: null, items_json: '[]', world_folder_id: wfId, shop_id: sId, interact_range: range, created_at: now() });
   },
-  update(id: string, patch: { name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }): void {
+  update(id: string, patch: { mapId?: string; name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }): void {
     const sets: string[] = [];
     const vals: unknown[] = [];
+    // A chest can be carried to another map — one box, moved, rather than a
+    // second box minted and the first one left standing on the old map.
+    if (patch.mapId !== undefined) { sets.push('map_id = ?'); vals.push(patch.mapId); }
     if (patch.name !== undefined) { sets.push('name = ?'); vals.push(patch.name); }
     if (patch.description !== undefined) { sets.push('description = ?'); vals.push(patch.description); }
     if (patch.artAssetId !== undefined) { sets.push('art_asset_id = ?'); vals.push(patch.artAssetId); }

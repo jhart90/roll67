@@ -14,6 +14,7 @@ import {
   type FieldDef, type Rollable, type SheetTab, type SystemSchema,
 } from './types.js';
 import { scaleBand, swadeWoundCap } from './swadeSize.js';
+import { isVehicle, vehicleHandling, vehicleSeats, vehicleTopSpeed, vehicleWoundCap, VEHICLE_KINDS } from './swadeVehicles.js';
 import { COVER_PENALTY, isCoverGrade } from './swadeCover.js';
 import { conditionsOf, DAMAGE_TYPES, ENVIRONMENTAL_TYPES } from './effects.js';
 
@@ -310,6 +311,9 @@ export function swadeParry(sheet: SheetData): number {
 /** Toughness: 2 + half Vigor die + equipped armor + maintained Armor /
  *  Protection powers (+2 each while toggled on). */
 export function swadeToughness(sheet: SheetData): number {
+  // A vehicle's Toughness is a stat off its plate — 57 (37) for an Abrams —
+  // not a derivation from a Vigor die it does not have.
+  if (isVehicle(sheet)) return num(sheet, 'vehicleToughness', 8);
   const vigor = dieSides(str(sheet, 'vigor', 'd6'));
   // The Undead's +2 is Toughness, not armor: a bullet passing through a
   // corpse simply does less to it than it would to a person.
@@ -749,10 +753,61 @@ const powersTab: SheetTab = {
   ],
 };
 
+/**
+ * The sheet a MACHINE gets: the book's own stat block — Size, Handling, Top
+ * Speed, Toughness (Armor), Crew, Cost — plus its weapons, which reuse the
+ * ordinary attacks table so every existing roll path works unchanged. No
+ * attributes, no skills, no Bennies: a vehicle does nothing on its own, it
+ * is done TO, and its driver brings the dice.
+ */
+const vehicleCoreTab: SheetTab = {
+  id: 'core',
+  title: 'Vehicle',
+  sections: [
+    {
+      kind: 'fields', id: 'identity', title: 'Vehicle',
+      fields: [
+        { id: 'concept', label: 'Concept', type: 'text', width: 'third', maxLength: CONCEPT_MAX_LEN },
+        { id: 'vehicleKind', label: 'Kind', type: 'select', width: 'third', options: [...VEHICLE_KINDS], default: 'ground' },
+        { id: 'cost', label: 'Cost', type: 'text', width: 'third' },
+        { id: 'size', label: 'Size', type: 'number', width: 'sixth', default: 4 },
+        { id: 'handling', label: 'Handling', type: 'number', width: 'sixth', default: 0 },
+        { id: 'topSpeed', label: 'Top Speed (mph)', type: 'number', width: 'sixth', default: 30 },
+        { id: 'vehicleToughness', label: 'Toughness', type: 'number', width: 'sixth', default: 10 },
+        { id: 'vehicleArmor', label: '…of which Armor', type: 'number', width: 'sixth', default: 2 },
+        { id: 'heavyArmor', label: 'Heavy Armor', type: 'checkbox', width: 'sixth', default: false },
+        { id: 'crew', label: 'Crew', type: 'number', width: 'sixth', default: 1 },
+        { id: 'passengers', label: 'Passengers', type: 'number', width: 'sixth', default: 0 },
+        { id: 'wounds', label: 'Wounds', type: 'number', width: 'sixth', default: 0 },
+        { id: 'maxWoundsOverride', label: 'Wreck cap', type: 'number', width: 'sixth', default: 0 },
+        { id: 'guidanceHits', label: 'Guidance hits', type: 'number', width: 'sixth', default: 0 },
+        { id: 'locomotionHits', label: 'Locomotion hits', type: 'number', width: 'sixth', default: 0 },
+        { id: 'vehicleFeatures', label: 'Features', type: 'multiselect', width: 'full', default: '', options: [
+          'Four-Wheel Drive', 'Tracked', 'Amphibious', 'Hover', 'Night Vision', 'Infrared Night Vision',
+          'Stabilizer', 'Improved Stabilizer', 'Reaction Fire', 'Sloped Armor', 'Stealth Paint', 'AMCM', 'Atmospheric',
+        ] },
+      ],
+    },
+    {
+      kind: 'derived', id: 'derivedStats', title: 'Derived',
+      items: [
+        { key: 'vehicleHandlingNow', label: 'Handling (after damage)' },
+        { key: 'vehicleTopSpeedNow', label: 'Top Speed (after damage)' },
+        { key: 'vehicleSeats', label: 'Seats (crew + passengers)' },
+        { key: 'vehicleWreck', label: 'Wrecked at' },
+      ],
+    },
+    // The same columns a creature's weapons use, so the whole attack
+    // pipeline — Heavy flags, AP, templates, RoF, ammo — works unchanged.
+    ...gearTab.sections.filter((sec) => sec.id === 'attacks'),
+  ],
+};
+
 export const swade: SystemSchema = {
   id: 'swade',
   name: 'Savage Worlds (SWADE)',
   tabs: [coreTab, gearTab, powersTab],
+  vehicleTabs: [vehicleCoreTab],
 
   defaultSheet(): SheetData {
     const sheet: SheetData = {};
@@ -774,6 +829,15 @@ export const swade: SystemSchema = {
 
   derive(sheet: SheetData): Record<string, number | string> {
     const out: Record<string, number | string> = {};
+    if (isVehicle(sheet)) {
+      const h = vehicleHandling(sheet);
+      out.vehicleHandlingNow = `${h >= 0 ? '+' : ''}${h} on maneuvering rolls`;
+      out.vehicleTopSpeedNow = `${vehicleTopSpeed(sheet)} mph`;
+      out.vehicleSeats = vehicleSeats(sheet);
+      out.vehicleWreck = `${vehicleWoundCap(sheet)} Wounds`;
+      out.vehicleToughness = `${num(sheet, 'vehicleToughness', 8)} (${num(sheet, 'vehicleArmor', 0)})`;
+      return out;
+    }
     for (const a of ATTRIBUTES_SWADE) {
       out[a.id] = str(sheet, a.id, 'd6');
     }
@@ -910,9 +974,10 @@ export const swade: SystemSchema = {
 
   hp(sheet: SheetData): { hp: number; maxHp: number } {
     // SWADE tracks Wounds, not hit points: the "bar" is wound slots left —
-    // 3 for a Wild Card, 1 for an Extra. Damage flows through the wound
-    // ladder (swadeDamage.ts); these numbers only feed token bars/notes.
-    const maxWounds = sheet.wildCard !== false ? 3 : 1;
+    // 3 for a Wild Card, 1 for an Extra, and 3-6 for a vehicle on its way to
+    // Wrecked. Damage flows through the wound ladder (swadeDamage.ts);
+    // these numbers only feed token bars/notes.
+    const maxWounds = isVehicle(sheet) ? vehicleWoundCap(sheet) : sheet.wildCard !== false ? 3 : 1;
     const wounds = Math.max(0, Math.min(maxWounds, num(sheet, 'wounds', 0)));
     return { hp: maxWounds - wounds, maxHp: maxWounds };
   },

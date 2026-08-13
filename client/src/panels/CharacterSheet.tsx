@@ -1139,7 +1139,10 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
   // A character with no colour of its own wears its player's colour.
   const owner = members.find((m) => m.userId === character.ownerUserId);
   const inheritedColor = owner ? playerColorFor(owner) : undefined;
-  const activeTab = schema.tabs.find((t) => t.id === tabId) ?? schema.tabs[0];
+  // A vehicle renders the machine's tab set: Handling and Top Speed, not
+  // Smarts and Spirit. Same schema plumbing either way.
+  const sheetTabs = character.sheet.vehicle === true && schema.vehicleTabs ? schema.vehicleTabs : schema.tabs;
+  const activeTab = sheetTabs.find((t) => t.id === tabId) ?? sheetTabs[0];
 
   function patch(p: SheetData) {
     if (!character) return;
@@ -1208,7 +1211,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
         </div>
 
         <div className="sheet-tabs">
-          {schema.tabs.map((t) => (
+          {sheetTabs.map((t) => (
             <button key={t.id} className={t.id === activeTab.id && tabId !== STATS_TAB && tabId !== NOTES_TAB ? 'active' : ''} onClick={() => setTabId(t.id)}>
               {t.title}
             </button>

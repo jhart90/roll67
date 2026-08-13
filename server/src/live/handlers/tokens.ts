@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
-  playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr,
+  playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
@@ -503,10 +503,15 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       return;
     }
     if (mount.id === token.id) return;
-    // A mount already carrying someone is taken; and a mount cannot itself be
-    // riding something else, or the two would drag each other around.
-    const rider = tokens.forMap(token.mapId).find((t) => t.mountedOn === mount.id && t.id !== token.id);
-    if (rider) { emitError(socket, `${mount.name} is already carrying ${rider.name}.`); return; }
+    // Seats are finite: one on a horse, a whole crew on a boat. And a mount
+    // cannot itself be riding something else, or the two would drag each
+    // other around.
+    const riders = tokens.forMap(token.mapId).filter((t) => t.mountedOn === mount.id && t.id !== token.id);
+    const seats = Math.max(1, mount.maxRiders ?? 1);
+    if (riders.length >= seats) {
+      emitError(socket, `${mount.name} is full — ${seats} rider${seats === 1 ? '' : 's'} (${riders.map((r) => r.name).join(', ')}).`);
+      return;
+    }
     if (mount.mountedOn) { emitError(socket, `${mount.name} is riding something else.`); return; }
 
     tokens.update(tokenId, { mountedOn: mount.id });
@@ -697,6 +702,12 @@ export function placeCharacterToken(
           ?? (typeof sh.tokenColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(sh.tokenColor) ? sh.tokenColor : fallbackColor),
         vision: null, bar: hp.maxHp > 0 ? hp : null, light: null,
       });
+      // A vehicle arrives already rideable, with its seats set from the
+      // sheet's crew + passengers — that IS the designation, made by whoever
+      // put a boat in the compendium rather than re-ticked on every spawn.
+      if (character.system === 'swade' && character.sheet.vehicle === true) {
+        tokens.update(created.id, { mountable: true, maxRiders: vehicleSeats(character.sheet) });
+      }
       touchedMaps.add(mapId);
       return { removedIds: removed, upserted: created };
     }

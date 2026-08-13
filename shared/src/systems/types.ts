@@ -197,6 +197,9 @@ export interface SystemSchema {
   id: 'dnd5e' | 'swn' | 'swade';
   name: string;
   tabs: SheetTab[];
+  /** The tab set a sheet with `vehicle: true` renders instead — a machine's
+   *  stat block, not a creature's. Only SWADE defines one so far. */
+  vehicleTabs?: SheetTab[];
   defaultSheet(): SheetData;
   /** Read-only computed values, keyed by id, shown next to fields. */
   derive(sheet: SheetData): Record<string, number | string>;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { NPCS_SWADE } from '../src/data/npcsSwade.js';
+import { num } from '../src/systems/types.js';
 import { SKILLS_SWADE } from '../src/systems/swade.js';
 import { conditionsFor } from '../src/systems/effects.js';
 import { roll } from '../src/dice/roller.js';
@@ -90,7 +91,9 @@ describe('SWADE bestiary', () => {
       // plausibly reach, not a pool. Nothing in the book goes past the low
       // twenties (the heaviest thing here is a main battle tank at 20).
       expect(npc.hp, `${npc.name} Toughness`).toBeGreaterThan(0);
-      expect(npc.hp, `${npc.name} Toughness`).toBeLessThanOrEqual(24);
+      // Creatures top out in the low twenties; plated machines go far past
+      // them — an Abrams is Toughness 57 (37) on the book's own page.
+      expect(npc.hp, `${npc.name} Toughness`).toBeLessThanOrEqual(npc.sheet.vehicle === true ? 60 : 24);
       expect(npc.sheet.hp, `${npc.name} must not carry hit points`).toBeUndefined();
       expect(npc.sheet.maxHp, `${npc.name} must not carry hit points`).toBeUndefined();
       expect(npc.ac, `${npc.name} Parry`).toBeGreaterThanOrEqual(0);
@@ -150,13 +153,23 @@ describe('SWADE bestiary', () => {
     expect(String(boss!.sheet.notes ?? '')).toMatch(/[Ww]eak point/);
   });
 
-  it('builds vehicles as spawnable tokens with armor and a crew note', () => {
+  it('builds vehicles as machines with the stat block off the book page', () => {
     const vehicles = NPCS_SWADE.filter((n) => n.category === 'Vehicles');
-    expect(vehicles.length).toBeGreaterThanOrEqual(15);
+    // The whole gear chapter: civilian, two world wars, modern and futuristic.
+    expect(vehicles.length).toBeGreaterThanOrEqual(50);
     for (const v of vehicles) {
-      expect(v.sheet.armor, `${v.name} needs a chassis`).toBeTruthy();
-      expect(String(v.sheet.notes ?? ''), `${v.name} should note its crew`).toMatch(/Crew/);
+      expect(v.sheet.vehicle, `${v.name} should be a vehicle sheet`).toBe(true);
+      expect(num(v.sheet, 'vehicleToughness', 0), `${v.name} needs a hull`).toBeGreaterThan(0);
+      expect(num(v.sheet, 'crew', 0), `${v.name} needs someone at the controls`).toBeGreaterThanOrEqual(1);
+      expect(num(v.sheet, 'topSpeed', 0), `${v.name} should move`).toBeGreaterThan(0);
     }
+    // Spot checks straight off the tables.
+    const byName = (n: string) => NPCS_SWADE.find((x) => x.name === n)!;
+    expect(num(byName('Main Battle Tank').sheet, 'vehicleToughness', 0)).toBe(57);
+    expect(num(byName('Main Battle Tank').sheet, 'vehicleArmor', 0)).toBe(37);
+    expect(byName('Tiger II').sheet.heavyArmor === true
+      || String(byName('Tiger II').sheet.vehicleFeatures ?? '').includes('Heavy Armor')).toBe(true);
+    expect(num(byName('Galleon').sheet, 'crew', 0) + num(byName('Galleon').sheet, 'passengers', 0)).toBe(100);
   });
 
   /**

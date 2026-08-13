@@ -37,7 +37,7 @@ import { RoundCardsOverlay } from '../table/RoundCardsOverlay';
 import { CountersOverlay } from '../table/CountersOverlay';
 import { RunPrompt } from '../table/RunPrompt';
 import { CrawlPrompt } from '../table/CrawlPrompt';
-import { AftermathPrompt, HealingPrompt } from '../table/AftermathPrompt';
+import { AftermathPrompt, HealingPrompt, VehicleOocPrompt } from '../table/AftermathPrompt';
 import { PresenceBar } from '../table/PresenceBar';
 import { DiceRoller } from '../table/DiceRoller';
 import { Toolbar } from '../table/Toolbar';
@@ -482,6 +482,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <CrawlPrompt />
         <AftermathPrompt />
         <HealingPrompt />
+        <VehicleOocPrompt />
         <CookPrompt />
         <CalledShotPrompt />
         <BlastPrompt />

@@ -141,6 +141,12 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // one under the other. The rider rides smaller and sits up and to the right,
   // which reads as "on that" rather than "next to that" at any zoom.
   const riding = !!token.mountedOn;
+  // Which seat this rider holds among its mount's riders, so several fan out
+  // around the hull instead of stacking on one shoulder. Sorted by id: stable
+  // for everyone, and stable across re-renders.
+  const seatIdx = useGameStore((s) => !token.mountedOn ? 0
+    : Object.values(s.tokens).filter((t) => t.mountedOn === token.mountedOn)
+      .map((t) => t.id).sort().indexOf(token.id));
   const radius = map.grid.hexSize * 0.72 * token.size * (riding ? 0.55 : 1);
   // Token art reads better with a little more presence than the flat colour
   // discs, so it renders 20% larger than the hex-derived radius. Everything
@@ -290,7 +296,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // at 2.5× so a far zoom doesn't wallpaper the map in text. Quantized to
   // 0.05 steps so continuous wheel-zoom doesn't re-render every token per tick.
   const nameScale = useGameStore((s) => Math.round(Math.min(2.5, Math.max(1, 1 / s.camera.scale)) * 20) / 20);
-  const swadeWounds = system === 'swade' && token.characterId && bar && bar.maxHp > 0 && bar.maxHp <= 3
+  const swadeWounds = system === 'swade' && token.characterId && bar && bar.maxHp > 0 && bar.maxHp <= 6
     ? Math.max(0, bar.maxHp - bar.hp)
     : null;
   const hpFrac = swadeWounds === null && bar && bar.maxHp > 0 ? Math.max(0, Math.min(1, bar.hp / bar.maxHp)) : null;
@@ -312,7 +318,13 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
 
   return (
     <g
-      transform={`translate(${pos.x + (riding ? radius * 0.85 : 0)}, ${pos.y - (riding ? radius * 0.85 : 0)})`}
+      transform={(() => {
+        if (!riding) return `translate(${pos.x}, ${pos.y})`;
+        // Seats fan across the top of the mount, left to right.
+        const angle = Math.PI * (0.75 - 0.5 * (seatIdx % 4) / 3);
+        const d = radius * 1.15;
+        return `translate(${pos.x + Math.cos(angle) * d}, ${pos.y - Math.abs(Math.sin(angle)) * d})`;
+      })()}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

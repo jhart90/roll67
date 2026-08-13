@@ -35,6 +35,7 @@ export {
   FREE_SKILLS_SWADE, SKILL_ATTR_SWADE, dieStepIndex, stepDie,
   swadeSnakeEyes, swadeCritFail, isConstruct, isUndead, isAbomination, swadeBennyMax,
 } from './swade.js';
+export * from './swadeVehicles.js';
 export * from './swadeCreation.js';
 export * from './swnCreation.js';
 

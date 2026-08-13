@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, addTally, isAbomination, swadeCritFail, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, vehicleWoundCap, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetData } from 'shared';
 import { campaigns, characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -442,11 +442,116 @@ export function critFailFor(io: Server, campaignId: string, ch: Character, dice:
   return crit;
 }
 
+/** Vehicles whose driver still owes a maneuvering roll against going Out of
+ *  Control, waiting on the DM's answer. */
+const pendingOoc = new Map<string, { characterId: string; at: number }>();
+export function takeOocOffer(characterId: string): boolean {
+  const rec = pendingOoc.get(characterId);
+  pendingOoc.delete(characterId);
+  return !!rec && Date.now() - rec.at < 5 * 60_000;
+}
+
+/**
+ * Damage to a MACHINE.
+ *
+ * A vehicle is never Shaken — there is no nerve in it to rattle. Instead:
+ * any hit that reaches its Toughness threatens control (the driver owes a
+ * maneuvering roll or the thing goes Out of Control — offered to the DM as
+ * a prompt, since the engine does not yet know who is driving); each raise
+ * is a Wound as usual; a hit that Wounds also rolls once on the Vehicle
+ * Critical Hits table — the wheels, the engine, the crew inside; and past
+ * its cap the vehicle is not Incapacitated but WRECKED.
+ */
+function applyVehicleDamage(
+  io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
+): { character: Character; note: string } {
+  const toughness = swadeToughness(character.sheet);
+  const margin = damage - toughness;
+  if (margin < 0) {
+    return { character, note: ` — no effect (${damage} vs Toughness ${toughness})` };
+  }
+  let cur = character;
+  const bits: string[] = [];
+  const woundsDealt = Math.floor(margin / 4);
+  const cap = vehicleWoundCap(cur.sheet);
+  if (woundsDealt > 0) {
+    const woundsAfter = Math.min(num(cur.sheet, 'wounds', 0) + woundsDealt, cap + 1);
+    cur = persistSheet(io, campaignId, cur, { wounds: woundsAfter });
+    bits.push(`${woundsDealt} Wound${woundsDealt === 1 ? '' : 's'} (now ${Math.min(woundsAfter, cap)} of ${cap})`);
+    // One Critical Hit per wounding hit — not one per Wound.
+    const crit = rollVehicleCrit();
+    bits.push(`Critical Hit: ${crit.label}`);
+    if (crit.patchField) {
+      cur = persistSheet(io, campaignId, cur, { [crit.patchField]: num(cur.sheet, crit.patchField, 0) + 1 });
+    }
+    postStatusLine(io, campaignId, `🔧 ${cur.name} — ${crit.label}: ${crit.effect}`);
+    if (woundsAfter > cap) {
+      cur = persistSheet(io, campaignId, cur, {
+        conditions: [...conditionsOf(cur.sheet).filter((c) => c !== 'incapacitated'), 'incapacitated'],
+      });
+      postStatusLine(io, campaignId, `💥 ${cur.name} is WRECKED${sourceLabel ? ` by ${sourceLabel}` : ''}!`);
+      return { character: cur, note: ` — ${bits.join('; ')} — WRECKED (${damage} vs Toughness ${toughness})` };
+    }
+  } else {
+    bits.push('no Wound');
+  }
+  // Control is threatened by ANY hit that reaches Toughness, wounding or not.
+  pendingOoc.set(cur.id, { characterId: cur.id, at: Date.now() });
+  io.to(dmRoom(campaignId)).emit(S2C.VEHICLE_OOC_PROMPT, { characterId: cur.id, name: cur.name });
+  bits.push('the driver must hold it or go Out of Control');
+  return { character: cur, note: ` — ${bits.join('; ')} (${damage} vs Toughness ${toughness})` };
+}
+
+/**
+ * The DM's answer to the Out of Control prompt: either the driver held it
+ * (skip), or the vehicle rolls on the table. Collision Wounds from the table
+ * are applied DIRECTLY — the book is explicit that Out of Control damage
+ * never triggers another Out of Control roll.
+ */
+export function resolveOutOfControl(io: Server, campaignId: string, ch: Character): void {
+  const out = rollOutOfControl();
+  let cur = ch;
+  const cap = vehicleWoundCap(cur.sheet);
+  postStatusLine(io, campaignId, `🌀 ${cur.name} goes Out of Control — ${out.label} (${out.roll}): ${out.effect}`);
+  if (out.vehicleWounds > 0) {
+    const after = Math.min(num(cur.sheet, 'wounds', 0) + out.vehicleWounds, cap + 1);
+    cur = persistSheet(io, campaignId, cur, { wounds: after });
+    if (after > cap) {
+      cur = persistSheet(io, campaignId, cur, {
+        conditions: [...conditionsOf(cur.sheet).filter((c) => c !== 'incapacitated'), 'incapacitated'],
+      });
+      postStatusLine(io, campaignId, `💥 ${cur.name} is WRECKED by the collision!`);
+    }
+  }
+  for (let i = 0; i < out.crits; i++) {
+    const crit = rollVehicleCrit(Math.random, { rerollCrew: out.label === 'Glitch' });
+    if (crit.patchField) {
+      cur = persistSheet(io, campaignId, cur, { [crit.patchField]: num(cur.sheet, crit.patchField, 0) + 1 });
+    }
+    postStatusLine(io, campaignId, `🔧 ${cur.name} — ${crit.label}: ${crit.effect}`);
+  }
+  if (out.condition) {
+    // The jolt hits everyone aboard, not just the hull: the mount link knows
+    // who is riding, and their sheets carry the condition like anyone else's.
+    cur = (applyConditionTo(io, campaignId, cur, out.condition, 'going Out of Control'), characters.byId(cur.id) ?? cur);
+    for (const tok of tokens.forCharacter(cur.id)) {
+      for (const rider of tokens.forMap(tok.mapId).filter((t) => t.mountedOn === tok.id)) {
+        const rch = rider.characterId ? characters.byId(rider.characterId) : undefined;
+        if (rch) applyConditionTo(io, campaignId, rch, out.condition, 'the vehicle going Out of Control');
+      }
+    }
+  }
+}
+
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
   attackerName?: string, damageType?: string,
 ): { character: Character; note: string } {
+  // A machine takes its hits on its own ladder — see applyVehicleDamage.
+  if (isVehicle(character.sheet)) {
+    return applyVehicleDamage(io, campaignId, character, damage, sourceLabel);
+  }
   const derived = systemFor('swade').derive(character.sheet);
   const toughness = Number(derived.toughness) || 4;
   const wildCard = character.sheet.wildCard !== false;

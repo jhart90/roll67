@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -288,6 +288,8 @@ interface GameState {
   clockSeconds: number;
   /** DM-only: who is due a natural healing roll after days passed. */
   healingPrompt: HealingPromptPayload | null;
+  /** DM-only: a vehicle hit hard enough to threaten control. */
+  vehicleOocPrompt: VehicleOocPromptPayload | null;
   /** SWADE: your Bleeding Out character owes their start-of-turn Vigor roll. */
   bleedPrompt: BleedPromptPayload | null;
   /** SWADE: your Stunned character may roll Vigor to come to. */
@@ -557,6 +559,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aftermathPrompt: null,
   clockSeconds: 0,
   healingPrompt: null,
+  vehicleOocPrompt: null,
   rollStatsData: {},
   ironDice: null,
   publicSheets: {},
@@ -1382,6 +1385,10 @@ export function wireSocket(): void {
     useGameStore.setState({ healingPrompt: p });
   });
 
+  socket.on(S2C.VEHICLE_OOC_PROMPT, (p: VehicleOocPromptPayload) => {
+    useGameStore.setState({ vehicleOocPrompt: p });
+  });
+
   socket.on(S2C.CLOCK, (p: ClockPayload) => {
     useGameStore.setState({ clockSeconds: Math.max(0, p.seconds) });
   });
@@ -1977,6 +1984,11 @@ export const intents = {
     socket.emit(C2S.JUMP_ROLL, { tokenId, withRunUp, athletics }),
   /** DM: move the in-world clock forward one step. */
   advanceTime: (step: TimeStepId) => socket.emit(C2S.ADVANCE_TIME, { step }),
+  /** Answer a vehicle's Out of Control threat: roll the table, or held it. */
+  vehicleOocRoll: (characterId: string, roll: boolean) => {
+    socket.emit(C2S.VEHICLE_OOC_ROLL, { characterId, roll });
+    useGameStore.setState({ vehicleOocPrompt: null });
+  },
   /** Answer the natural-healing prompt: roll for the wounded, or not yet. */
   healingRoll: (roll: boolean) => {
     socket.emit(C2S.HEALING_ROLL, { roll });

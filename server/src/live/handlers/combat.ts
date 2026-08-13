@@ -7,7 +7,7 @@ import {
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type AdvanceTimePayload, type AftermathRollPayload, type HealingRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AdvanceTimePayload, type AftermathRollPayload, type HealingRollPayload, type VehicleOocRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -20,7 +20,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -4015,6 +4015,19 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'ADVANCE_TIME'));
+
+  socket.on(C2S.VEHICLE_OOC_ROLL, safe(socket, ({ characterId, roll: shouldRoll }: VehicleOocRollPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    if (!takeOocOffer(characterId)) return;
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    if (!shouldRoll) {
+      postStatusLine(io, d.campaignId, `🌀 ${ch.name}'s driver wrestles it back under control.`);
+      return;
+    }
+    resolveOutOfControl(io, d.campaignId, ch);
+  }, 'VEHICLE_OOC_ROLL'));
 
   socket.on(C2S.HEALING_ROLL, safe(socket, ({ roll: shouldRoll }: HealingRollPayload) => {
     const d = requireCampaign(socket);

@@ -169,6 +169,8 @@ export const C2S = {
   AFTERMATH_ROLL: 'aftermathRoll',
   /** SWADE: the DM's answer to the natural-healing prompt. */
   HEALING_ROLL: 'healingRoll',
+  /** SWADE: the DM answers a vehicle's Out of Control threat. */
+  VEHICLE_OOC_ROLL: 'vehicleOocRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
   /** Fetch the public-facing sheet of a character you don't control. */
@@ -844,6 +846,8 @@ export const S2C = {
   AFTERMATH_PROMPT: 'aftermathPrompt',
   /** SWADE: days passed and someone is due a natural healing roll. */
   HEALING_PROMPT: 'healingPrompt',
+  /** SWADE: a vehicle was hit hard enough to threaten control. */
+  VEHICLE_OOC_PROMPT: 'vehicleOocPrompt',
   /** The in-world clock, after any change. */
   CLOCK: 'clock',
   /** Lifetime roll statistics for the requested scope. */
@@ -1229,6 +1233,10 @@ export interface AftermathRollPayload { roll: boolean }
 /** DM-only: these wounded are due their natural healing roll. */
 export interface HealingPromptPayload { names: string[] }
 export interface HealingRollPayload { roll: boolean }
+/** DM-only: this vehicle's driver owes a maneuvering roll or it goes Out of
+ *  Control. `roll: false` means the driver held it. */
+export interface VehicleOocPromptPayload { characterId: string; name: string }
+export interface VehicleOocRollPayload { characterId: string; roll: boolean }
 
 /**
  * The GM's time controls. A SWADE round is six seconds — the book's own

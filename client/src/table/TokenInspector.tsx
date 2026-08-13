@@ -280,6 +280,20 @@ export function TokenInspector() {
             <span className="dim"> — riders share its hex and move with it</span>
           </span>
         </label>
+        {token.mountable === true && (
+          <label>
+            Max riders
+            <input
+              type="number"
+              min={1}
+              value={token.maxRiders ?? 1}
+              onChange={(e) => {
+                const maxRiders = Math.max(1, Number(e.target.value) || 1);
+                intents.updateToken(token.id, { maxRiders });
+              }}
+            />
+          </label>
+        )}
       </div>
         </>
       )}

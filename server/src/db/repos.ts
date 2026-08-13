@@ -833,6 +833,7 @@ interface TokenRow {
   conditions_json: string | null;
   mountable: number;
   mounted_on: string | null;
+  max_riders: number;
   light_json: string | null;
   /** From the LEFT JOIN in TOKEN_SELECT — the art asset's file extension. */
   art_ext: string | null;
@@ -864,6 +865,7 @@ function toToken(row: TokenRow): Token {
     conditions: row.conditions_json ? safeParse<string[]>(row.conditions_json, []) : null,
     mountable: row.mountable === 1,
     mountedOn: row.mounted_on,
+    maxRiders: Math.max(1, Number(row.max_riders ?? 1)),
     light: row.light_json ? safeParse(row.light_json, null) : null,
   };
 }
@@ -908,12 +910,12 @@ export const tokens = {
     characterId?: string | null; artAssetId?: string | null;
     vision?: object | null; bar?: object | null; light?: object | null;
     conditions?: string[] | null;
-    mountable?: boolean; mountedOn?: string | null;
+    mountable?: boolean; mountedOn?: string | null; maxRiders?: number;
   }): void {
     const cur = stmt('SELECT * FROM tokens WHERE id = ?').get(id) as TokenRow | undefined;
     if (!cur) return;
     stmt(
-      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?, conditions_json = ?, mountable = ?, mounted_on = ?, light_json = ?, revealed_at = ?
+      `UPDATE tokens SET name = ?, layer = ?, size = ?, shape = ?, color = ?, character_id = ?, art_asset_id = ?, vision_json = ?, bar_json = ?, conditions_json = ?, mountable = ?, mounted_on = ?, max_riders = ?, light_json = ?, revealed_at = ?
        WHERE id = ?`,
     ).run(
       patch.name ?? cur.name,
@@ -928,6 +930,7 @@ export const tokens = {
       patch.conditions !== undefined ? (patch.conditions ? JSON.stringify(patch.conditions) : null) : cur.conditions_json,
       patch.mountable !== undefined ? (patch.mountable ? 1 : 0) : cur.mountable,
       patch.mountedOn !== undefined ? patch.mountedOn : cur.mounted_on,
+      patch.maxRiders !== undefined ? Math.max(1, Math.floor(patch.maxRiders)) : cur.max_riders,
       patch.light !== undefined ? (patch.light ? JSON.stringify(patch.light) : null) : cur.light_json,
       // Crossing from the GM layer onto the visible one is a reveal: stamp it
       // so players fade the piece in rather than have it blink into being.

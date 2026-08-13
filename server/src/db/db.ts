@@ -78,6 +78,8 @@ if (ensureColumn('tokens', 'conditions_json', 'conditions_json TEXT')) {
 ensureColumn('tokens', 'mountable', 'mountable INTEGER NOT NULL DEFAULT 0');
 // …and this is the rider's link to the mount carrying them.
 ensureColumn('tokens', 'mounted_on', 'mounted_on TEXT');
+// How many riders a mount carries: one for a horse, a crew for a boat.
+ensureColumn('tokens', 'max_riders', 'max_riders INTEGER NOT NULL DEFAULT 1');
 ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0');
 // In-world elapsed seconds. Every time-based rule in SWADE — the Golden Hour,
 // Power Points coming back, Natural Healing — is measured against this rather

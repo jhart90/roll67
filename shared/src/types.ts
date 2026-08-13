@@ -333,6 +333,8 @@ export interface Token {
   /** For a RIDER: the token carrying them. They share its hex, move where it
    *  moves, and cannot walk off on their own until they dismount. */
   mountedOn?: string | null;
+  /** Seats on a mountable token: one for a horse, a whole crew for a boat. */
+  maxRiders?: number;
   /** When this token was moved onto the visible layer. Players fade it in over
    *  REVEAL_FADE_MS from this moment; null once the fade is ancient history. */
   revealedAt?: number | null;

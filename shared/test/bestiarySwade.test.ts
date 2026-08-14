@@ -148,8 +148,11 @@ describe('SWADE bestiary', () => {
     const attacks = (boss!.sheet.attacks ?? []) as Array<{ name: string; damage: string }>;
     // A melee threat, an area attack, a ranged option and a fear effect.
     expect(attacks.length).toBeGreaterThanOrEqual(4);
-    // Toughness, not a pool: heavy plating over a d12 Vigor frame.
-    expect(boss!.hp).toBeGreaterThanOrEqual(16);
+    // Toughness, not a pool — and a number a NOVICE squad can actually get
+    // through. At 18 it took a 22 to Wound, which six starting characters
+    // cannot roll: the boss was unkillable rather than hard.
+    expect(boss!.hp).toBeGreaterThanOrEqual(11);
+    expect(boss!.hp, 'a boss a novice party cannot scratch is not a boss').toBeLessThanOrEqual(13);
     expect(String(boss!.sheet.notes ?? '')).toMatch(/[Ww]eak point/);
   });
 
@@ -247,5 +250,69 @@ describe('SWADE bestiary', () => {
     expect(find('Zombie Horde', 'Clawing Mass')).toMatchObject({ aoeShape: 'sphere', aoeHexes: 3 });
     expect(find('War Mech', 'Missile Pod')).toMatchObject({ aoeShape: 'sphere', aoeHexes: 5 });
     expect(find('Young Dragon', 'Fiery Breath')).toMatchObject({ aoeShape: 'cone', aoeSize: 54 });
+  });
+});
+
+/**
+ * The scenario rosters are written for a specific table: six Novice
+ * characters with an advance or two between them. That is a narrow band, and
+ * it is easy to drift out of by writing a creature that reads well.
+ *
+ * A starting character swings about 2d6 (average 7, a little more with aces)
+ * and carries Toughness 5–7. So anything they are meant to FIGHT has to be
+ * Shakeable by that, and anything meant to fight THEM has to leave somebody
+ * standing afterwards.
+ */
+describe('the scenario rosters, against six Novices', () => {
+  const SCENARIOS = ['Spice Coast (Scenario)', 'Nazareth (Scenario)', 'Chrono Rivals', 'Robo-Dinosaurs', 'Dinosaurs'];
+  const roster = NPCS_SWADE.filter((n) => SCENARIOS.includes(n.category ?? ''));
+  /** Ships and other machines are shot at with cannon, not with cutlasses. */
+  const creatures = roster.filter((n) => n.sheet.vehicle !== true && !/Ship|Indiaman|Brigantine/.test(n.name));
+
+  it('has rosters to check', () => {
+    expect(creatures.length).toBeGreaterThan(60);
+  });
+
+  it('leaves nothing a starting party cannot hurt at all', () => {
+    for (const n of creatures) {
+      // 12 is a hard fight for 2d6 and a raise; past that they need luck
+      // they do not have yet.
+      expect(n.hp, `${n.name} has Toughness ${n.hp} — a novice squad cannot get through it`).toBeLessThanOrEqual(13);
+    }
+  });
+
+  it('never swings hard enough to take a starting character out in one blow', () => {
+    for (const n of creatures) {
+      for (const atk of (n.sheet.attacks ?? []) as Array<{ name: string; damage: string }>) {
+        // Sum the faces: 2d10! averages 11, which Wounds a Toughness-6
+        // character and can drop them with a raise. Anything past that is
+        // one-shotting people who have not earned a second Wound yet.
+        const faces = [...String(atk.damage).matchAll(/(\d*)d(\d+)/g)]
+          .reduce((sum, m) => sum + (Number(m[1] || 1) * (Number(m[2]) + 1)) / 2, 0);
+        const flat = [...String(atk.damage).matchAll(/\+(\d+)(?!d)/g)].reduce((a, m) => a + Number(m[1]), 0);
+        expect(faces + flat, `${n.name}'s ${atk.name} averages ${faces + flat}`).toBeLessThanOrEqual(12);
+      }
+    }
+  });
+
+  it('gives every template attack an answer — Evasion, by name', () => {
+    for (const n of creatures) {
+      for (const atk of (n.sheet.attacks ?? []) as Array<Record<string, unknown>>) {
+        if (!atk.aoeShape) continue;
+        expect(atk.evadable, `${n.name}'s ${String(atk.name)} is a template nobody can dive away from`).toBe(true);
+      }
+    }
+  });
+
+  it('gives every Wild Card who is a PERSON their Edges and Hindrances', () => {
+    const people = creatures.filter((n) => n.sheet.wildCard === true
+      && !['Dinosaurs', 'Robo-Dinosaurs'].includes(n.category ?? ''));
+    expect(people.length).toBeGreaterThan(5);
+    for (const n of people) {
+      const edges = (n.sheet.edges ?? []) as unknown[];
+      const hindrances = (n.sheet.hindrances ?? []) as unknown[];
+      expect(edges.length, `${n.name} is a Wild Card with no Edges`).toBeGreaterThan(0);
+      expect(hindrances.length, `${n.name} is a Wild Card with no Hindrances`).toBeGreaterThan(0);
+    }
   });
 });

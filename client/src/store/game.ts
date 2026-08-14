@@ -636,13 +636,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       aoeTargeting: { characterId, sourceTokenId, action, adv, originHex, aimHex: originHex },
       tool: 'select', selectedTokenId: null, selectedTokenIds: [],
     });
-    // A burst with no range goes off where the thing is standing — there is
-    // nothing to aim, so asking where to put it is a question with one answer.
-    if (aoeCentredOnSelf(action)) get().confirmAoeTargeting();
+    // A burst with no range goes off where the thing is standing, so there is
+    // nothing to AIM — but there is still something to look at. The template
+    // is drawn locked to the attacker and waits for a click, which is the
+    // moment the table can see who is standing in it and think again.
   },
   updateAoeAim(hex) {
     const t = get().aoeTargeting;
     if (!t || (t.aimHex.q === hex.q && t.aimHex.r === hex.r)) return;
+    // A self-centred burst does not follow the cursor: it is stuck to whoever
+    // is about to set it off, and the only question left is whether to.
+    if (aoeCentredOnSelf(t.action)) return;
     set({ aoeTargeting: { ...t, aimHex: hex } });
     const aoe = t.action.aoe;
     if (!aoe) return;

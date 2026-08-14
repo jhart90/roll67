@@ -8,6 +8,7 @@
 
 import type { DieRoll, Hex, SheetData, VisionStats } from '../types.js';
 import { ACE_STYLES, CONCEPT_MAX_LEN } from '../types.js';
+import { CALIBERS_SWADE, CALIBER_LABELS } from '../data/contentSwade.js';
 import { hexDistance } from '../hex/coords.js';
 import {
   fmtMod, num, rows, str,
@@ -447,6 +448,27 @@ export function swadeSnakeEyes(dice: DieRoll[]): boolean {
 }
 
 /**
+ * Does this weapon count its rounds at all?
+ *
+ * Only a weapon with a MAGAZINE does. A claw, a bite, a tail sweep has no
+ * ammunition, and the Ammo Left box on its row is meaningless — but a stray
+ * 0 in it read as "empty" and greyed the attack out with "Reload!", which a
+ * dinosaur cannot do. The magazine is the thing that says a weapon is fed,
+ * so the magazine is what decides.
+ *
+ * A one-use thrown weapon still qualifies: the compendium gives a grenade a
+ * magazine of one, which is exactly what it is.
+ */
+export function swadeTracksAmmo(atk: SheetData): boolean {
+  return num(atk, 'maxAmmo', 0) > 0;
+}
+
+/** Rounds left, or -1 for a weapon that does not count them. */
+export function swadeAmmoLeft(atk: SheetData): number {
+  return swadeTracksAmmo(atk) ? Math.max(0, num(atk, 'ammo', 0)) : -1;
+}
+
+/**
  * A Critical Failure on a roll of MANY dice — a burst of automatic fire.
  *
  * Snake eyes is written for two dice, one trait and one Wild, and does not
@@ -752,7 +774,7 @@ const gearTab: SheetTab = {
         { id: 'wielded', label: 'Wielded', type: 'checkbox', width: 'sixth' },
         { id: 'ammo', label: 'Ammo left', type: 'number', width: 'sixth' },
         { id: 'maxAmmo', label: 'Mag', type: 'number', width: 'sixth', default: 0 },
-        { id: 'caliber', label: 'Caliber', type: 'text', width: 'sixth' },
+        { id: 'caliber', label: 'Caliber', type: 'select', width: 'sixth', default: '', options: ['', ...CALIBERS_SWADE], optionLabels: CALIBER_LABELS },
         { id: 'rof', label: 'RoF', type: 'number', width: 'sixth', default: 1 },
         { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },

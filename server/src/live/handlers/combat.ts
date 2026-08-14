@@ -15,7 +15,7 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
-  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
+  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeAmmoLeft, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
   activationOutcome, backlashPatch, castingBlocker, swadeArcaneExpr, ACTIVATION_TN, FAILED_ACTIVATION_PP,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
@@ -2279,15 +2279,20 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         emitError(socket, `${action.label} isn't in hand — tick Wielded on its card first.`);
         return;
       }
-      // SWADE burst fire needs its full round count in the magazine.
-      if (actor.system === 'swade' && atkRow && num(atkRow, 'ammo', -1) >= 0) {
+      // SWADE burst fire needs its full round count in the magazine — and
+      // only a weapon WITH a magazine counts rounds at all. A tail sweep has
+      // no ammunition, and a stray 0 in its Ammo Left box used to read as
+      // empty and tell a dinosaur to reload.
+      const swadeAmmo = actor.system === 'swade' && atkRow ? swadeAmmoLeft(atkRow) : -1;
+      if (swadeAmmo >= 0) {
         const need = AMMO_BY_ROF[Math.min(6, effRof)];
-        if (num(atkRow, 'ammo', 0) < need) {
-          emitError(socket, `${action.label} needs ${need} round${need === 1 ? '' : 's'} at RoF ${effRof} — only ${num(atkRow, 'ammo', 0)} left. Reload or fire slower.`);
+        if (swadeAmmo < need) {
+          emitError(socket, `${action.label} needs ${need} round${need === 1 ? '' : 's'} at RoF ${effRof} — only ${swadeAmmo} left. Reload or fire slower.`);
           return;
         }
       }
-      if (atkRow && num(atkRow, 'ammo', -1) === 0) {
+      const otherAmmo = actor.system !== 'swade' && atkRow ? num(atkRow, 'ammo', -1) : -1;
+      if (swadeAmmo === 0 || otherAmmo === 0) {
         emitError(socket, `${action.label} is out of ammo.`);
         return;
       }

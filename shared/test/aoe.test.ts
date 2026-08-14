@@ -182,3 +182,25 @@ describe('a burst centred on whoever set it off', () => {
     expect(aoeCentredOnSelf({ rangeFt: 0 })).toBe(false);
   });
 });
+
+describe('a burst does not catch whoever set it off', () => {
+  const spec: AoeSpec = { shape: 'sphere', sizeFt: 0, sizeHexes: 3 };
+  const here = { q: 4, r: 4 };
+  const tokens = [
+    { id: 'sweeper', q: 4, r: 4 },
+    { id: 'victim', q: 5, r: 4 },
+  ];
+
+  it('spares the thing at the centre of its own sweep', () => {
+    const hit = tokensCaughtInAoe(spec, here, here, GRID, tokens, null);
+    expect(hit).not.toContain('sweeper');
+    expect(hit).toContain('victim');
+  });
+
+  it('…but a grenade at your own feet still gets you', () => {
+    // Thrown from somewhere else and landing here: the thrower is not the
+    // centre, so nobody standing on it is spared.
+    const hit = tokensCaughtInAoe(spec, { q: 0, r: 4 }, here, GRID, tokens, null);
+    expect(hit).toContain('sweeper');
+  });
+});

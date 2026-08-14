@@ -33,7 +33,7 @@ export {
   TRAIT_DICE, dieSides, traitExpr, traitModWhy, woundPenalty, swadeParry, swadeToughness,
   swadeRangedArmor, swadeArcaneExpr, gearTraitBonus, swadePace, gangUpBonus, skillDie, swadeStowed, swadeStowedRollable, type GangUpCombatant,
   FREE_SKILLS_SWADE, SKILL_ATTR_SWADE, dieStepIndex, stepDie,
-  swadeSnakeEyes, swadeNaturalOne, swadeCritFail, swadeBurstCritFail, bennyPurse, type BennyPurse, isConstruct, isUndead, isAbomination, swadeBennyMax,
+  swadeSnakeEyes, swadeNaturalOne, swadeCritFail, swadeBurstCritFail, swadeTracksAmmo, swadeAmmoLeft, bennyPurse, type BennyPurse, isConstruct, isUndead, isAbomination, swadeBennyMax,
 } from './swade.js';
 export * from './swadeVehicles.js';
 export * from './swadeChase.js';

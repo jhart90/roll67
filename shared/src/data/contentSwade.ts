@@ -429,6 +429,31 @@ const POWERS: P[] = [
 // the whole batch the row buys, since that is how the tables price ammunition
 // (per 50 rounds, per 25 shells) rather than per round.
 type Ammo = [string, string, number, string, number, number];
+
+/**
+ * Every caliber the ammunition table feeds, for the weapon row's own picker.
+ *
+ * A weapon and its rounds have to agree on a spelling exactly — the sheet
+ * matches them by this string — so it is a list to choose from rather than a
+ * box to mistype "bullets-med" into.
+ */
+export const CALIBERS_SWADE = [
+  'arrows', 'bolts', 'bullets-small', 'bullets-medium', 'bullets-large',
+  'battery-pistol', 'battery-rifle', 'battery-gatling', 'shot', 'shells', 'slugs', 'stones',
+] as const;
+
+/** What each one is called when a person reads it. */
+export const CALIBER_LABELS: Record<string, string> = {
+  '': 'none — needs no ammunition',
+  arrows: 'Arrows', bolts: 'Crossbow bolts',
+  'bullets-small': 'Bullets, small (.22–.32)',
+  'bullets-medium': 'Bullets, medium (9mm–.45)',
+  'bullets-large': 'Bullets, large (.50+)',
+  'battery-pistol': 'Laser battery (pistol)',
+  'battery-rifle': 'Laser battery (rifle/SMG)',
+  'battery-gatling': 'Laser battery (gatling)',
+  shot: 'Shot & powder', shells: 'Shotgun shells', slugs: 'Shotgun slugs', stones: 'Sling stones',
+};
 const AMMUNITION: Ammo[] = [
   ['Arrows (20)', 'arrows', 20, 'For bows of every era', 10, 4],
   ['Crossbow Bolts (20)', 'bolts', 20, 'For crossbows, arbalests, and repeaters', 10, 4],

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
-  AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swadeStowedRollable, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swadeAmmoLeft, swadeStowedRollable, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef, type SheetCard,
 } from 'shared';
 import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
@@ -932,8 +932,11 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             // picker (a modal — the pane is too narrow for inline controls)
             // before targeting begins. The trigger greys only when even a
             // single shot (or the suppressive burst) can't be paid.
-            const ammoLeft = a.source === 'attack'
-              ? num(rows(character.sheet, 'attacks')[a.index] ?? {}, 'ammo', -1)
+            // Only a weapon with a magazine counts rounds; a claw has none,
+            // and a 0 sitting in its Ammo Left box is not an empty gun.
+            const atkRow = a.source === 'attack' ? rows(character.sheet, 'attacks')[a.index] ?? {} : null;
+            const ammoLeft = atkRow
+              ? (character.system === 'swade' ? swadeAmmoLeft(atkRow) : num(atkRow, 'ammo', -1))
               : -1;
             const maxRof = a.rof ?? 1;
             const minNeeded = a.suppressive ? 3 * AMMO_BY_ROF[Math.min(6, maxRof)] : 1;

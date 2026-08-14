@@ -186,7 +186,20 @@ export function tokensCaughtInAoe<T extends { id: string; q: number; r: number }
   tokens: T[],
   sight: { walls: Wall[]; doors: Door[] } | null,
 ): string[] {
-  const ids = tokensInAoe(spec, originHex, aimHex, grid, tokens);
+  let ids = tokensInAoe(spec, originHex, aimHex, grid, tokens);
+  // A burst centred on the thing that set it off does not catch it. The book
+  // already says so of a cone — "a cone's point of origin is not included" —
+  // and a tail sweep is the same claim: the sweep goes round the creature
+  // swinging it, not through it. Only when the two hexes are the SAME, so a
+  // grenade thrown at your own feet still gets you.
+  const selfCentred = (spec.shape === 'sphere' || spec.shape === 'cylinder')
+    && originHex.q === aimHex.q && originHex.r === aimHex.r;
+  if (selfCentred) {
+    ids = ids.filter((id) => {
+      const t = tokens.find((x) => x.id === id);
+      return !t || t.q !== originHex.q || t.r !== originHex.r;
+    });
+  }
   if (!sight || (sight.walls.length === 0 && sight.doors.length === 0)) return ids;
   const from = hexToPixel(aoeSourceHex(spec, originHex, aimHex), grid);
   const segs = sightSegments(sight.walls, sight.doors, from);

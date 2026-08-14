@@ -845,6 +845,8 @@ export const S2C = {
   BENNY_STATE: 'bennyState',
   /** SWADE: how many Bennies are in the GM's own pool (DM only). */
   GM_BENNIES: 'gmBennies',
+  /** SWADE: what is left of a token's Pace this turn, for the range shading. */
+  MOVE_BUDGET: 'moveBudget',
   /** SWADE: your character is Bleeding Out and owes a Vigor roll. */
   BLEED_PROMPT: 'bleedPrompt',
   /** SWADE: your Shaken character may roll Spirit to recover. */
@@ -1287,6 +1289,25 @@ export interface VehicleOocPromptPayload { characterId: string; name: string }
 export interface RepairPromptPayload { names: string[]; hours: number }
 /** The GM's own Benny pool — villains' Jokers pay into it. DM-only. */
 export interface GmBenniesPayload { count: number }
+/**
+ * What a token has left to move with this turn.
+ *
+ * The budget lives on the server (it is the only thing that can be trusted
+ * with it) but the client has to draw the range, so it is published to
+ * whoever is entitled to move that token. Absent entirely when no fight is
+ * running: out of combat, Pace is not a budget at all.
+ */
+export interface MoveBudgetPayload {
+  tokenId: string;
+  /** The turn's allowance in inches, already adjusted for standing/crawling. */
+  pace: number;
+  /** Inches spent so far this turn. */
+  moved: number;
+  /** The running die's bonus, once it has been rolled; null if it has not. */
+  runBonus: number | null;
+  /** Down and staying down: rough ground costs this token nothing extra. */
+  crawling: boolean;
+}
 export interface RepairRollPayload { roll: boolean }
 export interface VehicleOocRollPayload { characterId: string; roll: boolean }
 

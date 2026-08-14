@@ -27,7 +27,7 @@ import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom
 import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
-import { hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
+import { emitMoveBudget, hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -592,6 +592,10 @@ function finishTurnTransition(io: Server, campaignId: string, state: InitiativeS
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
   if (ch?.system === 'swade') startOfTurnRecovery(io, campaignId, ch);
+  // A fresh turn is a fresh Pace: tell whoever is up what they have to spend,
+  // so the map can shade the ground they can actually reach.
+  const upNext = state.entries[state.turnIdx]?.tokenId;
+  if (upNext) emitMoveBudget(io, campaignId, upNext);
   // …and whatever the Club they were dealt has waiting for them.
   resolveChaseComplication(io, campaignId, state);
 }

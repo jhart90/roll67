@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type GmBenniesPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -324,6 +324,8 @@ interface GameState {
   bennyState: Record<string, BennyStatePayload>;
   /** SWADE: how many Bennies sit in the GM's own pool (DM only). */
   gmBennies: number;
+  /** SWADE: what the token whose turn it is has left to move with. */
+  moveBudget: MoveBudgetPayload | null;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number; calledShot?: CalledShotAim | typeof CALLED_SHOT_PENDING | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
@@ -561,6 +563,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   blastOffer: null,
   bennyState: {},
   gmBennies: 0,
+  moveBudget: null,
   bleedPrompt: null,
   shakenPrompt: null,
   stunPrompt: null,
@@ -1441,6 +1444,10 @@ export function wireSocket(): void {
 
   socket.on(S2C.GM_BENNIES, (p: GmBenniesPayload) => {
     useGameStore.setState({ gmBennies: p.count });
+  });
+
+  socket.on(S2C.MOVE_BUDGET, (p: MoveBudgetPayload) => {
+    useGameStore.setState({ moveBudget: p });
   });
 
   socket.on(S2C.BENNY_STATE, (p: BennyStatePayload) => {

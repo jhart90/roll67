@@ -73,6 +73,34 @@ export function hasRunThisTurn(campaignId: string, tokenId: string): boolean {
   return swadeTurnMoves.get(campaignId)?.get(tokenId)?.runBonus != null;
 }
 
+/**
+ * Tell whoever may move this token what is left of its Pace.
+ *
+ * The budget is the server's — it is the only thing that can be trusted with
+ * it — but the map has to draw the reach, so the numbers behind it are
+ * published to the token's owner and to the DM. Sent when a turn begins and
+ * after every move, which is exactly when the answer changes.
+ */
+export function emitMoveBudget(io: Server, campaignId: string, tokenId: string): void {
+  const token = tokens.byId(tokenId);
+  const ch = token?.characterId ? characters.byId(token.characterId) : undefined;
+  if (!token || !ch || ch.system !== 'swade') return;
+  if (!initiative.get(campaignId).active) return;
+  const conds = conditionsOf(ch.sheet);
+  const prone = conds.includes('prone');
+  const crawling = prone && proneIntent.get(tokenId) === 'crawl';
+  const rec = swadeTurnMoves.get(campaignId)?.get(tokenId);
+  const payload = {
+    tokenId,
+    pace: crawling ? CRAWL_PACE : Math.max(1, swadePace(ch.sheet) - (prone ? 2 : 0)),
+    moved: rec?.moved ?? 0,
+    runBonus: rec?.runBonus ?? null,
+    crawling,
+  };
+  io.to(dmRoom(campaignId)).emit(S2C.MOVE_BUDGET, payload);
+  if (ch.ownerUserId) io.to(userRoom(ch.ownerUserId)).emit(S2C.MOVE_BUDGET, payload);
+}
+
 /** Has this token spent any Pace this turn? (Aiming demands standing still.) */
 export function movedThisTurn(campaignId: string, tokenId: string): boolean {
   return (swadeTurnMoves.get(campaignId)?.get(tokenId)?.moved ?? 0) > 0;
@@ -441,6 +469,9 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       hexes: [fromHex, dest],
       extraRadius: token.light ? Math.max(token.light.bright, token.light.dim) : 0,
     });
+    // What is left of the turn, so the reach shading on the map keeps up with
+    // the ground actually covered.
+    emitMoveBudget(io, d.campaignId, tokenId);
   }, 'MOVE_TOKEN'));
 
   // The player accepted the run: roll the d6 running die (logged to chat)
@@ -542,6 +573,9 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     postStatusLine(io, d.campaignId, mode === 'crawl'
       ? `${character.name} stays down and crawls (${CRAWL_PACE}″, still Prone).`
       : `${character.name} gets up — the next move stands them up for 2″ of Pace.`);
+    // Crawling is a smaller budget than standing, so the reach changes with
+    // the answer.
+    emitMoveBudget(io, d.campaignId, tokenId);
   }, 'PRONE_MOVE'));
 
   /**
@@ -611,6 +645,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       roll: br, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    emitMoveBudget(io, d.campaignId, tokenId);
   }, 'RUN_ROLL'));
 
   socket.on(C2S.DRAG_TOKEN, safe(socket, ({ tokenId, x, y, done }: DragTokenPayload) => {

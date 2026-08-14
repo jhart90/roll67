@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { intents, useGameStore, wireSocket, type DockTab, type Tool, type TerrainBrush } from '../store/game';
 import { openWindow } from '../store/windowManager';
+import { inkOnDark, playerColorFor } from '../util/playerColor';
 import { MapStage } from '../table/MapStage';
 import { BennyFlip } from '../table/BennyFlip';
 import { MapManager } from '../table/dm/MapManager';
@@ -542,18 +543,81 @@ function RollCallout() {
   // group save naming who is up next), so the live one wins while it lasts.
   const anim = useGameStore((s) => s.diceAnim);
   const announced = useGameStore((s) => s.rollCallout);
+  const members = useGameStore((s) => s.members);
+  const top = useTopChrome();
   const shown = anim
-    ? { key: `anim-${anim.id}`, name: anim.who, what: anim.what, tone: anim.tone }
+    ? { key: `anim-${anim.id}`, name: anim.who, what: anim.what, tone: anim.tone, byUserId: anim.byUserId }
     : announced
-      ? { key: `evt-${announced.id}`, name: announced.name, what: announced.what, tone: 'neutral' as const }
+      ? { key: `evt-${announced.id}`, name: announced.name, what: announced.what, tone: 'neutral' as const, byUserId: null }
       : null;
   if (!shown) return null;
+  // The roller's own color, the one their pill and their tokens already wear,
+  // so a table with four people rolling can tell whose dice are in the air
+  // without reading a word. Deepened for the background and the text picked
+  // to sit on it, because a name has to stay readable first.
+  const member = shown.byUserId ? members.find((m) => m.userId === shown.byUserId) : undefined;
+  const color = member ? playerColorFor(member) : null;
+  const style = color
+    ? { background: mixToward(color, '#0c0e14', 0.55), borderColor: color, color: inkOnDark(color) }
+    : undefined;
   return (
-    <div className={`roll-callout tone-${shown.tone}`} key={shown.key}>
-      <span className="rc-name">{shown.name}</span>
-      <span className="rc-what">{shown.what}</span>
+    <div
+      className={`roll-callout tone-${shown.tone}`}
+      key={shown.key}
+      style={{ top, ...style }}
+    >
+      <span className="rc-name" style={color ? { color: '#f4f6fb' } : undefined}>{shown.name}</span>
+      <span className="rc-what" style={color ? { color: inkOnDark(color) } : undefined}>{shown.what}</span>
     </div>
   );
+}
+
+/** Gap between the callout and whatever is above it. */
+const TOP_GAP = 8;
+/**
+ * How far down the map pane the callout has to start: under the top counter
+ * dock when there is one, and just under the top bar when there is not.
+ *
+ * Measured rather than guessed, for the same reason the counters measure the
+ * chrome beneath them — "however many counters the DM has put up" has no
+ * constant, and a banner parked at a fixed offset sits on top of them.
+ */
+function useTopChrome(): number {
+  const [top, setTop] = useState(TOP_GAP);
+  useEffect(() => {
+    const measure = () => {
+      // The banner is positioned against the whole screen shell, which starts
+      // ABOVE the top bar — so everything is measured in viewport terms and
+      // turned back into an offset from the shell at the end.
+      const shell = document.querySelector('.table-shell');
+      const pane = document.querySelector('.table-main');
+      if (!shell || !pane) { setTop(TOP_GAP); return; }
+      const shellTop = shell.getBoundingClientRect().top;
+      let y = pane.getBoundingClientRect().top;   // just under the top bar
+      const dock = document.querySelector('.counters-top');
+      const d = dock?.getBoundingClientRect();
+      // …and under the top counter dock when the DM has one up.
+      if (d && d.height > 0) y = Math.max(y, d.bottom);
+      setTop(Math.max(TOP_GAP, y - shellTop + TOP_GAP));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    const dock = document.querySelector('.counters-top');
+    const ro = dock ? new ResizeObserver(measure) : null;
+    if (dock && ro) ro.observe(dock);
+    return () => { window.removeEventListener('resize', measure); ro?.disconnect(); };
+  });
+  return top;
+}
+
+/** Darken a color toward the panel behind it, so text can live on top of it. */
+function mixToward(hex: string, toward: string, amount: number): string {
+  const parse = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex;
+  const a = parse(hex);
+  const b = parse(toward);
+  const out = a.map((c, i) => Math.round(c + (b[i] - c) * amount));
+  return `#${out.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Colored pills that flash a rollable-table result, then fade after ~3s. */

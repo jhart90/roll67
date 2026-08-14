@@ -1131,12 +1131,21 @@ function jokersWild(
   io: Server, campaignId: string, drawerName: string, drawnByPlayerSide: boolean, hidden = false,
 ): void {
   const all = characters.forCampaign(campaignId).filter((c) => c.system === 'swade');
-  // Who the chips go to. Heroes share a Joker between them; the other side
-  // pays its Wild Cards and the GM's pool.
+  // Everyone actually IN this fight, by character. A Joker is a turn of luck
+  // at this table, in this room — not a dividend paid to every villain the
+  // campaign has ever written down, half of whom are on another map.
+  const inTheFight = new Set(
+    initiative.get(campaignId).entries
+      .flatMap((e) => (e.tokenId ? [tokens.byId(e.tokenId)?.characterId] : []))
+      .filter((id): id is string => !!id),
+  );
+  // Who the chips go to. Heroes share a Joker between them, wherever they are
+  // standing — the book gives the party its luck as a party. The other side
+  // pays only the Wild Cards fighting for it, and the GM's pool.
   const paid = drawnByPlayerSide
     ? all.filter((c) => c.ownerUserId)
     // Extras hold no Bennies, so there is nobody else on that side to pay.
-    : all.filter((c) => !c.ownerUserId && c.sheet.wildCard !== false);
+    : all.filter((c) => !c.ownerUserId && c.sheet.wildCard !== false && inTheFight.has(c.id));
   for (const ch of paid) {
     persistSheet(io, campaignId, ch, { bennies: num(ch.sheet, 'bennies', 0) + 1 });
   }
@@ -1159,7 +1168,10 @@ function jokersWild(
     notes: [
       drawnByPlayerSide
         ? `Joker's Wild — every hero takes a Benny${paid.length ? `: ${paid.map((c) => c.name).join(', ')}.` : '.'}`
-        : `Joker's Wild for the other side — a Benny to the GM's pool${paid.length ? `, and one to ${paid.map((c) => c.name).join(', ')}.` : '.'}`,
+        : `Joker's Wild for the other side — a Benny to the GM's pool${
+          paid.length
+            ? `, and one to every GM Wild Card in this fight: ${paid.map((c) => c.name).join(', ')}.`
+            : '. No GM Wild Card is in this fight to take one.'}`,
       `${drawerName} may act at any point in the round, interrupting anyone, and carries +2 on every Trait roll and damage roll until the round ends.`,
       'The action deck is reshuffled at the end of this round.',
     ],

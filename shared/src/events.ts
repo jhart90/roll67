@@ -3,7 +3,7 @@
 
 import type {
   AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
-  CampaignInfo, Character, ChatMessage, Door, DoorType, Drawing, DrawingLayerName,
+  CampaignInfo, Character, ChatMessage, DiceSpeed, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
   MapDef, MapMeta, MapText, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
   Counter, NameplateLine, RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
@@ -101,6 +101,8 @@ export const C2S = {
   SET_DICE_ACE_STYLE: 'setDiceAceStyle',
   /** Show the combat turn guide over my map, or don't. */
   SET_TURN_GUIDE: 'setTurnGuide',
+  /** DM: how long the whole table spends watching dice. */
+  SET_DICE_SPEED: 'setDiceSpeed',
   SET_PLAYER_COLOR: 'setPlayerColor',
   SET_USERNAME: 'setUsername',
   /** Save this account's audio mix (music + effects), so it follows the player. */
@@ -871,6 +873,8 @@ export const S2C = {
   REPAIR_PROMPT: 'repairPrompt',
   /** The in-world clock, after any change. */
   CLOCK: 'clock',
+  /** The campaign's dice pacing changed — everyone switches together. */
+  DICE_SPEED: 'diceSpeed',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
@@ -1184,6 +1188,8 @@ export interface SetDiceBouncePayload { pct: number | null }
 /** How your aced dice celebrate (null restores the default). */
 export interface SetDiceAceStylePayload { style: import('./types.js').AceStyle | null }
 export interface SetTurnGuidePayload { on: boolean }
+export interface SetDiceSpeedPayload { speed: DiceSpeed }
+export interface DiceSpeedPayload { speed: DiceSpeed }
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }
 export interface SoakOfferPayload { characterId: string; name: string; wounds: number; bennies: number }

@@ -12,6 +12,17 @@ export interface UserInfo {
   username: string;
 }
 
+/**
+ * How long the table spends watching dice.
+ *
+ * A CAMPAIGN setting, not a personal one, and deliberately so: if one player
+ * runs instant dice and another runs the full throw, the first one knows the
+ * result several seconds before the second — and says so out loud, or reacts
+ * where the others can see. The surprise belongs to everybody at once, so the
+ * pacing has to be one number for the whole table, and the DM's to set.
+ */
+export type DiceSpeed = 'cinematic' | 'brisk' | 'instant';
+
 export interface CampaignInfo {
   id: string;
   name: string;
@@ -19,6 +30,8 @@ export interface CampaignInfo {
   dmUserId: string;
   inviteCode: string; // only sent to the DM
   activeMapId: string | null;
+  /** Absent on an older server; treat as 'cinematic'. */
+  diceSpeed?: DiceSpeed;
 }
 
 export interface MemberInfo {

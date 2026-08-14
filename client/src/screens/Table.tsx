@@ -7,7 +7,6 @@ import { useTopChrome } from '../util/topChrome';
 import { MapStage } from '../table/MapStage';
 import { BennyFlip } from '../table/BennyFlip';
 import { MapManager } from '../table/dm/MapManager';
-import { CampaignBackup } from '../panels/CampaignBackup';
 import { TokenInspector } from '../table/TokenInspector';
 import { LightInspector } from '../table/LightInspector';
 import { WallInspector } from '../table/WallInspector';
@@ -107,7 +106,6 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const terrainKind = useGameStore((s) => s.terrainKind);
   const terrainRadius = useGameStore((s) => s.terrainRadius);
   const [showMaps, setShowMaps] = useState(false);
-  const [showBackup, setShowBackup] = useState(false);
   const [showDice, setShowDice] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
   const dockTab = useGameStore((s) => s.dockTab);
@@ -187,7 +185,6 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           <>
             <button onClick={() => setShowMaps((v) => !v)}>Maps</button>
             <button onClick={() => openWindow('assetLibrary', 'main', {}, 'Asset Library')}>Assets</button>
-            <button onClick={() => setShowBackup((v) => !v)} title="Download this whole campaign as one file">Backup</button>
           </>
         )}
         <TurnBanner />
@@ -246,12 +243,6 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         {showMaps && isDm && (
           <div className="overlay-panel">
             <MapManager onClose={() => setShowMaps(false)} />
-          </div>
-        )}
-
-        {showBackup && isDm && (
-          <div className="overlay-panel">
-            <CampaignBackup onClose={() => setShowBackup(false)} />
           </div>
         )}
 

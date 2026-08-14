@@ -1,6 +1,6 @@
 import type {
   AssetFolder, AssetInfo, AudioTrack,
-  CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, Door, Drawing, GameSystem,
+  CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, DiceSpeed, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   Counter, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, RollCalloutInfo, Token, Wall, WorldFolder,
 } from 'shared';
@@ -141,6 +141,7 @@ interface CampaignRow {
   dm_user_id: string;
   invite_code: string;
   active_map_id: string | null;
+  dice_speed?: string | null;
 }
 
 function toCampaignInfo(row: CampaignRow): CampaignInfo {
@@ -151,7 +152,13 @@ function toCampaignInfo(row: CampaignRow): CampaignInfo {
     dmUserId: row.dm_user_id,
     inviteCode: row.invite_code,
     activeMapId: row.active_map_id,
+    diceSpeed: isDiceSpeed(row.dice_speed) ? row.dice_speed : 'cinematic',
   };
+}
+
+/** A stored value that is still one of the speeds this build knows about. */
+export function isDiceSpeed(v: unknown): v is DiceSpeed {
+  return v === 'cinematic' || v === 'brisk' || v === 'instant';
 }
 
 const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -204,6 +211,9 @@ export const campaigns = {
   clockSeconds(id: string): number {
     const r = stmt('SELECT clock_seconds FROM campaigns WHERE id = ?').get(id) as { clock_seconds?: number } | undefined;
     return Math.max(0, Number(r?.clock_seconds ?? 0));
+  },
+  setDiceSpeed(id: string, speed: DiceSpeed): void {
+    stmt('UPDATE campaigns SET dice_speed = ? WHERE id = ?').run(speed, id);
   },
   setClockSeconds(id: string, seconds: number): number {
     const next = Math.max(0, Math.floor(seconds));

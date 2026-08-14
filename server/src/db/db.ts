@@ -98,6 +98,9 @@ ensureColumn('campaigns', 'gm_bennies', 'gm_bennies INTEGER NOT NULL DEFAULT 0')
 // Power Points coming back, Natural Healing — is measured against this rather
 // than against the wall clock, because a session is not a day.
 ensureColumn('campaigns', 'clock_seconds', 'clock_seconds INTEGER NOT NULL DEFAULT 0');
+// How long the whole table spends watching dice. On the CAMPAIGN because it
+// has to be one number for everyone — see DiceSpeed.
+ensureColumn('campaigns', 'dice_speed', "dice_speed TEXT NOT NULL DEFAULT 'cinematic'");
 ensureColumn('macros', 'color', 'color TEXT');
 ensureColumn('macros', 'character_id', 'character_id TEXT');
 ensureColumn('macros', 'rollable_id', 'rollable_id TEXT');

@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import type { DiceSpeed } from 'shared';
+import { authHeaders } from '../api';
 import { intents, useGameStore } from '../store/game';
 import { MAP_COLORS_DEFAULT, UI_THEMES, type MapColors } from '../util/appearance';
 import { WHEEL_COLORS } from '../util/palette';
@@ -29,6 +32,7 @@ export function SettingsWindow() {
   const setColors = useGameStore((s) => s.setMapColors);
   const you = useGameStore((s) => s.you);
   const members = useGameStore((s) => s.members);
+  const isDm = useGameStore((s) => s.isDm());
 
   const nowPlaying = tracks.find((t) => t.id === audioState.trackId);
   const myColor = members.find((m) => m.userId === you?.userId)?.playerColor ?? null;
@@ -128,6 +132,8 @@ export function SettingsWindow() {
         These are yours alone — they are stored on this browser and change
         nothing for anyone else at the table.
       </p>
+
+      {isDm && <DmSection />}
     </div>
   );
 }
@@ -166,5 +172,85 @@ function ColorRow({ label, color, opacity, onColor, onOpacity }: {
         <span className="settings-pct">{Math.round(opacity * 100)}%</span>
       </span>
     </label>
+  );
+}
+
+/** The speeds, and what each is FOR — the tooltip is the whole explanation. */
+const DICE_SPEEDS: Array<{ id: DiceSpeed; label: string; hint: string }> = [
+  { id: 'cinematic', label: 'Cinematic', hint: 'Full throw, with a long beat between rolls to read each result. Best for a small table.' },
+  { id: 'brisk', label: 'Brisk', hint: 'Full throw, short beat between rolls. Roughly halves the time a busy round spends on dice.' },
+  { id: 'instant', label: 'Instant', hint: 'No dice thrown — results appear immediately. The card still shows every die.' },
+];
+
+/**
+ * The DM's half of the settings window: the two things here that are not
+ * personal preference.
+ *
+ * Dice speed is a CAMPAIGN setting on purpose. If one player runs instant and
+ * another runs the full throw, the first knows the result several seconds
+ * before the second — and reacts where everyone can see. One number for the
+ * table, and the DM's to choose.
+ */
+function DmSection() {
+  const campaign = useGameStore((s) => s.campaign);
+  const speed = campaign?.diceSpeed ?? 'cinematic';
+  const [busy, setBusy] = useState(false);
+
+  async function downloadBackup() {
+    if (!campaign) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}/backup`, { headers: authHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Backup failed');
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      const slug = campaign.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'campaign';
+      a.download = `${slug}-${new Date().toISOString().slice(0, 10)}.r67campaign`;
+      a.click();
+      URL.revokeObjectURL(url);
+      useGameStore.getState().toast('Backup saved. Keep it somewhere that isn’t this server.', 'info');
+    } catch (err) {
+      useGameStore.getState().toast(err instanceof Error ? err.message : 'Backup failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <h4 className="settings-head">Table (DM)</h4>
+
+      <div className="settings-row">
+        <span className="settings-label">Dice speed</span>
+        <span className="settings-value settings-themes">
+          {DICE_SPEEDS.map((s) => (
+            <button
+              key={s.id}
+              className={`settings-theme ${speed === s.id ? 'on' : ''}`}
+              title={s.hint}
+              onClick={() => intents.setDiceSpeed(s.id)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </span>
+      </div>
+
+      <div className="settings-row">
+        <span className="settings-label">Backup</span>
+        <span className="settings-value">
+          <button className="link" disabled={busy} onClick={downloadBackup}>
+            {busy ? 'packing it up…' : 'download this campaign'}
+          </button>
+        </span>
+      </div>
+
+      <p className="dim settings-note">
+        These two are the table’s, not yours: everyone watches dice at the same speed, so nobody
+        sees a result before anybody else. The backup is one file holding the whole campaign —
+        every sheet, map, wall, chest, image and the chat log — and restores from the shelf screen.
+      </p>
+    </>
   );
 }

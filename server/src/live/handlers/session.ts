@@ -3,13 +3,13 @@ import {
   C2S, S2C, isAceStyle,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
-  type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload,
+  type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload, type SetDiceSpeedPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
 import { validUsername } from '../../auth.js';
 import {
-  assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings,
+  assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings, isDiceSpeed,
   handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders, worldSort, worldVis,
 } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom, viewerFor } from '../hub.js';
@@ -269,6 +269,23 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     users.setTurnGuide(d.userId, on === true);
     broadcastPresence(io, d.campaignId);
   }, 'SET_TURN_GUIDE'));
+
+  /**
+   * Dice pacing, for the whole table at once.
+   *
+   * Everything else in the settings window is personal. This one cannot be:
+   * a player on instant dice reads the result seconds before a player on the
+   * full throw, and reacts where the others can see them. So it belongs to
+   * the campaign, and only the DM sets it.
+   */
+  socket.on(C2S.SET_DICE_SPEED, safe(socket, ({ speed }: SetDiceSpeedPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM sets the table’s dice speed.'); return; }
+    if (!isDiceSpeed(speed)) return;
+    campaigns.setDiceSpeed(d.campaignId, speed);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.DICE_SPEED, { speed });
+  }, 'SET_DICE_SPEED'));
 
   socket.on(C2S.SET_DICE_ACE_STYLE, safe(socket, ({ style }: SetDiceAceStylePayload) => {
     const d = sdata(socket);

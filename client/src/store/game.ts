@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type DiceSpeed, type DiceSpeedPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -35,18 +35,31 @@ import { pathCost } from '../util/moveReach';
  * Long, deliberately: an attack and its damage are two separate results and
  * the table needs to read the first before the second starts throwing.
  */
-const ROLL_TO_ROLL_GAP_MS = 3000;
 /**
- * Everything else — a projectile, a chat line — waits this much instead. It
- * only has to clear the dice, not give them time to be read.
+ * The pacing, per speed — the DM's one setting for the whole table.
+ *
+ *   roll    a following ROLL waits this long after the last one's dice land.
+ *           Long at 'cinematic' on purpose: an attack and its damage are two
+ *           separate results and the table needs to read the first.
+ *   other   everything else — a projectile, a chat line — only has to clear
+ *           the dice, not give them time to be read.
+ *   linger  how long finished dice stay on screen. Above `roll`, so a roll
+ *           that ends a sequence doesn't vanish the moment the gap elapses.
+ *
+ * 'instant' throws no dice at all: with seven at the table a round can be
+ * fifteen rolls, and five seconds apiece is a minute and a half of watching
+ * plastic. The card still says what every die did.
  */
-const POST_ROLL_GAP_MS = 1000;
-/**
- * How long a finished roll's dice linger before the overlay clears them. Sits
- * above ROLL_TO_ROLL_GAP_MS so a roll that ends a sequence stays readable
- * rather than vanishing the moment the gap elapses.
- */
-const OVERLAY_LINGER_MS = 4000;
+const PACING: Record<DiceSpeed, { roll: number; other: number; linger: number }> = {
+  cinematic: { roll: 3000, other: 1000, linger: 4000 },
+  brisk: { roll: 800, other: 300, linger: 1800 },
+  instant: { roll: 0, other: 0, linger: 0 },
+};
+
+/** Whatever the DM has the table set to. Absent (older server) = the old feel. */
+function pacing(): { roll: number; other: number; linger: number } {
+  return PACING[useGameStore.getState().campaign?.diceSpeed ?? 'cinematic'];
+}
 
 type DiceAnimState = NonNullable<GameState['diceAnim']>;
 type QueueItem = {
@@ -75,9 +88,10 @@ function pumpChatQueue(): void {
   if (activeRoll) return; // a roll is still on screen
   const next = chatQueue[0];
   if (!next) return;
+  const pace = pacing();
   // Measured against the clock rather than a one-shot timer, so an item that
   // arrives during the gap still waits its turn instead of jumping the queue.
-  const wait = lastRollEndedAt + (next.roll ? ROLL_TO_ROLL_GAP_MS : POST_ROLL_GAP_MS) - Date.now();
+  const wait = lastRollEndedAt + (next.roll ? pace.roll : pace.other) - Date.now();
   if (wait > 0) {
     if (gapTimer === null) {
       gapTimer = setTimeout(() => { gapTimer = null; pumpChatQueue(); }, wait);
@@ -85,6 +99,15 @@ function pumpChatQueue(): void {
     return;
   }
   chatQueue.shift();
+  // No dice to throw at all: the card lands now and the queue keeps draining,
+  // exactly as it does for a chat line. Order is still the server's order —
+  // everyone at the table sees the same results in the same sequence, which
+  // is the whole reason this is one setting rather than seven.
+  if (next.roll && pace.linger === 0) {
+    next.append();
+    pumpChatQueue();
+    return;
+  }
   if (!next.roll) {
     // Nothing to animate, so it lands now and we keep draining until we hit a
     // roll or run dry.
@@ -110,7 +133,7 @@ function finishRoll(id: number): void {
   setTimeout(() => {
     const cur = useGameStore.getState();
     if (cur.diceAnim?.id === id) useGameStore.setState({ diceAnim: null });
-  }, OVERLAY_LINGER_MS);
+  }, pacing().linger);
   // pump works out how long this particular next item has to wait.
   pumpChatQueue();
 }
@@ -1433,6 +1456,13 @@ export function wireSocket(): void {
     useGameStore.setState({ clockSeconds: Math.max(0, p.seconds) });
   });
 
+  // The DM changed the table's dice pacing. It rides on the campaign so that
+  // everyone switches at the same moment and nobody is a few seconds ahead.
+  socket.on(S2C.DICE_SPEED, (p: DiceSpeedPayload) => {
+    const cur = useGameStore.getState().campaign;
+    if (cur) useGameStore.setState({ campaign: { ...cur, diceSpeed: p.speed } });
+  });
+
   let roundCardsSeq = 0;
   socket.on(S2C.ROUND_CARDS, (p: RoundCardsPayload) => {
     useGameStore.setState({ roundCardsDeal: { ...p, seq: ++roundCardsSeq } });
@@ -1920,6 +1950,7 @@ export const intents = {
   /** Show the combat turn guide over MY map. Sent to the server rather than
    *  kept locally so a DM viewing as this player sees it their way. */
   setTurnGuide: (on: boolean) => socket.emit(C2S.SET_TURN_GUIDE, { on }),
+  setDiceSpeed: (speed: DiceSpeed) => socket.emit(C2S.SET_DICE_SPEED, { speed }),
   setUsername: (username: string) => socket.emit(C2S.SET_USERNAME, { username }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),

@@ -31,10 +31,15 @@ export function RangeRulerLayer() {
   const system = useGameStore((s) => s.campaign?.system);
   const targeting = useGameStore((s) => s.targeting);
   const aoe = useGameStore((s) => s.aoeTargeting);
+  // A Called Shot has already picked its victim and is being priced. The
+  // shot is decided, so the ruler stops chasing the cursor and holds on the
+  // target it is about — a line still swinging around the map says the
+  // choice is open when it is not.
+  const pricing = useGameStore((s) => s.calledShotPending);
   const [cursor, setCursor] = useState<Hex | null>(null);
 
   const active = targeting ?? aoe;
-  const wantCursor = !!targeting && !aoe;
+  const wantCursor = !!targeting && !aoe && !pricing;
 
   useEffect(() => {
     if (!wantCursor) { setCursor(null); return; }
@@ -50,7 +55,8 @@ export function RangeRulerLayer() {
 
   const src = tokens[active.sourceTokenId];
   if (!src) return null;
-  const aim: Hex | null = aoe ? aoe.aimHex : cursor;
+  const locked = pricing ? tokens[pricing.targetTokenId] : undefined;
+  const aim: Hex | null = aoe ? aoe.aimHex : locked ? { q: locked.q, r: locked.r } : cursor;
   if (!aim) return null;
 
   const { width, height } = mapPixelSize(map);

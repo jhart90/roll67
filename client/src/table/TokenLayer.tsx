@@ -472,6 +472,7 @@ export function TokenLayer() {
   const targeting = useGameStore((s) => s.targeting);
   const aoeTargeting = useGameStore((s) => s.aoeTargeting);
   const selectedIds = useGameStore((s) => s.selectedTokenIds);
+  const pricing = useGameStore((s) => s.calledShotPending);
   const { width, height } = mapPixelSize(map);
 
   // In targeting mode, resolve which tokens are valid targets (in range, and
@@ -520,6 +521,10 @@ export function TokenLayer() {
   function stateFor(t: TokenView): TargetState {
     if (aoeTargeting) return aoeHitIds?.has(t.id) ? 'valid' : 'invalid';
     if (!targeting || !src) return 'off';
+    // A Called Shot being priced has its victim: ring THEM and let the rest
+    // of the board go quiet, rather than going on offering targets to
+    // somebody who has already chosen one.
+    if (pricing) return t.id === pricing.targetTokenId ? 'valid' : 'off';
     const reach = rangeHexes + (t.size >= 3 ? 1 : 0);
     const inRange = hexDistance({ q: src.q, r: src.r }, { q: t.q, r: t.r }) <= reach;
     const outOfSight = !!sightSegs && t.id !== src.id && rayBlocked(

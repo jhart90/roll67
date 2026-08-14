@@ -88,6 +88,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const tool = useGameStore((s) => s.tool);
   const viewingAs = useGameStore((s) => s.viewingAs);
   const targeting = useGameStore((s) => s.targeting);
+  const calledShotPending = useGameStore((s) => s.calledShotPending);
   const errorToast = useGameStore((s) => s.errorToast);
   const toastKind = useGameStore((s) => s.toastKind);
   const drawColor = useGameStore((s) => s.drawColor);
@@ -503,7 +504,10 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <LootPopup />
       </div>
 
-      {targeting && targeting.action.source === 'attack' && (
+      {/* …unless a Called Shot has already picked its victim and is being
+          priced: the choosing is over, and the banner would be asking for
+          something the player has already given. */}
+      {targeting && targeting.action.source === 'attack' && !calledShotPending && (
         <div className="target-banner">
           Choose a target for <strong>{targeting.action.label}</strong> — click a highlighted token
           <button className="link" onClick={() => useGameStore.getState().cancelTargeting()}>cancel (Esc)</button>

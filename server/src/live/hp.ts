@@ -774,6 +774,27 @@ export interface BennyRollRec {
    *  it takes MORE Wounds off the same attack, so the reroll has to know
    *  what the attack offered and what the first roll already removed. */
   soak?: { offerWounds: number; removed: number };
+  /**
+   * What the roll was actually measured against, and what to call it —
+   * "Parry 6", "TN 4", "Toughness 8".
+   *
+   * A reroll is not a competition with the previous roll: it is the same
+   * attempt made again, and whether it worked is whether it beat the number
+   * it was always up against. Without this the card could only say "better
+   * than last time", which is not a question anybody at the table has.
+   */
+  tn?: number;
+  tnName?: string;
+  /** Did the original clear that number? */
+  hit?: boolean;
+  /**
+   * What still has to happen if a reroll turns this miss into a hit: the
+   * damage, and everything that follows from it. Held as the closure the
+   * attack already built, so the resolution the reroll earns is the SAME
+   * resolution the first roll would have had — not a second implementation
+   * of it that can drift.
+   */
+  onHit?: () => void;
 }
 export const lastBennyRolls = new Map<string, { trait?: BennyRollRec; damage?: BennyRollRec }>();
 const BENNY_REROLL_TTL_MS = 5 * 60_000;
@@ -835,10 +856,17 @@ export function emitBennyState(io: Server, campaignId: string, ch: Character): v
 export function recordBennyRoll(
   io: Server, campaignId: string, ch: Character, kind: 'trait' | 'damage',
   expr: string, total: number, label: string, critFail = false,
+  /** The number this roll was up against, and what happens if a reroll now
+   *  clears it. See BennyRollRec. */
+  against?: { tn: number; tnName: string; hit: boolean; onHit?: () => void },
 ): void {
   if (ch.system !== 'swade') return;
   const rec = lastBennyRolls.get(ch.id) ?? {};
-  rec[kind] = { expr, total, label, at: Date.now(), ...(critFail ? { critFail: true } : {}) };
+  rec[kind] = {
+    expr, total, label, at: Date.now(),
+    ...(critFail ? { critFail: true } : {}),
+    ...(against ? { tn: against.tn, tnName: against.tnName, hit: against.hit, onHit: against.onHit } : {}),
+  };
   lastBennyRolls.set(ch.id, rec);
   emitBennyState(io, campaignId, ch);
 }

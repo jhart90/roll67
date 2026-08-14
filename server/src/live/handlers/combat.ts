@@ -2503,6 +2503,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let saveScale = 1;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
     let attackCritFail = false;
+    /** The number the attack roll was measured against, and its name — kept
+     *  out here so the Benny record can say what a reroll has to beat. */
+    let attackTn = 0;
+    let attackTnName = 'TN';
+    let attackExpr = '';
     /** How many of a burst's shots landed, and how many landed well. One each
      *  for an ordinary single attack. */
     let burstHits = 1;
@@ -2756,6 +2761,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (burst && attackCritFail) {
           postStatusLine(io, d.campaignId, `💀 ${actor.name}'s burst goes badly wrong — a Critical Failure.`);
         }
+        // Recorded again below, once `ac` and `hit` are known — this early
+        // call is what the Benny menu reads to know a reroll is possible at
+        // all, and a Critical Failure is what tells it to refuse.
         recordBennyRoll(io, d.campaignId, actor, 'trait', expr, attackBreakdown.total, `their ${action.label} roll`, attackCritFail);
         // Itemize every flat modifier for the chat tooltip: sheet-borne
         // penalties plus the situational tags computed above.
@@ -2812,6 +2820,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // power beats a flat TN, and the two numbers look nothing alike.
       const targetSystem = targetChar?.system ?? actor.system;
       const acName = action.fixedTn ? 'TN' : swadeRangedTn ? 'TN' : targetSystem === 'swade' ? 'Parry' : 'AC';
+      attackTn = ac;
+      attackTnName = acName;
+      attackExpr = expr;
       const why = attackCritFail ? 'a Critical Failure fails outright, whatever the total'
         : nat1 ? 'natural 1 always misses'
           : crit ? `natural ${critAt}+ always hits`
@@ -2967,7 +2978,15 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         }
       }
       if (actor.system === 'swade' && hit) {
-        recordBennyRoll(io, d.campaignId, actor, 'damage', action.amountExpr, amountRoll.total, `their ${action.label} damage`);
+        // Damage is measured against Toughness, so that is the number the
+        // reroll's card should name — "9 vs Toughness 8", not "9 vs the 7 you
+        // rolled before", which tells nobody whether it hurt.
+        const tough = targetChar?.system === 'swade' ? swadeToughness(targetChar.sheet) : 0;
+        recordBennyRoll(
+          io, d.campaignId, actor, 'damage', action.amountExpr, amountRoll.total, `their ${action.label} damage`,
+          false,
+          tough > 0 ? { tn: tough, tnName: 'Toughness', hit: amountRoll.total >= tough } : undefined,
+        );
       }
       let magnitude = Math.max(0, amountRoll.total);
       // Cover Armor Bonus: the obstacle that made the shot harder also
@@ -3274,6 +3293,18 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // hit consumes inside resolveDamage's own flow instead, before its
       // damage card.
       if (!hit) consumeAmmoAndItem();
+      // What the roll was up against, and — if it missed — the resolution a
+      // Benny could still buy. The closure is the attack's OWN resolveDamage,
+      // so a reroll that lands gets exactly the resolution the first roll
+      // would have had rather than a second implementation of it. The ammo is
+      // already spent either way: the shot was fired once.
+      if (actor.system === 'swade') {
+        recordBennyRoll(
+          io, d.campaignId, actor, 'trait', attackExpr, attackBreakdown.total,
+          `their ${action.label} roll`, attackCritFail,
+          { tn: attackTn, tnName: attackTnName, hit, ...(hit ? {} : { onHit: () => resolveDamage() }) },
+        );
+      }
       // Headline states who did what to whom; the action rides in its own
       // field so chat can underline it and hang a tooltip off it, and the
       // outcome in another so it can sit under the dice rather than above.
@@ -4428,11 +4459,36 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           }
           const rerollCrit = kind === 'trait' && critFailFor(io, d.campaignId, now, b.dice);
           // The reroll stands beside the original; whichever is higher counts.
-          recordBennyRoll(io, d.campaignId, now, kind, rec.expr, Math.max(rec.total, b.total), rec.label, rerollCrit);
-          postRoll(
-            `${now.name} rerolls ${rec.label} — ${b.total} vs the original ${rec.total}: ${better ? 'the reroll counts!' : 'keep the original.'}`,
-            b, better, `rerolling ${rec.label}`,
+          const best = Math.max(rec.total, b.total);
+          // What the roll was always up against — a reroll is the same attempt
+          // made again, not a competition with the last one. So the card is
+          // red or green by whether it BEAT THE NUMBER, and says which number.
+          const nowHits = rec.tn !== undefined ? best >= rec.tn : better;
+          const turned = rec.tn !== undefined && rec.hit === false && nowHits;
+          recordBennyRoll(
+            io, d.campaignId, now, kind, rec.expr, best, rec.label, rerollCrit,
+            rec.tn === undefined ? undefined
+              : { tn: rec.tn, tnName: rec.tnName ?? 'TN', hit: nowHits, ...(nowHits ? {} : { onHit: rec.onHit }) },
           );
+          // "HIT" is the word for an attack roll. Damage against Toughness is
+          // the other question the same shape answers, and calling a 9 against
+          // Toughness 8 a "hit" would be answering a question nobody asked.
+          const dmgKind = rec.tnName === 'Toughness';
+          const verdict = rec.tn === undefined
+            ? (better ? 'the reroll counts!' : 'keep the original.')
+            : `${best} vs ${rec.tnName ?? 'TN'} ${rec.tn} — `
+              + (dmgKind
+                ? (nowHits ? 'enough to tell' : 'not enough')
+                : (nowHits ? 'HIT' : 'still a miss'))
+              + (turned ? ', and it lands!' : better ? '' : ' (the original still stands)');
+          postRoll(
+            `${now.name} rerolls ${rec.label} — ${verdict}`,
+            b, rec.tn === undefined ? better : nowHits, `rerolling ${rec.label}`,
+          );
+          // A miss turned into a hit finishes the job it started: the damage
+          // and everything that follows, run from the attack's own closure so
+          // it is the same resolution the first roll would have had.
+          if (turned && rec.onHit) setTimeout(rec.onHit, diceSettleDelayMs(b.dice));
         }, BENNY_FLIP_MS);
         break;
       }

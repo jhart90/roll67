@@ -3,7 +3,7 @@ import {
   C2S, S2C, isAceStyle,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
-  type SetDiceAceStylePayload, type SetDiceBouncePayload,
+  type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -66,6 +66,8 @@ export function buildCampaignState(campaignId: string, userId: string, username:
       ...m,
       online: false,
       mapId: campaigns.viewMapIdFor(campaignId, m.userId),
+      // Never chosen means ON — see the presence build below.
+      turnGuide: m.turnGuide !== 0,
     })),
     // Players only receive character sheets they own; the DM sees all
     // (NPC and other-player sheets stay private).
@@ -147,6 +149,9 @@ export function broadcastPresence(io: Server, campaignId: string): void {
     playerColor: m.playerColor,
     diceBouncePct: m.diceBouncePct,
     diceAceStyle: m.diceAceStyle,
+    // Never chosen means ON: a guide you have to go and switch on is a
+    // guide the person who needed it never saw.
+    turnGuide: m.turnGuide !== 0,
   }));
   io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, { members });
 }
@@ -249,6 +254,15 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
   // for the same reason the colors and the bounce share are: an ace should
   // look the same on every screen at the table, not however each watcher
   // happens to like other people's dice.
+  // The combat turn guide is a teaching aid, so it is the LEARNER's setting:
+  // it travels with presence, and a DM viewing as them sees it their way.
+  socket.on(C2S.SET_TURN_GUIDE, safe(socket, ({ on }: SetTurnGuidePayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    users.setTurnGuide(d.userId, on === true);
+    broadcastPresence(io, d.campaignId);
+  }, 'SET_TURN_GUIDE'));
+
   socket.on(C2S.SET_DICE_ACE_STYLE, safe(socket, ({ style }: SetDiceAceStylePayload) => {
     const d = sdata(socket);
     if (!d.campaignId) return;

@@ -1,27 +1,24 @@
 import { intents, useGameStore } from '../store/game';
+import { useTopChrome } from '../util/topChrome';
 
 /**
  * The shape of a SWADE turn, for whoever is taking one.
  *
- * A turn in this system is not a list of boxes to tick — it is a loop the
- * table learns: shake it off, look around, move, do the thing, see what it
- * cost, hand over. New players lose turns to the parts they cannot see
- * coming (the Shaken roll that comes FIRST, the second action that makes both
- * harder), so this says where they are in that loop and what is still open.
+ * Two things this is careful NOT to do.
  *
- * It reports rather than enforces. Nothing here gates a button: Assess and
- * Resolve are thinking, not mechanics, and a turn spent standing still doing
- * nothing is a legitimate turn. The only thing it insists on is the one the
- * rules insist on — that a Shaken character deals with being Shaken.
+ * It does not invent phases. "Assess the battlefield" and "decide whether that
+ * was worth a Benny" are good advice and terrible chevrons: a step you cannot
+ * finish is a step that sits there unlit all turn, teaching the player that
+ * the guide does not mean anything. Everything here is something you SPEND —
+ * a roll, an inch of Pace, an action, a Benny — or the choice not to.
+ *
+ * And it does not pretend a turn is a queue. SWADE lets you move, shoot, move
+ * again; the only thing that must come first is shaking off Shaken, and the
+ * only thing that must come last is handing over. So the shape is a gate, a
+ * band of things you spend in whatever order you like, and a door — not six
+ * boxes in a row implying you walk them left to right.
  */
-type StageState = 'todo' | 'now' | 'done' | 'skip';
-
-interface Stage {
-  id: string;
-  label: string;
-  state: StageState;
-  hint: string;
-}
+type LaneState = 'open' | 'spent' | 'blocked' | 'urgent';
 
 export function TurnCoach() {
   const you = useGameStore((s) => s.you);
@@ -30,111 +27,112 @@ export function TurnCoach() {
   const budgets = useGameStore((s) => s.moveBudgets);
   const tokens = useGameStore((s) => s.tokens);
   const characters = useGameStore((s) => s.characters);
+  const members = useGameStore((s) => s.members);
   const asUser = useGameStore((s) => s.asUserId());
   const isDm = useGameStore((s) => s.isDm());
   const viewingAs = useGameStore((s) => s.viewingAs);
   const bennyState = useGameStore((s) => s.bennyState);
   const soakOffer = useGameStore((s) => s.soakOffer);
+  const top = useTopChrome();
 
   const entry = init.entries[init.turnIdx];
   const token = entry?.tokenId ? tokens[entry.tokenId] : undefined;
   const ch = token?.characterId ? characters.find((c) => c.id === token.characterId) : undefined;
   /**
-   * Whose turn this coach is for.
-   *
-   * A player's own character, obviously. In "view as" that is whoever the DM
-   * is standing in for — asUserId() already answers as them, which is the
-   * whole point of it. And the DM's own turn: when the thing that is up
-   * answers to nobody but them, the loop is theirs to walk and the coach is
-   * as much use to them as to anybody.
-   *
-   * What it is NOT is a checklist over somebody else's character.
+   * Whose turn this is for: a player's own character, whoever the DM is
+   * standing in for, or — on the DM's own screen — a token that answers to
+   * nobody but them.
    */
   const mine = !!ch && (ch.ownerUserId === asUser || (isDm && !viewingAs && !ch.ownerUserId));
+  /**
+   * And whose SETTING decides. A guide is for the person being taught, so in
+   * "view as" it follows the player being stood in for rather than the DM
+   * looking over their shoulder.
+   */
+  const wants = members.find((m) => m.userId === asUser)?.turnGuide !== false;
   const budget = entry?.tokenId ? budgets[entry.tokenId] : undefined;
-  if (!you || system !== 'swade' || !init.active || !entry || !mine || !budget) return null;
+  if (!you || system !== 'swade' || !init.active || !entry || !mine || !budget || !wants) return null;
 
   const moveLeft = Math.max(0, budget.pace + (budget.runBonus ?? 0) - budget.moved);
-  const acted = budget.actions > 0;
-  const moved = budget.moved > 0;
-  // The one rule this thing enforces, because the rules do: a Shaken
-  // character's turn starts with getting up off the floor.
+  const acted = budget.actions;
   const shaken = budget.shaken;
   const reroll = ch ? bennyState[ch.id] : undefined;
   const openBenny = !!soakOffer || !!reroll?.canRerollTrait || !!reroll?.canRerollDamage;
+  const nextPenalty = acted >= 2 ? -4 : acted === 1 ? -2 : 0;
 
-  const nextPenalty = budget.actions >= 2 ? -4 : budget.actions === 1 ? -2 : 0;
-
-  const stages: Stage[] = [
-    {
-      id: 'recover',
-      label: 'Recover',
-      state: shaken ? 'now' : 'done',
-      hint: shaken
-        ? 'Shaken: roll Spirit to shake it off, or spend a Benny. Until then you may move but not act.'
-        : 'Nothing holding you — no Shaken, no condition to clear first.',
-    },
-    {
-      id: 'assess',
-      label: 'Assess',
-      state: shaken ? 'todo' : 'now',
-      hint: 'What is this turn FOR? The threat, the objective, the ally who needs you — and where you stand relative to it. Thinking, not a roll.',
-    },
+  /** The band: everything a turn is made of spending, in any order. */
+  const lanes: Array<{ id: string; label: string; sub: string; state: LaneState; hint: string }> = [
     {
       id: 'move',
       label: 'Move',
-      state: moved ? 'done' : 'todo',
-      hint: moved
-        ? `${budget.moved}″ spent, ${moveLeft}″ left. Movement can come before, between or after your actions.`
-        : `${moveLeft}″ of Pace, and none of it spent. Running adds a d6 but costs −2 on everything else this turn.`,
+      sub: budget.moved > 0 ? `${moveLeft}″ left of ${budget.pace + (budget.runBonus ?? 0)}″` : `${moveLeft}″`,
+      state: moveLeft <= 0 ? 'spent' : 'open',
+      hint: 'Pace, spent in any order you like — before an action, between two, or after. Running adds a d6 and costs −2 on everything else this turn.',
     },
     {
       id: 'act',
-      label: 'Act',
-      state: acted ? 'done' : 'todo',
-      hint: acted
-        ? `${budget.actions} action${budget.actions === 1 ? '' : 's'} taken. Another would put every one of them at ${nextPenalty}.`
-        : 'One action is free of penalty. Two make both −2, three make all three −4 — declare before you roll.',
-    },
-    {
-      id: 'resolve',
-      label: 'Resolve',
-      state: openBenny ? 'now' : acted ? 'done' : 'todo',
-      hint: openBenny
-        ? 'A roll is still open to a Benny — reroll it, or Soak what it cost you.'
-        : 'Damage beats Toughness to Shake, and every raise over it is a Wound. Worth a Benny?',
-    },
-    {
-      id: 'reset',
-      label: 'Reset',
-      state: shaken ? 'todo' : (acted || moved) ? 'now' : 'todo',
-      hint: 'Everything spent that you meant to spend? Then hand the round on.',
+      label: acted === 0 ? 'Act' : `Act ×${acted}`,
+      sub: acted === 0 ? 'no penalty' : `next at ${nextPenalty}`,
+      state: shaken ? 'blocked' : acted > 0 ? 'spent' : 'open',
+      hint: shaken
+        ? 'Shaken: free actions and movement only until you shake it off.'
+        : acted === 0
+          ? 'One action costs nothing. Declare a second before you roll and BOTH are −2; a third makes all three −4.'
+          : `${acted} spent. Another would put every action this turn at ${nextPenalty}.`,
     },
   ];
+  // Only a lane when there is something to spend it on — a Benny you cannot
+  // use on anything is not a step of the turn.
+  if (openBenny) {
+    lanes.push({
+      id: 'benny',
+      label: 'Benny',
+      sub: soakOffer ? 'soak?' : 'reroll?',
+      state: 'urgent',
+      hint: soakOffer
+        ? 'Wounds just landed — a Benny buys a Vigor roll to take them back.'
+        : 'That roll is still open: a Benny rerolls the whole thing, wild die and all.',
+    });
+  }
 
-  // Ready to hand over: the thing the rules demanded is dealt with, and the
-  // turn has actually been used for something.
-  const ready = !shaken && (acted || moved) && !openBenny;
+  // Ready to hand over: the one thing the rules demand is dealt with, and the
+  // turn has been used for something.
+  const ready = !shaken && (acted > 0 || budget.moved > 0) && !openBenny;
 
   return (
-    <div className="turn-coach">
-      <div className="tc-chevrons">
-        {stages.map((s) => (
-          <div key={s.id} className={`tc-step tc-${s.state}`} title={s.hint}>
-            <span className="tc-label">{s.label}</span>
+    <div className="turn-coach" style={{ top }}>
+      {/* The gate. It is a step only while it is in the way. */}
+      <div
+        className={`tc-gate ${shaken ? 'urgent' : 'clear'}`}
+        title={shaken
+          ? 'Roll Spirit to shake it off, or spend a Benny. Until then: move, but no actions.'
+          : 'Nothing holding you — no Shaken to clear before you act.'}
+      >
+        {shaken ? '⚡ Shake it off' : '✓ Clear'}
+      </div>
+
+      {/* The band. Side by side, because that is how they are spent. */}
+      <div className="tc-band">
+        {lanes.map((l) => (
+          <div key={l.id} className={`tc-lane tc-${l.state}`} title={l.hint}>
+            <span className="tc-lane-label">{l.label}</span>
+            <span className="tc-lane-sub">{l.sub}</span>
           </div>
         ))}
       </div>
-      <div className="tc-foot">
-        <span className="tc-hint">{stages.find((s) => s.state === 'now')?.hint ?? stages[5].hint}</span>
-        <button
-          className={`tc-end${ready ? ' ready' : ''}`}
-          title={ready ? 'Hand the round on' : 'You can end early — this only lights up once the turn has been used'}
-          onClick={() => intents.endTurn()}
-        >
-          End turn
-        </button>
-      </div>
+
+      {/* The door. */}
+      <button
+        className={`tc-end${ready ? ' ready' : ''}`}
+        title={ready
+          ? 'Hand the round on'
+          : shaken
+            ? 'You can still end early — but you are Shaken, and shaking it off is free to try'
+            : 'You can end early; this lights up once the turn has been spent on something'}
+        onClick={() => intents.endTurn()}
+      >
+        End turn ▸
+      </button>
     </div>
   );
 }

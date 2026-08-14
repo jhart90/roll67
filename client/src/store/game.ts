@@ -1900,6 +1900,9 @@ export const intents = {
   setDiceBounce: (pct: number | null) => socket.emit(C2S.SET_DICE_BOUNCE, { pct }),
   /** How your aced dice celebrate (null for the default flash). */
   setDiceAceStyle: (style: AceStyle | null) => socket.emit(C2S.SET_DICE_ACE_STYLE, { style }),
+  /** Show the combat turn guide over MY map. Sent to the server rather than
+   *  kept locally so a DM viewing as this player sees it their way. */
+  setTurnGuide: (on: boolean) => socket.emit(C2S.SET_TURN_GUIDE, { on }),
   setUsername: (username: string) => socket.emit(C2S.SET_USERNAME, { username }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),

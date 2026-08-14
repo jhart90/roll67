@@ -47,6 +47,10 @@ export interface MemberInfo {
   /** How this member's aced dice celebrate. Null = the default. Rides with the
    *  roller for the same reason the colors and the bounce do. */
   diceAceStyle: AceStyle | null;
+  /** Does this member want the combat turn guide over their map? Sent with
+   *  presence so that a DM standing in for them shows what THEY would see —
+   *  a guide is for the person being taught, not for whoever is looking. */
+  turnGuide: boolean;
 }
 
 /** Share of dice that bounce off a wall when a player hasn't chosen. */

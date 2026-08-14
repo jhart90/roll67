@@ -16,6 +16,11 @@ export function SettingsWindow() {
   const tracks = useGameStore((s) => s.audioTracks);
   const musicVolume = useGameStore((s) => s.localMusicVolume);
   const sfxVolume = useGameStore((s) => s.localSfxVolume);
+  // Read back off presence, which is where it lives — never chosen means on.
+  const turnGuide = useGameStore((s) => {
+    const me = s.members.find((m) => m.userId === s.you?.userId);
+    return me?.turnGuide !== false;
+  });
   const setMusic = useGameStore((s) => s.setLocalMusicVolume);
   const setSfx = useGameStore((s) => s.setLocalSfxVolume);
   const theme = useGameStore((s) => s.uiTheme);
@@ -63,6 +68,26 @@ export function SettingsWindow() {
               {t.label}
             </button>
           ))}
+        </span>
+      </div>
+
+      {/* The combat turn guide. An account setting rather than a local one:
+          a guide belongs to the person being taught, so the DM standing in
+          for them sees what THEY would see. */}
+      <div className="settings-row">
+        <span className="settings-label">Combat turn guide</span>
+        <span className="settings-value">
+          <label className="check-row" style={{ marginTop: 0 }}>
+            <input
+              type="checkbox"
+              checked={turnGuide}
+              onChange={(e) => intents.setTurnGuide(e.target.checked)}
+            />
+            <span>Show the turn guide over the map on my turn</span>
+          </label>
+          <span className="dim" style={{ fontSize: 11 }}>
+            What is left to spend this turn — Pace, actions, a Benny — and when it is safe to hand over.
+          </span>
         </span>
       </div>
 

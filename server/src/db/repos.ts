@@ -28,6 +28,8 @@ export interface MemberRow {
   playerColor: string | null;
   diceBouncePct: number | null;
   diceAceStyle: AceStyle | null;
+  /** 1/0/null in the row; null means never chosen, which is ON. */
+  turnGuide: number | null;
 }
 
 /**
@@ -85,6 +87,9 @@ export const users = {
   /** How this account's aced dice celebrate; null = the default. */
   setDiceAceStyle(userId: string, style: AceStyle | null): void {
     stmt('UPDATE users SET dice_ace_style = ? WHERE id = ?').run(style, userId);
+  },
+  setTurnGuide(userId: string, on: boolean): void {
+    stmt('UPDATE users SET turn_guide = ? WHERE id = ?').run(on ? 1 : 0, userId);
   },
   setDiceBouncePct(userId: string, pct: number | null): void {
     stmt('UPDATE users SET dice_bounce_pct = ? WHERE id = ?').run(pct, userId);
@@ -235,7 +240,8 @@ export const campaigns = {
               u.dice_color as diceColor, u.dice_text_color as diceTextColor,
               u.dice_trait_color as diceTraitColor, u.dice_wild_color as diceWildColor,
               u.dice_raise_color as diceRaiseColor, u.player_color as playerColor,
-              u.dice_bounce_pct as diceBouncePct, u.dice_ace_style as diceAceStyle
+              u.dice_bounce_pct as diceBouncePct, u.dice_ace_style as diceAceStyle,
+              u.turn_guide as turnGuide
        FROM campaign_members m
        JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ?`,
     ).all(campaignId) as MemberRow[]);

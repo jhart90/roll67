@@ -151,6 +151,9 @@ ensureColumn('users', 'player_color', 'player_color TEXT');
 ensureColumn('users', 'dice_bounce_pct', 'dice_bounce_pct INTEGER');
 // How this account's aced dice celebrate; NULL = the default flash.
 ensureColumn('users', 'dice_ace_style', 'dice_ace_style TEXT');
+// Whether this player wants the combat turn guide over their map. Travels
+// with presence so a DM standing in for them sees what THEY would see.
+ensureColumn('users', 'turn_guide', 'turn_guide INTEGER');
 // Per-account audio mix (0..1), so a player's levels follow them to any
 // device instead of living only in one browser's localStorage.
 ensureColumn('users', 'music_volume', 'music_volume REAL');

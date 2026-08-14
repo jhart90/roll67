@@ -709,52 +709,52 @@ button.link:hover { text-decoration: underline; }
 /* "X is rolling to evade!" — centred on the map, below the counters that sit
    along the top edge, and non-interactive so it never eats a click meant for
    a token underneath it. */
-/* The turn coach: the shape of a SWADE turn, in chevrons, for whoever is
-   taking one. Sits at the top of the map with the roll callout beneath it —
-   it is there for the whole turn, so it takes the fixed spot and the banner
-   that comes and goes moves down for it. */
+/* The combat turn guide: a gate, a band, a door.
+   Laid out as one row so the eye reads "this, then any of these, then out" —
+   the band's lanes sit SIDE BY SIDE because that is how a SWADE turn spends
+   them, in whatever order suits. `top` is set inline; see useTopChrome. */
 .turn-coach {
-  position: absolute; top: 8px; left: 50%; transform: translate(-50%, 0);
-  display: flex; flex-direction: column; gap: 4px;
-  max-width: min(760px, 92%);
-  padding: 8px 10px; border-radius: 12px;
-  background: rgba(12, 14, 20, 0.88);
+  position: absolute; left: 50%; transform: translate(-50%, 0);
+  display: flex; align-items: stretch; gap: 6px;
+  max-width: min(720px, 94%);
+  padding: 6px 8px; border-radius: 12px;
+  background: rgba(12, 14, 20, 0.9);
   border: 1px solid var(--border);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-  z-index: 88; pointer-events: auto;
+  z-index: 88;
 }
-.tc-chevrons { display: flex; gap: 3px; }
-/* Each stage is an arrow pointing at the next one, which is the whole idea:
-   a turn is a loop you walk, not a row of boxes. */
-.tc-step {
-  flex: 1 1 0; min-width: 0;
-  padding: 7px 10px 7px 16px;
-  font-size: 12px; font-weight: 600; text-align: center; white-space: nowrap;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%);
-  background: var(--panel-2); color: var(--text-dim);
+/* Chevron pointing into the band: the one thing that really does come first. */
+.tc-gate {
+  display: flex; align-items: center; flex: none;
+  padding: 6px 14px 6px 10px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
   cursor: help;
 }
-.tc-step:first-child { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); }
-.tc-step:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%); }
-/* Done is behind you, now is where you are, to-do is ahead. */
-.tc-step.tc-done { background: #2f3646; color: #cfd6e6; }
-.tc-step.tc-now { background: var(--accent); color: #10131a; }
-.tc-step.tc-todo { background: var(--panel); color: var(--text-dim); opacity: 0.85; }
-.tc-step.tc-skip { background: var(--panel); color: var(--text-dim); opacity: 0.5; }
-.tc-foot { display: flex; align-items: center; gap: 10px; }
-.tc-hint { flex: 1; min-width: 0; font-size: 11px; line-height: 1.35; color: var(--text-dim); }
+.tc-gate.clear { background: #2f3646; color: #9aa4b8; }
+.tc-gate.urgent { background: #f2cf4a; color: #241f00; }
+.tc-band { display: flex; align-items: stretch; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.tc-lane {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 4px 10px; border-radius: 7px; text-align: center; cursor: help;
+  border: 1px solid transparent;
+}
+.tc-lane-label { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.tc-lane-sub { font-size: 10px; opacity: 0.85; white-space: nowrap; }
+/* Open = still yours to spend. Spent = you have used it. Blocked = something
+   is in the way. Urgent = the table is waiting on you. */
+.tc-lane.tc-open { background: var(--panel-2); color: var(--text); border-color: var(--border); }
+.tc-lane.tc-spent { background: #2f3646; color: #9aa4b8; }
+.tc-lane.tc-blocked { background: var(--panel); color: #6f7686; }
+.tc-lane.tc-urgent { background: #d9a520; color: #241f00; }
+/* Chevron pointing out. */
 .tc-end {
-  flex: none; width: auto; padding: 5px 12px; font-size: 12px; font-weight: 700;
-  border-radius: 8px;
+  flex: none; width: auto; padding: 6px 12px 6px 18px; font-size: 12px; font-weight: 700;
+  border-radius: 0 8px 8px 0; white-space: nowrap;
+  clip-path: polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%);
 }
-/* Lit only once the turn has actually been used — the pulse is an invitation
-   to hand over, never a demand: ending early is always allowed. */
-/* The floating tracker's own End Turn lights the same way, for the player
-   who has that panel open rather than the coach in front of them. */
-.init-end-turn.ready {
-  background: var(--accent); color: #10131a; border-color: var(--accent);
-  animation: tc-pulse 1.6s ease-in-out infinite;
-}
+/* Lit once the turn has been spent on something — an invitation to hand over,
+   never a demand: ending early is always allowed. */
 .tc-end.ready {
   background: var(--accent); color: #10131a; border-color: var(--accent);
   animation: tc-pulse 1.6s ease-in-out infinite;
@@ -762,6 +762,12 @@ button.link:hover { text-decoration: underline; }
 @keyframes tc-pulse {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
   50% { box-shadow: 0 0 0 7px transparent; }
+}
+/* The floating tracker's own End Turn lights the same way, for the player
+   who has that panel open rather than the guide in front of them. */
+.init-end-turn.ready {
+  background: var(--accent); color: #10131a; border-color: var(--accent);
+  animation: tc-pulse 1.6s ease-in-out infinite;
 }
 
 /* Just under the top chrome, not across the middle of the map: the banner

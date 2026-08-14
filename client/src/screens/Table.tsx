@@ -3,6 +3,7 @@ import { intents, useGameStore, wireSocket, type DockTab, type Tool, type Terrai
 import { openWindow } from '../store/windowManager';
 import { inkOnDark, playerColorFor } from '../util/playerColor';
 import { TurnCoach } from '../table/TurnCoach';
+import { useTopChrome } from '../util/topChrome';
 import { MapStage } from '../table/MapStage';
 import { BennyFlip } from '../table/BennyFlip';
 import { MapManager } from '../table/dm/MapManager';
@@ -546,7 +547,7 @@ function RollCallout() {
   const anim = useGameStore((s) => s.diceAnim);
   const announced = useGameStore((s) => s.rollCallout);
   const members = useGameStore((s) => s.members);
-  const top = useTopChrome();
+  const top = useTopChrome(['.turn-coach']);
   const shown = anim
     ? { key: `anim-${anim.id}`, name: anim.who, what: anim.what, tone: anim.tone, byUserId: anim.byUserId }
     : announced
@@ -572,48 +573,6 @@ function RollCallout() {
       <span className="rc-what" style={color ? { color: inkOnDark(color) } : undefined}>{shown.what}</span>
     </div>
   );
-}
-
-/** Gap between the callout and whatever is above it. */
-const TOP_GAP = 8;
-/**
- * How far down the map pane the callout has to start: under the top counter
- * dock when there is one, and just under the top bar when there is not.
- *
- * Measured rather than guessed, for the same reason the counters measure the
- * chrome beneath them — "however many counters the DM has put up" has no
- * constant, and a banner parked at a fixed offset sits on top of them.
- */
-function useTopChrome(): number {
-  const [top, setTop] = useState(TOP_GAP);
-  useEffect(() => {
-    const measure = () => {
-      // The banner is positioned against the whole screen shell, which starts
-      // ABOVE the top bar — so everything is measured in viewport terms and
-      // turned back into an offset from the shell at the end.
-      const shell = document.querySelector('.table-shell');
-      const pane = document.querySelector('.table-main');
-      if (!shell || !pane) { setTop(TOP_GAP); return; }
-      const shellTop = shell.getBoundingClientRect().top;
-      let y = pane.getBoundingClientRect().top;   // just under the top bar
-      const dock = document.querySelector('.counters-top');
-      const d = dock?.getBoundingClientRect();
-      // …and under the top counter dock when the DM has one up.
-      if (d && d.height > 0) y = Math.max(y, d.bottom);
-      // …and under the turn coach, which owns the top of the map for the
-      // whole of somebody's turn while this banner comes and goes.
-      const coach = document.querySelector('.turn-coach')?.getBoundingClientRect();
-      if (coach && coach.height > 0) y = Math.max(y, coach.bottom);
-      setTop(Math.max(TOP_GAP, y - shellTop + TOP_GAP));
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    const dock = document.querySelector('.counters-top');
-    const ro = dock ? new ResizeObserver(measure) : null;
-    if (dock && ro) ro.observe(dock);
-    return () => { window.removeEventListener('resize', measure); ro?.disconnect(); };
-  });
-  return top;
 }
 
 /** Darken a color toward the panel behind it, so text can live on top of it. */

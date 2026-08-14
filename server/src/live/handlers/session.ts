@@ -20,6 +20,7 @@ import { broadcastCounters } from './counters.js';
 import { buildDirectory, broadcastDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
 import { foldersVisibleTo, shopsForUser, sendShopPresentationTo } from './world.js';
+import { emitMoveBudget } from './tokens.js';
 
 function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   const all = handouts.forCampaign(campaignId);
@@ -193,6 +194,12 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       if (camp) emitCustomNpcs(socket, d.userId, camp.system);
     }
     sendMapState(socket);
+    // The turn budget lives in the server's memory for the length of a turn
+    // and is normally announced when that turn begins — so somebody who
+    // refreshes mid-turn arrives to a map with no reach on it and no turn
+    // guide. Say it again, to them, on the way in.
+    const upNow = initiative.get(campaignId).entries[initiative.get(campaignId).turnIdx]?.tokenId;
+    if (upNow) emitMoveBudget(io, campaignId, upNow, socket);
     broadcastPresence(io, campaignId);
   }, 'JOIN_CAMPAIGN'));
 

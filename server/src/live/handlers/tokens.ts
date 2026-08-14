@@ -82,7 +82,7 @@ export function hasRunThisTurn(campaignId: string, tokenId: string): boolean {
  * published to the token's owner and to the DM. Sent when a turn begins and
  * after every move, which is exactly when the answer changes.
  */
-export function emitMoveBudget(io: Server, campaignId: string, tokenId: string): void {
+export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, only?: Socket): void {
   const token = tokens.byId(tokenId);
   const ch = token?.characterId ? characters.byId(token.characterId) : undefined;
   if (!token || !ch || ch.system !== 'swade') return;
@@ -104,6 +104,9 @@ export function emitMoveBudget(io: Server, campaignId: string, tokenId: string):
     actions: actionsTakenThisTurn(campaignId, ch.id),
     shaken: conds.includes('shaken'),
   };
+  // `only` is the socket that just joined: it needs catching up, and nobody
+  // else needs telling again.
+  if (only) { only.emit(S2C.MOVE_BUDGET, payload); return; }
   io.to(dmRoom(campaignId)).emit(S2C.MOVE_BUDGET, payload);
   if (ch.ownerUserId) io.to(userRoom(ch.ownerUserId)).emit(S2C.MOVE_BUDGET, payload);
 }

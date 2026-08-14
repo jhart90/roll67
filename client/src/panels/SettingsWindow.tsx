@@ -71,23 +71,18 @@ export function SettingsWindow() {
         </span>
       </div>
 
-      {/* The combat turn guide. An account setting rather than a local one:
-          a guide belongs to the person being taught, so the DM standing in
-          for them sees what THEY would see. */}
+      {/* An account setting rather than a local one: a guide belongs to the
+          person being taught, so the DM standing in for them sees what THEY
+          would see. The label says what it is; the guide explains itself. */}
       <div className="settings-row">
         <span className="settings-label">Combat turn guide</span>
         <span className="settings-value">
-          <label className="check-row" style={{ marginTop: 0 }}>
-            <input
-              type="checkbox"
-              checked={turnGuide}
-              onChange={(e) => intents.setTurnGuide(e.target.checked)}
-            />
-            <span>Show the turn guide over the map on my turn</span>
-          </label>
-          <span className="dim" style={{ fontSize: 11 }}>
-            What is left to spend this turn — Pace, actions, a Benny — and when it is safe to hand over.
-          </span>
+          <input
+            type="checkbox"
+            checked={turnGuide}
+            title="Show what is left to spend this turn, over the map, on your turn"
+            onChange={(e) => intents.setTurnGuide(e.target.checked)}
+          />
         </span>
       </div>
 

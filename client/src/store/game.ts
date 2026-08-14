@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  C2S, S2C, castableLevels, combatActions, systemFor,
+  C2S, S2C, aoeCentredOnSelf, castableLevels, combatActions, systemFor,
   type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type CustomItem, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
   type Door, type DoorType, type Drawing, type DrawingLayerName, type GameSystem, type GridConfig, type Handout, type Hex,
@@ -636,6 +636,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       aoeTargeting: { characterId, sourceTokenId, action, adv, originHex, aimHex: originHex },
       tool: 'select', selectedTokenId: null, selectedTokenIds: [],
     });
+    // A burst with no range goes off where the thing is standing — there is
+    // nothing to aim, so asking where to put it is a question with one answer.
+    if (aoeCentredOnSelf(action)) get().confirmAoeTargeting();
   },
   updateAoeAim(hex) {
     const t = get().aoeTargeting;

@@ -273,6 +273,46 @@ const EQUIP_COL: Record<string, string> = {
   attacks: 'wielded', inventory: 'equipped', armor: 'equipped',
 };
 
+/**
+ * How an open weapon editor is laid out: what the thing IS, how far it
+ * reaches, what feeds it, and what it does to whoever it lands on.
+ *
+ * A flat grid of eighteen boxes put Poison next to Parry mod and buried the
+ * ammunition between them, so finding a field meant reading all of them. The
+ * order here is the order the questions get asked, and anything a schema adds
+ * that this does not name still appears — under "More", never dropped.
+ */
+const ATTACK_GROUPS: Array<{ title: string | null; ids: string[] }> = [
+  { title: null, ids: ['name', 'skill', 'damage', 'dtype'] },
+  { title: 'Reach & bite', ids: ['range', 'ap', 'rof', 'parryBonus', 'heavy', 'swat', 'hardRange'] },
+  { title: 'Ammunition', ids: ['ammo', 'maxAmmo', 'caliber'] },
+  { title: 'Venom', ids: ['poison', 'infection', 'poisonMod', 'poisonEffect'] },
+  { title: 'Bookkeeping', ids: ['weight', 'notes'] },
+];
+
+interface FieldGroup { title: string | null; cols: FieldDef[] }
+
+function fieldGroups(section: ListSection, cols: FieldDef[], equipId?: string): FieldGroup[] {
+  // The equip tick is drawn in the card's own corner, so it is not a field.
+  const usable = cols.filter((c) => c.id !== equipId);
+  if (section.id !== 'attacks') return [{ title: null, cols: usable }];
+  const byId = new Map(usable.map((c) => [c.id, c]));
+  const out: FieldGroup[] = [];
+  const claimed = new Set<string>();
+  for (const g of ATTACK_GROUPS) {
+    const picked = g.ids.flatMap((id) => {
+      const col = byId.get(id);
+      if (!col) return [];
+      claimed.add(id);
+      return [col];
+    });
+    if (picked.length > 0) out.push({ title: g.title, cols: picked });
+  }
+  const rest = usable.filter((c) => !claimed.has(c.id));
+  if (rest.length > 0) out.push({ title: 'More', cols: rest });
+  return out;
+}
+
 /** These ids pair up into one chip instead of appearing as two. */
 const PAIRED = new Set(['bonusAmt', 'maxAmmo', 'amount']);
 
@@ -609,29 +649,62 @@ function ListEditor({
       <div className="card-grid">
         {rows.map((row, i) => {
           const editing = editIdx === i;
+          const { chips, notes } = cardChips(section, row);
+          const rider = hasDetail ? riderSummary(row) : '';
+          const equipId = EQUIP_COL[section.id];
+          const equipCol = equipId ? mainCols.find((c) => c.id === equipId) : undefined;
+          const isEquipped = !!equipCol && row[equipCol.id] === true;
+          // One control, drawn in the same corner whether the card is open or
+          // shut — it is the same tick either way, and the editor losing it to
+          // a row of checkboxes in the middle of the form made it feel like a
+          // different object.
+          const equipToggle = equipCol ? (
+            <label className={`sc-equip${isEquipped ? ' on' : ''}`} title={`${equipCol.label} — announced in chat`}>
+              <span>{equipLabel(equipCol.label, isEquipped)}</span>
+              <input
+                type="checkbox"
+                checked={isEquipped}
+                disabled={readOnly}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setRows(rows.map((r, j) => (j === i ? { ...r, [equipCol.id]: on } : r)));
+                  onEquipChange?.(String(row.name || nameFallback), equipCol.label, on);
+                }}
+              />
+              <span className="sc-box" aria-hidden="true" />
+            </label>
+          ) : null;
           if (editing && !readOnly) {
+            const groups = fieldGroups(section, mainCols, equipCol?.id);
             return (
-              <div key={i} className="sheet-card sheet-card-edit">
+              // The open editor is the same card, opened: it keeps the green
+              // it wears when the thing is in hand.
+              <div key={i} className={`sheet-card sheet-card-edit${isEquipped ? ' card-good' : ''}`}>
                 <div className="sheet-card-head">
                   <span className="sc-title">✎ {String(row.name || nameFallback)}</span>
                   <span className="spacer" />
                   <button className="link" onClick={() => setEditIdx(null)}>done</button>
                   {moveGrip(i)}
                 </div>
-                <div className="sc-fields">
-                  {mainCols.map((col) => (
-                    <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
-                      <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
-                      {renderCell(col, row, i)}
-                    </label>
-                  ))}
-                </div>
+                {groups.map((g) => (
+                  <div key={g.title ?? '·'}>
+                    {g.title && <div className="sc-divider sc-group">{g.title}</div>}
+                    <div className="sc-fields">
+                      {g.cols.map((col) => (
+                        <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
+                          <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
+                          {renderCell(col, row, i)}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
                 {hasDetail && (
                   <>
                     <div className="sc-divider" title={RIDER_BTN_TITLE}>⚡ Rider effects (save / condition / AoE)</div>
                     <div className="sc-fields">
                       {section.columns.filter((col) => ATTACK_DETAIL_COLS.has(col.id)).map((col) => (
-                        <label key={col.id} className="sc-field">
+                        <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
                           <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
                           {renderCell(col, row, i)}
                         </label>
@@ -641,15 +714,12 @@ function ListEditor({
                 )}
                 <div className="sheet-card-foot">
                   <button className="link danger" onClick={() => removeRow(i)}>delete</button>
+                  <span className="spacer" />
+                  {equipToggle}
                 </div>
               </div>
             );
           }
-          const { chips, notes } = cardChips(section, row);
-          const rider = hasDetail ? riderSummary(row) : '';
-          const equipId = EQUIP_COL[section.id];
-          const equipCol = equipId ? mainCols.find((c) => c.id === equipId) : undefined;
-          const isEquipped = !!equipCol && row[equipCol.id] === true;
           return (
             <div key={i} className={`sheet-card${isEquipped ? ' card-good' : ''}${SECTION_THEME[section.id] ? ' ' + SECTION_THEME[section.id] : ''}`}>
               <div className="sheet-card-head">
@@ -687,22 +757,7 @@ function ListEditor({
                 </div>
               )}
               {notes.map((n, j) => <div key={j} className="sc-notes">{n}</div>)}
-              {equipCol && (
-                <label className={`sc-equip${isEquipped ? ' on' : ''}`} title={`${equipCol.label} — announced in chat`}>
-                  <span>{equipLabel(equipCol.label, isEquipped)}</span>
-                  <input
-                    type="checkbox"
-                    checked={isEquipped}
-                    disabled={readOnly}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      setRows(rows.map((r, j) => (j === i ? { ...r, [equipCol.id]: on } : r)));
-                      onEquipChange?.(String(row.name || nameFallback), equipCol.label, on);
-                    }}
-                  />
-                  <span className="sc-box" aria-hidden="true" />
-                </label>
-              )}
+              {equipToggle}
             </div>
           );
         })}

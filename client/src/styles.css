@@ -1048,7 +1048,13 @@ button.link:hover { text-decoration: underline; }
   margin-top: 2px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--accent); border-top: 1px dashed var(--border); padding-top: 6px;
 }
-.sheet-card-foot { display: flex; justify-content: flex-end; }
+/* The open editor's foot carries delete on the left and the equip tick on the
+   right, which is the corner that tick lives in on the closed card. */
+.sheet-card-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.sheet-card-foot .sc-equip { margin-top: 0; padding-top: 0; }
+/* A group heading inside the editor: quieter than the ⚡ rider divider, which
+   is a different KIND of thing rather than another shelf of the same form. */
+.sc-divider.sc-group { color: var(--text-dim); border-top-style: solid; }
 
 /* Soundboard page toggles (3 pages of 4x4 pads). */
 .soundboard-pages { display: flex; gap: 4px; margin-bottom: 6px; }

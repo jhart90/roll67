@@ -15,7 +15,7 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
-  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBennyMax,
+  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBennyMax, aoeCentredOnSelf,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
   activationOutcome, backlashPatch, castingBlocker, swadeArcaneExpr, ACTIVATION_TN, FAILED_ACTIVATION_PP,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
@@ -3223,7 +3223,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
   // tokens the shape actually covers on the server's own map data, then run
   // the same sequenced save-and-damage pipeline as the DM's "call for save"
   // tool — one roll per hit target, damage always last.
-  socket.on(C2S.CAST_AOE, safe(socket, (p: CastAoePayload) => {
+  socket.on(C2S.CAST_AOE, safe(socket, (pIn: CastAoePayload) => {
+    let p = pIn;
     const d = requireCampaign(socket);
     let actor = characters.byId(p.characterId);
     if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
@@ -3281,6 +3282,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // exactly as the shooter's ruler promises — the old check stopped at the
     // listed Short range, so a grenade could only go a third as far as it
     // should. `throwRead` is reused below for the throwing roll's penalty.
+    // A burst with no range is centred on whoever set it off — a tail sweep,
+    // a shockwave. There is nowhere to aim it, so the aim is not taken from
+    // the client at all.
+    if (aoeCentredOnSelf(action)) p = { ...p, aimHex: originHex };
     const feetPerHexA = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
     const aimDist = hexDistance({ q: src.q, r: src.r }, p.aimHex);
     const shortHexesA = action.rangeFt > 0 ? Math.max(1, Math.ceil(action.rangeFt / feetPerHexA)) : 0;

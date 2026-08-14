@@ -17,6 +17,23 @@ const SYSTEMS = { dnd5e, swn, swade };
 /** SWADE RoF → rounds per attack: 1→1, 2→5, 3→10, 4→20, 5→40, 6→50. */
 export const AMMO_BY_ROF = [1, 1, 5, 10, 20, 40, 50];
 
+/**
+ * A burst that goes off where the thing STANDS, rather than one it throws.
+ *
+ * A tail sweep, a shockwave, a dragon curling up and detonating: the template
+ * is a circle centred on the attacker and there is nowhere to aim it. The
+ * sheet says so by leaving Range at 0 — no range is exactly the claim being
+ * made — so it needs no extra column, and there is nothing to place: the
+ * attack simply goes off.
+ *
+ * Cones and lines are excluded: they already erupt from the attacker, but
+ * they point somewhere, and that direction is still the player's to choose.
+ */
+export function aoeCentredOnSelf(action: Pick<CombatAction, 'aoe' | 'rangeFt'>): boolean {
+  const shape = action.aoe?.shape;
+  return !!shape && (shape === 'sphere' || shape === 'cylinder') && action.rangeFt <= 0;
+}
+
 export function combatActions(character: Character): CombatAction[] {
   const sheet = character.sheet;
   const schema = SYSTEMS[character.system];

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { aoeSourceHex, pointInAoe, pxPerFoot, tokensCaughtInAoe, tokensInAoe } from '../src/hex/aoe.js';
 import { hexToPixel } from '../src/hex/pixel.js';
+import { aoeCentredOnSelf } from '../src/systems/combat.js';
 import type { AoeSpec, GridConfig, Wall } from '../src/types.js';
 
 const GRID: GridConfig = {
@@ -157,5 +158,27 @@ describe('walls and blasts', () => {
   it('falls back to bare geometry when the caller has no wall data', () => {
     const hit = tokensCaughtInAoe(spec, origin, centre, GRID, tokens, null);
     expect(hit).toContain('farSide');
+  });
+});
+
+describe('a burst centred on whoever set it off', () => {
+  const sphere = { shape: 'sphere' as const, sizeFt: 0, sizeHexes: 3 };
+
+  it('is what "an area, and no range" means', () => {
+    // A tail sweep: three tiles of trouble all round the thing swinging it.
+    expect(aoeCentredOnSelf({ aoe: sphere, rangeFt: 0 })).toBe(true);
+  });
+
+  it('is not what a thrown grenade is', () => {
+    expect(aoeCentredOnSelf({ aoe: sphere, rangeFt: 30 })).toBe(false);
+  });
+
+  it('leaves cones and lines alone — they still point somewhere', () => {
+    expect(aoeCentredOnSelf({ aoe: { shape: 'cone', sizeFt: 54 }, rangeFt: 0 })).toBe(false);
+    expect(aoeCentredOnSelf({ aoe: { shape: 'line', sizeFt: 60, widthFt: 5 }, rangeFt: 0 })).toBe(false);
+  });
+
+  it('is nothing at all without a template', () => {
+    expect(aoeCentredOnSelf({ rangeFt: 0 })).toBe(false);
   });
 });

@@ -2726,7 +2726,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // so the two never both apply — the book is explicit that the modifier
         // depends on "the Scale of the target itself, not the creature it's
         // part of". Stacking them charged the attacker twice for one Scale.
-        const rawScale = p.calledShot ? 0 : sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
+        const creatureScale = sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
+        const rawScale = p.calledShot ? 0 : creatureScale;
         // Swat: a creature that has learned to deal with things smaller than
         // itself ignores up to 4 points of the Scale penalty — but only with
         // the attacks its own description names, which is why it is a flag on
@@ -2753,7 +2754,12 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           const csLabel = String(p.calledShot.label || 'Called Shot').slice(0, 40);
           mod += csPen;
           dmgBonus += csDmg;
-          tags.push(calledShotTag(csLabel, csPen) + (noVitals && Number(p.calledShot.damageBonus) > 0 ? ' (no vitals — no bonus damage)' : ''));
+          tags.push(calledShotTag(csLabel, csPen)
+            + (noVitals && Number(p.calledShot.damageBonus) > 0 ? ' (no vitals — no bonus damage)' : '')
+            // Say where the creature's own Scale went. Silently dropping a +4
+            // for a Large target reads as a bug to anyone who knows the number
+            // should be there.
+            + (creatureScale ? ` (in place of ${creatureScale > 0 ? '+' : '−'}${Math.abs(creatureScale)} for the creature's Scale)` : ''));
         }
         if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
         else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }

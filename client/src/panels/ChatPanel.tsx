@@ -198,6 +198,9 @@ function ExprWithWhy({ r, text }: { r: NonNullable<ChatMessage['roll']>; text?: 
         ? <span key={i}>!<span className="mod-why" title={UNSKILLED_WHY}>-2</span></span>
         : <span key={i}>{p}</span>)}
       {tail && <span className="mod-why" title={tailWhy}>{tail[1]}</span>}
+      {/* Nothing trailing the dice because the modifiers cancelled — but they
+          were still applied, so say so rather than let the roll look bare. */}
+      {!tail && lines.length > 0 && <span className="mod-why" title={tailWhy}>+0</span>}
     </span>
   );
 }
@@ -256,9 +259,14 @@ function DiceEquation({ r, why, fromUserId, look }: {
         </span>
       ))}
       {hidden > 0 && <span className="roll-op">+ {hidden} more</span>}
-      {mod !== 0 && (
+      {/* A modifier that cancels out is still a modifier, and the +0 is where
+          the story of it lives: +4 for a Large target and −4 for aiming at
+          its eye is a very different roll from no modifiers at all. So the
+          chip stays whenever there is something to explain, and only a roll
+          with genuinely nothing on it goes without. */}
+      {(mod !== 0 || lines.length > 0) && (
         <span className="roll-op" style={{ cursor: 'help', textDecoration: 'underline dotted' }} title={modTitle}>
-          {mod > 0 ? '+' : '−'} {Math.abs(mod)}
+          {mod < 0 ? '−' : '+'} {Math.abs(mod)}
         </span>
       )}
       <span className="roll-op">=</span>

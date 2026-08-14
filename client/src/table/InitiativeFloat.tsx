@@ -31,6 +31,10 @@ export function InitiativeFloat() {
 
   const current = state.entries[state.turnIdx];
   const isMine = !!current && current.ownerUserId === you.userId;
+  // The same signal the turn coach lights up on: the rules' one demand is
+  // dealt with and the turn has been used for something.
+  const budget = useGameStore((st) => st.moveBudget);
+  const turnSpent = !!budget && !budget.shaken && (budget.actions > 0 || budget.moved > 0);
   const myTurn = isMine || you.role === 'dm';
   // Rotate so whoever is up leads the list. Only the DISPLAY rotates — the
   // stored order and turnIdx stay put, which keeps round counting and the DM's
@@ -90,7 +94,10 @@ export function InitiativeFloat() {
       </ol>
       {myTurn && (
         <div className="row" style={{ gap: 4 }}>
-          <button className="init-end-turn" onClick={() => intents.endTurn()}>
+          <button
+            className={`init-end-turn${turnSpent ? ' ready' : ''}`}
+            onClick={() => intents.endTurn()}
+          >
             End {isMine ? 'my' : `${current?.name}’s`} turn
           </button>
           <button

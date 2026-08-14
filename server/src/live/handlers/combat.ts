@@ -422,6 +422,12 @@ export function resolveShakenRecovery(io: Server, campaignId: string, ch: Charac
 /** SWADE Multi-Action tracking: actions taken this turn, per character. */
 const swadeActionCounts = new Map<string, Map<string, number>>();
 
+/** How many actions this character has already spent this turn — what the
+ *  Multi-Action penalty is counted from, and what the turn coach reads. */
+export function actionsTakenThisTurn(campaignId: string, characterId: string): number {
+  return swadeActionCounts.get(campaignId)?.get(characterId) ?? 0;
+}
+
 /** Count an action for Multi-Action purposes; returns the penalty it takes. */
 function multiActionPenalty(campaignId: string, characterId: string): number {
   if (!initiative.get(campaignId).active) return 0;
@@ -2649,6 +2655,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // Multi-Action: −2 per extra action this turn (−4 max).
         const map2 = multiActionPenalty(d.campaignId, actor.id);
         if (map2) { mod += map2; tags.push(`${map2} Multi-Action`); }
+        // The turn coach counts actions off this, so it has to hear about one
+        // the moment it is spent rather than at the next move.
+        emitMoveBudget(io, d.campaignId, src.id);
         // Running die spent this turn: −2 to everything else.
         if (hasRunThisTurn(d.campaignId, src.id)) { mod -= 2; tags.push('−2 Ran'); }
         // A Support roll banked for this character: spend it now.

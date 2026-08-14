@@ -9,6 +9,7 @@ import { assets, campaigns, characters, chat, initiative, maps, tokens } from '.
 import { db } from '../../db/db.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { breakAim, persistSheet, postStatusLine } from '../hp.js';
+import { actionsTakenThisTurn } from './combat.js';
 
 /** SWADE combat movement spent this turn, per campaign → token. */
 /** A crawl is 2″ of Pace, whatever the character's legs would normally do. */
@@ -97,6 +98,8 @@ export function emitMoveBudget(io: Server, campaignId: string, tokenId: string):
     moved: rec?.moved ?? 0,
     runBonus: rec?.runBonus ?? null,
     crawling,
+    actions: actionsTakenThisTurn(campaignId, ch.id),
+    shaken: conds.includes('shaken'),
   };
   io.to(dmRoom(campaignId)).emit(S2C.MOVE_BUDGET, payload);
   if (ch.ownerUserId) io.to(userRoom(ch.ownerUserId)).emit(S2C.MOVE_BUDGET, payload);

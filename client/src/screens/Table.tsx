@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { intents, useGameStore, wireSocket, type DockTab, type Tool, type TerrainBrush } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { inkOnDark, playerColorFor } from '../util/playerColor';
+import { TurnCoach } from '../table/TurnCoach';
 import { MapStage } from '../table/MapStage';
 import { BennyFlip } from '../table/BennyFlip';
 import { MapManager } from '../table/dm/MapManager';
@@ -522,6 +523,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
       )}
 
       <TableToasts />
+      <TurnCoach />
       <RollCallout />
       <BennyFlip />
     </div>
@@ -598,6 +600,10 @@ function useTopChrome(): number {
       const d = dock?.getBoundingClientRect();
       // …and under the top counter dock when the DM has one up.
       if (d && d.height > 0) y = Math.max(y, d.bottom);
+      // …and under the turn coach, which owns the top of the map for the
+      // whole of somebody's turn while this banner comes and goes.
+      const coach = document.querySelector('.turn-coach')?.getBoundingClientRect();
+      if (coach && coach.height > 0) y = Math.max(y, coach.bottom);
       setTop(Math.max(TOP_GAP, y - shellTop + TOP_GAP));
     };
     measure();

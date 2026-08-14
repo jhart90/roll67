@@ -1323,6 +1323,12 @@ export interface MoveBudgetPayload {
   runBonus: number | null;
   /** Down and staying down: rough ground costs this token nothing extra. */
   crawling: boolean;
+  /** Actions taken this turn, for the Multi-Action penalty and for the turn
+   *  coach, which is trying to tell the player what is left to do. */
+  actions: number;
+  /** True while this character is Shaken and still owes the roll to shake it
+   *  off — the first thing a SWADE turn asks. */
+  shaken: boolean;
 }
 export interface RepairRollPayload { roll: boolean }
 export interface VehicleOocRollPayload { characterId: string; roll: boolean }

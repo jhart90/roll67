@@ -226,12 +226,13 @@ function equipLabel(label: string, on: boolean): string {
   return UNSET_EQUIP_LABEL[label] ?? `Not ${label.toLowerCase()}`;
 }
 
-const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoeSize', 'aoeWidth', 'condition', 'conditionSave', 'conditionDc']);
+const ATTACK_DETAIL_COLS = new Set(['save', 'onSave', 'saveDc', 'aoeShape', 'aoeSize', 'aoeHexes', 'aoeWidth', 'condition', 'conditionSave', 'conditionDc', 'evadable']);
 
 /** Does this attack carry a rider effect (forced save, inflicted condition,
  *  or AoE template)? Lights up the ⚡ button so configured attacks stand out. */
 function attackHasRider(row: SheetData): boolean {
-  return Boolean(str(row, 'save', '') || str(row, 'condition', '') || str(row, 'aoeShape', ''));
+  return Boolean(str(row, 'save', '') || str(row, 'condition', '') || str(row, 'aoeShape', '')
+    || row.evadable === true);
 }
 
 /**

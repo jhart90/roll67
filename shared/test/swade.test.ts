@@ -478,7 +478,10 @@ describe('SWADE library & compendium', () => {
     const breath = combatActions(dragonChar).find((a) => a.label === 'Fiery Breath')!;
     expect(breath.aoe).toEqual({ shape: 'cone', sizeFt: 54 });
     expect(breath.saveId).toBe('agility');
-    expect(breath.onSave).toBe('half');
+    // SWADE is all or nothing: making the roll means taking NO damage. Half
+    // damage on a save is a d20 idea, and this used to be the default on
+    // every SWADE attack that forced a roll.
+    expect(breath.onSave).toBe('negate');
   });
 
   it('undead carry their +2 Toughness off the Undead flag, not a fake armor row', () => {

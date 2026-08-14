@@ -360,6 +360,10 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           ...(caliberMatch ? { caliber: caliberMatch[1].toLowerCase() } : {}),
           ...(blastHexes > 0 ? { aoeShape: 'sphere', aoeHexes: blastHexes } : {}),
           ...(coneTemplate ? { aoeShape: 'cone', aoeSize: 54 } : {}),
+          // A template landing at your feet is the book's own example of an
+          // attack you can throw yourself clear of, so the ones that come
+          // with a template arrive with the box already ticked.
+          ...(blastHexes > 0 || coneTemplate ? { evadable: true } : {}),
           ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
           ...(hardRange ? { hardRange: true } : {}),
           ...(thrown ? { thrown: true } : {}),

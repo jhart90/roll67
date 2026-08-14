@@ -736,6 +736,19 @@ const gearTab: SheetTab = {
         { id: 'rof', label: 'RoF', type: 'number', width: 'sixth', default: 1 },
         { id: 'weight', label: 'Weight', type: 'number', width: 'sixth', default: 0 },
         { id: 'notes', label: 'Notes', type: 'text', width: 'sixth' },
+        // ⚡ Rider effects. The compendium has always written these onto
+        // grenades and breath weapons — a Vigor roll or be Stunned, a Medium
+        // Burst Template — but the sheet gave nowhere to read or change them,
+        // so the panel that promised "save / condition / AoE" opened empty.
+        { id: 'save', label: 'Resisted by', type: 'select', width: 'sixth', default: '', options: ['', 'agility', 'smarts', 'spirit', 'strength', 'vigor'] },
+        { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', 'shaken', 'distracted', 'vulnerable', 'entangled', 'bound', 'stunned', 'frightened', 'blinded', 'prone', 'unconscious'] },
+        { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', 'sphere', 'cone', 'line', 'cube'] },
+        { id: 'aoeHexes', label: 'Area (tiles)', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeSize', label: 'Area ft', type: 'number', width: 'sixth', default: 0 },
+        { id: 'aoeWidth', label: 'Line width ft', type: 'number', width: 'sixth', default: 0 },
+        // "If an attack doesn't say it can be evaded, it can't" — so it is a
+        // box the attack has to tick, not something guessed from its shape.
+        { id: 'evadable', label: 'Can be Evaded', type: 'checkbox', width: 'sixth' },
       ],
     },
     {

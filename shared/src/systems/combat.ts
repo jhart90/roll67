@@ -80,7 +80,16 @@ export function combatActions(character: Character): CombatAction[] {
       ...(atk.thrown === true ? { thrown: true } : {}),
       ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
         ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),
-      ...(save ? { saveId: save, onSave: str(atk, 'onSave', 'half') === 'negate' ? 'negate' as const : 'half' as const, fixedDc: num(atk, 'saveDc', 13) } : {}),
+      // SWADE has no half-damage save. Evasion is all or nothing — "those
+      // who are successful manage to avoid the attack and take no damage" —
+      // and nothing else in the system asks a target to eat half. Other
+      // systems keep the choice the row records.
+      ...(save ? {
+        saveId: save,
+        onSave: (character.system === 'swade' || str(atk, 'onSave', 'half') === 'negate')
+          ? 'negate' as const : 'half' as const,
+        fixedDc: num(atk, 'saveDc', 13),
+      } : {}),
       ...(aoeShape && (aoeSize > 0 || aoeHexes > 0)
         ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeHexes > 0 ? { sizeHexes: aoeHexes } : {}), ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }
         : {}),
@@ -88,6 +97,8 @@ export function combatActions(character: Character): CombatAction[] {
       ...(condition && !save && conditionSave && conditionDc > 0
         ? { conditionSaveId: conditionSave, conditionDc } : {}),
       ...(atk.hardRange === true ? { hardRange: true } : {}),
+      // SWADE Evasion: only the attacks that SAY they can be dived away from.
+      ...(atk.evadable === true ? { evadable: true } : {}),
       // Put away: still listed, but greyed out and refused until drawn.
       ...(character.system === 'swade' && swadeStowed(atk) ? { stowed: true as const } : {}),
     });

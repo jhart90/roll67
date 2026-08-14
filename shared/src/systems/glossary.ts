@@ -75,6 +75,8 @@ const SWADE_CONCEPTS: Record<string, string> = {
   'Wild Die color': 'This character’s own Wild Die. Blank uses your own setting.',
   'Wild Die pip color': 'The numbers painted on this character’s Wild Die. Blank picks whatever stays legible on it.',
   'Ace animation': 'How this character’s exploding dice celebrate — flash, flames, confetti and the rest. Blank uses whatever you picked for yourself.',
+  'Line width ft': 'How wide a line template is. Only meaningful for the line shape; leave it at 0 for a burst or a cone.',
+  'Can be Evaded': 'This attack is slow or telegraphed enough to throw yourself clear of — a flamethrower, a dragon’s breath, a grenade landing at your feet. Anyone aware of it rolls Agility at −2 and takes NO damage on a success; there is no half. The book is strict about this: if an attack does not SAY it can be evaded, it cannot be, so this is a box the attack ticks rather than something guessed from its shape.',
   Scale: 'The band this creature’s Size falls in, and what that is worth when the two sides of a fight are different sizes: the smaller adds the difference to its attacks, the larger subtracts it. Tiny −6, Very Small −4, Small −2, Normal 0, Large +2, Huge +4, Gargantuan +6.',
   Cover: 'Cover this character has that the MAP cannot see — furniture, a crowd, a raised shield. Light −2, Medium −4, Heavy −6, Near Total −8, applied to melee and ranged attacks against them. The map keeps working out its own cover from walls; an attack uses whichever of the two protects the target more, so claiming light here never strips away medium cover the map can see.',
   'Wild Card': 'A hero or major character: rolls a d6 Wild Die alongside every Trait roll (keep the better), takes three Wounds before going down, and holds Bennies.',

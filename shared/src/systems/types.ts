@@ -194,6 +194,11 @@ export interface CombatAction {
    *  AFTER the hit lands (ghoul claws: hit, then CON save or be paralyzed).
    *  Absent = the condition applies automatically on a hit (grapples). */
   conditionSaveId?: string;
+  /** SWADE: this attack is slow or telegraphed enough to be dived away from
+   *  — an Agility roll at −2 for no damage at all. The book is explicit that
+   *  it is a property the attack has to claim: "if an attack doesn't say it
+   *  can be evaded, it can't". */
+  evadable?: boolean;
   conditionDc?: number;
   /** SWADE: `rangeFt` is a HARD maximum rather than the Short band. Suppresses
    *  the Medium/Long/Extreme ladder on both the client's targeting ring and

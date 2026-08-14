@@ -2426,7 +2426,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         : { expr: '1d20', threshold: casterDc, label: `${action.saveId.toUpperCase()} save` };
       attackBreakdown = roll(sc.expr);
       const passed = attackBreakdown.total >= sc.threshold;
-      saveScale = passed ? (action.onSave === 'negate' ? 0 : 0.5) : 1;
+      // SWADE is all or nothing: a successful Evasion or resisted effect takes
+      // NO damage. Half-damage saves are a d20 idea and this engine used to
+      // apply the default to every SWADE attack that forced a roll.
+      const negates = action.onSave === 'negate' || actor.system === 'swade';
+      saveScale = passed ? (negates ? 0 : 0.5) : 1;
       // 5e's threshold is always the caster's DC; SWN's is target-number based
       // (ignores the caster's DC entirely) — showing sc.threshold is correct
       // for both instead of hard-coding "vs DC" around the 5e-only casterDc.
@@ -3457,7 +3461,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // SWADE Evasion: a telegraphed template attack (grenade blast, cone of
       // flame) can be dived away from — Agility at −2, success takes nothing.
       // A properly cooked grenade goes off the instant it lands: no diving clear.
-      const evadeable = actor.system === 'swade' && action.source === 'attack'
+      // Evasion is a property the ATTACK claims — "if an attack doesn't say
+      // it can be evaded, it can't" — so it is the weapon's own ⚡ box, not a
+      // guess made from its shape. An attack that already forces a roll has
+      // its evasion built in; a cooked grenade goes off before anyone moves.
+      const evadeable = actor.system === 'swade' && action.evadable === true
         && !action.suppressive && !action.saveId && usableAmount(action.amountExpr) && !cooked;
       if (action.saveId || evadeable) {
         // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC

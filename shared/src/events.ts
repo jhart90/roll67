@@ -136,6 +136,8 @@ export const C2S = {
   INIT_CARD_DRAW: 'initCardDraw',
   /** DM: deal a latecomer into the round already in progress. */
   INIT_DEAL_IN: 'initDealIn',
+  /** What would this shot be modified by? Asked while hovering a target. */
+  ATTACK_PREVIEW: 'attackPreview',
   /** 5e/SWN: DM calls for initiative — every combatant owes their own roll. */
   INIT_ROLL_CALL: 'initRollCall',
   /** 5e/SWN: roll initiative for one pending combatant. */
@@ -628,6 +630,14 @@ export interface InitRollMinePayload { tokenId: string }
 /** SWADE: draw the top card for one pending combatant's token. */
 export interface InitCardDrawPayload { tokenId: string }
 export interface InitDealInPayload { tokenId: string }
+export interface AttackPreviewPayload {
+  characterId: string;
+  actionId: string;
+  sourceTokenId: string;
+  targetTokenId: string;
+  adv?: 'adv' | 'dis' | null;
+  rof?: number;
+}
 /** SWADE: a card was drawn — drives the flip animation + chat framing. */
 /** Round 2+ auto-deal: every combatant's new card, in deal order, for the
  *  sequenced face-down → flip-over reveal. Hidden combatants are omitted. */
@@ -878,6 +888,8 @@ export const S2C = {
   CLOCK: 'clock',
   /** The campaign's dice pacing changed — everyone switches together. */
   DICE_SPEED: 'diceSpeed',
+  /** The modifier a hovered shot would carry, itemised. */
+  ATTACK_PREVIEW: 'attackPreviewResult',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
@@ -1192,6 +1204,21 @@ export interface SetDiceBouncePayload { pct: number | null }
 export interface SetDiceAceStylePayload { style: import('./types.js').AceStyle | null }
 export interface SetTurnGuidePayload { on: boolean }
 export interface SetDiceSpeedPayload { speed: DiceSpeed }
+/**
+ * The itemised modifier a shot would carry if it were taken right now.
+ *
+ * `tags` is the same list the roll's own tooltip shows afterwards, because it
+ * is produced by the same function — see swadeShotModifiers.
+ */
+export interface AttackPreviewResultPayload {
+  sourceTokenId: string;
+  targetTokenId: string;
+  actionId: string;
+  mod: number;
+  tags: string[];
+  /** Set when the shot cannot be taken at all; `tags` is then empty. */
+  blocked?: string;
+}
 export interface DiceSpeedPayload { speed: DiceSpeed }
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }

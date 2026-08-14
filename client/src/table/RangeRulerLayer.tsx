@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Hex } from 'shared';
 import { hexDistance, hexToPixel, pixelToHex, rayBlocked, sightSegments, swadeRangeBand } from 'shared';
-import { sightGeometry, useGameStore } from '../store/game';
+import { intents, sightGeometry, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
 
 /**
@@ -36,6 +36,7 @@ export function RangeRulerLayer() {
   // target it is about — a line still swinging around the map says the
   // choice is open when it is not.
   const pricing = useGameStore((s) => s.calledShotPending);
+  const preview = useGameStore((s) => s.attackPreview);
   const [cursor, setCursor] = useState<Hex | null>(null);
 
   const active = targeting ?? aoe;
@@ -47,6 +48,28 @@ export function RangeRulerLayer() {
     window.addEventListener('pointermove', onMove);
     return () => window.removeEventListener('pointermove', onMove);
   }, [wantCursor, stage, map.grid]);
+
+  // Whoever the cursor is actually over. Worked out from the hex rather than
+  // from pointer events on the tokens, because this layer takes no pointer
+  // events at all — clicking a token is how a target gets chosen, and an
+  // overlay that swallowed the click would break the thing it is explaining.
+  const overHex = pricing ? null : cursor;
+  const hovered = overHex
+    ? Object.values(tokens).find((t) => t.mapId === map.id && t.q === overHex.q && t.r === overHex.r
+      && t.id !== targeting?.sourceTokenId)
+    : undefined;
+  const lockedId = pricing?.targetTokenId ?? null;
+  const askAbout = lockedId ?? hovered?.id ?? null;
+
+  // Ask the server what this shot would be modified by. The server, because
+  // half the inputs — the target's Size, their Wounds, what cover their sheet
+  // claims — are on a sheet this client is never sent, and because the answer
+  // has to come from the same function that will score the roll.
+  useEffect(() => {
+    if (!askAbout || !targeting) { useGameStore.setState({ attackPreview: null }); return; }
+    const timer = setTimeout(() => intents.attackPreview(askAbout), 60);
+    return () => clearTimeout(timer);
+  }, [askAbout, targeting?.action.id, targeting?.adv, targeting?.rof]);
 
   if (system !== 'swade' || !active) return null;
   const action = active.action;
@@ -81,14 +104,30 @@ export function RangeRulerLayer() {
 
   // The roll this action actually makes, so the penalty names the right skill.
   const skillName = action.thrown ? 'Athletics (Throwing)' : 'Shooting';
+  const measure = `${dist} ${dist === 1 ? 'tile' : 'tiles'} / ${dist * feetPerHex} ft`;
+  // Once the cursor is over somebody, the ruler stops quoting the range band
+  // on its own and shows the whole sum — a shooter deciding whether to take
+  // the shot wants the number the dice will actually carry, and the +4 for a
+  // Huge target can easily outweigh the −4 for the distance.
+  const showing = preview && preview.targetTokenId === askAbout ? preview : null;
+  const total = showing && !showing.blocked
+    ? `${showing.mod > 0 ? '+' : showing.mod < 0 ? '−' : '±'}${Math.abs(showing.mod)} to ${skillName}`
+    : null;
   const lines = blocked
-    ? [`${dist} ${dist === 1 ? 'tile' : 'tiles'} / ${dist * feetPerHex} ft`, 'No line of sight', 'A wall is in the way']
-    : [
-      `${dist} ${dist === 1 ? 'tile' : 'tiles'} / ${dist * feetPerHex} ft`,
-      reading.label,
-      ...(reading.penalty !== 0 ? [`${reading.penalty} to ${skillName}`] : []),
-      ...(!reading.reachable ? [reading.reason ?? 'Out of range'] : []),
-    ];
+    ? [measure, 'No line of sight', 'A wall is in the way']
+    : showing?.blocked
+      ? [measure, showing.blocked]
+      : showing
+        ? [measure, ...showing.tags, ...(total ? [total] : [])]
+        : [
+          measure,
+          reading.label,
+          ...(reading.penalty !== 0 ? [`${reading.penalty} to ${skillName}`] : []),
+          ...(!reading.reachable ? [reading.reason ?? 'Out of range'] : []),
+        ];
+  // The total is the line that decides the shot, so it is the one that reads
+  // like a heading rather than another item in the list.
+  const totalIdx = showing && total ? lines.length - 1 : -1;
 
   // Keep the label clear of the ruler's tip and on the far side from the
   // shooter, so it never sits under the cursor.
@@ -120,8 +159,8 @@ export function RangeRulerLayer() {
         <text
           key={i}
           x={lx} y={ly + i * (fs * 1.25) - (lines.length - 1) * (fs * 0.6)}
-          textAnchor={anchor} fontSize={fs} fontWeight={i === 0 ? 700 : 600}
-          fill={i === 0 ? '#e6e8ee' : color}
+          textAnchor={anchor} fontSize={i === totalIdx ? fs * 1.15 : fs} fontWeight={i === 0 || i === totalIdx ? 700 : 600}
+          fill={i === 0 ? '#e6e8ee' : i === totalIdx ? (showing && showing.mod >= 0 ? '#4cc47e' : '#d2564f') : color}
           stroke="#10131a" strokeWidth={3} paintOrder="stroke"
         >
           {text}

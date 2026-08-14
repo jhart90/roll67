@@ -13,7 +13,7 @@ import {
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
-  type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
+  type AttackPreviewPayload, type AttackPreviewResultPayload, type CoverGrade, type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeAmmoLeft, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
@@ -2265,6 +2265,366 @@ function chaseSelfContext(campaignId: string, srcTokenId: string): { evading: bo
 }
 
 export function registerCombatHandlers(io: Server, socket: Socket): void {
+
+/**
+ * SWADE cover grades read off the MAP: the target's centre is already known to
+ * be clear, so sample four points around their hex and let each blocked edge
+ * deepen the penalty (Light −2, Medium −4, Heavy −6).
+ *
+ * Its own function so the shot preview samples exactly the walls the roll
+ * will, rather than a second opinion about the same stonework.
+ */
+function sampleMapCover(
+  map: MapDef, srcPx: { x: number; y: number }, tgtPx: { x: number; y: number },
+  sightSegs: ReturnType<typeof sightSegments>, tgt: Token,
+): number {
+  const nb = hexToPixel({ q: tgt.q + 1, r: tgt.r }, map.grid);
+  const rad = 0.4 * Math.hypot(nb.x - tgtPx.x, nb.y - tgtPx.y);
+  const blocked = [
+    { x: tgtPx.x + rad, y: tgtPx.y }, { x: tgtPx.x - rad, y: tgtPx.y },
+    { x: tgtPx.x, y: tgtPx.y + rad }, { x: tgtPx.x, y: tgtPx.y - rad },
+  ].filter((pt) => rayBlocked(srcPx, pt, sightSegs)).length;
+  return blocked === 0 ? 0 : blocked === 1 ? -2 : blocked === 2 ? -4 : -6;
+}
+
+/**
+ * Everything the situation adds to a SWADE attack roll, and the itemised list
+ * that explains it.
+ *
+ * Lifted out of the COMBAT_ACTION handler so that the SHOT PREVIEW — the
+ * breakdown a player sees while hovering a target, before committing — is the
+ * same arithmetic that will actually score the roll. A preview computed
+ * separately is a preview that drifts, and a modifier tooltip nobody can trust
+ * is worse than no tooltip: it teaches players to ignore the number.
+ *
+ * Read-only on purpose. The two things the real path does that a preview must
+ * not — telling the turn coach an action was spent, and cashing in a banked
+ * Support roll — are returned for the caller to do rather than done here.
+ */
+interface ShotModCtx {
+  campaignId: string;
+  action: CombatAction;
+  p: { adv?: 'adv' | 'dis' | null; calledShot?: { label?: unknown; penalty?: unknown; damageBonus?: unknown } | null };
+  actor: Character;
+  targetChar: Character | undefined;
+  attackerConditions: string[];
+  targetConditions: string[];
+  src: Token;
+  tgt: Token;
+  map: MapDef;
+  tgtPx: { x: number; y: number };
+  reading: { label: string; penalty: number } | null;
+  rangeBandMod: number;
+  coverPenalty: number;
+  coverGrade: CoverGrade;
+  coverSource: 'map' | 'sheet' | 'both';
+  aimBonusActive: boolean;
+  effRof: number;
+  chaseCtx: { targetEvading?: boolean } | null;
+  chaseSelf: { evading?: boolean; unstable?: boolean };
+}
+
+interface ShotMods {
+  mod: number;
+  tags: string[];
+  dmgBonus: number;
+  wildAttack: boolean;
+  /** A banked Support bonus this roll consumed — the caller clears it. */
+  spendSupport: number;
+  /** Why this shot cannot be taken at all, when it cannot. */
+  blocked?: string;
+}
+
+function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
+  const {
+    campaignId, action, p, actor, targetChar, attackerConditions, targetConditions,
+    src, tgt, map, tgtPx, reading, rangeBandMod, coverPenalty, coverGrade, coverSource,
+    aimBonusActive, effRof, chaseCtx, chaseSelf,
+  } = ctx;
+  let dmgBonus = 0;
+  let wildAttack = false;
+  let spendSupport = 0;
+      let mod = 0;
+      const tags: string[] = [];
+      // A healer works against the patient's own condition: their Wound
+      // levels come off the Healing roll. It cannot be baked into the
+      // expression the sheet builds — that is written before anyone has
+      // been picked to treat — so it lands here, where the patient is
+      // known. Without it, patching up a dying casualty was as easy as
+      // dressing a scratch.
+      if (action.healsWounds && targetChar?.system === 'swade') {
+        const hurt = Math.min(3, Math.max(0, num(targetChar.sheet, 'wounds', 0)));
+        if (hurt > 0) {
+          mod -= hurt;
+          tags.push(`−${hurt} patient's Wounds`);
+        }
+      }
+      // The adv slot is repurposed: melee 'adv' is a Wild Attack (+2 to
+      // hit AND damage, but you're Vulnerable), ranged 'adv' is Aim (+2).
+      if (p.adv === 'adv' && !action.ranged) {
+        mod += 2; dmgBonus += 2; wildAttack = true; tags.push('+2 Wild Attack');
+      } else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
+      if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${reading?.label ?? 'range'}`); }
+      if (coverPenalty) {
+        mod += coverPenalty;
+        const via = coverSource === 'both' ? '' : coverSource === 'sheet' ? ', on their sheet' : ', from the map';
+        tags.push(`${coverPenalty} ${COVER_LABEL[coverGrade]}${via} (armor +${-coverPenalty})`);
+      }
+      // Illumination: Dim −2, Dark −4 — unless the target stands in light
+      // (a map light's or a carried torch's bright radius washes it out;
+      // a dim radius still leaves −2).
+      if (map.grid.lighting !== 'light') {
+        const nb2 = hexToPixel({ q: tgt.q + 1, r: tgt.r }, map.grid);
+        const hexStep = Math.hypot(nb2.x - tgtPx.x, nb2.y - tgtPx.y);
+        let lit: 'bright' | 'dim' | 'none' = 'none';
+        for (const L of map.lights) {
+          const dHex = Math.hypot(L.x - tgtPx.x, L.y - tgtPx.y) / hexStep;
+          if (dHex <= L.brightRadius) { lit = 'bright'; break; }
+          if (dHex <= L.dimRadius) lit = 'dim';
+        }
+        if (lit !== 'bright') {
+          for (const t of tokens.forMap(src.mapId)) {
+            if (!t.light) continue;
+            const px = hexToPixel({ q: t.q, r: t.r }, map.grid);
+            const dHex = Math.hypot(px.x - tgtPx.x, px.y - tgtPx.y) / hexStep;
+            if (dHex <= t.light.bright) { lit = 'bright'; break; }
+            if (dHex <= t.light.dim) lit = 'dim';
+          }
+        }
+        const base = map.grid.lighting === 'dim' ? -2 : map.grid.lighting === 'dark' ? -4 : -6;
+        let illum = lit === 'bright' ? 0 : lit === 'dim' ? -2 : base;
+        const illumWord = illum === -2 ? 'Dim light' : illum === -4 ? 'Darkness' : 'Pitch darkness';
+        // Low Light Vision ignores Dim and Dark outright — but not Pitch
+        // Darkness, where there is no light left to make the most of.
+        if (illum < 0 && illum > -6 && actor.sheet.lowLightVision === true) {
+          tags.push(`${illum} ${illumWord} ignored (Low Light Vision)`);
+          illum = 0;
+        } else if (illum < 0 && actor.sheet.infravision === true) {
+          // Infravision sees heat rather than light, so it halves the
+          // penalty — against something that gives off heat. A construct
+          // does not, which is exactly the clever trick the book invites
+          // players to pull with cold mud and a heat-filtering suit.
+          const warm = !targetChar || !(targetChar.system === 'swade' && isAbomination(targetChar.sheet));
+          if (warm) {
+            const halved = Math.ceil(illum / 2); // −4 → −2, −6 → −3
+            tags.push(`${halved} ${illumWord}, halved by Infravision`);
+            illum = halved;
+          } else {
+            tags.push(`${illum} ${illumWord} (Infravision finds no warmth here)`);
+          }
+        } else if (illum) {
+          tags.push(`${illum} ${illumWord}`);
+        }
+        mod += illum;
+      }
+      // Aim (earned by spending last turn on the 🎯 Aim action): negate up
+      // to 4 points of range/cover penalties, else +2 flat.
+      if (aimBonusActive) {
+        const offset = Math.min(4, -(rangeBandMod + coverPenalty));
+        if (offset > 0) { mod += offset; tags.push(`+${offset} Aim`); }
+        else { mod += 2; tags.push('+2 Aim'); }
+      }
+      // Automatic fire: RoF 2+ takes −2 Recoil; a raise lands extra hits.
+      if (effRof >= 2) { mod -= 2; tags.push(`−2 Recoil (RoF ${effRof})`); }
+      // Firing in melee: nothing bigger than a pistol when a foe is adjacent.
+      if (action.ranged && action.rangeFt > 90) {
+        const mySide = actor.ownerUserId ? 'pc' : 'npc';
+        const adjacentFoe = tokens.forMap(src.mapId).some((t) => {
+          if (t.id === src.id || !t.characterId) return false;
+          if (hexDistance({ q: t.q, r: t.r }, { q: src.q, r: src.r }) !== 1) return false;
+          const c = characters.byId(t.characterId);
+          return !!c && (c.ownerUserId ? 'pc' : 'npc') !== mySide
+            && !conditionsOf(c.sheet).includes('incapacitated');
+        });
+        if (adjacentFoe) {
+          return { mod, tags, dmgBonus, wildAttack, spendSupport, blocked:
+            `${action.label} is too big to fire with a foe in reach — pistols only in melee.` };
+        }
+      }
+      // Bigger targets are easier to hit (Large +2, Huge +4).
+      if (tgt.size === 2) { mod += 2; tags.push('+2 Size'); }
+      else if (tgt.size >= 3) { mod += 4; tags.push('+4 Size'); }
+      // Joker: the real +2 to trait rolls and damage, not just card text.
+      const initState = initiative.get(campaignId);
+      const myEntry = initState.active ? initState.entries.find((e) => (e.tokenId ? tokens.byId(e.tokenId)?.characterId : undefined) === actor.id) : undefined;
+      if (myEntry?.card?.rank === 15) { mod += 2; dmgBonus += 2; tags.push('+2 Joker'); }
+      // Multi-Action: −2 per extra action this turn (−4 max).
+      const map2 = multiActionPenalty(campaignId, actor.id);
+      if (map2) { mod += map2; tags.push(`${map2} Multi-Action`); }
+      // The turn coach counts actions off this, so it has to hear about one
+      // the moment it is spent rather than at the next move.
+      // Running die spent this turn: −2 to everything else.
+      if (hasRunThisTurn(campaignId, src.id)) { mod -= 2; tags.push('−2 Ran'); }
+      // A Support roll banked for this character: spend it now.
+      const support = num(actor.sheet, 'supportBonus', 0);
+      if (support > 0) {
+        mod += support; tags.push(`+${support} Support`);
+        spendSupport = support;
+      }
+      if (!action.ranged && attackerConditions.includes('prone')) { mod -= 2; tags.push('−2 Prone'); }
+      // Gang Up: melee only. Sides split PC (player-owned) vs NPC; a
+      // bystander too hurt to threaten anyone doesn't count for either.
+      if (!action.ranged && targetChar) {
+        const mySide = actor.ownerUserId ? 'pc' : 'npc';
+        const others = tokens.forMap(src.mapId).flatMap((t): GangUpCombatant[] => {
+          if (t.id === src.id || t.id === tgt.id || !t.characterId) return [];
+          const c = characters.byId(t.characterId);
+          if (!c) return [];
+          const cond = conditionsOf(c.sheet);
+          const canFight = !cond.includes('incapacitated') && !cond.includes('stunned') && !cond.includes('bleeding');
+          return [{
+            hex: { q: t.q, r: t.r },
+            side: (c.ownerUserId ? 'pc' : 'npc') === mySide ? 'attacker' : 'defender',
+            canFight,
+          }];
+        });
+        const gang = gangUpBonus({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r }, others);
+        if (gang > 0) { mod += gang; tags.push(`+${gang} Gang Up`); }
+      }
+      // Scale: the smaller creature adds the difference, the larger
+      // subtracts it. A fly swatting at a dragon is easy; the dragon
+      // swatting back at the fly is not.
+      // A Called Shot uses the Scale of the PART instead of the creature's,
+      // so the two never both apply — the book is explicit that the modifier
+      // depends on "the Scale of the target itself, not the creature it's
+      // part of". Stacking them charged the attacker twice for one Scale.
+      const creatureScale = sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
+      const rawScale = p.calledShot ? 0 : creatureScale;
+      // Swat: a creature that has learned to deal with things smaller than
+      // itself ignores up to 4 points of the Scale penalty — but only with
+      // the attacks its own description names, which is why it is a flag on
+      // the weapon row rather than on the creature.
+      const swatted = action.swat === true && rawScale < 0 ? Math.min(4, -rawScale) : 0;
+      const scaleMod = rawScale + swatted;
+      if (scaleMod) {
+        mod += scaleMod;
+        tags.push(sizeAttackTag(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0))!);
+      }
+      if (swatted) tags.push(`+${swatted} Swat`);
+      // Called Shot: the Scale of the PART being aimed at, which the client
+      // worked out from the defender's own Size once a target was picked —
+      // a Huge creature's head is a bigger thing to hit than a person's.
+      // Re-clamped here so a hand-typed modifier cannot invent one.
+      if (p.calledShot) {
+        const csPen = clampCalledShotPenalty(Number(p.calledShot.penalty) || 0);
+        // A Called Shot pays a to-hit penalty for extra damage to a vital
+        // spot. A skeleton has no vitals: the penalty still applies (the eye
+        // socket is still a small target) but the bonus does not, which is
+        // the book's way of saying stop aiming for its heart.
+        const noVitals = !!targetChar && targetChar.system === 'swade' && isAbomination(targetChar.sheet);
+        const csDmg = noVitals ? 0 : Math.max(0, Math.min(8, Math.floor(Number(p.calledShot.damageBonus) || 0)));
+        const csLabel = String(p.calledShot.label || 'Called Shot').slice(0, 40);
+        mod += csPen;
+        dmgBonus += csDmg;
+        tags.push(calledShotTag(csLabel, csPen)
+          + (noVitals && Number(p.calledShot.damageBonus) > 0 ? ' (no vitals — no bonus damage)' : '')
+          // Say where the creature's own Scale went. Silently dropping a +4
+          // for a Large target reads as a bug to anyone who knows the number
+          // should be there.
+          + (creatureScale ? ` (in place of ${creatureScale > 0 ? '+' : '−'}${Math.abs(creatureScale)} for the creature's Scale)` : ''));
+      }
+      if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
+      else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
+      if (action.ranged && targetConditions.includes('prone')) { mod -= 2; tags.push('−2 vs Prone'); }
+      // Chase: evasive driving cuts both ways, and a moving vehicle is a
+      // poor firing platform unless its driver spent the turn steadying it.
+      if (chaseCtx?.targetEvading) { mod += EVADE_MOD; tags.push('−2 target is Evading'); }
+      if (chaseSelf.evading) { mod += EVADE_MOD; tags.push('−2 Evading'); }
+      if (action.ranged && chaseSelf.unstable) { mod += UNSTABLE_PLATFORM_MOD; tags.push('−2 Unstable Platform'); }
+  return { mod, tags, dmgBonus, wildAttack, spendSupport };
+}
+
+  /**
+   * What would this shot be modified by, if it were taken right now?
+   *
+   * Asked while the player is hovering a target and has not committed to
+   * anything. It runs the SAME modifier function the roll runs — a preview
+   * that quotes a different number than the roll applies is a preview that
+   * makes people distrust both — and touches nothing: no ammo, no aim spent,
+   * no action counted, no Support cashed in.
+   */
+  socket.on(C2S.ATTACK_PREVIEW, safe(socket, (q: AttackPreviewPayload) => {
+    const d = requireCampaign(socket);
+    const reply = (out: Omit<AttackPreviewResultPayload, 'sourceTokenId' | 'targetTokenId' | 'actionId'>): void => {
+      socket.emit(S2C.ATTACK_PREVIEW, {
+        sourceTokenId: q.sourceTokenId, targetTokenId: q.targetTokenId, actionId: q.actionId, ...out,
+      } satisfies AttackPreviewResultPayload);
+    };
+    const actor = characters.byId(q.characterId);
+    if (!actor || actor.campaignId !== d.campaignId) return;
+    if (d.role !== 'dm' && actor.ownerUserId !== d.userId) return;
+    if (actor.system !== 'swade') return;   // only SWADE folds situation into flat modifiers
+    const action = combatActions(actor).find((a) => a.id === q.actionId);
+    if (!action || !action.attackExpr) return;
+    const src = tokens.byId(q.sourceTokenId);
+    const tgt = tokens.byId(q.targetTokenId);
+    if (!src || !tgt || tgt.mapId !== src.mapId) return;
+    const map = maps.byId(src.mapId);
+    if (!map || map.campaignId !== d.campaignId) return;
+
+    const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
+    const rangeHexes = action.rangeFt <= 0 ? 0 : Math.max(1, Math.ceil(action.rangeFt / feetPerHex));
+    const chaseCtx = chaseAttackContext(d.campaignId, src.id, tgt.id);
+    const chaseSelf = chaseSelfContext(d.campaignId, src.id);
+    const dist = chaseCtx
+      ? Math.max(0, Math.round((chaseCtx.yards * 3) / feetPerHex))
+      : hexDistance({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
+    if (chaseCtx && !action.ranged && chaseCtx.gapCards > 0) {
+      reply({ mod: 0, tags: [], blocked: `${chaseCtx.gapCards} Chase Card${chaseCtx.gapCards === 1 ? '' : 's'} away` });
+      return;
+    }
+    const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0);
+    const swadeBands = action.ranged && rangeHexes > 1 && !action.hardRange;
+    const effRof = Math.max(1, Math.min(action.rof ?? 1, Math.round(q.rof ?? (action.rof ?? 1))));
+    const bandOpts = { aiming: q.adv === 'adv', thrown: action.thrown === true };
+    const effDist = Math.max(0, dist - (tgt.size >= 3 ? 1 : 0));
+    const reading = swadeBands ? swadeRangeBand(effDist, rangeHexes, bandOpts) : null;
+    if (swadeBands && reading && !reading.reachable) {
+      reply({ mod: 0, tags: [], blocked: reading.reason ?? 'Out of range' });
+      return;
+    }
+    if (!swadeBands && action.ranged && dist > effectiveRange) {
+      reply({ mod: 0, tags: [], blocked: 'Out of range' });
+      return;
+    }
+    if (!action.ranged && dist > effectiveRange) {
+      reply({ mod: 0, tags: [], blocked: 'Out of reach' });
+      return;
+    }
+
+    const srcPx = hexToPixel({ q: src.q, r: src.r }, map.grid);
+    const tgtPx = hexToPixel({ q: tgt.q, r: tgt.r }, map.grid);
+    const sightSegs = sightSegments(map.walls, map.doors, srcPx);
+    if (rayBlocked(srcPx, tgtPx, sightSegs)) {
+      reply({ mod: 0, tags: [], blocked: 'No line of sight' });
+      return;
+    }
+    const targetChar = tgt.characterId ? characters.byId(tgt.characterId) : undefined;
+    let coverPenalty = sampleMapCover(map, srcPx, tgtPx, sightSegs, tgt);
+    let coverGrade = coverGradeFor(coverPenalty);
+    let coverSource: 'map' | 'sheet' | 'both' = 'map';
+    if (targetChar) {
+      const eff = effectiveCover(coverPenalty, targetChar.sheet);
+      coverPenalty = eff.penalty;
+      coverGrade = eff.grade;
+      coverSource = eff.source;
+    }
+    // Read-only: an aim is CONSUMED by firing, never by considering it.
+    const attackerConditions = conditionsOf(actor.sheet);
+    const aimBonusActive = attackerConditions.includes('aiming')
+      && aimStateFor(d.campaignId, actor.id) === 'ready' && action.ranged;
+
+    const shot = swadeShotModifiers({
+      campaignId: d.campaignId, action, p: { adv: q.adv ?? null }, actor, targetChar,
+      attackerConditions, targetConditions: targetChar ? conditionsOf(targetChar.sheet) : [],
+      src, tgt, map, tgtPx, reading, rangeBandMod: reading?.penalty ?? 0,
+      coverPenalty, coverGrade, coverSource, aimBonusActive, effRof, chaseCtx, chaseSelf,
+    });
+    reply(shot.blocked
+      ? { mod: 0, tags: [], blocked: shot.blocked }
+      : { mod: shot.mod, tags: shot.tags });
+  }, 'ATTACK_PREVIEW'));
+
   socket.on(C2S.COMBAT_ACTION, safe(socket, (p: CombatActionPayload) => {
     const d = requireCampaign(socket);
     const actorMaybe = characters.byId(p.characterId);
@@ -2384,16 +2744,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // SWADE cover grades: the center is clear (checked above), so sample four
     // points around the target hex — each blocked edge deepens the penalty
     // (Light −2, Medium −4, Heavy −6).
-    let coverPenalty = 0;
-    if (actor.system === 'swade') {
-      const nb = hexToPixel({ q: tgt.q + 1, r: tgt.r }, map.grid);
-      const rad = 0.4 * Math.hypot(nb.x - tgtPx.x, nb.y - tgtPx.y);
-      const blocked = [
-        { x: tgtPx.x + rad, y: tgtPx.y }, { x: tgtPx.x - rad, y: tgtPx.y },
-        { x: tgtPx.x, y: tgtPx.y + rad }, { x: tgtPx.x, y: tgtPx.y - rad },
-      ].filter((pt) => rayBlocked(srcPx, pt, sightSegs)).length;
-      coverPenalty = blocked === 0 ? 0 : blocked === 1 ? -2 : blocked === 2 ? -4 : -6;
-    }
+    let coverPenalty = actor.system === 'swade' ? sampleMapCover(map, srcPx, tgtPx, sightSegs, tgt) : 0;
 
     const targetChar = tgt.characterId ? characters.byId(tgt.characterId) : undefined;
     // The map and the sheet can BOTH be right about cover, and neither
@@ -2593,194 +2944,20 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         // SWADE folds situation into flat modifiers, not adv/dis dice. The
         // attacker's own Distracted −2 is already baked into the trait
         // expression, so only positional and target-side effects apply here.
-        let mod = 0;
-        const tags: string[] = [];
-        // A healer works against the patient's own condition: their Wound
-        // levels come off the Healing roll. It cannot be baked into the
-        // expression the sheet builds — that is written before anyone has
-        // been picked to treat — so it lands here, where the patient is
-        // known. Without it, patching up a dying casualty was as easy as
-        // dressing a scratch.
-        if (action.healsWounds && targetChar?.system === 'swade') {
-          const hurt = Math.min(3, Math.max(0, num(targetChar.sheet, 'wounds', 0)));
-          if (hurt > 0) {
-            mod -= hurt;
-            tags.push(`−${hurt} patient's Wounds`);
-          }
-        }
-        // The adv slot is repurposed: melee 'adv' is a Wild Attack (+2 to
-        // hit AND damage, but you're Vulnerable), ranged 'adv' is Aim (+2).
-        if (p.adv === 'adv' && !action.ranged) {
-          mod += 2; dmgBonus += 2; wildAttack = true; tags.push('+2 Wild Attack');
-        } else if (p.adv === 'dis') { mod -= 2; tags.push('−2'); }
-        if (rangeBandMod) { mod += rangeBandMod; tags.push(`${rangeBandMod} ${reading?.label ?? 'range'}`); }
-        if (coverPenalty) {
-          mod += coverPenalty;
-          const via = coverSource === 'both' ? '' : coverSource === 'sheet' ? ', on their sheet' : ', from the map';
-          tags.push(`${coverPenalty} ${COVER_LABEL[coverGrade]}${via} (armor +${-coverPenalty})`);
-        }
-        // Illumination: Dim −2, Dark −4 — unless the target stands in light
-        // (a map light's or a carried torch's bright radius washes it out;
-        // a dim radius still leaves −2).
-        if (map.grid.lighting !== 'light') {
-          const nb2 = hexToPixel({ q: tgt.q + 1, r: tgt.r }, map.grid);
-          const hexStep = Math.hypot(nb2.x - tgtPx.x, nb2.y - tgtPx.y);
-          let lit: 'bright' | 'dim' | 'none' = 'none';
-          for (const L of map.lights) {
-            const dHex = Math.hypot(L.x - tgtPx.x, L.y - tgtPx.y) / hexStep;
-            if (dHex <= L.brightRadius) { lit = 'bright'; break; }
-            if (dHex <= L.dimRadius) lit = 'dim';
-          }
-          if (lit !== 'bright') {
-            for (const t of tokens.forMap(src.mapId)) {
-              if (!t.light) continue;
-              const px = hexToPixel({ q: t.q, r: t.r }, map.grid);
-              const dHex = Math.hypot(px.x - tgtPx.x, px.y - tgtPx.y) / hexStep;
-              if (dHex <= t.light.bright) { lit = 'bright'; break; }
-              if (dHex <= t.light.dim) lit = 'dim';
-            }
-          }
-          const base = map.grid.lighting === 'dim' ? -2 : map.grid.lighting === 'dark' ? -4 : -6;
-          let illum = lit === 'bright' ? 0 : lit === 'dim' ? -2 : base;
-          const illumWord = illum === -2 ? 'Dim light' : illum === -4 ? 'Darkness' : 'Pitch darkness';
-          // Low Light Vision ignores Dim and Dark outright — but not Pitch
-          // Darkness, where there is no light left to make the most of.
-          if (illum < 0 && illum > -6 && actor.sheet.lowLightVision === true) {
-            tags.push(`${illum} ${illumWord} ignored (Low Light Vision)`);
-            illum = 0;
-          } else if (illum < 0 && actor.sheet.infravision === true) {
-            // Infravision sees heat rather than light, so it halves the
-            // penalty — against something that gives off heat. A construct
-            // does not, which is exactly the clever trick the book invites
-            // players to pull with cold mud and a heat-filtering suit.
-            const warm = !targetChar || !(targetChar.system === 'swade' && isAbomination(targetChar.sheet));
-            if (warm) {
-              const halved = Math.ceil(illum / 2); // −4 → −2, −6 → −3
-              tags.push(`${halved} ${illumWord}, halved by Infravision`);
-              illum = halved;
-            } else {
-              tags.push(`${illum} ${illumWord} (Infravision finds no warmth here)`);
-            }
-          } else if (illum) {
-            tags.push(`${illum} ${illumWord}`);
-          }
-          mod += illum;
-        }
-        // Aim (earned by spending last turn on the 🎯 Aim action): negate up
-        // to 4 points of range/cover penalties, else +2 flat.
-        if (aimBonusActive) {
-          const offset = Math.min(4, -(rangeBandMod + coverPenalty));
-          if (offset > 0) { mod += offset; tags.push(`+${offset} Aim`); }
-          else { mod += 2; tags.push('+2 Aim'); }
-        }
-        // Automatic fire: RoF 2+ takes −2 Recoil; a raise lands extra hits.
-        if (effRof >= 2) { mod -= 2; tags.push(`−2 Recoil (RoF ${effRof})`); }
-        // Firing in melee: nothing bigger than a pistol when a foe is adjacent.
-        if (action.ranged && action.rangeFt > 90) {
-          const mySide = actor.ownerUserId ? 'pc' : 'npc';
-          const adjacentFoe = tokens.forMap(src.mapId).some((t) => {
-            if (t.id === src.id || !t.characterId) return false;
-            if (hexDistance({ q: t.q, r: t.r }, { q: src.q, r: src.r }) !== 1) return false;
-            const c = characters.byId(t.characterId);
-            return !!c && (c.ownerUserId ? 'pc' : 'npc') !== mySide
-              && !conditionsOf(c.sheet).includes('incapacitated');
-          });
-          if (adjacentFoe) {
-            emitError(socket, `${action.label} is too big to fire with a foe in reach — pistols only in melee.`);
-            return;
-          }
-        }
-        // Bigger targets are easier to hit (Large +2, Huge +4).
-        if (tgt.size === 2) { mod += 2; tags.push('+2 Size'); }
-        else if (tgt.size >= 3) { mod += 4; tags.push('+4 Size'); }
-        // Joker: the real +2 to trait rolls and damage, not just card text.
-        const initState = initiative.get(d.campaignId);
-        const myEntry = initState.active ? initState.entries.find((e) => (e.tokenId ? tokens.byId(e.tokenId)?.characterId : undefined) === actor.id) : undefined;
-        if (myEntry?.card?.rank === 15) { mod += 2; dmgBonus += 2; tags.push('+2 Joker'); }
-        // Multi-Action: −2 per extra action this turn (−4 max).
-        const map2 = multiActionPenalty(d.campaignId, actor.id);
-        if (map2) { mod += map2; tags.push(`${map2} Multi-Action`); }
+        const shot = swadeShotModifiers({
+          campaignId: d.campaignId, action, p, actor, targetChar, attackerConditions, targetConditions,
+          src, tgt, map, tgtPx, reading, rangeBandMod, coverPenalty, coverGrade, coverSource,
+          aimBonusActive, effRof, chaseCtx, chaseSelf,
+        });
+        if (shot.blocked) { emitError(socket, shot.blocked); return; }
+        const mod = shot.mod;
+        const tags = shot.tags;
+        dmgBonus += shot.dmgBonus;
+        if (shot.wildAttack) wildAttack = true;
         // The turn coach counts actions off this, so it has to hear about one
         // the moment it is spent rather than at the next move.
         emitMoveBudget(io, d.campaignId, src.id);
-        // Running die spent this turn: −2 to everything else.
-        if (hasRunThisTurn(d.campaignId, src.id)) { mod -= 2; tags.push('−2 Ran'); }
-        // A Support roll banked for this character: spend it now.
-        const support = num(actor.sheet, 'supportBonus', 0);
-        if (support > 0) {
-          mod += support; tags.push(`+${support} Support`);
-          actor = persistSheet(io, d.campaignId, actor, { supportBonus: 0 });
-        }
-        if (!action.ranged && attackerConditions.includes('prone')) { mod -= 2; tags.push('−2 Prone'); }
-        // Gang Up: melee only. Sides split PC (player-owned) vs NPC; a
-        // bystander too hurt to threaten anyone doesn't count for either.
-        if (!action.ranged && targetChar) {
-          const mySide = actor.ownerUserId ? 'pc' : 'npc';
-          const others = tokens.forMap(src.mapId).flatMap((t): GangUpCombatant[] => {
-            if (t.id === src.id || t.id === tgt.id || !t.characterId) return [];
-            const c = characters.byId(t.characterId);
-            if (!c) return [];
-            const cond = conditionsOf(c.sheet);
-            const canFight = !cond.includes('incapacitated') && !cond.includes('stunned') && !cond.includes('bleeding');
-            return [{
-              hex: { q: t.q, r: t.r },
-              side: (c.ownerUserId ? 'pc' : 'npc') === mySide ? 'attacker' : 'defender',
-              canFight,
-            }];
-          });
-          const gang = gangUpBonus({ q: src.q, r: src.r }, { q: tgt.q, r: tgt.r }, others);
-          if (gang > 0) { mod += gang; tags.push(`+${gang} Gang Up`); }
-        }
-        // Scale: the smaller creature adds the difference, the larger
-        // subtracts it. A fly swatting at a dragon is easy; the dragon
-        // swatting back at the fly is not.
-        // A Called Shot uses the Scale of the PART instead of the creature's,
-        // so the two never both apply — the book is explicit that the modifier
-        // depends on "the Scale of the target itself, not the creature it's
-        // part of". Stacking them charged the attacker twice for one Scale.
-        const creatureScale = sizeAttackMod(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0));
-        const rawScale = p.calledShot ? 0 : creatureScale;
-        // Swat: a creature that has learned to deal with things smaller than
-        // itself ignores up to 4 points of the Scale penalty — but only with
-        // the attacks its own description names, which is why it is a flag on
-        // the weapon row rather than on the creature.
-        const swatted = action.swat === true && rawScale < 0 ? Math.min(4, -rawScale) : 0;
-        const scaleMod = rawScale + swatted;
-        if (scaleMod) {
-          mod += scaleMod;
-          tags.push(sizeAttackTag(num(actor.sheet, 'size', 0), num(targetChar?.sheet ?? {}, 'size', 0))!);
-        }
-        if (swatted) tags.push(`+${swatted} Swat`);
-        // Called Shot: the Scale of the PART being aimed at, which the client
-        // worked out from the defender's own Size once a target was picked —
-        // a Huge creature's head is a bigger thing to hit than a person's.
-        // Re-clamped here so a hand-typed modifier cannot invent one.
-        if (p.calledShot) {
-          const csPen = clampCalledShotPenalty(Number(p.calledShot.penalty) || 0);
-          // A Called Shot pays a to-hit penalty for extra damage to a vital
-          // spot. A skeleton has no vitals: the penalty still applies (the eye
-          // socket is still a small target) but the bonus does not, which is
-          // the book's way of saying stop aiming for its heart.
-          const noVitals = !!targetChar && targetChar.system === 'swade' && isAbomination(targetChar.sheet);
-          const csDmg = noVitals ? 0 : Math.max(0, Math.min(8, Math.floor(Number(p.calledShot.damageBonus) || 0)));
-          const csLabel = String(p.calledShot.label || 'Called Shot').slice(0, 40);
-          mod += csPen;
-          dmgBonus += csDmg;
-          tags.push(calledShotTag(csLabel, csPen)
-            + (noVitals && Number(p.calledShot.damageBonus) > 0 ? ' (no vitals — no bonus damage)' : '')
-            // Say where the creature's own Scale went. Silently dropping a +4
-            // for a Large target reads as a bug to anyone who knows the number
-            // should be there.
-            + (creatureScale ? ` (in place of ${creatureScale > 0 ? '+' : '−'}${Math.abs(creatureScale)} for the creature's Scale)` : ''));
-        }
-        if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
-        else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
-        if (action.ranged && targetConditions.includes('prone')) { mod -= 2; tags.push('−2 vs Prone'); }
-        // Chase: evasive driving cuts both ways, and a moving vehicle is a
-        // poor firing platform unless its driver spent the turn steadying it.
-        if (chaseCtx?.targetEvading) { mod += EVADE_MOD; tags.push('−2 target is Evading'); }
-        if (chaseSelf.evading) { mod += EVADE_MOD; tags.push('−2 Evading'); }
-        if (action.ranged && chaseSelf.unstable) { mod += UNSTABLE_PLATFORM_MOD; tags.push('−2 Unstable Platform'); }
+        if (shot.spendSupport > 0) actor = persistSheet(io, d.campaignId, actor, { supportBonus: 0 });
         if (mod) expr = mod > 0 ? `${expr}+${mod}` : `${expr}${mod}`;
         swadeMod = mod;
         if (tags.length) advTag = ` [${tags.join(', ')}]`;

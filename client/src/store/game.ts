@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type DiceSpeed, type DiceSpeedPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type DiceLook, type DiceSpeed, type DiceSpeedPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -420,6 +420,8 @@ interface GameState {
    *  the same baseline, so two at once would overlap each other. */
   /** A Called Shot waiting on its aim, now that the target is known. */
   calledShotPending: { targetTokenId: string } | null;
+  /** The itemised modifier for the target currently hovered while aiming. */
+  attackPreview: AttackPreviewResultPayload | null;
   confirmCalledShot(aim: CalledShotAim): void;
   cancelCalledShot(): void;
   openChip: 'benny' | 'keyring' | null;
@@ -625,7 +627,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   beginTargeting(characterId, sourceTokenId, action, adv, rof, calledShot) {
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
-    set({ targeting: { characterId, sourceTokenId, action, adv, rof, calledShot: calledShot ?? null }, tool: 'select', selectedTokenId: null, selectedTokenIds: [] });
+    set({ targeting: { characterId, sourceTokenId, action, adv, rof, calledShot: calledShot ?? null }, tool: 'select', selectedTokenId: null, selectedTokenIds: [], attackPreview: null });
     // Live-broadcast the range highlight so the DM + other players see the
     // same in-range/out-of-range tokens the caster sees, before they click.
     socket.emit(C2S.TARGET_PREVIEW, {
@@ -634,7 +636,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   cancelTargeting() {
     const t = get().targeting;
-    set({ targeting: null });
+    set({ targeting: null, attackPreview: null });
     if (t) {
       socket.emit(C2S.TARGET_PREVIEW, {
         sourceTokenId: t.sourceTokenId, rangeFt: t.action.rangeFt, effect: t.action.effect, label: t.action.label, active: false,
@@ -650,7 +652,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ calledShotPending: { targetTokenId }, targeting: { ...t, calledShot: null } });
       return;
     }
-    set({ dockTab: 'chat' });
+    set({ dockTab: 'chat', attackPreview: null });
     socket.emit(C2S.COMBAT_ACTION, {
       characterId: t.characterId, actionId: t.action.id,
       sourceTokenId: t.sourceTokenId, targetTokenId, adv: t.adv, rof: t.rof, calledShot: t.calledShot ?? null,
@@ -893,6 +895,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     openWindow('characterSheet', characterId, { characterId }, char?.name ?? 'Character');
   },
   calledShotPending: null,
+  attackPreview: null,
   confirmCalledShot(aim) {
     const s = get();
     const t = s.targeting;
@@ -1458,6 +1461,15 @@ export function wireSocket(): void {
 
   // The DM changed the table's dice pacing. It rides on the campaign so that
   // everyone switches at the same moment and nobody is a few seconds ahead.
+  socket.on(S2C.ATTACK_PREVIEW, (p: AttackPreviewResultPayload) => {
+    // Only ever the answer to the question still being asked: hovers outrun
+    // the network, and a stale reply landing after the cursor has moved on
+    // would quote the last target's numbers over this one's.
+    const t = useGameStore.getState().targeting;
+    if (!t || t.action.id !== p.actionId || t.sourceTokenId !== p.sourceTokenId) return;
+    useGameStore.setState({ attackPreview: p });
+  });
+
   socket.on(S2C.DICE_SPEED, (p: DiceSpeedPayload) => {
     const cur = useGameStore.getState().campaign;
     if (cur) useGameStore.setState({ campaign: { ...cur, diceSpeed: p.speed } });
@@ -1951,6 +1963,15 @@ export const intents = {
    *  kept locally so a DM viewing as this player sees it their way. */
   setTurnGuide: (on: boolean) => socket.emit(C2S.SET_TURN_GUIDE, { on }),
   setDiceSpeed: (speed: DiceSpeed) => socket.emit(C2S.SET_DICE_SPEED, { speed }),
+  attackPreview: (targetTokenId: string) => {
+    const t = useGameStore.getState().targeting;
+    if (!t) return;
+    socket.emit(C2S.ATTACK_PREVIEW, {
+      characterId: t.characterId, actionId: t.action.id,
+      sourceTokenId: t.sourceTokenId, targetTokenId,
+      adv: t.adv, rof: t.rof,
+    });
+  },
   setUsername: (username: string) => socket.emit(C2S.SET_USERNAME, { username }),
   saveMacro: (macro: { id?: string; name: string; command: string; color?: string | null; characterId?: string | null; rollableId?: string | null; actionId?: string | null }) =>
     socket.emit(C2S.SAVE_MACRO, { macro }),

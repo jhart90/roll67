@@ -99,7 +99,12 @@ export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, 
     runBonus: rec?.runBonus ?? null,
     // What a run could still buy: the running die's best face. Spent already,
     // or crawling on the floor, and there is nothing left to promise.
-    runMax: rec?.runBonus != null || crawling ? 0 : dieSides(str(ch.sheet, 'runningDie', 'd6')),
+    // A blank field is not "no running die" — it is a character nobody has
+    // typed one for, and SWADE's answer to that is d6. Without the fallback
+    // this read 0 for every sheet with an empty box, which is most of them,
+    // and the run band on the map silently never appeared. (The run ITSELF
+    // has always guarded this; see the roll below.)
+    runMax: rec?.runBonus != null || crawling ? 0 : (dieSides(str(ch.sheet, 'runningDie', 'd6')) || 6),
     crawling,
     actions: actionsTakenThisTurn(campaignId, ch.id),
     shaken: conds.includes('shaken'),

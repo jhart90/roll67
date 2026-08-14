@@ -71,7 +71,7 @@ export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
 
     /** Fill a set of hexes, then trace only the edges that face OUT of it —
      *  so a band reads as one shape rather than a honeycomb of outlines. */
-    const paint = (hexes: Hex[], fill: string, stroke: string, lineWidth: number) => {
+    const paint = (hexes: Hex[], fill: string, stroke: string, lineWidth: number, dash?: number[]) => {
       if (hexes.length === 0) return;
       ctx.fillStyle = fill;
       ctx.beginPath();
@@ -86,6 +86,7 @@ export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
       const inside = new Set(hexes.map((h) => packHex(h)));
       ctx.strokeStyle = stroke;
       ctx.lineWidth = lineWidth;
+      ctx.setLineDash(dash ?? []);
       ctx.beginPath();
       for (const hex of hexes) {
         const corners = hexCorners(hex, grid);
@@ -106,8 +107,11 @@ export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
       ctx.stroke();
     };
 
-    // The maybe first, so the certainty sits on top of it.
-    paint(bands.run, 'rgba(126, 200, 255, 0.05)', 'rgba(126, 200, 255, 0.22)', 1);
+    // The maybe first, so the certainty sits on top of it. The far band is
+    // faint but not invisible — over a bright map (lava, sand, snow) a 5%
+    // wash reads as nothing at all, which is the same as not drawing it. Its
+    // edge is dashed instead: a provisional border for provisional ground.
+    paint(bands.run, 'rgba(126, 200, 255, 0.08)', 'rgba(126, 200, 255, 0.42)', 1.5, [6, 5]);
     paint(bands.walk, 'rgba(126, 200, 255, 0.13)', 'rgba(126, 200, 255, 0.75)', 2);
   }, [bands, grid, width, height]);
 

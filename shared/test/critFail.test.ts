@@ -103,3 +103,23 @@ describe('swadeCritFail', () => {
     expect(rolled).toBe(0);
   });
 });
+
+describe('what a Critical Failure is immune to', () => {
+  /**
+   * The case that found this: a +4 for a Large target carried snake eyes to a
+   * total of 5, which beat TN 4, and the engine called it a hit. It is not a
+   * hit. A Critical Failure fails outright — the modifiers are exactly what
+   * it does not care about.
+   */
+  it('is still snake eyes however big the bonus on the roll', () => {
+    const dice = [d(1), d(1, { wild: true })];
+    expect(swadeSnakeEyes(dice)).toBe(true);
+    // The engine adds the modifier to the TOTAL, never to the dice, so the
+    // predicate reading the dice is the one that cannot be fooled.
+    expect(swadeCritFail(dice, true)).toBe(true);
+  });
+
+  it('…and a good total off good dice is still a good roll', () => {
+    expect(swadeCritFail([d(1), d(5, { wild: true })], true)).toBe(false);
+  });
+});

@@ -1137,6 +1137,19 @@ function aftermathForExtras(io: Server, campaignId: string, shouldRoll: boolean)
  * The draw itself already grants the +2 and the free placement in the round;
  * this is only the Bennies.
  */
+/**
+ * A SWADE roll that has already failed, whatever its total says.
+ *
+ * Snake eyes is a Critical Failure and a Critical Failure fails outright —
+ * which is precisely the case where the total lies, since the modifiers that
+ * carried a 1 and a 1 up over the target number are the thing it is immune
+ * to. An Extra's lone 1 is left alone: the book only damns it on a confirming
+ * d6, and calling for one on every save is noise nobody asked for.
+ */
+function swadeRollFailed(ch: Character | undefined, dice: DieRoll[]): boolean {
+  return ch?.system === 'swade' && swadeCritFail(dice, ch.sheet.wildCard !== false);
+}
+
 function jokersWild(
   io: Server, campaignId: string, drawerName: string, drawnByPlayerSide: boolean, hidden = false,
 ): void {
@@ -1512,7 +1525,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const { sc } = targets[0];
     const expr = groupExpr(sc.expr);
     const br = roll(expr);
-    const passed = br.total >= sc.threshold;
+    const passed = br.total >= sc.threshold && !swadeRollFailed(targets[0].ch, br.dice);
     for (const { tok, ch } of targets) results.push({ tok, ch, passed });
     const who = `${targets.length} × ${targets[0].tok.name}`;
     io.to(campaignRoom(spec.campaignId)).emit(S2C.ROLL_CALLOUT, {
@@ -1554,7 +1567,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       return;
     }
     const br = roll(sc.expr);
-    const passed = br.total >= sc.threshold;
+    const passed = br.total >= sc.threshold && !swadeRollFailed(ch, br.dice);
     results.push({ tok, ch, passed });
     // Say whose roll this is on everyone's screen. A group save posts one card
     // at a time with a long beat between them; without this the table watches
@@ -2443,7 +2456,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         ? systemFor(targetChar.system).saveCheck(targetChar.sheet, action.saveId, casterDc)
         : { expr: '1d20', threshold: casterDc, label: `${action.saveId.toUpperCase()} save` };
       attackBreakdown = roll(sc.expr);
-      const passed = attackBreakdown.total >= sc.threshold;
+      const passed = attackBreakdown.total >= sc.threshold && !swadeRollFailed(targetChar, attackBreakdown.dice);
       // SWADE is all or nothing: a successful Evasion or resisted effect takes
       // NO damage. Half-damage saves are a d20 idea and this engine used to
       // apply the default to every SWADE attack that forced a roll.
@@ -2695,17 +2708,23 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         ?? (swadeRangedTn ? 4
           : vehicleTn
           ?? (targetChar ? Number(systemFor(targetChar.system).derive(targetChar.sheet).ac) || num(targetChar.sheet, 'ac', 0) : 0));
-      hit = nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
+      // Snake eyes ends it, whatever the total says. A Critical Failure is a
+      // failed roll by definition — the modifiers that carried a 1 and a 1 up
+      // to 5 are exactly what it is immune to — and this used to let a big
+      // enough target bonus turn the worst roll in the game into a hit.
+      hit = attackCritFail ? false
+        : nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
       raise = hit && actor.system === 'swade' && ac > 0 && attackBreakdown.total >= ac + 4;
       // Say WHY it landed or didn't. A bare HIT/MISS makes the engine look
       // arbitrary — especially in SWADE, where a weapon beats Parry but a
       // power beats a flat TN, and the two numbers look nothing alike.
       const targetSystem = targetChar?.system ?? actor.system;
       const acName = action.fixedTn ? 'TN' : swadeRangedTn ? 'TN' : targetSystem === 'swade' ? 'Parry' : 'AC';
-      const why = nat1 ? 'natural 1 always misses'
-        : crit ? `natural ${critAt}+ always hits`
-          : ac > 0 ? `vs ${acName} ${ac}`
-            : 'no target number to beat';
+      const why = attackCritFail ? 'a Critical Failure fails outright, whatever the total'
+        : nat1 ? 'natural 1 always misses'
+          : crit ? `natural ${critAt}+ always hits`
+            : ac > 0 ? `vs ${acName} ${ac}`
+              : 'no target number to beat';
       const landed = action.healsWounds
         ? (hit ? (raise ? 'SUCCESS with a RAISE — mends 2 Wounds' : 'SUCCESS — mends 1 Wound') : 'FAILED — no Wounds mended')
         : `${hit ? 'HIT' : 'MISS'}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''}`;
@@ -2783,7 +2802,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (!fresh) return;
         const sc = systemFor(fresh.system).saveCheck(fresh.sheet, action.conditionSaveId!, action.conditionDc!);
         const br = roll(sc.expr);
-        const passed = br.total >= sc.threshold;
+        const passed = br.total >= sc.threshold && !swadeRollFailed(fresh, br.dice);
         const msg = chat.add(d.campaignId, {
           userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll',
           text: `${tgt.name} — ${sc.label} vs ${action.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,

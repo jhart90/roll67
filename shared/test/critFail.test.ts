@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { swadeCritFail, swadeSnakeEyes } from '../src/systems/swade.js';
+import { swadeBurstCritFail, swadeCritFail, swadeSnakeEyes } from '../src/systems/swade.js';
 import type { DieRoll } from '../src/types.js';
 
 const d = (value: number, extra: Partial<DieRoll> = {}): DieRoll =>
@@ -121,5 +121,28 @@ describe('what a Critical Failure is immune to', () => {
 
   it('…and a good total off good dice is still a good roll', () => {
     expect(swadeCritFail([d(1), d(5, { wild: true })], true)).toBe(false);
+  });
+});
+
+describe('a Critical Failure on a burst', () => {
+  /**
+   * Snake eyes is written for two dice. Handed six, "a trait die showing 1"
+   * is nearly certain, so a burst needs the book's other answer: more than
+   * HALF the dice come up 1.
+   */
+  it('needs more than half the dice to come up 1', () => {
+    expect(swadeBurstCritFail([1, 1, 5, 6])).toBe(false);   // exactly half is not more
+    expect(swadeBurstCritFail([1, 1, 1, 6])).toBe(true);
+    expect(swadeBurstCritFail([1, 1, 5])).toBe(true);       // two of three is
+    expect(swadeBurstCritFail([1, 4, 5])).toBe(false);
+  });
+
+  it('is still one-in-thirty-six on the two dice of an ordinary roll', () => {
+    expect(swadeBurstCritFail([1, 1])).toBe(true);
+    expect(swadeBurstCritFail([1, 2])).toBe(false);
+  });
+
+  it('is nothing at all with no dice', () => {
+    expect(swadeBurstCritFail([])).toBe(false);
   });
 });

@@ -15,7 +15,7 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
-  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
+  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
   activationOutcome, backlashPatch, castingBlocker, swadeArcaneExpr, ACTIVATION_TN, FAILED_ACTIVATION_PP,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
@@ -1148,6 +1148,54 @@ function aftermathForExtras(io: Server, campaignId: string, shouldRoll: boolean)
  */
 function swadeRollFailed(ch: Character | undefined, dice: DieRoll[]): boolean {
   return ch?.system === 'swade' && swadeCritFail(dice, ch.sheet.wildCard !== false);
+}
+
+/**
+ * A burst of automatic fire: one attack roll per shot, and one Wild Die
+ * between them.
+ *
+ * SWADE rolls the Shooting die once for EACH shot up to the weapon's Rate of
+ * Fire, plus a single Wild Die a Wild Card may use in place of any one of
+ * them. Every die that beats the target number is a separate hit, and every
+ * one that beats it by 4 is a separate raise. Firing one roll at −2 and
+ * calling a raise "two rounds on target" was a rough stand-in for that, and
+ * it cost a burst most of the reason to fire one.
+ *
+ * Returns the shots' effective totals — the Wild Die already swapped in for
+ * the worst of them where it helps — plus one breakdown to put on the card,
+ * carrying every die that was thrown so the table watches the whole burst.
+ */
+function rollBurst(traitSides: number, wildCard: boolean, mod: number, shots: number): {
+  breakdown: ReturnType<typeof roll>; totals: number[]; naturalFaces: number[];
+} {
+  const modStr = mod === 0 ? '' : mod > 0 ? `+${mod}` : `${mod}`;
+  const arms = Array.from({ length: shots }, () => roll(`1d${traitSides}!${modStr}`));
+  const wild = wildCard ? roll(`1d6!${modStr}`) : null;
+  const totals = arms.map((a) => a.total);
+  // The Wild Die stands in for whichever shot it improves most, which is
+  // always the worst one — using it anywhere else would throw a hit away.
+  if (wild) {
+    let worst = 0;
+    for (let i = 1; i < totals.length; i++) if (totals[i] < totals[worst]) worst = i;
+    if (wild.total > totals[worst]) totals[worst] = wild.total;
+  }
+  const dice = [
+    ...arms.flatMap((a) => a.dice),
+    ...(wild ? wild.dice.map((dieRoll) => ({ ...dieRoll, wild: true })) : []),
+  ];
+  // The first throw of each chain: a 1 that ended an ace is not a 1 (see
+  // swadeNaturalOne), and only natural faces count toward a Critical Failure.
+  const naturalFaces = [
+    ...arms.map((a) => a.dice[0]?.value ?? 0),
+    ...(wild ? [wild.dice[0]?.value ?? 0] : []),
+  ];
+  const detail = `${shots}×1d${traitSides}!${modStr} (${totals.join(', ')})`
+    + (wild ? ` · Wild 1d6!${modStr} (${wild.total})` : '');
+  return {
+    breakdown: { expression: `${shots}d${traitSides}!${modStr}`, total: Math.max(...totals), dice, detail },
+    totals,
+    naturalFaces,
+  };
 }
 
 function jokersWild(
@@ -2444,6 +2492,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     let saveScale = 1;
     let attackBreakdown: ReturnType<typeof roll> | null = null;
     let attackCritFail = false;
+    /** How many of a burst's shots landed, and how many landed well. One each
+     *  for an ordinary single attack. */
+    let burstHits = 1;
+    let burstRaises = 0;
     let hitLabel = '';
     // The attack card shows this under the dice instead of in its headline.
     let attackOutcome = '';
@@ -2472,6 +2524,9 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // dice; on SWADE trait rolls it becomes the book's flat ±2 (Vulnerable
       // grants +2 to hit its bearer, Distracted takes −2 on its own rolls).
       const isD20 = action.attackExpr.toLowerCase().startsWith('1d20');
+      /** Everything the situation adds to a SWADE trait roll, kept for the
+       *  burst below — which rolls its own dice and has to apply it itself. */
+      let swadeMod = 0;
       const netAdv = attackAdvantage(p.adv ?? null, attackerConditions, targetConditions, action.ranged);
       let expr = action.attackExpr;
       let advTag = '';
@@ -2662,16 +2717,31 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         if (chaseSelf.evading) { mod += EVADE_MOD; tags.push('−2 Evading'); }
         if (action.ranged && chaseSelf.unstable) { mod += UNSTABLE_PLATFORM_MOD; tags.push('−2 Unstable Platform'); }
         if (mod) expr = mod > 0 ? `${expr}+${mod}` : `${expr}${mod}`;
+        swadeMod = mod;
         if (tags.length) advTag = ` [${tags.join(', ')}]`;
       } else if (netAdv) {
         expr = `${expr}${netAdv === 'adv' ? '+2' : '-2'}`;
         advTag = netAdv === 'adv' ? ' [+2]' : ' [−2]';
       }
-      attackBreakdown = roll(expr);
+      // A burst is one roll per shot. The trait die and whether there is a
+      // Wild Die both come from the expression the sheet already built, so
+      // nothing here has to guess at the shooter's skill a second time.
+      const traitSides = Number(/1d(\d+)!/.exec(action.attackExpr)?.[1] ?? 0);
+      const burst = actor.system === 'swade' && effRof >= 2 && traitSides > 0
+        ? rollBurst(traitSides, action.attackExpr.startsWith('best('), swadeMod, effRof)
+        : null;
+      attackBreakdown = burst ? burst.breakdown : roll(expr);
       if (actor.system === 'swade') {
         // Decided once, here: the Benny menu must know whether this roll is
-        // rerollable at all, and a Critical Failure never is.
-        attackCritFail = critFailFor(io, d.campaignId, actor, attackBreakdown.dice);
+        // rerollable at all, and a Critical Failure never is. A burst is
+        // judged by proportion instead of by snake eyes — a handful of dice
+        // shows a 1 nearly every time (see swadeBurstCritFail).
+        attackCritFail = burst
+          ? swadeBurstCritFail(burst.naturalFaces)
+          : critFailFor(io, d.campaignId, actor, attackBreakdown.dice);
+        if (burst && attackCritFail) {
+          postStatusLine(io, d.campaignId, `💀 ${actor.name}'s burst goes badly wrong — a Critical Failure.`);
+        }
         recordBennyRoll(io, d.campaignId, actor, 'trait', expr, attackBreakdown.total, `their ${action.label} roll`, attackCritFail);
         // Itemize every flat modifier for the chat tooltip: sheet-borne
         // penalties plus the situational tags computed above.
@@ -2712,9 +2782,17 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // failed roll by definition — the modifiers that carried a 1 and a 1 up
       // to 5 are exactly what it is immune to — and this used to let a big
       // enough target bonus turn the worst roll in the game into a hit.
+      if (burst && ac > 0) {
+        // Every shot is its own attack: count the ones that landed, and the
+        // ones that landed well.
+        burstHits = attackCritFail ? 0 : burst.totals.filter((t) => t >= ac).length;
+        burstRaises = attackCritFail ? 0 : burst.totals.filter((t) => t >= ac + 4).length;
+      }
       hit = attackCritFail ? false
-        : nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
-      raise = hit && actor.system === 'swade' && ac > 0 && attackBreakdown.total >= ac + 4;
+        : burst && ac > 0 ? burstHits > 0
+          : nat1 ? false : crit ? true : ac > 0 ? attackBreakdown.total >= ac : true;
+      raise = burst ? burstRaises > 0
+        : hit && actor.system === 'swade' && ac > 0 && attackBreakdown.total >= ac + 4;
       // Say WHY it landed or didn't. A bare HIT/MISS makes the engine look
       // arbitrary — especially in SWADE, where a weapon beats Parry but a
       // power beats a flat TN, and the two numbers look nothing alike.
@@ -2725,9 +2803,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           : crit ? `natural ${critAt}+ always hits`
             : ac > 0 ? `vs ${acName} ${ac}`
               : 'no target number to beat';
+      const burstTally = burst
+        ? `${burstHits} of ${effRof} shot${effRof === 1 ? '' : 's'} on target`
+          + (burstRaises > 0 ? `, ${burstRaises} with a raise` : '')
+        : '';
       const landed = action.healsWounds
         ? (hit ? (raise ? 'SUCCESS with a RAISE — mends 2 Wounds' : 'SUCCESS — mends 1 Wound') : 'FAILED — no Wounds mended')
-        : `${hit ? 'HIT' : 'MISS'}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''}`;
+        : burst ? `${hit ? 'HIT' : 'MISS'} — ${burstTally}`
+          : `${hit ? 'HIT' : 'MISS'}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''}`;
       attackOutcome = `${landed} — ${why}${raise ? `, beat it by ${attackBreakdown.total - ac}` : ''}`;
       hitLabel = ` — attack ${attackBreakdown.total}${advTag} · ${attackOutcome}`;
     }
@@ -2846,14 +2929,16 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // dice can be tagged — otherwise it just shows up as a mystery third die
       // in the breakdown with nothing marking it as earned.
       const rollDamage = (): RollBreakdown => {
-        // Automatic fire: a raise walks a second round onto the target.
-        const hits = actor.system === 'swade' && effRof >= 2 && raise ? 2 : 1;
+        // Automatic fire: every round that hit does its own damage, and every
+        // one that hit WELL brings its own raise die with it.
+        const hits = Math.max(1, burstHits);
         const core = hits > 1 ? Array(hits).fill(`(${action.amountExpr})`).join('+') : action.amountExpr;
         const baseExpr = dmgBonus > 0 ? `${core}+${dmgBonus}` : core;
         if (crit) return roll(critDamageExpr(baseExpr));
         const base = roll(baseExpr);
         if (!raise) return base;
-        return withRaiseDie(base, roll('1d6!'));
+        const raises = Math.max(1, burstRaises);
+        return withRaiseDie(base, roll(raises > 1 ? `${raises}d6!` : '1d6!'));
       };
       let amountRoll = rollDamage();
       // Savage Attacker: once per round, reroll a melee hit's damage and keep

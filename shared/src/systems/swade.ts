@@ -447,6 +447,26 @@ export function swadeSnakeEyes(dice: DieRoll[]): boolean {
 }
 
 /**
+ * A Critical Failure on a roll of MANY dice — a burst of automatic fire.
+ *
+ * Snake eyes is written for two dice, one trait and one Wild, and does not
+ * survive being handed six: "a trait die showing 1" is nearly certain across
+ * a burst, and would damn every long burst anybody ever fired. The book's own
+ * answer for multiple dice is a proportion instead of a pair — more than HALF
+ * the dice come up 1 — which is the same one-in-thirty-six on two dice and
+ * stays that rare as the handful grows.
+ *
+ * Takes the natural face of each die, so it is the caller's job to hand over
+ * the first throw of each chain and not the continuation of an ace (see
+ * swadeNaturalOne).
+ */
+export function swadeBurstCritFail(naturalFaces: number[]): boolean {
+  if (naturalFaces.length === 0) return false;
+  const ones = naturalFaces.filter((v) => v === 1).length;
+  return ones * 2 > naturalFaces.length;
+}
+
+/**
  * The full Critical Failure rule.
  *
  * A Wild Card needs snake eyes — a 1 on the trait die AND on the Wild Die.

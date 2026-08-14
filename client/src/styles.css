@@ -2910,10 +2910,20 @@ th > .term { border-bottom-style: dotted; }
 .settings-window {
   display: flex; flex-direction: column; gap: 2px;
   min-width: 300px;
+  /* A floating window is shrink-to-fit, so its width is whatever its widest
+     child wants — and a paragraph's widest wish is one unbroken line. Without
+     a cap here, a sentence of explanation stretched the whole window across
+     the screen. Capped, the prose wraps and the rows keep the width they
+     actually need. */
+  max-width: 380px;
+  box-sizing: border-box;
   background: var(--panel);
   padding: 12px 18px 16px;
   border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px;
 }
+/* Popped into a window of its own, there is nothing to be wide against: let
+   it use whatever the user has dragged that window out to. */
+.win-frame-body-popped .settings-window { max-width: none; }
 
 /* World-tab visibility: DM badge + right-click reveal/hide menu. */
 .dir-vis { margin-right: 5px; font-size: 10px; opacity: 0.75; cursor: help; }
@@ -3560,7 +3570,7 @@ th > .term { border-bottom-style: dotted; }
 }
 .settings-swatch.on { border-color: var(--text); }
 
-.settings-note { font-size: 11px; margin-top: 10px; line-height: 1.4; }
+.settings-note { font-size: 11px; margin-top: 10px; line-height: 1.4; overflow-wrap: break-word; }
 
 /* Blast templates drawn with the dice's Ace animation: a canvas riding inside
    the map's SVG, so it pans and zooms with everything else. */

@@ -18,6 +18,7 @@ import { connectSocket, socket } from '../socket';
 import { readMapColors, readTheme, saveMapColors, saveTheme, type MapColors, type UiTheme } from '../util/appearance';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
 import { BENNY_FLIP_MS, estimateDiceAnimMs } from '../table/dice3d';
+import { pathCost } from '../util/moveReach';
 
 /**
  * Serialized chat pipeline.
@@ -1714,7 +1715,7 @@ export function sightGeometry(): { walls: Wall[]; doors: Door[] } | null {
  * all, is refereeing rather than moving — and it is the only way to undo a
  * mistake mid-round.
  */
-function combatMoveBlocked(tokenId: string): string | null {
+function combatMoveBlocked(tokenId: string, to?: Hex): string | null {
   const s = useGameStore.getState();
   if (s.isDm() && !s.viewingAs) return null;
   const init = s.initiativeState;
@@ -1729,6 +1730,22 @@ function combatMoveBlocked(tokenId: string): string | null {
   // ask for. With the die unspent the server offers the run, so let it.
   if (b && b.runBonus !== null && b.moved >= b.pace + b.runBonus) {
     return `${s.tokens[tokenId]?.name ?? 'They'} have used all their movement this turn.`;
+  }
+  // A drag somewhere the turn could not reach even by running and rolling the
+  // best face on the die. The server would answer this with the run prompt —
+  // an offer to spend a die that still would not get them there — so it is
+  // refused here, where the answer is already known.
+  if (b && to && s.map) {
+    const left = Math.max(0, b.pace + (b.runBonus ?? 0) - b.moved);
+    const cost = pathCost(b.from, to, {
+      grid: s.map.grid, terrain: s.map.terrain, blocked: s.map.blocked ?? [], crawling: b.crawling,
+      sight: sightGeometry(),
+    });
+    if (cost !== null && cost > left + Math.max(0, b.runMax)) {
+      const feet = s.map.grid.feetPerHex > 0 ? s.map.grid.feetPerHex : 5;
+      return `Too far — ${cost * feet} ft, and ${(left + Math.max(0, b.runMax)) * feet} ft is everything this turn has,`
+        + ' running and rolling the best face on the die.';
+    }
   }
   return null;
 }
@@ -1849,7 +1866,7 @@ export const intents = {
   /** `drag` marks a deliberate drag-and-drop; keyboard steps leave it off so
    *  they always collide with walls. */
   moveToken: (tokenId: string, q: number, r: number, drag = false) => {
-    const blocked = combatMoveBlocked(tokenId);
+    const blocked = combatMoveBlocked(tokenId, { q, r });
     if (blocked) { useGameStore.getState().toast(blocked); return; }
     // Stop at the first wall we already know about, before anything is sent.
     // The server enforces this too — it has the whole map and we only have the

@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
-  playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
+  dieSides, playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
   type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
@@ -97,6 +97,9 @@ export function emitMoveBudget(io: Server, campaignId: string, tokenId: string):
     pace: crawling ? CRAWL_PACE : Math.max(1, swadePace(ch.sheet) - (prone ? 2 : 0)),
     moved: rec?.moved ?? 0,
     runBonus: rec?.runBonus ?? null,
+    // What a run could still buy: the running die's best face. Spent already,
+    // or crawling on the floor, and there is nothing left to promise.
+    runMax: rec?.runBonus != null || crawling ? 0 : dieSides(str(ch.sheet, 'runningDie', 'd6')),
     crawling,
     actions: actionsTakenThisTurn(campaignId, ch.id),
     shaken: conds.includes('shaken'),

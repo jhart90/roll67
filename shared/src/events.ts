@@ -1326,6 +1326,10 @@ export interface MoveBudgetPayload {
   moved: number;
   /** The running die's bonus, once it has been rolled; null if it has not. */
   runBonus: number | null;
+  /** The most that die could possibly add, for the "if you ran" band drawn
+   *  on the map. 0 once it has been rolled — the bonus above is the answer
+   *  then — and 0 for anything that cannot run at all. */
+  runMax: number;
   /** Down and staying down: rough ground costs this token nothing extra. */
   crawling: boolean;
   /** Actions taken this turn, for the Multi-Action penalty and for the turn

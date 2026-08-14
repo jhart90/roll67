@@ -200,8 +200,29 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
       useGameStore.getState().setCamera({ x: cam.x + pan.dx, y: cam.y + pan.dy, scale: cam.scale });
     }
 
+    /**
+     * Right-click is the other way out of "choose a target".
+     *
+     * Cancel is the one thing a player reaches for without looking, and the
+     * hand that is already holding the mouse should not have to find Escape.
+     * Captured on the window so it works wherever the cursor happens to be —
+     * over a token, over the map, over the banner asking the question — and
+     * suppressed only while there is actually something to cancel, so the
+     * browser menu is left alone the rest of the time.
+     */
+    function onContextMenu(e: MouseEvent) {
+      const s = useGameStore.getState();
+      if (s.calledShotPending) { e.preventDefault(); s.cancelCalledShot(); return; }
+      if (s.targeting) { e.preventDefault(); s.cancelTargeting(); return; }
+      if (s.aoeTargeting) { e.preventDefault(); s.cancelAoeTargeting(); }
+    }
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('contextmenu', onContextMenu);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('contextmenu', onContextMenu);
+    };
   }, []);
 
   // Center the map when it first loads (or changes). A player whose own

@@ -456,6 +456,17 @@ export interface RollBreakdown {
    *  wounds, fatigue, conditions, and situational tags — so chat tooltips
    *  can explain the math instead of guessing. */
   modWhy?: string[];
+  /**
+   * Automatic fire: how many SEPARATE trait rolls this breakdown holds.
+   *
+   * A burst is not one roll with more dice in it — it is one roll per shot,
+   * each carrying the same modifier, of which `total` is merely the best. The
+   * dice equation has to know, or it works the modifier out as
+   * `total − sum(every die)` and produces a number nobody applied: five dice
+   * at −6 apiece came out as a single "−21", which then disagreed with its own
+   * tooltip.
+   */
+  burstShots?: number;
   /** IronDice provenance: keystream index + the seed commitment published
    *  before this roll was thrown, so the card is independently verifiable. */
   iron?: { idx: number; commit: string };

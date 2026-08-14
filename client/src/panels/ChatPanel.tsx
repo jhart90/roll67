@@ -217,7 +217,13 @@ function DiceEquation({ r, why, fromUserId, look }: {
   if (counted.length === 0) return null;
   const shown = counted.slice(0, MAX_SHOWN_DICE);
   const hidden = counted.length - shown.length;
-  const mod = r.total - counted.reduce((s, d) => s + d.value, 0);
+  // A burst holds one roll per shot, not one roll with more dice, so
+  // "total minus every die" is not its modifier — it is an arithmetic
+  // coincidence. Five dice at −6 apiece came out as a single "−21" whose own
+  // tooltip then said the modifier was −6. The per-shot line under the
+  // equation is the honest account, so the chip stands down for it.
+  const burst = (r.burstShots ?? 0) > 1;
+  const mod = burst ? 0 : r.total - counted.reduce((s, d) => s + d.value, 0);
   // The equation's flat modifier is the SUM of everything: itemize it.
   const lines = whyLines(r, why);
   const modTitle = lines.length
@@ -264,12 +270,12 @@ function DiceEquation({ r, why, fromUserId, look }: {
           its eye is a very different roll from no modifiers at all. So the
           chip stays whenever there is something to explain, and only a roll
           with genuinely nothing on it goes without. */}
-      {(mod !== 0 || lines.length > 0) && (
+      {!burst && (mod !== 0 || lines.length > 0) && (
         <span className="roll-op" style={{ cursor: 'help', textDecoration: 'underline dotted' }} title={modTitle}>
           {mod < 0 ? '−' : '+'} {Math.abs(mod)}
         </span>
       )}
-      <span className="roll-op">=</span>
+      <span className="roll-op">{burst ? '→ best' : '='}</span>
       <span className="roll-eq-total">{r.total}</span>
     </div>
   );

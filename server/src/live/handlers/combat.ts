@@ -1210,7 +1210,16 @@ function rollBurst(traitSides: number, wildCard: boolean, mod: number, shots: nu
   const detail = `${shots}×1d${traitSides}!${modStr} (${totals.join(', ')})`
     + (wild ? ` · Wild 1d6!${modStr} (${wild.total})` : '');
   return {
-    breakdown: { expression: `${shots}d${traitSides}!${modStr}`, total: Math.max(...totals), dice, detail },
+    breakdown: {
+      // Not `3d8!-6`: that reads as one roll of three dice added together,
+      // which is the opposite of what a burst is. Each shot stands alone and
+      // the best of them is the result.
+      expression: `best of ${shots}×1d${traitSides}!${modStr}`,
+      total: Math.max(...totals),
+      dice,
+      detail,
+      burstShots: shots,
+    },
     totals,
     naturalFaces,
   };

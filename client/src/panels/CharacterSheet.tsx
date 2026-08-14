@@ -508,11 +508,18 @@ function ListEditor({
         </select>
       );
     }
+    // A weapon with no magazine does not count rounds at all — a claw, a
+    // bite, a built-in laser. Its Ammo left box is not a thing to fill in,
+    // and leaving it looking fillable is how a 0 there gets read as "empty".
+    const noMag = section.id === 'attacks' && col.id === 'ammo' && num(row, 'maxAmmo', 0) <= 0;
     return (
       <>
         <input
           type={col.type === 'number' ? 'number' : 'text'}
-          defaultValue={row[col.id] === undefined ? '' : String(row[col.id])}
+          defaultValue={noMag || row[col.id] === undefined ? '' : String(row[col.id])}
+          placeholder={noMag ? 'unlimited' : undefined}
+          disabled={noMag}
+          title={noMag ? 'No magazine, so nothing to count — set Mag above to make this weapon spend rounds.' : undefined}
           readOnly={readOnly}
           list={col.suggestions ? `dl-${section.id}-${col.id}` : undefined}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}

@@ -134,6 +134,8 @@ export const C2S = {
   INIT_CARD_CALL: 'initCardCall',
   /** SWADE: draw the top card for one pending combatant. */
   INIT_CARD_DRAW: 'initCardDraw',
+  /** DM: deal a latecomer into the round already in progress. */
+  INIT_DEAL_IN: 'initDealIn',
   /** 5e/SWN: DM calls for initiative — every combatant owes their own roll. */
   INIT_ROLL_CALL: 'initRollCall',
   /** 5e/SWN: roll initiative for one pending combatant. */
@@ -625,6 +627,7 @@ export interface InitRollCallPayload { mapId: string; includeGm?: boolean }
 export interface InitRollMinePayload { tokenId: string }
 /** SWADE: draw the top card for one pending combatant's token. */
 export interface InitCardDrawPayload { tokenId: string }
+export interface InitDealInPayload { tokenId: string }
 /** SWADE: a card was drawn — drives the flip animation + chat framing. */
 /** Round 2+ auto-deal: every combatant's new card, in deal order, for the
  *  sequenced face-down → flip-over reveal. Hidden combatants are omitted. */

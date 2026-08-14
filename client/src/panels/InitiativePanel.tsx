@@ -143,6 +143,27 @@ export function InitiativePanel() {
         </div>
       )}
 
+      {/* Reinforcements. A wandering monster that turns up on round four draws
+          one card and slots into the order it earns — nobody else redraws,
+          because the six people already fighting should not lose the order
+          they drew for just because somebody new walked in. */}
+      {cardMode && isDm && state.active && (state.pendingDraws ?? []).length === 0 && (
+        <div className="stack" style={{ marginTop: 12 }}>
+          {selected && !state.entries.some((e) => e.tokenId === selected.id) && (
+            <button
+              title={`${selected.name} draws one card and joins this round's order. If the card has already gone past, they act next round.`}
+              onClick={() => intents.initDealIn(selected.id)}
+            >
+              🂠 Deal in: {selected.name}
+            </button>
+          )}
+          {selected && state.entries.some((e) => e.tokenId === selected.id) && (
+            <p className="dim" style={{ fontSize: 12 }}>{selected.name} is already in the fight.</p>
+          )}
+          {!selected && <p className="dim" style={{ fontSize: 12 }}>Select a token to deal it into the fight mid-round.</p>}
+        </div>
+      )}
+
       {!cardMode && (
         <div className="stack" style={{ marginTop: 12 }}>
           {selected && (

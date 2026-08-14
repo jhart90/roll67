@@ -2,10 +2,15 @@
 // Aces are high; jokers beat aces. Pure functions + injectable RNG so the
 // server deals authoritatively and everything is unit-testable.
 //
-// HOUSE RULE, deliberate: ties in rank break by DRAW ORDER — whoever drew
-// first acts first — where the book breaks them by suit (♠ > ♥ > ♦ > ♣).
-// Every card here carries its suit, so the book's rule is a two-line change
-// if it is ever wanted; this is a choice, not an oversight. Please leave it.
+// Ties in rank break TWO different ways, on purpose, depending on the round.
+//
+// Round one is dealt a card at a time, each player clicking to draw their own:
+// draw order is something the table watched happen, so the house rule stands
+// there — whoever drew first acts first. Rounds two onward are dealt by the
+// server in a loop, where "who drew first" is an implementation detail nobody
+// saw and nobody agreed to, so those fall back to the book: ♠ > ♥ > ♦ > ♣.
+//
+// Which is why the comparator takes the rule rather than assuming one.
 
 import type { RNG } from '../dice/roller.js';
 
@@ -26,6 +31,11 @@ export const SUIT_SYMBOL: Record<CardSuit, string> = {
 
 export const SUIT_NAME: Record<CardSuit, string> = {
   spades: 'Spades', hearts: 'Hearts', diamonds: 'Diamonds', clubs: 'Clubs',
+};
+
+/** The book's pecking order for equal ranks: Spades high, Clubs low. */
+export const SUIT_RANK: Record<CardSuit, number> = {
+  spades: 4, hearts: 3, diamonds: 2, clubs: 1,
 };
 
 const RANK_NAME: Record<number, string> = {
@@ -80,16 +90,24 @@ export function shuffleDeck(deck: PlayingCard[], rng: RNG = Math.random): Playin
 }
 
 /**
- * Initiative order comparator: higher rank acts first; equal ranks break by
- * draw order — whoever drew EARLIER is higher. Entries without a card sink
- * to the bottom (kept stable by drawSeq fallback 0).
+ * Initiative order comparator: higher rank acts first, and equal ranks break
+ * by `tieBreak` — see the note at the top of this file for why there are two.
+ * Entries without a card sink to the bottom (kept stable by drawSeq fallback
+ * 0), and two Jokers, having no suit between them, always fall back to draw
+ * order however the ties are being settled.
  */
 export function compareCardEntries(
   a: { card?: PlayingCard; drawSeq?: number },
   b: { card?: PlayingCard; drawSeq?: number },
+  tieBreak: 'draw' | 'suit' = 'draw',
 ): number {
   const ra = a.card?.rank ?? -1;
   const rb = b.card?.rank ?? -1;
   if (rb !== ra) return rb - ra;
+  if (tieBreak === 'suit') {
+    const sa = a.card?.suit ? SUIT_RANK[a.card.suit] : 0;
+    const sb = b.card?.suit ? SUIT_RANK[b.card.suit] : 0;
+    if (sb !== sa) return sb - sa;
+  }
   return (a.drawSeq ?? 0) - (b.drawSeq ?? 0);
 }

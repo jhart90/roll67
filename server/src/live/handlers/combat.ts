@@ -13,7 +13,7 @@ import {
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
-  type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
+  type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeAmmoLeft, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
@@ -647,6 +647,18 @@ function drawActionCard(
   return { card, discarded, plan };
 }
 
+/**
+ * Put the order in order.
+ *
+ * The tie-break depends on the round, so it is decided here rather than at the
+ * five places that sort: round one was dealt a card at a time with the table
+ * watching, so draw order settles it; every round after is dealt in a server
+ * loop nobody saw, so the book's suit order does — see cards.ts.
+ */
+function sortInitiative(state: InitiativeState): void {
+  state.entries.sort((a, b) => compareCardEntries(a, b, state.round > 1 ? 'suit' : 'draw'));
+}
+
 /** The sheet behind a token, when there is one. */
 function sheetForToken(tokenId: string | null): SheetData | null {
   if (!tokenId) return null;
@@ -683,7 +695,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     entry.drawSeq = state.drawCounter;
     dealt.push({ tokenId: entry.tokenId, name: entry.name, card, hidden: entry.hidden });
   }
-  state.entries.sort(compareCardEntries);
+  sortInitiative(state);
   state.turnIdx = 0;
   const msg = chat.add(campaignId, {
     userId: null, fromName: 'System', kind: 'system',
@@ -4521,7 +4533,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         entry.card = card;
         entry.value = card.rank;
         entry.drawSeq = state.drawCounter;
-        state.entries.sort(compareCardEntries);
+        sortInitiative(state);
         // Re-sorting must not steal the current combatant's turn.
         const keep = state.entries.findIndex((e) => e.id === currentId);
         if (keep >= 0) state.turnIdx = keep;
@@ -4641,7 +4653,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
-    if (state.cardMode) state.entries.sort(compareCardEntries);
+    if (state.cardMode) sortInitiative(state);
     else state.entries.sort((a, b) => b.value - a.value);
     state.turnIdx = 0;
     initiative.set(d.campaignId, state);
@@ -4784,7 +4796,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         entry.value = card.rank;
         entry.drawSeq = state.drawCounter;
       }
-      state.entries.sort(compareCardEntries);
+      sortInitiative(state);
       state.turnIdx = 0;
     }
 
@@ -5437,6 +5449,73 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'INIT_CARD_CALL'));
 
+  /**
+   * Someone wanders into a fight already in progress.
+   *
+   * The reinforcement draws one card and takes the place that card earns —
+   * and nobody else redraws. That is the whole point: a wandering monster
+   * arriving on round four must not cost the six people already fighting
+   * their carefully-earned order.
+   *
+   * If the card lands them ABOVE the combatant currently acting, their slot
+   * this round has already gone past, so they wait for the redeal — which
+   * happens on its own, because the turn pointer only ever walks forward.
+   */
+  socket.on(C2S.INIT_DEAL_IN, safe(socket, ({ tokenId }: InitDealInPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM deals someone into a fight in progress.'); return; }
+    const state = initiative.get(d.campaignId);
+    if (!state.active || !state.cardMode) { emitError(socket, 'No action-deck combat is running.'); return; }
+    if ((state.pendingDraws ?? []).length > 0) {
+      emitError(socket, 'The opening deal is still going — they can draw with everyone else.');
+      return;
+    }
+    const token = tokens.byId(tokenId);
+    if (!token || maps.byId(token.mapId)?.campaignId !== d.campaignId) { emitError(socket, 'Unknown token.'); return; }
+    if (state.entries.some((e) => e.tokenId === tokenId)) {
+      emitError(socket, `${token.name} is already in the initiative order.`);
+      return;
+    }
+
+    const { card, discarded, plan } = drawActionCard(state, sheetForToken(tokenId));
+    if (card.rank === 15) state.jokerDealt = true;
+    state.drawCounter = (state.drawCounter ?? 0) + 1;
+    const hidden = token.layer === 'gm';
+    const entry = {
+      id: newId(), tokenId, name: token.name,
+      value: card.rank, hidden,
+      card, drawSeq: state.drawCounter,
+    };
+    // Whoever is mid-turn keeps their turn: the pointer follows the person,
+    // not the row number, because inserting above them would otherwise hand
+    // the turn to whoever slid down into their slot.
+    const currentId = state.entries[state.turnIdx]?.id;
+    state.entries.push(entry);
+    sortInitiative(state);
+    const keep = state.entries.findIndex((e) => e.id === currentId);
+    if (keep >= 0) state.turnIdx = keep;
+    const joinedAt = state.entries.findIndex((e) => e.id === entry.id);
+    const actsThisRound = joinedAt > state.turnIdx;
+    flagChaseComplications(io, d.campaignId, state);
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+
+    const room = hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId);
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, kind: 'system',
+      text: `🂠 ${token.name} joins the fight and draws the ${cardName(card)} ${cardShort(card)}`
+        + (plan.reasons.length ? ` [${plan.reasons.join('; ')}]` : '')
+        + (discarded.length ? ` — discarded ${discarded.map((c) => cardShort(c)).join(' ')}` : '')
+        + (actsThisRound
+          ? ` — they act this round (Round ${state.round}).`
+          : ` — that slot has already passed, so they wait for Round ${state.round + 1}.`),
+      roll: null, recipients: null,
+    });
+    io.to(room).emit(S2C.CHAT, { msg });
+    io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId, name: token.name, card, byUserId: d.userId });
+    if (card.rank === 15) jokersWild(io, d.campaignId, token.name, isPlayerSideToken(tokenId), hidden);
+  }, 'INIT_DEAL_IN'));
+
   // One combatant draws the top card. Players draw for their own tokens; the
   // DM can draw for anyone (NPCs, or an AFK player's token).
   socket.on(C2S.INIT_CARD_DRAW, safe(socket, ({ tokenId }: InitCardDrawPayload) => {
@@ -5473,7 +5552,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     });
     // Stack-rank as the cards come in: highest card on top, rank ties broken
     // by who drew first (lower drawSeq). Whoever is up next is always row 0.
-    state.entries.sort(compareCardEntries);
+    sortInitiative(state);
     state.turnIdx = 0;
     flagChaseComplications(io, d.campaignId, state);
     initiative.set(d.campaignId, state);

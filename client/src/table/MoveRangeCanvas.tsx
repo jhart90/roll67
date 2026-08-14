@@ -21,7 +21,7 @@ import { sightGeometry, useGameStore } from '../store/game';
 export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const map = useGameStore((s) => s.map)!;
-  const budget = useGameStore((s) => s.moveBudget);
+  const budgets = useGameStore((s) => s.moveBudgets);
   const tokens = useGameStore((s) => s.tokens);
   const active = useGameStore((s) => s.initiativeState.active);
   const turnEntry = useGameStore((s) => s.initiativeState.entries[s.initiativeState.turnIdx]);
@@ -31,11 +31,10 @@ export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
   const dmGeometry = useGameStore((s) => s.dmGeometry);
   const { width, height } = mapPixelSize(map);
 
+  // Whoever is up, and their own budget — not whichever arrived last.
+  const budget = turnEntry?.tokenId ? budgets[turnEntry.tokenId] : undefined;
   const token = budget ? tokens[budget.tokenId] : undefined;
-  // Only for whoever is up, and only while they are the one standing there:
-  // a budget left over from someone else's turn is not this token's reach.
-  const live = !!budget && !!token && active && turnEntry?.tokenId === budget.tokenId
-    && token.mapId === map.id;
+  const live = !!budget && !!token && active && token.mapId === map.id;
 
   const reach = useMemo(() => {
     if (!live || !budget || !token) return null;

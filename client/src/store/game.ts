@@ -324,8 +324,15 @@ interface GameState {
   bennyState: Record<string, BennyStatePayload>;
   /** SWADE: how many Bennies sit in the GM's own pool (DM only). */
   gmBennies: number;
-  /** SWADE: what the token whose turn it is has left to move with. */
-  moveBudget: MoveBudgetPayload | null;
+  /**
+    * SWADE: what each token has left to move with this turn, by token id.
+    *
+    * Keyed rather than kept as "the last one heard", because the DM is sent
+    * every token's budget — repositioning one out of turn would otherwise
+    * overwrite the budget of the token that is actually up, and the reach
+    * shading and the turn coach would blink out.
+    */
+  moveBudgets: Record<string, MoveBudgetPayload>;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number; calledShot?: CalledShotAim | typeof CALLED_SHOT_PENDING | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
@@ -563,7 +570,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   blastOffer: null,
   bennyState: {},
   gmBennies: 0,
-  moveBudget: null,
+  moveBudgets: {},
   bleedPrompt: null,
   shakenPrompt: null,
   stunPrompt: null,
@@ -994,6 +1001,9 @@ export function wireSocket(): void {
       handoutList: p.handouts,
       macroList: p.macros,
       initiativeState: p.initiative,
+      // Budgets are per-turn and live only in the server's memory; anything
+      // remembered across a rejoin is about a turn that has long since ended.
+      moveBudgets: {},
       clockSeconds: p.clockSeconds ?? 0,
       gmBennies: p.gmBennies ?? 0,
       chatLog: p.chatTail,
@@ -1454,7 +1464,7 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.MOVE_BUDGET, (p: MoveBudgetPayload) => {
-    useGameStore.setState({ moveBudget: p });
+    useGameStore.setState((s) => ({ moveBudgets: { ...s.moveBudgets, [p.tokenId]: p } }));
   });
 
   socket.on(S2C.BENNY_STATE, (p: BennyStatePayload) => {
@@ -1530,7 +1540,13 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.INITIATIVE, ({ state }: { state: InitiativeState }) => {
-    useGameStore.setState({ initiativeState: state });
+    // A fight that has ended takes its turn budgets with it: they are about
+    // rounds that no longer exist, and a stale one would light the coach up
+    // over a tracker nobody is using.
+    useGameStore.setState((s) => ({
+      initiativeState: state,
+      ...(state.active ? {} : { moveBudgets: {} }),
+    }));
   });
 
   // SWADE action-deck draw: drives the card-flip animation overlay (seq keeps
@@ -1708,10 +1724,10 @@ function combatMoveBlocked(tokenId: string): string | null {
   if (init.entries[init.turnIdx]?.tokenId !== tokenId) {
     return `It is not ${s.tokens[tokenId]?.name ?? 'their'}'s turn.`;
   }
-  const b = s.moveBudget;
+  const b = s.moveBudgets[tokenId];
   // Out of Pace with the running die already spent: there is nothing left to
   // ask for. With the die unspent the server offers the run, so let it.
-  if (b && b.tokenId === tokenId && b.runBonus !== null && b.moved >= b.pace + b.runBonus) {
+  if (b && b.runBonus !== null && b.moved >= b.pace + b.runBonus) {
     return `${s.tokens[tokenId]?.name ?? 'They'} have used all their movement this turn.`;
   }
   return null;

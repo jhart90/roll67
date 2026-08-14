@@ -33,7 +33,9 @@ export function InitiativeFloat() {
   const isMine = !!current && current.ownerUserId === you.userId;
   // The same signal the turn coach lights up on: the rules' one demand is
   // dealt with and the turn has been used for something.
-  const budget = useGameStore((st) => st.moveBudget);
+  const budgets = useGameStore((st) => st.moveBudgets);
+  const upTokenId = useGameStore((st) => st.initiativeState.entries[st.initiativeState.turnIdx]?.tokenId ?? null);
+  const budget = upTokenId ? budgets[upTokenId] : undefined;
   const turnSpent = !!budget && !budget.shaken && (budget.actions > 0 || budget.moved > 0);
   const myTurn = isMine || you.role === 'dm';
   // Rotate so whoever is up leads the list. Only the DISPLAY rotates — the

@@ -27,21 +27,32 @@ export function TurnCoach() {
   const you = useGameStore((s) => s.you);
   const system = useGameStore((s) => s.campaign?.system);
   const init = useGameStore((s) => s.initiativeState);
-  const budget = useGameStore((s) => s.moveBudget);
+  const budgets = useGameStore((s) => s.moveBudgets);
   const tokens = useGameStore((s) => s.tokens);
   const characters = useGameStore((s) => s.characters);
   const asUser = useGameStore((s) => s.asUserId());
+  const isDm = useGameStore((s) => s.isDm());
+  const viewingAs = useGameStore((s) => s.viewingAs);
   const bennyState = useGameStore((s) => s.bennyState);
   const soakOffer = useGameStore((s) => s.soakOffer);
 
   const entry = init.entries[init.turnIdx];
   const token = entry?.tokenId ? tokens[entry.tokenId] : undefined;
   const ch = token?.characterId ? characters.find((c) => c.id === token.characterId) : undefined;
-  // Only for the person actually taking the turn. The DM has the whole board
-  // to think about and does not need a checklist for one of forty tokens.
-  const mine = !!ch && ch.ownerUserId === asUser;
+  /**
+   * Whose turn this coach is for.
+   *
+   * A player's own character, obviously. In "view as" that is whoever the DM
+   * is standing in for — asUserId() already answers as them, which is the
+   * whole point of it. And the DM's own turn: when the thing that is up
+   * answers to nobody but them, the loop is theirs to walk and the coach is
+   * as much use to them as to anybody.
+   *
+   * What it is NOT is a checklist over somebody else's character.
+   */
+  const mine = !!ch && (ch.ownerUserId === asUser || (isDm && !viewingAs && !ch.ownerUserId));
+  const budget = entry?.tokenId ? budgets[entry.tokenId] : undefined;
   if (!you || system !== 'swade' || !init.active || !entry || !mine || !budget) return null;
-  if (budget.tokenId !== entry.tokenId) return null;
 
   const moveLeft = Math.max(0, budget.pace + (budget.runBonus ?? 0) - budget.moved);
   const acted = budget.actions > 0;

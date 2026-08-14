@@ -176,6 +176,7 @@ const ACE_STYLE_LABELS: Record<AceStyle, string> = {
   smoke: 'Smoke — grey puffs billowing up and thinning out',
   water: 'Water — a splash crown, spreading ripples and falling droplets',
   confetti: 'Confetti — a burst of colored paper that flutters off the bottom of the screen',
+  bubblegum: 'Bubble gum — a pink bubble swells behind the die until it pops all over it',
 };
 
 /**
@@ -190,7 +191,7 @@ export function DiceAceStylePicker() {
   const current = me?.diceAceStyle ?? ACE_STYLE_DEFAULT;
   return (
     <div className="dice-color-row">
-      <span className="dim" style={{ fontSize: 11 }} title="Exploding dice — how yours announce themselves when they ace">
+      <span className="dice-color-label" title="Exploding dice — how yours announce themselves when they ace">
         Aces:
       </span>
       <select
@@ -200,7 +201,8 @@ export function DiceAceStylePicker() {
         onChange={(e) => intents.setDiceAceStyle(e.target.value as AceStyle)}
       >
         {ACE_STYLES.map((s) => (
-          <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>
+          // "bubblegum" is two words to everyone but the code.
+          <option key={s} value={s}>{s === 'bubblegum' ? 'Bubble gum' : s[0].toUpperCase() + s.slice(1)}</option>
         ))}
       </select>
     </div>

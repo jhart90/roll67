@@ -388,6 +388,8 @@ export const ACE_GAP_MS = ACE_FLASH_MS + ACE_READ_PAUSE_MS;
  * real confetti does.
  */
 export function aceEffectMs(style: AceStyle): number {
+  // A bubble has to have time to be blown before it is worth popping.
+  if (style === 'bubblegum') return 1600;
   return style === 'confetti' ? 2800 : ACE_FLASH_MS;
 }
 /** Stagger between dice thrown in the same wave. */
@@ -1171,6 +1173,122 @@ export function drawAceEffect(
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (style === 'bubblegum') {
+    // Somebody blowing a bubble behind the die: it swells, wobbles, goes
+    // taut and thin as it gets big, and then goes all over everything.
+    //
+    // Two acts, and the whole trick is the join between them. POP is where
+    // the bubble is at its largest — the moment before it bursts is the one
+    // the eye is waiting for, so it is held a beat rather than run through.
+    const POP = 0.62;
+    const PINK = '236, 106, 178';
+    const PALE = '255, 190, 226';
+
+    if (phase < POP) {
+      const t = phase / POP;
+      // Fast at first, then straining — a bubble the size of your head does
+      // not grow at the rate it started at.
+      const grow = 1 - Math.pow(1 - t, 2.4);
+      // Five times the die across, which is a proper bubble.
+      const R = size * 5 * (0.16 + 0.84 * grow);
+      // Blown out and up from behind: the die stays in front of it.
+      const bx = cx - size * 0.15 * grow;
+      const by = cy - R * 0.28;
+      // The wobble of a film under pressure, faster and shallower as it
+      // stretches — a big bubble is taut and barely moves.
+      const wob = Math.sin(phase * 34) * (1 - t) * 0.05;
+
+      // Body: a soap film is nearly transparent in the middle and gathers at
+      // the rim, so this is a ring of colour rather than a disc of it.
+      ctx.globalAlpha = 0.9;
+      const g = ctx.createRadialGradient(bx, by, R * 0.1, bx, by, R);
+      g.addColorStop(0, `rgba(${PALE}, 0.10)`);
+      g.addColorStop(0.72, `rgba(${PINK}, 0.20)`);
+      g.addColorStop(0.93, `rgba(${PINK}, 0.55)`);
+      g.addColorStop(1, `rgba(${PALE}, 0.15)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(bx, by, R * (1 + wob), R * (1 - wob), 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // The rim itself, thinning as the film stretches.
+      ctx.globalAlpha = 0.55 + 0.35 * (1 - t);
+      ctx.strokeStyle = `rgba(${PALE}, 0.9)`;
+      ctx.lineWidth = Math.max(0.6, size * 0.09 * (1 - t * 0.65));
+      ctx.beginPath();
+      ctx.ellipse(bx, by, R * (1 + wob), R * (1 - wob), 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // A highlight where the light is, which is what makes it read as a
+      // sphere and not a circle.
+      ctx.globalAlpha = 0.5 * (0.4 + 0.6 * grow);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.beginPath();
+      ctx.ellipse(bx - R * 0.42, by - R * 0.44, R * 0.2, R * 0.13, -0.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // The neck of gum still attached at the mouth, stretched thin.
+      ctx.globalAlpha = 0.75;
+      ctx.strokeStyle = `rgba(${PINK}, 0.85)`;
+      ctx.lineWidth = Math.max(0.8, size * 0.16 * (1 - t * 0.5));
+      ctx.beginPath();
+      ctx.moveTo(cx + size * 0.1, cy + size * 0.35);
+      ctx.quadraticCurveTo(bx + R * 0.2, by + R * 0.7, bx, by + R * 0.92);
+      ctx.stroke();
+      return;
+    }
+
+    // …and the pop. The film tears into curls that fly out on the pressure
+    // that was holding it up, and the gum itself lands back on the face of
+    // whoever was blowing it — which here is the die.
+    const t = (phase - POP) / (1 - POP);
+    const ease = 1 - Math.pow(1 - t, 2);
+    const R = size * 5;
+
+    // The flash of the burst: the film going at once, gone almost before it
+    // registers, which is why a pop reads as a bang rather than a fade.
+    const burst = 1 - Math.min(1, t * 6);
+    if (burst > 0) {
+      ctx.globalAlpha = burst * 0.5;
+      ctx.strokeStyle = `rgba(${PALE}, 0.95)`;
+      ctx.lineWidth = size * 0.22 * burst;
+      ctx.beginPath();
+      ctx.arc(cx, cy - R * 0.28, R * (1 + (1 - burst) * 0.25), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Torn film: ragged arcs of the bubble's own edge, spinning as they go.
+    ctx.globalAlpha = (1 - t) * 0.95;
+    for (let i = 0; i < 14; i++) {
+      const ang = (i / 14) * Math.PI * 2 + i * 0.7;
+      const out = R * (0.9 + ease * 1.1);
+      const px = cx + Math.cos(ang) * out;
+      const py = cy - R * 0.28 + Math.sin(ang) * out * 0.85 + size * 3 * t * t;
+      const span = 0.5 + (i % 3) * 0.28;
+      ctx.strokeStyle = i % 2 ? `rgba(${PINK}, 0.9)` : `rgba(${PALE}, 0.9)`;
+      ctx.lineWidth = Math.max(0.7, size * 0.13 * (1 - t));
+      ctx.beginPath();
+      ctx.arc(px, py, size * (0.28 + (i % 4) * 0.12), ang + t * 4, ang + t * 4 + span);
+      ctx.stroke();
+    }
+
+    // And what lands on the die: blobs of gum stuck across its face, which
+    // is the part everyone laughs at.
+    ctx.globalAlpha = Math.min(1, (1 - t) * 1.6) * 0.85;
+    ctx.fillStyle = `rgba(${PINK}, 0.95)`;
+    for (let b = 0; b < 7; b++) {
+      const ang = b * 2.27;
+      const rr = size * (0.15 + (b % 3) * 0.22) * (0.5 + ease * 0.8);
+      ctx.beginPath();
+      ctx.ellipse(
+        cx + Math.cos(ang) * size * 0.55, cy + Math.sin(ang) * size * 0.5,
+        rr, rr * 0.78, ang, 0, Math.PI * 2,
+      );
       ctx.fill();
     }
     return;

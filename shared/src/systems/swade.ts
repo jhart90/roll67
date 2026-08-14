@@ -818,18 +818,23 @@ const powersTab: SheetTab = {
        * roller picked in their own dice settings, which is what makes an
        * untouched sheet behave exactly as it always did.
        */
-      kind: 'fields', id: 'diceLook', title: 'Dice (overrides your own settings)',
+      kind: 'fields', id: 'diceLook', title: 'Dice settings',
+      // Two halves to the row, so the four colors stack into a 2x2: the trait
+      // die and its pips above the Wild Die and its pips, each column the
+      // same question asked of the other die. The animation gets the row
+      // under them to itself.
       fields: [
-        { id: 'diceTraitColor', label: 'Trait die color', type: 'color', width: 'third' },
-        { id: 'diceTraitTextColor', label: 'Trait die pip color', type: 'color', width: 'third' },
-        { id: 'diceWildColor', label: 'Wild Die color', type: 'color', width: 'third' },
-        { id: 'diceWildTextColor', label: 'Wild Die pip color', type: 'color', width: 'third' },
+        { id: 'diceTraitColor', label: 'Trait die color', type: 'color', width: 'half' },
+        { id: 'diceTraitTextColor', label: 'Trait die pip color', type: 'color', width: 'half' },
+        { id: 'diceWildColor', label: 'Wild Die color', type: 'color', width: 'half' },
+        { id: 'diceWildTextColor', label: 'Wild Die pip color', type: 'color', width: 'half' },
         {
-          id: 'diceAceStyle', label: 'Ace animation', type: 'select', width: 'third', default: '',
+          id: 'diceAceStyle', label: 'Ace animation', type: 'select', width: 'full', default: '',
           options: ['', ...ACE_STYLES],
           optionLabels: {
             '': 'Use my own setting', flash: 'Flash', explosion: 'Explosion', flames: 'Flames',
-            disco: 'Disco', rainbow: 'Rainbow', smoke: 'Smoke', water: 'Water', confetti: 'Confetti',
+            disco: 'Disco', rainbow: 'Rainbow', smoke: 'Smoke', water: 'Water',
+            confetti: 'Confetti', bubblegum: 'Bubble gum',
           },
         },
       ],

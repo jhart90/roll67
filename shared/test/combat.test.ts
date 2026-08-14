@@ -194,3 +194,91 @@ describe('spell slots', () => {
     expect(castableLevels({ slots1: 1, slotsUsed1: 1 }, 1)).toEqual([]);
   });
 });
+
+/**
+ * A heal has to be able to reach the person next to you.
+ *
+ * All three of these were the same bug wearing different hats: a heal whose
+ * range box held 0 was read as reaching zero hexes, so the only token the
+ * healer could pick was themselves — and a Healing POWER, whose range box is
+ * blank by default, could not be aimed at anybody at all. The board simply
+ * refused every click and said nothing about why.
+ */
+describe('healing reaches arm’s length', () => {
+  const medic = (sheet: Record<string, unknown>): Character =>
+    ({ id: 'c3', campaignId: 'x', ownerUserId: 'u1', name: 'Medic', system: 'swade', sheet });
+  const find = (sheet: Record<string, unknown>, label: string) =>
+    combatActions(medic(sheet)).find((a) => a.label === label);
+
+  it('gives a range-less heal power a touch reach', () => {
+    const a = find({
+      ...swade.defaultSheet(), arcaneSkill: 'Faith', Faith: 'd8',
+      powers: [{ name: 'Healing', effect: 'heal', damage: '5', cost: 3 }],
+    }, 'Healing');
+    expect(a?.rangeFt).toBe(5);
+    expect(a?.healsWounds).toBe(true);
+    // The margin of the arcane roll is the healing — never an amount.
+    expect(a?.fixedTn).toBe(4);
+  });
+
+  it('…and a heal item whose range box holds a literal 0', () => {
+    const a = find({
+      ...swade.defaultSheet(),
+      inventory: [{ name: 'Healing Potion', qty: 1, effect: 'heal', amount: '', range: 0 }],
+    }, 'Healing Potion');
+    expect(a?.rangeFt).toBe(5);
+    expect(a?.healsWounds).toBe(true);
+    expect(a?.consumesItem).toBe(true);
+  });
+
+  it('leaves a ranged heal alone', () => {
+    const a = find({
+      ...swade.defaultSheet(), arcaneSkill: 'Faith', Faith: 'd8',
+      powers: [{ name: 'Mend at Range', effect: 'heal', damage: '5', range: 60 }],
+    }, 'Mend at Range');
+    expect(a?.rangeFt).toBe(60);
+  });
+
+  it('does not stretch a range-less ATTACK power — a Bolt still needs its range', () => {
+    const a = find({
+      ...swade.defaultSheet(), arcaneSkill: 'Faith', Faith: 'd8',
+      powers: [{ name: 'Bolt', effect: 'damage', damage: '2d6!' }],
+    }, 'Bolt');
+    expect(a?.rangeFt).toBe(0);
+  });
+});
+
+/**
+ * The Healing skill button in the rolls column prints a number and stops
+ * there: no patient, no consequence, nothing mended. Treating a wound is an
+ * ACTION, so SWADE characters get one whether or not they are carrying a kit.
+ */
+describe('Treat Wounds', () => {
+  const anyone = (sheet: Record<string, unknown>): Character =>
+    ({ id: 'c4', campaignId: 'x', ownerUserId: 'u1', name: 'Anyone', system: 'swade', sheet });
+
+  it('is offered to every SWADE character, kit or no kit', () => {
+    const a = combatActions(anyone(swade.defaultSheet())).find((x) => x.id === 'heal:hands');
+    expect(a).toBeDefined();
+    expect(a?.effect).toBe('heal');
+    expect(a?.healsWounds).toBe(true);
+    expect(a?.traitName).toBe('Healing');
+    expect(a?.rangeFt).toBe(5);
+    expect(a?.consumesItem).toBe(false);
+  });
+
+  it('rolls the Healing skill, and carries a kit’s bonus into it', () => {
+    const sheet = {
+      ...swade.defaultSheet(), skills: [{ name: 'Healing', die: 'd8' }],
+      inventory: [{ name: 'Medkit', qty: 1, bonusSkill: 'Healing', bonusAmt: 2, equipped: true }],
+    };
+    const a = combatActions(anyone(sheet)).find((x) => x.id === 'heal:hands');
+    expect(a?.attackExpr).toContain('d8');
+    expect(a?.attackExpr).toContain('+2');
+  });
+
+  it('is not offered outside SWADE, where healing is points off a spell', () => {
+    const other: Character = { id: 'c5', campaignId: 'x', ownerUserId: 'u1', name: 'Cleric', system: 'dnd5e', sheet: dnd5e.defaultSheet() };
+    expect(combatActions(other).some((x) => x.id === 'heal:hands')).toBe(false);
+  });
+});

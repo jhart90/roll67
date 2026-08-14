@@ -961,6 +961,7 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                   : !myToken ? "Place this character's token on the map first"
                   : dry ? `Needs ${minNeeded} round${minNeeded === 1 ? '' : 's'} — only ${ammoLeft} left. Reload!`
                     : maxRof >= 2 && !a.suppressive ? 'Choose a rate of fire, then pick a target'
+                      : a.effect === 'heal' ? `${a.label} — choose who to treat`
                       : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`)}
                 onClick={() => {
                   if (!myToken) return;
@@ -968,7 +969,11 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                   // penalty and the player should see it before committing.
                   // Flag the run; the aim prompt comes once a target is
                   // picked, because the part's Scale is read off the DEFENDER.
-                  if (adv === 'called' && a.attackExpr) {
+                  // A Called Shot is a place to aim a weapon. There is no
+                  // eye or leg to pick on a bandage, so a heal ignores the
+                  // toggle rather than dragging the player through a prompt
+                  // asking where on their patient they would like to hit.
+                  if (adv === 'called' && a.attackExpr && a.effect !== 'heal') {
                     useGameStore.getState().beginTargeting(character.id, myToken.id, a, null, undefined, CALLED_SHOT_PENDING);
                     return;
                   }
@@ -979,7 +984,11 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
               >
                 <span>{a.effect === 'heal' ? '🧪' : a.aoe ? '💥' : '⚔️'} {a.label}</span>
                 <span className="action-meta">
-                  {a.effect === 'heal' ? 'heal ' : ''}{a.amountExpr}{a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
+                  {/* A SWADE heal has no amount: the Healing roll's margin is
+                      the healing, and printing the row's vestigial 0 made a
+                      working potion look broken. */}
+                  {a.healsWounds ? 'mends Wounds' : `${a.effect === 'heal' ? 'heal ' : ''}${a.amountExpr}`}
+                  {a.rangeFt > 5 ? ` · ${a.rangeFt}ft` : ''}
                   {maxRof >= 2 && !a.suppressive ? ` · RoF ${maxRof}` : ''}
                   {a.suppressive ? ` · ${minNeeded} rounds` : ''}
                   {stowed ? ' · not wielded' : ''}

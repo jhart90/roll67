@@ -6,6 +6,9 @@ import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
 const SYSTEMS = { dnd5e, swn, swade };
 
+/** Arm's length: what a heal with no range of its own can reach. */
+export const TOUCH_FT = 5;
+
 /**
  * Derive the targeted combat actions available from a character sheet:
  *  - each weapon in the Attacks list (roll to hit + damage), and
@@ -233,7 +236,11 @@ export function combatActions(character: Character): CombatAction[] {
       const isAreaPower = !!str(pw, 'aoeShape', '') && (num(pw, 'aoeSize', 0) > 0 || num(pw, 'aoeHexes', 0) > 0);
       const save = isAreaPower ? '' : str(pw, 'save', '');
       const onSave = str(pw, 'onSave', 'negate') === 'half' ? 'half' as const : 'negate' as const;
-      const rangeFt = Math.max(0, num(pw, 'range', 0));
+      // A power with no range listed reaches as far as the caster's arm. That
+      // is nothing at all for a Bolt — it needs its range — but a HEAL with no
+      // range is a touch, and reading it as zero left the healer able to pick
+      // nobody but themselves, with the ally standing next to them unclickable.
+      const rangeFt = Math.max(effect === 'heal' ? TOUCH_FT : 0, num(pw, 'range', 0));
       const aoeShape = str(pw, 'aoeShape', '');
       const aoeSize = num(pw, 'aoeSize', 0);
       const aoeHexes = num(pw, 'aoeHexes', 0);
@@ -269,6 +276,33 @@ export function combatActions(character: Character): CombatAction[] {
         ...(isAoe ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeHexes > 0 ? { sizeHexes: aoeHexes } : {}) } } : {}),
         ...(condition ? { appliesCondition: condition } : {}),
       });
+    });
+
+    // Treating a wound with nothing but your hands and whatever is in the
+    // pack. The Healing skill has always been rollable from the skills list,
+    // but a bare trait roll has no patient and no consequence — it printed a
+    // number and left the wounds exactly where they were. This is the same
+    // roll with somebody on the other end of it: pick who is being treated,
+    // and the mending follows from the margin like every other heal.
+    //
+    // Unconditional, because SWADE lets anyone try: an unskilled attempt is
+    // d4−2 and a bad idea, not an impossible one. Any Healing bonus from gear
+    // (a Medkit's +2) is already folded into the expression.
+    out.push({
+      id: 'heal:hands',
+      label: 'Treat Wounds',
+      effect: 'heal',
+      attackExpr: traitExpr(sheet, skillDie(sheet, 'Healing'), gearTraitBonus(sheet, 'Healing')),
+      amountExpr: '0',
+      rangeFt: TOUCH_FT,
+      damageType: '',
+      ranged: false,
+      consumesItem: false,
+      source: 'attack',
+      index: 1100,
+      fixedTn: 4,
+      healsWounds: true,
+      traitName: 'Healing',
     });
 
     // Combat maneuvers from the quick-reference sheet: opposed rolls and
@@ -341,7 +375,9 @@ export function combatActions(character: Character): CombatAction[] {
     const qty = num(it, 'qty', 1);
     if (qty <= 0) return;
     const name = str(it, 'name', '').trim() || `Item ${i + 1}`;
-    const rangeFt = Math.max(0, num(it, 'range', 5));
+    // Same for a potion or a kit: treating someone is done at arm's length,
+    // and a 0 in the Range box is a blank, not a rule.
+    const rangeFt = Math.max(effect === 'heal' ? TOUCH_FT : 0, num(it, 'range', 5));
     out.push({
       id: `item:${i}`,
       label: qty > 1 ? `${name} (×${qty})` : name,

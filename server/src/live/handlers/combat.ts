@@ -2413,6 +2413,34 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       return;
     }
     const targetConditions = targetChar ? conditionsOf(targetChar.sheet) : [];
+    /**
+     * Can this patient be mended at all, and by these hands?
+     *
+     * A Construct wants Repair, the Undead want magic, and past the Golden
+     * Hour the body has already done what it is going to do. Worked out ONCE,
+     * here, where the patient is known — because the roll's own card, the
+     * mending itself and the line that reports it all have to agree, and they
+     * did not: the wound-mending path returned early and never reached the
+     * checks, so a Healing roll cheerfully mended a golem an hour late.
+     */
+    let healBlock: string | null = null;
+    if (action.healsWounds && targetChar?.system === 'swade') {
+      const arcaneHands = action.source === 'power' || action.source === 'spell';
+      const woundedAt = num(targetChar.sheet, 'woundsAtSec', -1);
+      healBlock = isConstruct(targetChar.sheet)
+        ? 'a Construct is mended with Repair, not Healing'
+        : !arcaneHands && isUndead(targetChar.sheet)
+          ? 'the Undead are mended by magic, not medicine'
+          : !arcaneHands && woundedAt >= 0 && campaigns.clockSeconds(d.campaignId) - woundedAt >= 3600
+            ? 'the Golden Hour has passed — only magic or natural healing now'
+            : null;
+      // And there is no treating someone who is not hurt. Refused rather than
+      // rolled, because rolling it would spend the potion on nothing.
+      if (num(targetChar.sheet, 'wounds', 0) <= 0) {
+        emitError(socket, `${tgt.name} has no Wounds to treat.`);
+        return;
+      }
+    }
     // SWADE bonuses that carry into the damage roll (Wild Attack, Joker, The
     // Drop) accumulate here; wildAttack also marks the attacker Vulnerable.
     let dmgBonus = 0;
@@ -2833,7 +2861,8 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           + (burstRaises > 0 ? `, ${burstRaises} with a raise` : '')
         : '';
       const landed = action.healsWounds
-        ? (hit ? (raise ? 'SUCCESS with a RAISE — mends 2 Wounds' : 'SUCCESS — mends 1 Wound') : 'FAILED — no Wounds mended')
+        ? (healBlock ? `no Wounds mended — ${healBlock}`
+          : hit ? (raise ? 'SUCCESS with a RAISE — mends 2 Wounds' : 'SUCCESS — mends 1 Wound') : 'FAILED — no Wounds mended')
         : burst ? `${hit ? 'HIT' : 'MISS'} — ${burstTally}`
           : `${hit ? 'HIT' : 'MISS'}${crit ? ' (crit!)' : ''}${raise ? ' (raise!)' : ''}`;
       attackOutcome = `${landed} — ${why}${raise ? `, beat it by ${attackBreakdown.total - ac}` : ''}`;
@@ -2932,7 +2961,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // apply the mending and stop: rolling the item's vestigial dice here
       // produced a second card showing a number that was then thrown away.
       if (action.healsWounds) {
-        const mended = swadeWoundsHealed(hit, raise);
+        const mended = healBlock ? 0 : swadeWoundsHealed(hit, raise);
         consumeAmmoAndItem();
         if (mended > 0 && targetChar) {
           const targetId = targetChar.id;
@@ -2941,8 +2970,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           // settled — waiting a second settle here just left the patient
           // bleeding for another beat.
           const fresh = characters.byId(targetId);
-          if (fresh) applySwadeWoundHeal(io, d.campaignId, fresh, mended);
+          // The note names what the mend actually did to them — the new Wound
+          // count, and whether it brought them back out of Shaken or off the
+          // floor. That is the part the table needs and the dice card cannot
+          // know, since it is rolled before anyone is patched up.
+          const wasDown = !!fresh && conditionsOf(fresh.sheet).includes('incapacitated');
+          const healed = fresh ? applySwadeWoundHeal(io, d.campaignId, fresh, mended) : null;
+          const upAgain = wasDown && !!healed && !conditionsOf(healed.character.sheet).includes('incapacitated');
           floatHp(io, d.campaignId, src.mapId, tgt.id, mended, 'heal');
+          postStatusLine(
+            io, d.campaignId,
+            `🩹 ${actor.name} treats ${tgt.name}${healed?.note ?? ` — heals ${mended} Wound${mended === 1 ? '' : 's'}`}`
+            + (upAgain ? ', and is back on their feet' : ''),
+          );
+        } else {
+          postStatusLine(io, d.campaignId, `🩹 ${actor.name} treats ${tgt.name} — no Wounds mended${healBlock ? `: ${healBlock}` : ''}`);
         }
         return;
       }
@@ -3027,31 +3069,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
           }
         }
       }
-      // SWADE healing isn't an amount at all: the Healing roll's own margin
-      // is the result — a success mends one Wound, a raise two, a failure
-      // none. `magnitude` here is that wound count, not points.
-      // A construct is repaired, not healed: the Healing skill has nothing to
-      // work on, and there is no Golden Hour on a golem. The roll still
-      // happens — the medic tried — it simply mends nothing, and the card
-      // says why so nobody spends a second action on it.
-      // A construct is repaired and an undead is mended by magic, so a
-      // Healing roll from a kit has nothing to work on either way. `arcane`
-      // marks the healing that does reach an undead — a power rather than a
-      // pair of hands.
-      const swadeTarget = targetChar?.system === 'swade';
-      const arcaneHeal = action.source === 'power' || action.source === 'spell';
-      const needsRepair = !!action.healsWounds && swadeTarget && isConstruct(targetChar!.sheet);
-      const needsMagic = !!action.healsWounds && swadeTarget && !arcaneHeal && isUndead(targetChar!.sheet);
-      // The Golden Hour. The Healing skill treats an injury while it is still
-      // fresh; past that hour the body has done what it is going to do, and
-      // only magic or time mends it. Measured against the world's clock, not
-      // the wall's — which is what the GM's time controls move.
-      const woundedAt = swadeTarget ? num(targetChar!.sheet, 'woundsAtSec', -1) : -1;
-      const tooLate = !!action.healsWounds && !arcaneHeal && woundedAt >= 0
-        && campaigns.clockSeconds(d.campaignId) - woundedAt >= 3600;
-      const woundsMended = action.healsWounds && !needsRepair && !needsMagic && !tooLate
-        ? swadeWoundsHealed(hit, raise) : 0;
-      if (action.healsWounds) magnitude = woundsMended;
+      // Wound-mending never reaches here — it is the whole of its own branch
+      // at the top of resolveDamage, where the Healing roll's margin decides
+      // the outcome and `healBlock` decides whether it counts. What is left
+      // for this path is healing that really does roll an amount: an area
+      // power, and every system that heals in points.
       const applied = action.effect === 'heal' ? magnitude : (hit ? magnitude : 0);
       const delta = action.effect === 'heal' ? applied : -applied;
       const impactKind: ImpactKind = action.effect === 'heal' ? 'heal' : action.aoe ? 'aoe' : action.ranged ? 'ranged' : 'melee';
@@ -3073,22 +3095,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       let applyToTarget: (() => void) | null = null;
       /** Venom only travels on a hit that at least Shakes — see resolvePoison. */
       let poisonLands = false;
-      if (action.healsWounds && targetChar) {
-        // Wound mending has its own application path — applyHpDelta's point
-        // arithmetic (4 points to a Wound) would misread a wound count.
-        const before = num(targetChar.sheet, 'wounds', 0);
-        const after = Math.max(0, before - woundsMended);
-        if (woundsMended > 0) statusRow = `${tgt.name} now ${after} of 3 Wounds`;
-        if (woundsMended > 0) {
-          undo.push({ t: 'hp', characterId: targetChar.id, delta: woundsMended });
-          const targetId = targetChar.id;
-          applyToTarget = () => {
-            const fresh = characters.byId(targetId);
-            if (fresh) applySwadeWoundHeal(io, d.campaignId, fresh, woundsMended);
-            floatHp(io, d.campaignId, src.mapId, tgt.id, woundsMended, 'heal');
-          };
-        }
-      } else if (applied !== 0) {
+      if (applied !== 0) {
         if (targetChar) {
           if (targetChar.system === 'swade' && delta < 0) {
             // The wound ladder, not the HP pool: preview the same outcome
@@ -3158,17 +3165,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // Name the bonus die's source on the headline, so an extra die in the
       // breakdown reads as a reward rather than a bug.
       const rollTag = crit ? ' (crit ×2 dice)' : raise && !action.healsWounds ? ' (raise +1d6)' : '';
-      const amountRow = action.healsWounds
-        ? (needsRepair
-          ? 'No Wounds mended — a Construct is mended with Repair, not Healing'
-          : needsMagic
-            ? 'No Wounds mended — the Undead are mended by magic, not medicine'
-            : tooLate
-              ? 'No Wounds mended — the Golden Hour has passed; only magic or natural healing now'
-          : woundsMended === 0
-            ? 'No Wounds mended'
-            : `Mends ${woundsMended} Wound${woundsMended === 1 ? '' : 's'}${raise ? ' (raise!)' : ''}`)
-        : action.effect === 'heal'
+      const amountRow = action.effect === 'heal'
         ? `Heals ${applied}`
         : hit ? `${applied} damage${resistTag}` : 'No damage';
 
@@ -3308,8 +3305,11 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       // Headline states who did what to whom; the action rides in its own
       // field so chat can underline it and hang a tooltip off it, and the
       // outcome in another so it can sit under the dice rather than above.
+      // "with" wants an instrument after it. Bare hands are not one, so the
+      // plain Healing roll says what it is instead of "treats Bob with Treat
+      // Wounds".
       const attackText = action.healsWounds
-        ? `${actor.name} treats ${tgt.name} with`
+        ? (action.source === 'attack' ? `${actor.name} treats ${tgt.name} —` : `${actor.name} treats ${tgt.name} with`)
         : `${actor.name} attacks ${tgt.name} with`;
       const attackMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, characterId: actor.id, kind: 'roll', text: attackText,

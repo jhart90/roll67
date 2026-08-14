@@ -507,7 +507,10 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
       {/* …unless a Called Shot has already picked its victim and is being
           priced: the choosing is over, and the banner would be asking for
           something the player has already given. */}
-      {targeting && targeting.action.source === 'attack' && !calledShotPending && (
+      {/* A heal picks its patient from a list, not off the map, so the banner
+          telling you to click a highlighted token would be pointing at the
+          wrong thing entirely. */}
+      {targeting && targeting.action.source === 'attack' && targeting.action.effect !== 'heal' && !calledShotPending && (
         <div className="target-banner">
           Choose a target for <strong>{targeting.action.label}</strong> — click a highlighted token
           <button className="link" onClick={() => useGameStore.getState().cancelTargeting()}>cancel (Esc)</button>

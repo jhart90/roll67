@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { GameSystem } from 'shared';
+import { authHeaders } from '../api';
 import { useAuthStore } from '../store/auth';
 
 const SYSTEM_LABELS: Record<GameSystem, string> = {
@@ -22,6 +23,12 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
   const [system, setSystem] = useState<GameSystem>('dnd5e');
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreNote, setRestoreNote] = useState<string[] | null>(null);
+  /** A file that names a campaign already on the shelf, waiting for the DM to
+   *  say whether it may overwrite it. Nothing is written until they do. */
+  const [pending, setPending] = useState<{ file: File; message: string } | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +51,52 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join campaign.');
     }
+  }
+
+  /**
+   * Put a whole campaign back from a .r67campaign file.
+   *
+   * A restore rebuilds the campaign under its ORIGINAL ids, which is what
+   * makes it exact — and also what makes it dangerous when the campaign is
+   * still here. So the first attempt never overwrites: if the server says a
+   * copy exists, the file is held and the DM is asked in as many words.
+   */
+  async function sendRestore(file: File, replace: boolean) {
+    setError('');
+    setRestoreNote(null);
+    setRestoring(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      if (replace) body.append('replace', 'true');
+      const res = await fetch('/api/campaigns/restore', { method: 'POST', headers: authHeaders(), body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // "It's already here" is a question, not a failure.
+        if (!replace && typeof data.error === 'string' && data.error.includes('already on this server')) {
+          setPending({ file, message: data.error });
+          return;
+        }
+        throw new Error(data.error ?? 'Restore failed.');
+      }
+      setPending(null);
+      await useAuthStore.getState().loadCampaigns();
+      const rows = Object.values(data.rows ?? {}).reduce((sum: number, n) => sum + Number(n), 0);
+      setRestoreNote([
+        `Restored "${data.name}" — ${rows} rows and ${data.files} file${data.files === 1 ? '' : 's'}.`,
+        ...(data.notes ?? []),
+      ]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Restore failed.');
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  function onPickBackup(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';   // so re-picking the same file still fires
+    if (file) void sendRestore(file, false);
   }
 
   return (
@@ -115,6 +168,46 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
           <button className="retro-cta" onClick={() => setShowCreate(true)}>
             🎲 START A NEW CAMPAIGN <span className="retro-cta-sub">(you&rsquo;re the DM)</span>
           </button>
+        )}
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".r67campaign"
+          style={{ display: 'none' }}
+          onChange={onPickBackup}
+        />
+        <button
+          className="retro-cta retro-cta-quiet"
+          disabled={restoring}
+          onClick={() => fileRef.current?.click()}
+          title="Rebuild a campaign from a .r67campaign backup file"
+        >
+          {restoring ? '📼 RESTORING…' : '📼 RESTORE FROM A BACKUP'}
+          <span className="retro-cta-sub">(a .r67campaign file)</span>
+        </button>
+
+        {pending && (
+          <div className="restore-confirm">
+            <p>{pending.message}</p>
+            <div className="row">
+              <button
+                className="btn btn-danger"
+                disabled={restoring}
+                onClick={() => void sendRestore(pending.file, true)}
+              >
+                Overwrite it
+              </button>
+              <button onClick={() => setPending(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {restoreNote && (
+          <div className="restore-note">
+            {restoreNote.map((line, i) => <p key={i} className={i === 0 ? '' : 'dim'}>{line}</p>)}
+            <button className="link" onClick={() => setRestoreNote(null)}>dismiss</button>
+          </div>
         )}
 
         <form onSubmit={handleJoin} className="rental-slot">

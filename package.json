@@ -19,6 +19,7 @@
     "start": "npm -w server run start",
     "test": "npm -w shared run test",
     "itest": "node scripts/integration-smoke.mjs",
+    "backup-check": "node scripts/backup-check.mjs",
     "typecheck": "npm -w shared run typecheck && npm -w server run typecheck && npm -w client run typecheck"
   },
   "devDependencies": {

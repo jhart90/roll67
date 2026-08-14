@@ -10,6 +10,7 @@ import { authRouter, campaignRouter } from './routes/authRoutes.js';
 import { uploadRouter } from './routes/uploadRoutes.js';
 import { mapPreviewRouter } from './routes/mapPreviewRoutes.js';
 import { attachMapPackIo, mapPackRouter } from './routes/mapPackRoutes.js';
+import { backupRouter } from './routes/backupRoutes.js';
 import { registerSessionHandlers } from './live/handlers/session.js';
 import { initIronDice } from './live/ironDice.js';
 import { registerMapEditHandlers } from './live/handlers/mapEdit.js';
@@ -41,6 +42,7 @@ app.use('/api/campaigns', campaignRouter);
 app.use('/api', uploadRouter);
 app.use('/api', mapPreviewRouter);
 app.use('/api', mapPackRouter);
+app.use('/api', backupRouter);
 
 // Uploaded assets (map backgrounds, token art, handout images).
 app.use('/uploads', express.static(UPLOADS_DIR, { immutable: true, maxAge: '365d' }));

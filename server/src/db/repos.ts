@@ -1488,6 +1488,15 @@ export const chat = {
       }
       rollStats.record(campaignId, uid, chId, msg.roll.dice);
     }
+    // Who the table sees. A message that names a character IS that character
+    // speaking — "Charn the Robo-T-Rex (Jack)" — and every caller having to
+    // remember to say so twice is how half of them came out as bare "Jack".
+    // Said once, here, from the id the message already carries.
+    let fromCharacter = msg.fromCharacter ?? null;
+    if (!fromCharacter && msg.characterId) {
+      const r = stmt('SELECT name FROM characters WHERE id = ?').get(msg.characterId) as { name: string } | undefined;
+      fromCharacter = r?.name ?? null;
+    }
     // A character with dice of its own sends them along with the roll, so
     // every screen throws the same dice — including the screens that have
     // never been shown that character's sheet.
@@ -1500,7 +1509,7 @@ export const chat = {
       `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, character_id, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, callout_json, thread_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     ).run(
-      campaignId, msg.userId, msg.fromName, msg.fromCharacter ?? null, msg.characterId ?? null,
+      campaignId, msg.userId, msg.fromName, fromCharacter, msg.characterId ?? null,
       msg.actionName ?? null, msg.outcomeNote ?? null, msg.kind, msg.text,
       msg.roll ? JSON.stringify(msg.roll) : null,
       msg.recipients ? JSON.stringify(msg.recipients) : null,

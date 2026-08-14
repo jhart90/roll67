@@ -357,9 +357,30 @@ export function applyHpDelta(
  */
 export function floatHp(
   io: Server, campaignId: string, mapId: string, tokenId: string, delta: number,
-  kind?: ImpactKind, damageType?: string,
+  kind?: ImpactKind, damageType?: string, text?: string,
 ): void {
-  io.to(campaignRoom(campaignId)).emit(S2C.HP_FLOAT, { mapId, tokenId, delta, kind, damageType });
+  io.to(campaignRoom(campaignId)).emit(S2C.HP_FLOAT, { mapId, tokenId, delta, kind, damageType, ...(text ? { text } : {}) });
+}
+
+/**
+ * What a hit DID, in the two or three words that go over the token.
+ *
+ * SWADE damage is a comparison, not a subtraction — the number on the dice is
+ * meaningless until it has met a Toughness — so the float says the verdict
+ * rather than the arithmetic. Returns null for anything not on the SWADE
+ * ladder, where the number IS the answer.
+ */
+export function swadeHitText(before: Character, after: Character): string | null {
+  if (after.system !== 'swade') return null;
+  const conds = conditionsOf(after.sheet);
+  if (conds.includes('dead')) return 'Killed!';
+  if (conds.includes('incapacitated')) return 'Incapacitated!';
+  const gained = Math.max(0, num(after.sheet, 'wounds', 0) - num(before.sheet, 'wounds', 0));
+  if (gained >= 2) return `${gained} Wounds!`;
+  if (gained === 1) return 'Wounded!';
+  const nowShaken = conds.includes('shaken') && !conditionsOf(before.sheet).includes('shaken');
+  if (nowShaken) return 'Shaken!';
+  return 'No effect';
 }
 
 /**

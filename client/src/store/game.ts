@@ -143,7 +143,7 @@ export type MapTarget = { kind: 'token' | 'object'; id: string } | null;
 
 export type TerrainBrush = 'brush' | 'rect' | 'circle';
 
-export interface HpFloat { id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }
+export interface HpFloat { id: number; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string; text?: string }
 export interface Projectile { id: number; fromTokenId: string; toTokenId: string; damageType?: string; flightMs: number }
 
 interface Camera {
@@ -1198,7 +1198,7 @@ export function wireSocket(): void {
     // Only float over tokens we can actually see (secrecy preserved).
     if (s.map?.id !== p.mapId || !s.tokens[p.tokenId]) return;
     const id = ++pingCounter;
-    useGameStore.setState({ floats: [...s.floats, { id, tokenId: p.tokenId, delta: p.delta, kind: p.kind, damageType: p.damageType }] });
+    useGameStore.setState({ floats: [...s.floats, { id, tokenId: p.tokenId, delta: p.delta, kind: p.kind, damageType: p.damageType, ...(p.text ? { text: p.text } : {}) }] });
     setTimeout(() => {
       const cur = useGameStore.getState();
       useGameStore.setState({ floats: cur.floats.filter((f) => f.id !== id) });

@@ -1013,7 +1013,18 @@ export interface DoorStatePayload { mapId: string; doorId: string; open: boolean
 export interface CharacterUpsertedPayload { character: Character }
 export interface CharacterRemovedPayload { characterId: string }
 /** Floating combat text over a token: negative = damage, positive = heal. */
-export interface HpFloatPayload { mapId: string; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string }
+export interface HpFloatPayload {
+  mapId: string; tokenId: string; delta: number; kind?: ImpactKind; damageType?: string;
+  /**
+   * What to show instead of the number.
+   *
+   * In SWADE the number is the least interesting thing about a hit: 9 damage
+   * means nothing until you know it was 9 against Toughness 8. What the table
+   * wants over the token is what HAPPENED — "Shaken!", "2 Wounds!", "No
+   * effect" — so the server, which has just worked that out, says it.
+   */
+  text?: string;
+}
 /** A ranged attack's shot flying from shooter to target — sent far enough
  *  ahead of the matching HpFloatPayload that, timed with flightMs, it lands
  *  on-screen right as the damage/heal float appears. */

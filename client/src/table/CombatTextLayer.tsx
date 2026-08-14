@@ -33,7 +33,11 @@ function FloatFx({ f, grid }: { f: HpFloat; grid: GridConfig }) {
   const p = hexToPixel({ q: t.q, r: t.r }, grid);
   const radius = grid.hexSize * 0.72 * t.size;
   const heal = f.delta > 0;
-  const fontSize = Math.max(16, grid.hexSize * 0.85);
+  // A word takes more room than a number, so it comes in smaller — "Incapacitated!"
+  // at damage-number size would be wider than the token it belongs to.
+  const fontSize = f.text
+    ? Math.max(11, grid.hexSize * (f.text.length > 9 ? 0.34 : 0.46))
+    : Math.max(16, grid.hexSize * 0.85);
   const color = impactColor(f.kind, f.damageType);
   return (
     <g>
@@ -51,7 +55,7 @@ function FloatFx({ f, grid }: { f: HpFloat; grid: GridConfig }) {
             strokeWidth={fontSize * 0.14}
             paintOrder="stroke"
           >
-            {heal ? `+${f.delta}` : f.delta}
+            {f.text ?? (heal ? `+${f.delta}` : f.delta)}
           </text>
         </g>
       </g>

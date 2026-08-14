@@ -15,7 +15,7 @@ import {
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type InitCardCallPayload, type InitCardDrawPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
-  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBennyMax, aoeCentredOnSelf,
+  swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
   cardDrawPlan, chooseCard, quickRedraws, type DrawPlan, swadeStowed, sanitizeCard, type CombatAction,
   activationOutcome, backlashPatch, castingBlocker, swadeArcaneExpr, ACTIVATION_TN, FAILED_ACTIVATION_PP,
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
@@ -24,7 +24,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { emitMoveBudget, hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -755,6 +755,12 @@ interface GroupSaveSpec {
   concentrationCasterId?: string;
   /** Who set this off, so a kill is attributed to them and not to the spell. */
   attackerName?: string;
+  /** …and their character id: the damage roll is THEIR roll, so it is their
+   *  name on the card and their dice on the felt. Without it the card came
+   *  out under the account name and threw the account's dice — or, worse,
+   *  inherited the defender's, since the defender's save card was the last
+   *  thing to name a character. */
+  attackerId?: string | null;
   /**
    * The "casting" card this whole resolution belongs to. Every reversible
    * effect — damage, wounds, conditions — is appended to that message, so
@@ -1438,6 +1444,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
         { t: 'field', characterId: ch.id, key: 'conditions', value: conditionsOf(ch.sheet) },
       );
       applications.push(() => {
+        let hit: string | null = null;
         if (ch) {
           const fresh = characters.byId(ch.id);
           if (fresh) {
@@ -1449,6 +1456,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
             const { note } = applyHpDelta(io, spec.campaignId, fresh, -amt, spec.label ?? 'a saving throw', spec.attackerName, spec.damageType);
             const said = note.replace(/^\s*—\s*/, '').trim();
             if (said) postStatusLine(io, spec.campaignId, `${fresh.name}: ${said}`, spec.leadMessageId);
+            hit = swadeHitText(fresh, characters.byId(fresh.id) ?? fresh);
           }
         } else {
           const live = tokens.byId(tok.id);
@@ -1458,16 +1466,26 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
             io.to(dmRoom(spec.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(tok.id)! });
           }
         }
-        floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt, 'aoe', spec.damageType);
+        floatHp(io, spec.campaignId, tok.mapId, tok.id, -amt, 'aoe', spec.damageType, hit ?? undefined);
       });
     }
     // With a lead card the effects belong to IT, not to the damage roll:
     // undoing half a power is worse than not being able to undo it at all.
     const all = [...preState, ...undo];
     if (spec.leadMessageId && all.length > 0) chat.appendUndo(spec.leadMessageId, all);
+    // What the number is about to MEET. A bare "9" tells the table nothing —
+    // nine against what? — so the card names each Toughness it is measured
+    // against, and the outcome follows as its own line once the dice land.
+    const facing = results
+      .filter(({ ch }) => ch?.system === 'swade')
+      .map(({ tok, ch }) => `${tok.name} (Toughness ${swadeToughness(ch!.sheet)})`);
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
+      // The damage is the ATTACKER's roll, whoever had to save against it.
+      characterId: spec.attackerId ?? null,
       text: `${spec.label?.trim() || 'Saving throw'} — damage`, roll: dmg, recipients: null,
+      ...(facing.length ? { outcomeNote: `vs ${facing.join(', ')}` } : {}),
+      callout: { what: `${spec.label?.trim() || 'Damage'} — damage`, tone: 'damage' },
       threadId: spec.leadMessageId,
     }, !spec.leadMessageId && undo.length > 0 ? undo : undefined);
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
@@ -2965,8 +2983,14 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
             // Re-read fresh: item/ammo consumption below may have already
             // patched this same sheet (when the actor heals themself).
             const fresh = characters.byId(targetId);
-            if (fresh) applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name, action.damageType);
-            floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType);
+            let hit: string | null = null;
+            if (fresh) {
+              applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name, action.damageType);
+              // In SWADE the number is not the news: 9 damage means nothing
+              // until it has met a Toughness. Float the verdict instead.
+              if (delta < 0) hit = swadeHitText(fresh, characters.byId(targetId) ?? fresh);
+            }
+            floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType, hit ?? undefined);
           };
         } else if (tgt.bar) {
           const cap = tgt.bar.maxHp > 0 ? tgt.bar.maxHp : tgt.bar.hp + delta;
@@ -3379,6 +3403,10 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // clear. Get it wrong badly enough and it goes off in your hand.
     let cooked = false;
     let cookBlewUp = false;
+    /** Animation this handler has already queued on everyone's screen. The
+     *  client plays roll dice one throw at a time, so anything timed from
+     *  "now" would land while these are still waiting their turn. */
+    let queuedMs = 0;
     /** Damage the blast will actually roll — a hand detonation adds the raise die. */
     let blastDamage = action.amountExpr;
     // What counts as a grenade — hoisted so cooking it, throwing it back and
@@ -3411,6 +3439,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         recipients: null,
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      queuedMs += diceSettleDelayMs(br.dice);
       if (critFail) {
         // Damage as if thrown with a raise, per the book.
         blastDamage = usableAmount(action.amountExpr) ? `${action.amountExpr}+1d6!` : action.amountExpr;
@@ -3445,6 +3474,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         text, roll: { ...br, outcome: onTarget ? 'success' as const : 'failure' as const }, recipients: null,
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: devMsg });
+      queuedMs += diceSettleDelayMs(br.dice);
     }
 
     // Everything from "who is standing in it" onward, as a closure. A SWADE
@@ -3486,6 +3516,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
         runGroupSave(io, {
           campaignId: d.campaignId, userId: d.userId, username: d.username,
           attackerName: actor.name,
+          attackerId: actor.id,
           leadMessageId: lead,
           tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
           ...(evadeable ? { evasion: true } : {}),
@@ -3563,14 +3594,22 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       && isNade && !action.suppressive && !cooked && !cookBlewUp;
     // offerBlastChoice returns false when there was nobody in the blast who
     // could answer for themselves — then it resolves as it always has.
-    if (!offerable || !offerBlastChoice({
-      io, campaignId: d.campaignId, label: castLabel,
-      throwerName: actor.name, throwerHex: { q: src.q, r: src.r },
-      aoe, originHex, aimHex: p.aimHex, map,
-      damageExpr: blastDamage, resume: detonate,
-    })) {
-      detonate({});
-    }
+    // The client plays roll animations one after another, so a throw that has
+    // already queued a cooking roll and a throwing roll is two throws deep
+    // before the blast's own dice get the screen. Timing the blast from NOW
+    // put the damage float over the target while the dice that decided it
+    // were still waiting their turn — so it waits for them.
+    const blast = () => {
+      if (!offerable || !offerBlastChoice({
+        io, campaignId: d.campaignId, label: castLabel,
+        throwerName: actor.name, throwerHex: { q: src.q, r: src.r },
+        aoe, originHex, aimHex: p.aimHex, map,
+        damageExpr: blastDamage, resume: detonate,
+      })) {
+        detonate({});
+      }
+    };
+    if (queuedMs > 0) setTimeout(blast, queuedMs); else blast();
   }, 'CAST_AOE'));
 
   // Activate a psychic power that has no target (utility/self powers, e.g.

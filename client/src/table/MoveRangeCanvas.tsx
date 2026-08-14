@@ -41,7 +41,9 @@ export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
     if (!live || !budget || !token) return null;
     const left = Math.max(0, budget.pace + (budget.runBonus ?? 0) - budget.moved);
     if (left <= 0) return { hexes: [] as Hex[], left: 0 };
-    const from = { q: token.q, r: token.r };
+    // The hex the SERVER says it is on, not the one the client has optimistically
+    // slid it to: an unconfirmed step must not move the whole reach with it.
+    const from = budget.from;
     // A crawler is already down in the rough and pays the ordinary rate;
     // everyone else pays double for it.
     const rough = budget.crawling ? new Set<number>() : new Set(map.terrain);

@@ -1299,6 +1299,11 @@ export interface GmBenniesPayload { count: number }
  */
 export interface MoveBudgetPayload {
   tokenId: string;
+  /** Where the token stood when this was measured. The client predicts moves
+   *  optimistically, so drawing the reach around the PREDICTED hex slid the
+   *  whole area a step ahead and then snapped it back when the real budget
+   *  arrived. Anchored here, it simply waits and redraws once. */
+  from: { q: number; r: number };
   /** The turn's allowance in inches, already adjusted for standing/crawling. */
   pace: number;
   /** Inches spent so far this turn. */

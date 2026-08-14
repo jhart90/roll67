@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, ChatMessage, DieRoll, MemberInfo, SheetCard, TokenView } from 'shared';
-import { CONDITION_COLORS, CONDITION_LABELS, contentForSystem, num, swadeSnakeEyes } from 'shared';
+import { CONDITION_COLORS, CONDITION_LABELS, contentForSystem, num, swadeSnakeEyes, type DiceLook } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { playerColorFor } from '../util/playerColor';
 import { DIE_COLORS, DieShape } from '../table/DiceShapes';
@@ -202,8 +202,11 @@ function ExprWithWhy({ r, text }: { r: NonNullable<ChatMessage['roll']>; text?: 
   );
 }
 
-function DiceEquation({ r, why, fromUserId }: {
+function DiceEquation({ r, why, fromUserId, look }: {
   r: NonNullable<ChatMessage['roll']>; why?: string; fromUserId?: string | null;
+  /** The character's own dice, if they have any — the same overrides the
+   *  animation used, so the card matches the dice the table just watched. */
+  look?: DiceLook | null;
 }) {
   const counted = r.dice.filter((d) => d.kept);
   const system = useGameStore((s) => s.campaign?.system);
@@ -220,11 +223,18 @@ function DiceEquation({ r, why, fromUserId }: {
   // Paint each die the same color it wore on the table: SWADE tells trait /
   // Wild Die / raise apart by hue from the roller's palette; other systems
   // use the roller's single custom color or the by-size default.
+  // Same precedence the overlay uses: the character's own, then the roller's,
+  // then the default — or the card would show one die and the felt another.
   const dieFill = (d: DieRoll): string => (system === 'swade'
     ? (d.raise ? member?.diceRaiseColor ?? DICE_ROLE_DEFAULTS.raise
-      : d.wild ? member?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild
-        : member?.diceTraitColor ?? DICE_ROLE_DEFAULTS.trait)
+      : d.wild ? look?.wild ?? member?.diceWildColor ?? DICE_ROLE_DEFAULTS.wild
+        : look?.trait ?? member?.diceTraitColor ?? DICE_ROLE_DEFAULTS.trait)
     : member?.diceColor ?? DIE_COLORS[d.sides] ?? '#9aa1b3');
+  /** …and the pips on it. Undefined means "whatever reads on that face". */
+  const dieInk = (d: DieRoll): string | undefined => (system === 'swade'
+    ? (d.raise ? '#ffffff'
+      : (d.wild ? look?.wildText : look?.traitText) ?? member?.diceTextColor ?? undefined)
+    : member?.diceTextColor ?? undefined);
   const dieTitle = (d: DieRoll): string => [
     `d${d.sides}: ${d.value}`,
     ...(d.raise ? ['Raise bonus die — earned by beating the target number by 4+'] : []),
@@ -241,7 +251,7 @@ function DiceEquation({ r, why, fromUserId }: {
             size={30}
             value={d.value}
             fill={dieFill(d)}
-            textFill={system !== 'swade' ? member?.diceTextColor ?? undefined : undefined}
+            textFill={dieInk(d)}
           />
         </span>
       ))}
@@ -284,7 +294,7 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
           it is the answer to the faces you can see, so it should sit level
           with them. The equation wraps to keep clear of it. */}
       <div className="roll-eq-row">
-        <DiceEquation r={r} why={msg.text} fromUserId={msg.fromUserId} />
+        <DiceEquation r={r} why={msg.text} fromUserId={msg.fromUserId} look={msg.callout?.look ?? null} />
         <span className="roll-total">{r.total}</span>
       </div>
       <div className="roll-detail">

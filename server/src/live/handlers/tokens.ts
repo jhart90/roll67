@@ -92,6 +92,7 @@ export function emitMoveBudget(io: Server, campaignId: string, tokenId: string):
   const rec = swadeTurnMoves.get(campaignId)?.get(tokenId);
   const payload = {
     tokenId,
+    from: { q: token.q, r: token.r },
     pace: crawling ? CRAWL_PACE : Math.max(1, swadePace(ch.sheet) - (prone ? 2 : 0)),
     moved: rec?.moved ?? 0,
     runBonus: rec?.runBonus ?? null,
@@ -380,7 +381,26 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     // SWADE combat movement: Pace is a real per-turn budget (1 hex = 1").
     // Standing from Prone costs 2" first; pushing past Pace automatically
     // rolls the d6 running die, once per turn.
-    if (d.role !== 'dm' && character?.system === 'swade') {
+    // Pace is the character's, not the mover's: a DM moving the NPC whose turn
+    // it is spends that NPC's legs the same way a player spends their own, or
+    // the reach drawn on the map is a promise nobody is keeping. The DM keeps
+    // their free hand for everything else — repositioning a token that is not
+    // up, or one that is not in the fight at all, is refereeing rather than
+    // moving, and it is the one way to undo a mistake mid-round.
+    const init = initiative.get(d.campaignId);
+    const upNow = init.entries[init.turnIdx]?.tokenId;
+    // A fight is turns. A token in the order waits for its own — the client
+    // refuses this before it sends anything, and this is the rule behind it.
+    // The DM is exempt: moving a token that is not up is refereeing, and the
+    // only way to undo a mistake mid-round.
+    if (d.role !== 'dm' && init.active && upNow !== tokenId
+      && init.entries.some((e) => e.tokenId === tokenId)) {
+      socket.emit(S2C.TOKEN_UPSERTED, { token });
+      emitError(socket, `It is not ${token.name}'s turn.`);
+      return;
+    }
+    const spendsPace = d.role !== 'dm' || upNow === tokenId;
+    if (spendsPace && character?.system === 'swade') {
       const prone = conditionsOf(character.sheet).includes('prone');
       const combat = initiative.get(d.campaignId).active;
       // Prone is a choice, not a state to be dragged out of. A character on

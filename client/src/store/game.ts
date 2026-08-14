@@ -1678,6 +1678,38 @@ export function sightGeometry(): { walls: Wall[]; doors: Door[] } | null {
   };
 }
 
+/**
+ * Why this token cannot move right now, or null when it can.
+ *
+ * A fight is turns: a token in the initiative order waits for its own, and
+ * when its turn comes it has Pace and no more. The server has always refused
+ * both, but it refused them AFTER the client had optimistically taken the
+ * step — so an illegal move looked like a move that then snapped back. This
+ * is the same two rules, asked before anything is sent.
+ *
+ * The DM is exempt. Moving a token that is not up, or not in the fight at
+ * all, is refereeing rather than moving — and it is the only way to undo a
+ * mistake mid-round.
+ */
+function combatMoveBlocked(tokenId: string): string | null {
+  const s = useGameStore.getState();
+  if (s.isDm() && !s.viewingAs) return null;
+  const init = s.initiativeState;
+  if (!init.active) return null;
+  const entry = init.entries.find((e) => e.tokenId === tokenId);
+  if (!entry) return null;   // not in this fight: nothing to wait for
+  if (init.entries[init.turnIdx]?.tokenId !== tokenId) {
+    return `It is not ${s.tokens[tokenId]?.name ?? 'their'}'s turn.`;
+  }
+  const b = s.moveBudget;
+  // Out of Pace with the running die already spent: there is nothing left to
+  // ask for. With the die unspent the server offers the run, so let it.
+  if (b && b.tokenId === tokenId && b.runBonus !== null && b.moved >= b.pace + b.runBonus) {
+    return `${s.tokens[tokenId]?.name ?? 'They'} have used all their movement this turn.`;
+  }
+  return null;
+}
+
 export function clampToKnownWalls(tokenId: string, to: Hex, drag = false): Hex | null {
   const s = useGameStore.getState();
   const from = s.tokens[tokenId];
@@ -1794,6 +1826,8 @@ export const intents = {
   /** `drag` marks a deliberate drag-and-drop; keyboard steps leave it off so
    *  they always collide with walls. */
   moveToken: (tokenId: string, q: number, r: number, drag = false) => {
+    const blocked = combatMoveBlocked(tokenId);
+    if (blocked) { useGameStore.getState().toast(blocked); return; }
     // Stop at the first wall we already know about, before anything is sent.
     // The server enforces this too — it has the whole map and we only have the
     // parts we've explored — but doing it here is what removes the twitch:

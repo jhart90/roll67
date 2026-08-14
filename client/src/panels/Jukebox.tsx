@@ -106,11 +106,20 @@ export function Jukebox({ onClose }: { onClose: () => void }) {
               title={state.shuffle ? 'Shuffle on — next track is picked at random' : 'Shuffle off — tracks play in order'}
               onClick={() => intents.audioControl({ action: state.playing ? 'play' : 'pause', shuffle: !state.shuffle })}
             >🔀</button>
+            {/* Three states, one button, in the order every music player
+                uses: off → the whole playlist → this one track → off. */}
             <button
               className={`jb-toggle ${state.loop ? 'on' : ''}`}
-              title={state.loop ? 'Loop on — the playlist starts over at the end' : 'Loop off — playback stops at the end of the playlist'}
-              onClick={() => intents.audioControl({ action: state.playing ? 'play' : 'pause', loop: !state.loop })}
-            >🔁</button>
+              title={!state.loop ? 'Loop off — playback stops at the end of the playlist'
+                : state.loopOne ? 'Repeat this track — it plays until you say otherwise'
+                  : 'Loop the playlist — it starts over at the end'}
+              onClick={() => intents.audioControl({
+                action: state.playing ? 'play' : 'pause',
+                // off → playlist → track → off
+                loop: !state.loop || !state.loopOne,
+                loopOne: state.loop && !state.loopOne,
+              })}
+            >{state.loop && state.loopOne ? '🔂' : '🔁'}</button>
             <button onClick={() => intents.audioControl({ action: 'stop' })}>■ stop all</button>
           </div>
 

@@ -52,7 +52,9 @@ export function KeyringMenu() {
   return (
     <div className="keyring-menu">
       <button className={`keyring-chip ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} title={isDm ? 'Key Manager' : 'Your keyring'}>
-        🔑{isDm ? ' DM' : ` ${total}`}
+        {/* A player counts their keys; the DM holds every key there is, and
+            "DM" on a key was a label saying who was looking at it. */}
+        🔑{isDm ? '' : ` ${total}`}
       </button>
       {open && (isDm
         ? <KeyManager onClose={() => setOpen(false)} currentMapId={currentMapId} />

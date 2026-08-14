@@ -740,6 +740,9 @@ export interface AudioState {
   playing: boolean;
   /** Wrap to the top of the playlist at the end instead of falling silent. */
   loop: boolean;
+  /** …or don't move on at all: repeat the track that is playing. Set only
+   *  alongside `loop`, so the button reads off → playlist → track → off. */
+  loopOne?: boolean;
   /** Pick the next track at random rather than in order. */
   shuffle: boolean;
   /** Which playlist is being played through. */

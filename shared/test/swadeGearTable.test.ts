@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEntry, contentForSystem, shopItemFromEntry } from '../src/data/compendium.js';
-import { swade } from '../src/systems/swade.js';
+import { swade, swadeWeightCarried } from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
 import type { Character, SheetData } from '../src/types.js';
 
@@ -226,7 +226,17 @@ describe('SWADE gear tables', () => {
     const entry = byName.get(name);
     expect(entry, `no swade entry named ${name}`).toBeDefined();
     expect(entry!.gear?.cost).toBe(cost);
-    expect(entry!.gear?.weight).toBe(weight);
+    // Ammunition is priced by the box and weighed by the round — the pinned
+    // figure is the book's, which is the BOX, so it is the box that has to
+    // add back up. Everything else weighs one of itself.
+    if (entry!.category === 'Ammunition') {
+      // The per-round figure is rounded for a legible sheet, so the box adds
+      // back up to within a rounding error rather than exactly.
+      const box = (entry!.gear?.weight ?? 0) * (entry!.gear?.qty ?? 1);
+      expect(box).toBeCloseTo(weight, 1);
+    } else {
+      expect(entry!.gear?.weight).toBe(weight);
+    }
   });
 
   it.each(DEFENCE_TABLE)('%s is a weapon costing %i and weighing %s', (name, cost, weight) => {
@@ -566,5 +576,35 @@ describe('SWADE gear tables', () => {
       seen.set(key, (seen.get(key) ?? 0) + 1);
     }
     expect([...seen].filter(([, n]) => n > 1)).toEqual([]);
+  });
+});
+
+describe('ammunition weighs by the round, not by the box', () => {
+  const ammo = contentForSystem('swade').filter((e) => e.category === 'Ammunition');
+
+  it('has ammunition to weigh at all', () => {
+    expect(ammo.length).toBeGreaterThan(8);
+  });
+
+  it('carries a per-round weight that adds back up to the box', () => {
+    // The table prints "2 lbs / 50 rounds". The row holds 50 rounds at 0.04
+    // each, because everything downstream multiplies weight by quantity.
+    const medium = ammo.find((e) => e.name === 'Bullets, Medium (50)')!;
+    expect(medium.gear?.qty).toBe(50);
+    expect(medium.gear?.weight).toBeCloseTo(0.04, 5);
+    expect((medium.gear!.weight ?? 0) * medium.gear!.qty!).toBeCloseTo(2, 5);
+  });
+
+  it('is why 40 rounds weigh under two pounds and not eighty', () => {
+    const medium = ammo.find((e) => e.name === 'Bullets, Medium (50)')!;
+    const sheet: SheetData = {
+      strength: 'd6',
+      inventory: [{ name: medium.name, qty: 40, weight: medium.gear!.weight }],
+    };
+    expect(swadeWeightCarried(sheet)).toBeCloseTo(1.6, 5);
+  });
+
+  it('never weighs a round as nothing at all, however light the box', () => {
+    for (const e of ammo) expect(e.gear?.weight, e.name).toBeGreaterThan(0);
   });
 });

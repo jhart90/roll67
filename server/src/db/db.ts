@@ -4,6 +4,15 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { DB_PATH, ensureDataDirs } from '../config.js';
+import { contentForSystem } from 'shared';
+
+/** Every ammunition entry by name: what a round weighs now, and what the box
+ *  it came in used to be written as. Built once, read by the repair below. */
+const AMMO_BY_NAME = new Map(
+  contentForSystem('swade')
+    .filter((e) => e.category === 'Ammunition' && e.gear?.weight && e.gear.qty)
+    .map((e) => [e.name, { perUnit: e.gear!.weight!, box: e.gear!.weight! * e.gear!.qty! }]),
+);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -523,6 +532,49 @@ for (const row of db.prepare(`SELECT id, grid_json FROM maps`).all() as Array<{ 
     }
   } catch { /* malformed json handled by normalizeGrid at read time */ }
 }
+
+/**
+ * Ammunition already on a sheet, weighed by the box.
+ *
+ * The gear table prints "2 lbs / 50 rounds" and the compendium used to hand
+ * that straight to the row — where weight means "one of these" and is
+ * multiplied by how many are held. Forty rounds weighed eighty pounds. The
+ * compendium now divides (see contentSwade), but rows written before it did
+ * are still carrying a box each, so they are corrected here.
+ *
+ * Precise on purpose: only a row that still holds EXACTLY the old box weight
+ * is touched. A weight somebody has since typed themselves is theirs.
+ */
+function repairAmmoRowWeights(): void {
+  const rows = db.prepare("SELECT id, sheet_json FROM characters WHERE system = 'swade'").all() as
+    Array<{ id: string; sheet_json: string }>;
+  let fixed = 0;
+  for (const row of rows) {
+    let sheet: Record<string, unknown>;
+    try { sheet = JSON.parse(row.sheet_json) as Record<string, unknown>; } catch { continue; }
+    const inv = sheet.inventory;
+    if (!Array.isArray(inv)) continue;
+    let touched = false;
+    for (const item of inv as Array<Record<string, unknown>>) {
+      if (!item || typeof item.name !== 'string' || !item.caliber) continue;
+      const entry = AMMO_BY_NAME.get(item.name);
+      if (!entry) continue;
+      const weight = Number(item.weight);
+      // A hundredth of a pound of slack: the per-round figure is rounded for
+      // a legible sheet, so the box it multiplies back up to is close rather
+      // than identical to the number the table printed.
+      if (!Number.isFinite(weight) || Math.abs(weight - entry.box) > 0.01) continue;
+      item.weight = entry.perUnit;
+      touched = true;
+      fixed++;
+    }
+    if (touched) {
+      db.prepare('UPDATE characters SET sheet_json = ? WHERE id = ?').run(JSON.stringify(sheet), row.id);
+    }
+  }
+  if (fixed > 0) console.log(`Repaired ${fixed} ammunition row(s) weighed by the box instead of the round`);
+}
+try { repairAmmoRowWeights(); } catch (e) { console.error('ammo weight repair skipped', e); }
 
 // Enable FK enforcement now that all migrations and repairs are complete.
 db.pragma('foreign_keys = ON');

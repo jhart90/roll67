@@ -150,11 +150,12 @@ export function registerLibraryHandlers(io: Server, socket: Socket): void {
     broadcastAudio(io, d.campaignId);
   }, 'REMOVE_AUDIO'));
 
-  socket.on(C2S.AUDIO_CONTROL, safe(socket, ({ trackId, action, loop, shuffle, playlist, volume }: AudioControlPayload) => {
+  socket.on(C2S.AUDIO_CONTROL, safe(socket, ({ trackId, action, loop, loopOne, shuffle, playlist, volume }: AudioControlPayload) => {
     const d = requireDm(socket);
     const cur = getAudioState(d.campaignId);
     const next: AudioState = { ...cur };
     if (loop !== undefined) next.loop = loop;
+    if (loopOne !== undefined) next.loopOne = loopOne;
     if (shuffle !== undefined) next.shuffle = shuffle;
     if (playlist !== undefined) next.playlist = Math.max(0, Math.min(PLAYLIST_COUNT - 1, Math.floor(playlist)));
     if (volume !== undefined) next.volume = Math.max(0, Math.min(1, volume));

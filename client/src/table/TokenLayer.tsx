@@ -471,6 +471,7 @@ export function TokenLayer() {
   const dragGhosts = useGameStore((s) => s.dragGhosts);
   const targeting = useGameStore((s) => s.targeting);
   const aoeTargeting = useGameStore((s) => s.aoeTargeting);
+  const selectedIds = useGameStore((s) => s.selectedTokenIds);
   const { width, height } = mapPixelSize(map);
 
   // In targeting mode, resolve which tokens are valid targets (in range, and
@@ -543,9 +544,15 @@ export function TokenLayer() {
       viewBox={`0 0 ${width} ${height}`}
       style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}
     >
-      {Object.values(tokens).map((t) => (
-        <TokenPiece key={t.id} token={t} targetState={stateFor(t)} />
-      ))}
+      {/* Whatever is selected is drawn LAST, which in SVG is on top. Tokens
+          overlap constantly — a mount and its rider share a hex by design —
+          and a piece you have deliberately clicked is the one whose condition
+          badges you are trying to read. */}
+      {Object.values(tokens)
+        .sort((a, b) => Number(selectedIds.includes(a.id)) - Number(selectedIds.includes(b.id)))
+        .map((t) => (
+          <TokenPiece key={t.id} token={t} targetState={stateFor(t)} />
+        ))}
       {Object.entries(dragGhosts).map(([id, p]) => (
         <DragGhost key={id} tokenId={id} x={p.x} y={p.y} />
       ))}

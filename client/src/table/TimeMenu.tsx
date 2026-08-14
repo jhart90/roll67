@@ -33,8 +33,14 @@ export function TimeMenu() {
 
   return (
     <div className="time-menu">
-      <button className={`time-chip ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} title="Advance the in-world clock">
-        ⏱ {clockLabel(seconds)}
+      {/* The chip is a clock, not a readout: the date and time are the first
+          thing inside the panel, where somebody who wants them has asked. */}
+      <button
+        className={`time-chip ${open ? 'open' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+        title={`Advance the in-world clock — ${clockLabel(seconds)}`}
+      >
+        ⏱
       </button>
       {open && (
         <div className="time-panel">

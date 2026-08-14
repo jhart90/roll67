@@ -831,7 +831,12 @@ export const CONTENT_SWADE: ContentEntry[] = [
     id: contentSlug('swade', 'gear', name),
     system: 'swade', kind: 'gear', name, category: 'Ammunition', order: i,
     subtitle: `${subtitle} · caliber: ${caliber}`,
-    gear: { qty, caliber, cost, weight },
+    // The table weighs ammunition by the BOX — "1 lbs/50" — but a sheet row
+    // weighs one of a thing and multiplies by how many are held. Handing the
+    // box weight straight over made 40 rounds weigh 80 pounds, so the round
+    // is weighed here, once, where the batch size is still in scope. Cost
+    // stays per box, which is how it is bought.
+    gear: { qty, caliber, cost, weight: Math.round((weight / qty) * 10_000) / 10_000 },
   })),
   ...EDGES.map(([name, category, requires, effect, mods], i): ContentEntry => ({
     id: contentSlug('swade', 'edge', name),

@@ -706,10 +706,12 @@ function applySwadeDamage(
     // An Extra that drops is out of the fight: empty its bar so the token
     // reads as down. A Wild Card keeps its pool — Soak may yet stand it up.
     if (!wildCard) cur = persistSheet(io, campaignId, cur, { hp: 0 });
+    // One card, like every other change of state — and no skull: a skull is
+    // death, and being Incapacitated is being out of the fight. Plenty of
+    // people get up again.
     const withWhat = sourceLabel ? ` with ${sourceLabel}` : '';
-    postStatusLine(io, campaignId, attackerName
-      ? `💀 ${attackerName} incapacitates ${cur.name}${withWhat}!`
-      : `💀 ${cur.name} is Incapacitated${withWhat}!`);
+    postStateCard(io, campaignId, cur.name, ['incapacitated'], [],
+      attackerName ? `${attackerName}${withWhat}` : (sourceLabel ?? null));
     recordIncapacitation(io, campaignId, attackerName, cur);
   }
 

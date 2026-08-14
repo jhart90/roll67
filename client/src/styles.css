@@ -2603,13 +2603,18 @@ th > .term { border-bottom-style: dotted; }
   100% { opacity: 1; transform: scale(1); }
 }
 
+/* Label · swatches · custom picker, and the row never breaks: only the
+   swatches inside it are allowed to fold. */
 .dice-color-row {
   display: flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
   margin-top: 8px;
 }
+/* Fixed so both rows' swatches start at the same x. */
+.dice-color-label { flex: none; width: 58px; font-size: 11px; color: var(--text-dim); }
+.dice-swatches { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 auto; min-width: 0; }
 /* Bounce share: sits in the same row rhythm as the color pickers. */
 .dice-bounce-slider { flex: 1 1 90px; min-width: 80px; margin: 0; padding: 0; accent-color: var(--accent); }
 .dice-bounce-val { font-size: 11px; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
@@ -3075,9 +3080,12 @@ th > .term { border-bottom-style: dotted; }
 /* The chip is the anchor and never moves; its panel floats ABOVE it.
    In the flex flow the panel used to push the column upward and, being far
    wider than the chip, spread sideways across the neighbouring chip. */
+/* The three GM chips sit in a row along the bottom right, evenly pitched and
+   all the same size — a clock, a key and a coin, which is what the eye picks
+   them out by. 76px of pitch = 68px chip + 8px gap. */
 .benny-menu { position: fixed; right: 314px; bottom: 16px; z-index: 69; }
 .benny-chip {
-  width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
+  width: 68px; padding: 6px 0; text-align: center; border-radius: 999px; font-weight: 700;
   background: var(--panel); border: 2px solid #d9a520; color: var(--text);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: pointer;
 }
@@ -3098,12 +3106,12 @@ th > .term { border-bottom-style: dotted; }
 .benny-session { margin-bottom: 6px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 
 /* Keyring / Key Manager — same clothes as the Benny chip, one shelf left. */
-.keyring-menu { position: fixed; right: 404px; bottom: 16px; z-index: 69; }
+.keyring-menu { position: fixed; right: 390px; bottom: 16px; z-index: 69; }
 /* The GM's clock, one shelf left of the keyring. Same chip, its own color —
    time is the DM's lever, not a player's. */
-.time-menu { position: fixed; right: 520px; bottom: 16px; z-index: 69; }
+.time-menu { position: fixed; right: 466px; bottom: 16px; z-index: 69; }
 .time-chip {
-  width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
+  width: 68px; padding: 6px 0; text-align: center; border-radius: 999px; font-weight: 700;
   background: var(--panel); border: 2px solid #9b8ad0; color: var(--text);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: pointer;
 }
@@ -3117,7 +3125,7 @@ th > .term { border-bottom-style: dotted; }
 .time-panel button { width: 100%; text-align: left; }
 .time-panel button:disabled { opacity: 0.45; cursor: not-allowed; }
 .keyring-chip {
-  width: auto; padding: 6px 12px; border-radius: 999px; font-weight: 700;
+  width: 68px; padding: 6px 0; text-align: center; border-radius: 999px; font-weight: 700;
   background: var(--panel); border: 2px solid #7fa8d9; color: var(--text);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: pointer;
 }

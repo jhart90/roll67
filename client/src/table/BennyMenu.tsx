@@ -18,6 +18,7 @@ export function BennyMenu() {
   const characters = useGameStore((s) => s.characters);
   const soakOffer = useGameStore((s) => s.soakOffer);
   const bennyState = useGameStore((s) => s.bennyState);
+  const gmBennies = useGameStore((s) => s.gmBennies);
   const init = useGameStore((s) => s.initiativeState);
   // Shared with the keyring chip beside it: only one panel at a time.
   const open = useGameStore((s) => s.openChip === 'benny');
@@ -43,8 +44,11 @@ export function BennyMenu() {
     if (wildCards.length === 0) return null;
     return (
       <div className="benny-menu">
-        <button className={`benny-chip ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} title="Award Bennies">
-          🪙 DM
+        {/* The DM's chip counts the GM's OWN pool, the one villains' Jokers
+            pay into — the same thing a player's chip counts for them. "DM"
+            was a label saying who was looking at it. */}
+        <button className={`benny-chip ${open ? 'open' : ''}`} onClick={() => setOpen((o) => !o)} title="Award Bennies · the GM's own pool">
+          🪙 {gmBennies}
         </button>
         {open && (
           <div className="benny-panel">

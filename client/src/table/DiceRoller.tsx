@@ -107,16 +107,21 @@ export function SwadeDicePalettePicker() {
         const current = currentOf(role);
         return (
           <div className="dice-color-row" key={role}>
-            <span className="dim" style={{ fontSize: 11 }} title={hint}>{label} dice:</span>
-            {DICE_PALETTE.map((c) => (
-              <button
-                key={c}
-                className={`dice-color-swatch ${current === c ? 'active' : ''}`}
-                style={{ background: c }}
-                title={c}
-                onClick={() => intents.setDiceRoleColor(role, c)}
-              />
-            ))}
+            <span className="dice-color-label" title={hint}>{label} dice:</span>
+            {/* The swatches wrap INSIDE their own box, so a row that runs out
+                of width folds its circles rather than pushing the custom
+                picker onto a line of its own. */}
+            <span className="dice-swatches">
+              {DICE_PALETTE.map((c) => (
+                <button
+                  key={c}
+                  className={`dice-color-swatch ${current === c ? 'active' : ''}`}
+                  style={{ background: c }}
+                  title={c}
+                  onClick={() => intents.setDiceRoleColor(role, c)}
+                />
+              ))}
+            </span>
             <input
               type="color"
               className="dice-color-custom"

@@ -656,6 +656,9 @@ export interface AudioControlPayload {
   trackId?: string;
   action: 'play' | 'stop' | 'pause';
   loop?: boolean;
+  /** Repeat the CURRENT track instead of the playlist. Only meaningful
+   *  alongside loop; the two together are the 'repeat one' state. */
+  loopOne?: boolean;
   shuffle?: boolean;
   /** Which playlist is being played through. */
   playlist?: number;
@@ -840,6 +843,8 @@ export const S2C = {
   BLAST_OFFER_CLOSED: 'blastOfferClosed',
   /** SWADE: which Benny reroll options are currently live for your character. */
   BENNY_STATE: 'bennyState',
+  /** SWADE: how many Bennies are in the GM's own pool (DM only). */
+  GM_BENNIES: 'gmBennies',
   /** SWADE: your character is Bleeding Out and owes a Vigor roll. */
   BLEED_PROMPT: 'bleedPrompt',
   /** SWADE: your Shaken character may roll Spirit to recover. */
@@ -906,6 +911,8 @@ export interface CampaignStatePayload {
   initiative: InitiativeState;
   /** In-world elapsed seconds, so the GM's clock reads right on join. */
   clockSeconds: number;
+  /** SWADE: Bennies in the GM's own pool. */
+  gmBennies?: number;
   chatTail: ChatMessage[];
   /** Loot/chest/shop markers across ALL maps (so the world tree can nest
    *  them under every map, not just the one being viewed). */
@@ -1278,6 +1285,8 @@ export interface VehicleOocPromptPayload { characterId: string; name: string }
 /** DM-only: these machines are damaged and the clock has moved far enough to
  *  do something about it. `hours` is the downtime that just passed. */
 export interface RepairPromptPayload { names: string[]; hours: number }
+/** The GM's own Benny pool — villains' Jokers pay into it. DM-only. */
+export interface GmBenniesPayload { count: number }
 export interface RepairRollPayload { roll: boolean }
 export interface VehicleOocRollPayload { characterId: string; roll: boolean }
 

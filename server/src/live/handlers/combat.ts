@@ -1141,6 +1141,7 @@ function jokersWild(
     persistSheet(io, campaignId, ch, { bennies: num(ch.sheet, 'bennies', 0) + 1 });
   }
   const pool = drawnByPlayerSide ? null : campaigns.setGmBennies(campaignId, campaigns.gmBennies(campaignId) + 1);
+  if (pool !== null) io.to(dmRoom(campaignId)).emit(S2C.GM_BENNIES, { count: pool });
 
   // One card, everything a Joker means. It is the best thing that can happen
   // to a combatant in SWADE and it changes four separate things at once — a
@@ -4143,6 +4144,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       persistSheet(io, d.campaignId, ch, { bennies: 2, fatigue: 0 });
     }
     const pool = campaigns.setGmBennies(d.campaignId, heroes.length);
+    io.to(dmRoom(d.campaignId)).emit(S2C.GM_BENNIES, { count: pool });
     postStatusLine(io, d.campaignId,
       `🪙 A new session begins. ${heroes.length} hero${heroes.length === 1 ? '' : 'es'} draw a fresh hand of Bennies;`
       + ` the GM's pool holds ${pool}.`);

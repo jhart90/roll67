@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type DiceLook, type GmBenniesPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -322,6 +322,8 @@ interface GameState {
   rollStatsData: Record<string, RollStatsPayload>;
   /** SWADE: per-character flags for which Benny rerolls are currently live. */
   bennyState: Record<string, BennyStatePayload>;
+  /** SWADE: how many Bennies sit in the GM's own pool (DM only). */
+  gmBennies: number;
   /** In-progress combat action awaiting a target selection. */
   targeting: { characterId: string; sourceTokenId: string; action: CombatAction; adv: 'adv' | 'dis' | null; rof?: number; calledShot?: CalledShotAim | typeof CALLED_SHOT_PENDING | null } | null;
   /** In-progress AoE spell awaiting the caster to aim + lock in a shape. */
@@ -558,6 +560,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   soakOffer: null,
   blastOffer: null,
   bennyState: {},
+  gmBennies: 0,
   bleedPrompt: null,
   shakenPrompt: null,
   stunPrompt: null,
@@ -982,6 +985,7 @@ export function wireSocket(): void {
       macroList: p.macros,
       initiativeState: p.initiative,
       clockSeconds: p.clockSeconds ?? 0,
+      gmBennies: p.gmBennies ?? 0,
       chatLog: p.chatTail,
       mapObjects: mapObjectsById(p.mapObjects ?? []),
     });
@@ -1433,6 +1437,10 @@ export function wireSocket(): void {
     useGameStore.setState((s) => ({
       rollStatsData: { ...s.rollStatsData, [p.characterId ?? 'account']: p },
     }));
+  });
+
+  socket.on(S2C.GM_BENNIES, (p: GmBenniesPayload) => {
+    useGameStore.setState({ gmBennies: p.count });
   });
 
   socket.on(S2C.BENNY_STATE, (p: BennyStatePayload) => {
@@ -2069,7 +2077,7 @@ export const intents = {
   playSfx: (slotIndex: number) => socket.emit(C2S.PLAY_SFX, { slotIndex }),
   addAudio: (assetId: string, title: string, playlist?: number) => socket.emit(C2S.ADD_AUDIO, { assetId, title, playlist }),
   removeAudio: (trackId: string) => socket.emit(C2S.REMOVE_AUDIO, { trackId }),
-  audioControl: (p: { trackId?: string; action: 'play' | 'stop' | 'pause'; loop?: boolean; shuffle?: boolean; playlist?: number; volume?: number }) =>
+  audioControl: (p: { trackId?: string; action: 'play' | 'stop' | 'pause'; loop?: boolean; loopOne?: boolean; shuffle?: boolean; playlist?: number; volume?: number }) =>
     socket.emit(C2S.AUDIO_CONTROL, p),
 
   createShop: (name: string) => socket.emit(C2S.CREATE_SHOP, { name }),

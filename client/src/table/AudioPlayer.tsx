@@ -27,6 +27,12 @@ export function AudioPlayer() {
     if (!isDm || !track) return;
     const list = tracks.filter((t) => (t.playlist ?? 0) === (track.playlist ?? 0));
     if (list.length === 0) return;
+    // Repeat-one wins over everything: it is the setting that says "do not
+    // move on", so neither shuffle nor the end of the playlist gets a say.
+    if (audioState.loop && audioState.loopOne) {
+      intents.audioControl({ trackId: track.id, action: 'play' });
+      return;
+    }
     const i = list.findIndex((t) => t.id === track.id);
     let next: typeof track | undefined;
     if (audioState.shuffle) {

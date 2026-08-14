@@ -715,8 +715,8 @@ button.link:hover { text-decoration: underline; }
    them, in whatever order suits. `top` is set inline; see useTopChrome. */
 .turn-coach {
   position: absolute; left: 50%; transform: translate(-50%, 0);
-  display: flex; align-items: stretch; gap: 6px;
-  max-width: min(720px, 94%);
+  display: flex; align-items: center; gap: 8px;
+  max-width: min(560px, 94%);
   padding: 6px 8px; border-radius: 12px;
   background: rgba(12, 14, 20, 0.9);
   border: 1px solid var(--border);
@@ -732,15 +732,22 @@ button.link:hover { text-decoration: underline; }
 }
 .tc-gate.clear { background: #2f3646; color: #9aa4b8; }
 .tc-gate.urgent { background: #f2cf4a; color: #241f00; }
-.tc-band { display: flex; align-items: stretch; gap: 4px; flex: 1 1 auto; min-width: 0; }
+/* Stacked, not strung out: these are spent in any order and as often as the
+   turn allows, so they share ONE position in the row rather than queueing.
+   The brace down the left edge is what says "all of this, together". */
+.tc-band {
+  display: flex; flex-direction: column; gap: 3px;
+  flex: 1 1 auto; min-width: 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
 .tc-lane {
-  flex: 1 1 0; min-width: 0;
-  display: flex; flex-direction: column; justify-content: center; gap: 1px;
-  padding: 4px 10px; border-radius: 7px; text-align: center; cursor: help;
+  display: flex; align-items: baseline; gap: 7px;
+  padding: 3px 9px; border-radius: 6px; cursor: help;
   border: 1px solid transparent;
 }
 .tc-lane-label { font-size: 12px; font-weight: 700; white-space: nowrap; }
-.tc-lane-sub { font-size: 10px; opacity: 0.85; white-space: nowrap; }
+.tc-lane-sub { font-size: 10px; opacity: 0.8; white-space: nowrap; margin-left: auto; }
 /* Open = still yours to spend. Spent = you have used it. Blocked = something
    is in the way. Urgent = the table is waiting on you. */
 .tc-lane.tc-open { background: var(--panel-2); color: var(--text); border-color: var(--border); }

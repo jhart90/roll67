@@ -33,6 +33,7 @@ export function TurnCoach() {
   const viewingAs = useGameStore((s) => s.viewingAs);
   const bennyState = useGameStore((s) => s.bennyState);
   const soakOffer = useGameStore((s) => s.soakOffer);
+  const map = useGameStore((s) => s.map);
   const top = useTopChrome();
 
   const entry = init.entries[init.turnIdx];
@@ -53,26 +54,40 @@ export function TurnCoach() {
   const budget = entry?.tokenId ? budgets[entry.tokenId] : undefined;
   if (!you || system !== 'swade' || !init.active || !entry || !mine || !budget || !wants) return null;
 
+  // Pace is inches on a tabletop and hexes here, but the table talks in feet
+  // — the range on every weapon is in feet, so the two numbers a player is
+  // holding at once should be in the same unit.
+  const feetPerHex = map && map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
   const moveLeft = Math.max(0, budget.pace + (budget.runBonus ?? 0) - budget.moved);
+  const ft = (hexes: number) => `${hexes * feetPerHex} ft`;
   const acted = budget.actions;
   const shaken = budget.shaken;
   const reroll = ch ? bennyState[ch.id] : undefined;
   const openBenny = !!soakOffer || !!reroll?.canRerollTrait || !!reroll?.canRerollDamage;
   const nextPenalty = acted >= 2 ? -4 : acted === 1 ? -2 : 0;
 
-  /** The band: everything a turn is made of spending, in any order. */
-  const lanes: Array<{ id: string; label: string; sub: string; state: LaneState; hint: string }> = [
+  /**
+   * The band: everything a turn is made of spending. Stacked rather than laid
+   * out left to right, because they are not a sequence — you may move, act,
+   * and move again, and a row would say otherwise.
+   *
+   * A lane's second line is for something worth knowing. "No penalty" is the
+   * ordinary state of the world and does not need announcing; how much the
+   * NEXT action will cost does.
+   */
+  const lanes: Array<{ id: string; label: string; sub?: string; state: LaneState; hint: string }> = [
     {
       id: 'move',
       label: 'Move',
-      sub: budget.moved > 0 ? `${moveLeft}″ left of ${budget.pace + (budget.runBonus ?? 0)}″` : `${moveLeft}″`,
+      sub: moveLeft > 0 ? ft(moveLeft) : 'all spent',
       state: moveLeft <= 0 ? 'spent' : 'open',
-      hint: 'Pace, spent in any order you like — before an action, between two, or after. Running adds a d6 and costs −2 on everything else this turn.',
+      hint: `${ft(moveLeft)} of Pace left, spent in any order you like — before an action, between two, or after. `
+        + 'Running adds a d6 of ground and costs −2 on everything else this turn.',
     },
     {
       id: 'act',
       label: acted === 0 ? 'Act' : `Act ×${acted}`,
-      sub: acted === 0 ? 'no penalty' : `next at ${nextPenalty}`,
+      ...(shaken ? { sub: 'blocked' } : acted > 0 ? { sub: `next at ${nextPenalty}` } : {}),
       state: shaken ? 'blocked' : acted > 0 ? 'spent' : 'open',
       hint: shaken
         ? 'Shaken: free actions and movement only until you shake it off.'
@@ -111,12 +126,14 @@ export function TurnCoach() {
         {shaken ? '⚡ Shake it off' : '✓ Clear'}
       </div>
 
-      {/* The band. Side by side, because that is how they are spent. */}
+      {/* The band. STACKED, because these are not a sequence: you may move,
+          act, and move again, and a row of them left to right would be saying
+          the opposite. A brace down the side ties them into one slot. */}
       <div className="tc-band">
         {lanes.map((l) => (
           <div key={l.id} className={`tc-lane tc-${l.state}`} title={l.hint}>
             <span className="tc-lane-label">{l.label}</span>
-            <span className="tc-lane-sub">{l.sub}</span>
+            {l.sub && <span className="tc-lane-sub">{l.sub}</span>}
           </div>
         ))}
       </div>

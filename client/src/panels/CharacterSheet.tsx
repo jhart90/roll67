@@ -687,30 +687,36 @@ function ListEditor({
                   {moveGrip(i)}
                 </div>
                 {groups.map((g) => (
-                  <div key={g.title ?? '·'}>
-                    {g.title && <div className="sc-divider sc-group">{g.title}</div>}
-                    <div className="sc-fields">
-                      {g.cols.map((col) => (
-                        <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
-                          <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
-                          {renderCell(col, row, i)}
-                        </label>
-                      ))}
+                  <div key={g.title ?? '·'} className="sc-group">
+                    {g.title && <div className="sc-group-title">{g.title}</div>}
+                    <div className="sc-group-box">
+                      <div className="sc-fields">
+                        {g.cols.map((col) => (
+                          <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
+                            <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
+                            {renderCell(col, row, i)}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ))}
                 {hasDetail && (
-                  <>
-                    <div className="sc-divider" title={RIDER_BTN_TITLE}>⚡ Rider effects (save / condition / AoE)</div>
-                    <div className="sc-fields">
-                      {section.columns.filter((col) => ATTACK_DETAIL_COLS.has(col.id)).map((col) => (
-                        <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
-                          <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
-                          {renderCell(col, row, i)}
-                        </label>
-                      ))}
+                  <div className="sc-group">
+                    <div className="sc-group-title rider" title={RIDER_BTN_TITLE}>
+                      ⚡ Rider effects (save / condition / AoE)
                     </div>
-                  </>
+                    <div className="sc-group-box rider">
+                      <div className="sc-fields">
+                        {section.columns.filter((col) => ATTACK_DETAIL_COLS.has(col.id)).map((col) => (
+                          <label key={col.id} className={`sc-field ${col.type === 'checkbox' ? 'sc-check' : ''}`}>
+                            <span className="sc-label"><SheetTerm system={system} label={col.label} /></span>
+                            {renderCell(col, row, i)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 )}
                 <div className="sheet-card-foot">
                   <button className="link danger" onClick={() => removeRow(i)}>delete</button>

@@ -24,7 +24,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -3914,8 +3914,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     const offer = takeSoakOffer(characterId);
     if (!offer) return;
     if (!spend) return; // declined — the wounds stand
-    const bennies = num(ch.sheet, 'bennies', 0);
-    if (bennies <= 0) return;
+    if (bennyPurse(d.campaignId, ch).total <= 0) return;
     // The new wounds do not penalise the roll to soak them: offset the wound
     // penalty by the wounds in this offer.
     const expr = traitExpr(ch.sheet, dieSides(String(ch.sheet.vigor ?? 'd4')), offer.wounds);
@@ -3925,7 +3924,7 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
     // announced now; the Vigor dice wait for the coin to land, so the two
     // animations take their turn instead of talking over each other.
     flipBenny(io, d.campaignId, ch.name, 'to Soak Wounds');
-    persistSheet(io, d.campaignId, ch, { bennies: bennies - 1 });
+    spendOneBenny(io, d.campaignId, ch);
     postStatusLine(io, d.campaignId, `🪙 ${ch.name} spends a Benny to Soak ${offer.wounds} Wound${offer.wounds === 1 ? '' : 's'}.`);
     setTimeout(() => soakAfterCoin(io, d, ch.id, offer.wounds, expr), BENNY_FLIP_MS);
   }, 'SOAK_ROLL'));
@@ -4160,17 +4159,21 @@ export function registerCombatHandlers(io: Server, socket: Socket): void {
       emitError(socket, 'That is not your character.');
       return;
     }
-    const bennies = num(ch.sheet, 'bennies', 0);
-    if (bennies <= 0) {
-      emitError(socket, `${ch.name} has no Bennies left.`);
+    // Their own hand, and — for the DM's own characters — the GM's pool
+    // behind it. See bennyPurse: an Extra has only the pool.
+    const purse = bennyPurse(d.campaignId, ch);
+    if (purse.total <= 0) {
+      emitError(socket, purse.pool === 0 && !ch.ownerUserId
+        ? `${ch.name} has nothing to spend, and the GM's pool is empty.`
+        : `${ch.name} has no Bennies left.`);
       return;
     }
     const spendBenny = (extra: Record<string, unknown> = {}): Character => {
       // Every use funnels through here, so this is the one place the coin has
       // to be flipped from — no way to spend a Benny without the table seeing it.
       flipBenny(io, d.campaignId, ch.name, BENNY_REASON[use] ?? 'to change their fate');
-      return persistSheet(io, d.campaignId, characters.byId(ch.id) ?? ch,
-        { bennies: num((characters.byId(ch.id) ?? ch).sheet, 'bennies', 0) - 1, ...extra });
+      return spendOneBenny(io, d.campaignId, characters.byId(ch.id) ?? ch, extra)
+        ?? (characters.byId(ch.id) ?? ch);
     };
     const postRoll = (text: string, breakdown: ReturnType<typeof roll>, ok: boolean, what = 'a Benny reroll') => {
       const msg = chat.add(d.campaignId, {

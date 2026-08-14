@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, vehicleWoundCap, WRECK_DAMAGE, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetCard, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, bennyPurse as swadeBennyPurse, type BennyPurse, vehicleWoundCap, WRECK_DAMAGE, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetCard, type SheetData } from 'shared';
 import { campaigns, characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -717,7 +717,9 @@ function applySwadeDamage(
 
   // Record the Soak while the wounds are fresh (any Wild Card with a Benny —
   // the DM soaks for their own Wild Cards through the incapacitation window).
-  const bennies = num(cur.sheet, 'bennies', 0);
+  // What this character can actually pay with — a DM's Wild Card falls back
+  // on the GM's pool, so a villain out of its own chips can still Soak.
+  const bennies = bennyPurse(campaignId, cur).total;
   const soakable = wildCard && out.woundsDealt > 0 && bennies > 0;
   if (soakable) pendingSoaks.set(cur.id, { wounds: out.woundsDealt, at: Date.now() });
 
@@ -760,11 +762,46 @@ function freshBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRol
   return rec && Date.now() - rec.at <= BENNY_REROLL_TTL_MS ? rec : null;
 }
 
+/** The purse rule (see shared/systems/swade), with the GM's pool looked up. */
+export function bennyPurse(campaignId: string, ch: Character): BennyPurse {
+  return swadeBennyPurse({
+    sheet: ch.sheet,
+    playerOwned: !!ch.ownerUserId,
+    gmPool: campaigns.gmBennies(campaignId),
+  });
+}
+
+/**
+ * Spend one, from whichever purse should pay, and say so when it was the
+ * pool. Returns the character as it now stands, or null when there was
+ * nothing to spend — callers check the purse first, so null is a race rather
+ * than an expected answer.
+ *
+ * `extra` is whatever the spend also does to the sheet (clearing Shaken, say)
+ * and is applied either way, so a Benny paid for out of the pool still has
+ * its effect.
+ */
+export function spendBenny(
+  io: Server, campaignId: string, ch: Character, extra: SheetData = {},
+): Character | null {
+  const fresh = characters.byId(ch.id) ?? ch;
+  const purse = bennyPurse(campaignId, fresh);
+  if (purse.total <= 0) return null;
+  if (purse.own > 0) return persistSheet(io, campaignId, fresh, { bennies: purse.own - 1, ...extra });
+  const left = campaigns.setGmBennies(campaignId, purse.pool - 1);
+  io.to(dmRoom(campaignId)).emit(S2C.GM_BENNIES, { count: left });
+  postStatusLine(io, campaignId,
+    `🪙 ${fresh.name} draws on the GM's pool — ${left} left in it.`);
+  return Object.keys(extra).length > 0 ? persistSheet(io, campaignId, fresh, extra) : fresh;
+}
+
 /** Tell the owner which Benny reroll buttons are currently live. */
-export function emitBennyState(io: Server, ch: Character): void {
-  if (!ch.ownerUserId) return;
+export function emitBennyState(io: Server, campaignId: string, ch: Character): void {
   const trait = freshBennyRoll(ch.id, 'trait');
-  io.to(userRoom(ch.ownerUserId)).emit(S2C.BENNY_STATE, {
+  // A DM's own characters answer to the DM, and they can spend too — their
+  // own hand if they are a Wild Card, the GM's pool either way.
+  const room = ch.ownerUserId ? userRoom(ch.ownerUserId) : dmRoom(campaignId);
+  io.to(room).emit(S2C.BENNY_STATE, {
     characterId: ch.id,
     // A Critical Failure cannot be rerolled, so the offer is withdrawn — but
     // the reason travels with it, or the menu just looks broken.
@@ -782,7 +819,7 @@ export function recordBennyRoll(
   const rec = lastBennyRolls.get(ch.id) ?? {};
   rec[kind] = { expr, total, label, at: Date.now(), ...(critFail ? { critFail: true } : {}) };
   lastBennyRolls.set(ch.id, rec);
-  emitBennyState(io, ch);
+  emitBennyState(io, campaignId, ch);
 }
 
 /**
@@ -799,7 +836,7 @@ export function recordSoakRoll(
   const rec = lastBennyRolls.get(ch.id) ?? {};
   rec.trait = { expr, total, label: 'their Soak roll', at: Date.now(), soak: { offerWounds, removed } };
   lastBennyRolls.set(ch.id, rec);
-  emitBennyState(io, ch);
+  emitBennyState(io, campaignId, ch);
 }
 
 /** The reroll a Benny buys, if the original is still fresh. */

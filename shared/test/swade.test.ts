@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor, swadeToughness, traitExpr, woundPenalty, swadeBennyMax } from '../src/systems/swade.js';
+import {
+  bennyPurse, dieSides, gangUpBonus, swade, swadePace, swadeParry, swadeRangedArmor,
+  swadeToughness, traitExpr, woundPenalty, swadeBennyMax,
+} from '../src/systems/swade.js';
 import { combatActions } from '../src/systems/combat.js';
 import type { FieldDef } from '../src/systems/types.js';
 import { swadeWoundsHealed } from '../src/systems/swadeDamage.js';
@@ -813,5 +816,41 @@ describe('SWADE Hindrance budget', () => {
     // 3 points spent leaves room for a Minor but not a Major.
     expect(canTakeHindrance([major, minor], 'Minor')).toBe(true);
     expect(canTakeHindrance([major, minor], 'Major')).toBe(false);
+  });
+});
+
+describe('whose Bennies get spent', () => {
+  const wildCard = (bennies: number) => ({ bennies, wildCard: true });
+  const extra = (bennies: number) => ({ bennies, wildCard: false });
+
+  it("gives a player's character its own hand and nothing else", () => {
+    expect(bennyPurse({ sheet: wildCard(3), playerOwned: true, gmPool: 9 }))
+      .toEqual({ own: 3, pool: 0, total: 3 });
+  });
+
+  it("lets the DM's Wild Card spend its own first, with the pool behind it", () => {
+    const p = bennyPurse({ sheet: wildCard(2), playerOwned: false, gmPool: 4 });
+    expect(p).toEqual({ own: 2, pool: 4, total: 6 });
+  });
+
+  it('…and keeps it in the fight once its own hand is empty', () => {
+    expect(bennyPurse({ sheet: wildCard(0), playerOwned: false, gmPool: 4 }).total).toBe(4);
+    expect(bennyPurse({ sheet: wildCard(0), playerOwned: false, gmPool: 0 }).total).toBe(0);
+  });
+
+  it("gives the DM's Extra the pool and only the pool", () => {
+    // Whatever is written in its own box: an Extra is not somebody the book
+    // tracks chips for.
+    expect(bennyPurse({ sheet: extra(2), playerOwned: false, gmPool: 5 }))
+      .toEqual({ own: 0, pool: 5, total: 5 });
+    expect(bennyPurse({ sheet: extra(2), playerOwned: false, gmPool: 0 }).total).toBe(0);
+  });
+
+  it('treats a sheet with no wildCard flag as a Wild Card, as everything else does', () => {
+    expect(bennyPurse({ sheet: { bennies: 1 }, playerOwned: false, gmPool: 3 }).own).toBe(1);
+  });
+
+  it('never counts a negative hand or a negative pool', () => {
+    expect(bennyPurse({ sheet: wildCard(-2), playerOwned: false, gmPool: -5 }).total).toBe(0);
   });
 });

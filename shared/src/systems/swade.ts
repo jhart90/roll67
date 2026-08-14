@@ -401,6 +401,38 @@ export function swadeNaturalOne(dice: DieRoll[], i: number): boolean {
 }
 
 /**
+ * Where a character's Bennies come from, and in what order they are spent.
+ *
+ * A player's character spends its own hand and nothing else — the GM's pool
+ * is not theirs to reach into.
+ *
+ * The DM's own Wild Cards have a hand too: two at the start of a session, and
+ * whatever their Edges add. They spend that FIRST, because it is theirs, and
+ * fall back on the GM's pool when it runs dry — which is what the pool is
+ * for, and where villains' Jokers have been paying into all session.
+ *
+ * A DM's Extra has no hand at all. It is not somebody the book tracks chips
+ * for, so it draws on the pool or it does without, and anything written in
+ * its own Bennies box is deliberately ignored rather than quietly spent.
+ */
+export interface BennyPurse {
+  /** Spendable off this character's own sheet, and spent before the pool. */
+  own: number;
+  /** Spendable out of the GM's pool, for those entitled to reach it. */
+  pool: number;
+  total: number;
+}
+
+export function bennyPurse(opts: { sheet: SheetData; playerOwned: boolean; gmPool: number }): BennyPurse {
+  const own = Math.max(0, Math.floor(num(opts.sheet, 'bennies', 0)));
+  if (opts.playerOwned) return { own, pool: 0, total: own };
+  const pool = Math.max(0, Math.floor(opts.gmPool));
+  return opts.sheet.wildCard !== false
+    ? { own, pool, total: own + pool }
+    : { own: 0, pool, total: pool };
+}
+
+/**
  * Snake eyes: the trait die AND the Wild Die both showing a natural 1. This is
  * SWADE's Critical Failure for a Wild Card, and the whole rule is readable from
  * the dice alone — which is what lets the client light it up without ever being

@@ -168,6 +168,8 @@ export interface CombatAction {
    *  one on a success, two on a raise, none on a failure. There is no HP
    *  pool to top up, so the roll's margin IS the healing. */
   healsWounds?: boolean;
+  /** This template leaves a cloud behind rather than hurting anyone: smoke. */
+  obscures?: boolean;
   /** Name of the trait this action rolls, for the chat card ("Healing"). */
   traitName?: string;
   /** SWADE: the weapon's Rate of Fire (parsed from its notes). RoF 2+ fires

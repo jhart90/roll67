@@ -117,6 +117,7 @@ export function combatActions(character: Character): CombatAction[] {
       ...(condition && !save && conditionSave && conditionDc > 0
         ? { conditionSaveId: conditionSave, conditionDc } : {}),
       ...(atk.hardRange === true ? { hardRange: true } : {}),
+      ...(atk.obscures === true ? { obscures: true } : {}),
       // SWADE Evasion: only the attacks that SAY they can be dived away from.
       ...(atk.evadable === true ? { evadable: true } : {}),
       // Put away: still listed, but greyed out and refused until drawn.

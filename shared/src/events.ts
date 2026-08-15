@@ -5,7 +5,7 @@ import type {
   AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, DiceSpeed, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
-  MapDef, MapMeta, MapText, MapView, MeasureInfo, MemberInfo, PingInfo, Point,
+  MapDef, MapMeta, MapText, MapView, MapZone, MeasureInfo, MemberInfo, PingInfo, Point,
   Counter, NameplateLine, RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
@@ -890,6 +890,8 @@ export const S2C = {
   DICE_SPEED: 'diceSpeed',
   /** The modifier a hovered shot would carry, itemised. */
   ATTACK_PREVIEW: 'attackPreviewResult',
+  /** The clouds hanging over a map changed — one landed, or one blew away. */
+  MAP_ZONES: 'mapZones',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
   /** IronDice public state: active commitment + revealed seeds. */
@@ -1210,6 +1212,8 @@ export interface SetDiceSpeedPayload { speed: DiceSpeed }
  * `tags` is the same list the roll's own tooltip shows afterwards, because it
  * is produced by the same function — see swadeShotModifiers.
  */
+export interface MapZonesPayload { mapId: string; zones: MapZone[] }
+
 export interface AttackPreviewResultPayload {
   sourceTokenId: string;
   targetTokenId: string;

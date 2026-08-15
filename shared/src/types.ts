@@ -247,6 +247,33 @@ export interface MapDef extends MapMeta {
    *  No token may stand here, DM's included: it is scenery, not cover. */
   blocked: number[];
   texts: MapText[];
+  /** Clouds hanging over the map: smoke and its like. Absent on older maps. */
+  zones?: MapZone[];
+}
+
+/**
+ * A patch of the map that something is hanging over — smoke, for now.
+ *
+ * Stored as a centre and a radius in tiles rather than as a list of hexes,
+ * because that is exactly how the template that made it was measured (see
+ * tokensInAoe): the cloud covers the ground the blast covered, and saying so
+ * in the same terms means the two can never disagree about its edge.
+ *
+ * Not a wall. SWADE smoke does not stop anyone seeing through it; it makes
+ * seeing through it harder, which is a penalty on a roll and nothing to do
+ * with the vision system.
+ */
+export interface MapZone {
+  id: string;
+  kind: 'smoke';
+  label: string;
+  hex: Hex;
+  /** Tiles from the centre, inclusive — the template's own reach. */
+  radius: number;
+  /** Flat penalty on a sight-based roll into or through it. */
+  penalty: number;
+  /** Rounds left before it disperses. */
+  roundsLeft: number;
 }
 
 /** What players receive: geometry stripped, doors reduced to known state. */
@@ -254,6 +281,8 @@ export interface MapView extends MapMeta {
   bgUrl: string | null;
   bgWidth: number;
   bgHeight: number;
+  /** Clouds are public: everyone can see the smoke. */
+  zones?: MapZone[];
   grid: GridConfig;
   spawn?: Hex | null;
   /** Packed hex keys painted as rough terrain. */

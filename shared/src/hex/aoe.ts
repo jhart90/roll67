@@ -3,10 +3,11 @@
 // pixels via the map's grid scale, so the same math works for any shape or
 // size a spell declares without per-spell special-casing.
 
-import type { AoeSpec, Door, GridConfig, Hex, Point, Wall } from '../types.js';
+import type { AoeSpec, Door, GridConfig, Hex, MapZone, Point, Wall } from '../types.js';
 import { rayBlocked, sightSegments } from '../vision/raycast.js';
 import { hexToPixel } from './pixel.js';
 import { hexDistance } from './coords.js';
+import { hexLine } from './line.js';
 
 const SQRT3 = Math.sqrt(3);
 
@@ -210,4 +211,31 @@ export function tokensCaughtInAoe<T extends { id: string; q: number; r: number }
     if (!t) return false;
     return !rayBlocked(from, hexToPixel({ q: t.q, r: t.r }, grid), segs);
   });
+}
+
+/**
+ * How much harder a cloud makes a shot from `from` at `to`.
+ *
+ * A cloud counts if the target is standing in it or if the shot has to pass
+ * through it — the straight line between the two is walked hex by hex, the
+ * same line the engine uses for movement cost and for cover. Standing IN the
+ * smoke and shooting OUT of it is the same −4 as shooting into it, which is
+ * the book's answer and also the intuitive one: you cannot see either way.
+ *
+ * Clouds do not stack: two overlapping banks of smoke are still smoke, so the
+ * worst single penalty applies rather than their sum.
+ */
+export function obscureBetween(
+  zones: MapZone[] | undefined, from: Hex, to: Hex,
+): { penalty: number; label: string } | null {
+  if (!zones || zones.length === 0) return null;
+  const path = hexLine(from, to);
+  let worst: MapZone | null = null;
+  for (const z of zones) {
+    if (z.roundsLeft <= 0) continue;
+    const touched = path.some((h: Hex) => hexDistance(z.hex, h) <= z.radius);
+    if (!touched) continue;
+    if (!worst || z.penalty < worst.penalty) worst = z;
+  }
+  return worst ? { penalty: worst.penalty, label: worst.label } : null;
 }

@@ -2,7 +2,7 @@ import type {
   AssetFolder, AssetInfo, AudioTrack,
   CampaignInfo, Character, ChatKind, ChatMessage, CustomItem, DiceSpeed, Door, Drawing, GameSystem,
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
-  Counter, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, RollCalloutInfo, Token, Wall, WorldFolder,
+  Counter, MapZone, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, RollCalloutInfo, Token, Wall, WorldFolder,
 } from 'shared';
 import { isAceStyle, isCounterPosition, statEntriesFromDice, type AceStyle, type DiceLook, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
 import { db, newId, now, stmt } from './db.js';
@@ -701,6 +701,7 @@ interface MapRow {
   lights_json: string;
   is_scene?: number;
   texts_json: string;
+  zones_json?: string | null;
   spawn_json: string | null;
   terrain_json: string;
   blocked_json?: string;
@@ -760,6 +761,7 @@ function toMapDef(row: MapRow): MapDef & { campaignId: string; bgAssetId: string
     doors: safeParse(row.doors_json, []),
     lights: safeParse(row.lights_json, []),
     texts: safeParse(row.texts_json, []),
+    zones: safeParse(row.zones_json ?? '[]', []),
     isScene: row.is_scene === 1,
     spawn: row.spawn_json ? safeParse(row.spawn_json, null) : null,
     terrain: safeParse(row.terrain_json, []),
@@ -814,6 +816,9 @@ export const maps = {
   },
   setTexts(id: string, texts: MapText[]): void {
     stmt('UPDATE maps SET texts_json = ? WHERE id = ?').run(JSON.stringify(texts), id);
+  },
+  setZones(id: string, zones: MapZone[]): void {
+    stmt('UPDATE maps SET zones_json = ? WHERE id = ?').run(JSON.stringify(zones), id);
   },
   setLights(id: string, lights: Light[]): void {
     stmt('UPDATE maps SET lights_json = ? WHERE id = ?').run(JSON.stringify(lights), id);

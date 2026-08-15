@@ -5,10 +5,10 @@ import {
   CHASE_TRACK_DEFAULT, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
   opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
   bumpResult, chaseCritFailure, complicationFor, isComplicationCard, type ChaseTravel,
-  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type PlayingCard,
+  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
-  swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, tokensCaughtInAoe, usableAmount,
+  swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, tokensCaughtInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
@@ -667,7 +667,41 @@ function sheetForToken(tokenId: string | null): SheetData | null {
   return ch ? ch.sheet : null;
 }
 
+/**
+ * Push the map's clouds out to everyone.
+ *
+ * Their own broadcast rather than a full map resend: a cloud thinning by one
+ * round should not make every player's fog, doors and tokens round-trip.
+ */
+export function broadcastMapZones(io: Server, campaignId: string, mapId: string): void {
+  const map = maps.byId(mapId);
+  if (!map) return;
+  io.to(campaignRoom(campaignId)).emit(S2C.MAP_ZONES, { mapId, zones: map.zones ?? [] });
+}
+
+/**
+ * A round passes and the smoke thins. Clouds that run out say so — the
+ * table needs to know the −4 has gone as much as it needed to know it
+ * arrived.
+ */
+function ageMapZones(io: Server, campaignId: string): void {
+  for (const meta of maps.forCampaign(campaignId)) {
+    const map = maps.byId(meta.id);
+    if (!map) continue;
+    const zones: MapZone[] = map.zones ?? [];
+    if (zones.length === 0) continue;
+    const left = zones
+      .map((z) => ({ ...z, roundsLeft: z.roundsLeft - 1 }))
+      .filter((z) => z.roundsLeft > 0);
+    const gone = zones.filter((z) => !left.some((l) => l.id === z.id));
+    maps.setZones(map.id, left);
+    broadcastMapZones(io, campaignId, map.id);
+    for (const z of gone) postStatusLine(io, campaignId, `💨 The ${z.label} disperses.`);
+  }
+}
+
 function redealRoundCards(io: Server, campaignId: string, state: InitiativeState): void {
+  ageMapZones(io, campaignId);
   if (!state.active || !state.cardMode || state.entries.length === 0) return;
   if (state.jokerDealt) {
     state.deck = shuffleDeck(buildDeck());
@@ -2535,6 +2569,11 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       if (targetConditions.includes('stunned')) { mod += 4; dmgBonus += 4; tags.push('+4 The Drop'); }
       else if (targetConditions.includes('vulnerable') || targetConditions.includes('bound')) { mod += 2; tags.push('+2 Vulnerable'); }
       if (action.ranged && targetConditions.includes('prone')) { mod -= 2; tags.push('−2 vs Prone'); }
+      // Smoke between the two of them, or over one of them. Not a wall: the
+      // shot is allowed, it is just much harder — which is the book's answer
+      // and the reason this lives here rather than in the vision system.
+      const cloud = obscureBetween(map.zones, { q: src.q, r: src.r }, { q: tgt.q, r: tgt.r });
+      if (cloud) { mod += cloud.penalty; tags.push(`${cloud.penalty} ${cloud.label}`); }
       // Chase: evasive driving cuts both ways, and a moving vehicle is a
       // poor firing platform unless its driver spent the turn steadying it.
       if (chaseCtx?.targetEvading) { mod += EVADE_MOD; tags.push('−2 target is Evading'); }
@@ -3898,6 +3937,22 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       // covers, for as long as it hangs there — is not wired yet. The throw,
       // the scatter and the template are; the lingering area is not.
       if (!usableAmount(damageExpr)) {
+        // Smoke: the template does not hurt anyone, it hangs there. The cloud
+        // covers exactly the ground the blast covered — same centre, same
+        // reach — and lasts 2d6 rounds, rolled where the table can see it.
+        if (action.obscures && aoe.sizeHexes) {
+          const life = roll('2d6');
+          const zones = [...(map.zones ?? []), {
+            id: newId(), kind: 'smoke' as const, label: action.label,
+            hex: centre, radius: aoe.sizeHexes, penalty: -4, roundsLeft: Math.max(1, life.total),
+          }];
+          maps.setZones(map.id, zones);
+          broadcastMapZones(io, d.campaignId, map.id);
+          postStatusLine(io, d.campaignId,
+            `💨 ${action.label} bursts where ${actor.name} aimed it — the smoke covers the area for ${life.total} rounds.`
+            + ' Shooting into or through it is −4.');
+          return;
+        }
         postStatusLine(io, d.campaignId,
           `💨 ${action.label} lands where ${actor.name} aimed it — it covers the area, and does no damage.`);
         return;

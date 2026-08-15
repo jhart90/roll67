@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type DiceLook, type DiceSpeed, type DiceSpeedPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -1461,6 +1461,11 @@ export function wireSocket(): void {
 
   // The DM changed the table's dice pacing. It rides on the campaign so that
   // everyone switches at the same moment and nobody is a few seconds ahead.
+  socket.on(S2C.MAP_ZONES, (p: MapZonesPayload) => {
+    const cur = useGameStore.getState().map;
+    if (cur && cur.id === p.mapId) useGameStore.setState({ map: { ...cur, zones: p.zones } });
+  });
+
   socket.on(S2C.ATTACK_PREVIEW, (p: AttackPreviewResultPayload) => {
     // Only ever the answer to the question still being asked: hovers outrun
     // the network, and a stale reply landing after the cursor has moved on

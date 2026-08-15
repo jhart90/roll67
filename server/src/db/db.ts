@@ -123,6 +123,8 @@ ensureColumn('maps', 'terrain_json', "terrain_json TEXT NOT NULL DEFAULT '[]'");
 // Ground no token may stand on — a chasm, lava, deep water.
 ensureColumn('maps', 'blocked_json', "blocked_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('maps', 'texts_json', "texts_json TEXT NOT NULL DEFAULT '[]'");
+// Smoke and its like: clouds that hang over the map for a few rounds.
+ensureColumn('maps', 'zones_json', "zones_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('maps', 'is_scene', 'is_scene INTEGER NOT NULL DEFAULT 0');
 ensureColumn('tokens', 'revealed_at', 'revealed_at INTEGER');
 // Chests lock like doors: a flag plus the inventory item that opens them.

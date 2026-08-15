@@ -16,6 +16,7 @@ import { PingMeasureLayer } from './PingMeasureLayer';
 import { TargetPreviewLayer } from './TargetPreviewLayer';
 import { TerrainCanvas } from './TerrainCanvas';
 import { MoveRangeCanvas } from './MoveRangeCanvas';
+import { ZoneLayer } from './ZoneLayer';
 import { TerrainPainter } from './TerrainPainter';
 import { TokenLayer } from './TokenLayer';
 
@@ -392,6 +393,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
         >
           <BackgroundCanvas map={map} />
           <TerrainCanvas grid={map.grid} />
+          <ZoneLayer grid={map.grid} />
           <MoveRangeCanvas grid={map.grid} />
           <LightColorOverlay map={map} visibleLitMask={visibleLitMask} fadePolygons={fadePolygons} />
           <DrawingLayer />

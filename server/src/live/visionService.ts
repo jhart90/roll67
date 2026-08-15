@@ -414,6 +414,9 @@ export function buildMapState(
     terrain: map.terrain ?? [],
     blocked: map.blocked ?? [],
     texts: map.texts ?? [],
+    // Smoke is public: hiding the cloud from the people standing in it would
+    // be hiding the reason their shots are missing.
+    zones: map.zones ?? [],
   };
   const allTokens = tokens.forMap(map.id);
 

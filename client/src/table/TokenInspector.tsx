@@ -44,6 +44,14 @@ export function TokenInspector() {
   const members = useGameStore((s) => s.members);
   const token = useGameStore((s) => (s.inspectorTokenId ? s.tokens[s.inspectorTokenId] : undefined));
   const character = useGameStore((s) => s.characters.find((c) => c.id === token?.characterId));
+  // ABOVE the early returns, with every other hook. Below them it ran only
+  // when the inspector was open, so opening one changed the hook count from
+  // the render before and React tore the whole app down — the same way the
+  // initiative float did when combat ended. A component's hooks are a
+  // contract about every render, not just the interesting ones.
+  const bodyChest = useGameStore((s) => (token?.characterId
+    ? Object.values(s.mapObjects).find((o) => o.kind === 'chest' && o.linkedCharacterId === token.characterId)
+    : undefined));
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
@@ -96,10 +104,6 @@ export function TokenInspector() {
       if (fileRef.current) fileRef.current.value = '';
     }
   }
-
-  const bodyChest = useGameStore((s) => (token?.characterId
-    ? Object.values(s.mapObjects).find((o) => o.kind === 'chest' && o.linkedCharacterId === token.characterId)
-    : undefined));
 
   return (
     <div className="token-inspector">

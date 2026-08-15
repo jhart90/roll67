@@ -20,7 +20,8 @@
     "test": "npm -w shared run test",
     "itest": "node scripts/integration-smoke.mjs",
     "backup-check": "node scripts/backup-check.mjs",
-    "typecheck": "npm -w shared run typecheck && npm -w server run typecheck && npm -w client run typecheck"
+    "check:hooks": "node scripts/check-hooks.mjs",
+    "typecheck": "npm -w shared run typecheck && npm -w server run typecheck && npm -w client run typecheck && node scripts/check-hooks.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

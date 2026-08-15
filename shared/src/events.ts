@@ -691,7 +691,7 @@ export interface AudioControlPayload {
 }
 
 export interface CreateHandoutPayload { title: string; bodyMd?: string; assetId?: string | null }
-export interface UpdateHandoutPayload { handoutId: string; title?: string; bodyMd?: string; assetId?: string | null; parentId?: string | null }
+export interface UpdateHandoutPayload { handoutId: string; title?: string; bodyMd?: string; dmNotesMd?: string; assetId?: string | null; parentId?: string | null }
 export interface DeleteHandoutPayload { handoutId: string }
 export interface ShareHandoutPayload { handoutId: string; to: string[] | 'all' | 'none' }
 

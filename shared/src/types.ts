@@ -749,6 +749,10 @@ export interface Handout {
   id: string;
   title: string;
   bodyMd: string;
+  /** The DM's private margin on this handout. Always '' in anything a player
+   *  receives — stripped server-side, whatever the sharing state — because a
+   *  secret that merely isn't RENDERED is a secret in the network tab. */
+  dmNotesMd: string;
   imageUrl: string | null;
   sharedAll: boolean;
   /** userIds; only meaningful for the DM's view. */

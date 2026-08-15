@@ -118,6 +118,8 @@ ensureColumn('chat_messages', 'undo_json', 'undo_json TEXT');
 // Unified world tree: any entity can be parented to any other by id.
 ensureColumn('characters', 'parent_id', 'parent_id TEXT');
 ensureColumn('handouts', 'parent_id', 'parent_id TEXT');
+// The DM's private margin on a handout; never leaves the DM's own payloads.
+ensureColumn('handouts', 'dm_notes_md', "dm_notes_md TEXT NOT NULL DEFAULT ''");
 ensureColumn('shops', 'parent_id', 'parent_id TEXT');
 ensureColumn('rollable_tables', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'parent_id', 'parent_id TEXT');

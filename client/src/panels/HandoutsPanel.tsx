@@ -69,6 +69,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
   const players = useGameStore((s) => s.members).filter((m) => m.role === 'player');
   const [title, setTitle] = useState(handout?.title ?? '');
   const [body, setBody] = useState(handout?.bodyMd ?? '');
+  const [dmNotes, setDmNotes] = useState(handout?.dmNotesMd ?? '');
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
   const [assetId, setAssetId] = useState<string | null>(null);
@@ -89,7 +90,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
 
   function save() {
     if (!title.trim()) return;
-    if (handout) intents.updateHandout(handout.id, { title: title.trim(), bodyMd: body, ...(assetId ? { assetId } : {}) });
+    if (handout) intents.updateHandout(handout.id, { title: title.trim(), bodyMd: body, dmNotesMd: dmNotes, ...(assetId ? { assetId } : {}) });
     else intents.createHandout(title.trim(), body, assetId);
     onClose();
   }
@@ -125,6 +126,19 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
         <label>
           Text
           <textarea rows={8} value={body} onChange={(e) => setBody(e.target.value)} />
+        </label>
+        {/* The DM's margin. Only ever rendered on this, the DM's branch of
+            the window — and, more to the point, only ever SENT to the DM: the
+            server strips it from every player payload whatever the handout's
+            sharing state, so presenting the prophecy never presents the plan. */}
+        <label>
+          DM secret notes <span className="dim">(never shown to players)</span>
+          <textarea
+            rows={4}
+            value={dmNotes}
+            placeholder="What this handout is really about — only you see this."
+            onChange={(e) => setDmNotes(e.target.value)}
+          />
         </label>
         <label className="upload-label">
           Image

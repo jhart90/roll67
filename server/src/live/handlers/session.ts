@@ -27,7 +27,7 @@ function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   if (isDm) return all;
   return all
     .filter((h) => h.sharedAll || h.sharedWith.includes(userId))
-    .map((h) => ({ ...h, sharedWith: [] })); // players don't see the share list
+    .map((h) => ({ ...h, sharedWith: [], dmNotesMd: '' })); // players see neither the share list nor the DM's margin
 }
 
 /**

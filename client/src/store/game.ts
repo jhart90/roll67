@@ -2094,7 +2094,7 @@ export const intents = {
 
   createHandout: (title: string, bodyMd?: string, assetId?: string | null) =>
     socket.emit(C2S.CREATE_HANDOUT, { title, bodyMd, assetId }),
-  updateHandout: (handoutId: string, fields: { title?: string; bodyMd?: string; assetId?: string | null }) =>
+  updateHandout: (handoutId: string, fields: { title?: string; bodyMd?: string; dmNotesMd?: string; assetId?: string | null }) =>
     socket.emit(C2S.UPDATE_HANDOUT, { handoutId, ...fields }),
   deleteHandout: (handoutId: string) => socket.emit(C2S.DELETE_HANDOUT, { handoutId }),
   shareHandout: (handoutId: string, to: string[] | 'all' | 'none') =>

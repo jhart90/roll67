@@ -40,7 +40,7 @@ export function broadcastHandouts(io: Server, campaignId: string): void {
     const v = viewerFor(sdata(socket));
     const list = v.isDm
       ? all
-      : all.filter((h) => h.sharedAll || h.sharedWith.includes(v.userId)).map((h) => ({ ...h, sharedWith: [] }));
+      : all.filter((h) => h.sharedAll || h.sharedWith.includes(v.userId)).map((h) => ({ ...h, sharedWith: [], dmNotesMd: '' }));
     socket.emit(S2C.HANDOUTS, { handouts: list });
   }
 }
@@ -145,12 +145,12 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     broadcastHandouts(io, d.campaignId);
   }, 'CREATE_HANDOUT'));
 
-  socket.on(C2S.UPDATE_HANDOUT, safe(socket, ({ handoutId, title, bodyMd, assetId, parentId }: UpdateHandoutPayload) => {
+  socket.on(C2S.UPDATE_HANDOUT, safe(socket, ({ handoutId, title, bodyMd, dmNotesMd, assetId, parentId }: UpdateHandoutPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const h = handouts.byId(handoutId);
     if (!h) return;
-    handouts.update(handoutId, { title, bodyMd, assetId, parentId });
+    handouts.update(handoutId, { title, bodyMd, dmNotesMd, assetId, parentId });
     broadcastHandouts(io, d.campaignId);
   }, 'UPDATE_HANDOUT'));
 

@@ -1039,6 +1039,7 @@ interface HandoutRow {
   campaign_id: string;
   title: string;
   body_md: string;
+  dm_notes_md?: string | null;
   asset_id: string | null;
   shared_all: number;
   folder_id?: string | null;
@@ -1051,6 +1052,7 @@ function toHandout(row: HandoutRow): Handout {
     id: row.id,
     title: row.title,
     bodyMd: row.body_md,
+    dmNotesMd: row.dm_notes_md ?? '',
     imageUrl: assets.urlFor(row.asset_id),
     sharedAll: !!row.shared_all,
     sharedWith: shares.map((s) => s.user_id),
@@ -1074,12 +1076,13 @@ export const handouts = {
     const rows = stmt('SELECT * FROM handouts WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as HandoutRow[];
     return rows.map(toHandout);
   },
-  update(id: string, fields: { title?: string; bodyMd?: string; assetId?: string | null; parentId?: string | null }): void {
+  update(id: string, fields: { title?: string; bodyMd?: string; dmNotesMd?: string; assetId?: string | null; parentId?: string | null }): void {
     const cur = stmt('SELECT * FROM handouts WHERE id = ?').get(id) as HandoutRow | undefined;
     if (!cur) return;
-    stmt('UPDATE handouts SET title = ?, body_md = ?, asset_id = ?, parent_id = ? WHERE id = ?').run(
+    stmt('UPDATE handouts SET title = ?, body_md = ?, dm_notes_md = ?, asset_id = ?, parent_id = ? WHERE id = ?').run(
       fields.title ?? cur.title,
       fields.bodyMd ?? cur.body_md,
+      fields.dmNotesMd ?? cur.dm_notes_md ?? '',
       fields.assetId !== undefined ? fields.assetId : cur.asset_id,
       fields.parentId !== undefined ? fields.parentId : (cur.parent_id ?? null),
       id,

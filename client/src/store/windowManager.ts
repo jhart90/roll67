@@ -26,7 +26,9 @@ export type WindowKind =
   // Sheet pickers: choosing a feat/focus/invocation/image is a browse, and a
   // browse over the sheet you are choosing FOR should not cover it.
   | 'sheetPicker'
-  | 'assetPicker';
+  | 'assetPicker'
+  // The card-back studio: pattern, border and paint for one character.
+  | 'cardBack';
 
 export interface WindowInstance {
   /** `${kind}:${key}` — opening the same kind+key again focuses this instance. */

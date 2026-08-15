@@ -1776,6 +1776,7 @@ button.link:hover { text-decoration: underline; }
 .card-back {
   width: 96px;
   height: 134px;
+  box-sizing: border-box; /* a Heavy border and a Hairline stay the same card */
   border-radius: 9px;
   border: 3px solid #e8e2d2;
   background:
@@ -1786,8 +1787,29 @@ button.link:hover { text-decoration: underline; }
 }
 .card-deck-btn { cursor: pointer; padding: 0; transition: transform 0.15s ease; }
 
-/* The card-back picker on the Bio tab: sixteen little face-down cards. */
+/* Card backs: the Bio tab shows the current card and a door; the studio
+   window holds the sixteen patterns, sixteen borders and the paint. */
 .cardback-field > span { display: block; margin-bottom: 6px; }
+.cbe-field-preview { display: flex; align-items: center; gap: 12px; }
+.cardback-editor {
+  background: var(--panel); padding: 12px 16px 14px;
+  border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px;
+  max-width: 430px;
+}
+.cbe-preview {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  margin-bottom: 6px;
+}
+.cbe-grid { margin-bottom: 4px; }
+.cbe-colors { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 4px 0; }
+.cbe-colors label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.cbe-swatch-row { display: flex; align-items: center; gap: 6px; }
+.cbe-swatch {
+  width: 22px; height: 22px; border-radius: 50%; padding: 0;
+  border: 2px solid transparent; font-size: 9px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); cursor: pointer;
+}
+.cbe-swatch.on { border-color: var(--text); }
 .cardback-grid {
   display: grid; grid-template-columns: repeat(8, auto); gap: 8px;
   justify-content: start;
@@ -1803,8 +1825,12 @@ button.link:hover { text-decoration: underline; }
 /* A mini of the same card, a third the size: same borders, same patterns,
    scaled — so the picker shows exactly what the table will see. */
 .cardback-mini {
-  width: 34px; height: 48px; border-radius: 4px; border-width: 2px;
-  border-style: solid;
+  width: 34px; height: 48px; border-radius: 4px;
+  /* The look (background AND border) arrives inline from cardBackCss, the
+     same function that paints the real card — only the size differs. The
+     border widths are the full card's, which at a third scale reads as a
+     slightly bolder frame; that is the point of a swatch. */
+  box-sizing: border-box;
   box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
 }
 .card-deck-btn:hover { transform: translateY(-4px) rotate(-2deg); }

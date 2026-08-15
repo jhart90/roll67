@@ -6,7 +6,7 @@ import {
 } from 'shared';
 import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
 import { intents, useGameStore, CALLED_SHOT_PENDING } from '../store/game';
-import { CARD_BACK_CHOICES, CardBackView } from '../util/cardBacks';
+import { CardBackFieldPreview } from './CardBackEditor';
 import { openWindow } from '../store/windowManager';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnFeatures } from './SwnFeatures';
@@ -33,7 +33,7 @@ type AdvMode = null | 'adv' | 'dis' | 'called';
 const wireAdv = (m: AdvMode): 'adv' | 'dis' | null => (m === 'adv' || m === 'dis' ? m : null);
 
 function FieldInput({
-  field, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor,
+  field, system, sheet, derived, readOnly, onPatch, onEditImage, onEditCardBack, inheritedColor,
 }: {
   field: FieldDef;
   system: GameSystem;
@@ -42,6 +42,8 @@ function FieldInput({
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
   onEditImage?: (fieldId: string) => void;
+  /** Opens the card-back studio window — the field itself only previews. */
+  onEditCardBack?: () => void;
   /** What this character's color actually is when the sheet hasn't set one:
    *  their player's own color. Showing the app default here would lie. */
   inheritedColor?: string;
@@ -93,26 +95,13 @@ function FieldInput({
   }
 
   if (field.type === 'cardback') {
-    // Sixteen little face-down cards, not a dropdown of names: nobody knows
-    // what "Copper Herringbone" looks like until they see it, and the whole
-    // point of a card back is being recognised on sight.
-    const chosen = typeof value === 'string' && value ? value : '';
+    // The sheet shows only the card as it currently is; the sixteen patterns,
+    // sixteen borders and the paint live in their own window. A studio is a
+    // browse, and a browse does not belong crammed into a sheet row.
     return (
       <div className={`sheet-field w-${field.width ?? 'full'} cardback-field`}>
         <span><SheetTerm system={system} label={field.label} /></span>
-        <div className="cardback-grid">
-          {CARD_BACK_CHOICES.map((b) => (
-            <button
-              key={b.id}
-              className={`cardback-pick${(chosen || 'classic') === b.id ? ' on' : ''}`}
-              title={b.label}
-              disabled={readOnly}
-              onClick={() => onPatch({ [field.id]: b.id === 'classic' ? '' : b.id })}
-            >
-              <CardBackView back={b.id} className="cardback-mini" />
-            </button>
-          ))}
-        </div>
+        <CardBackFieldPreview value={value} readOnly={readOnly} onOpen={() => onEditCardBack?.()} />
       </div>
     );
   }
@@ -826,7 +815,7 @@ function DerivedBlocks({
 }
 
 function Section({
-  section, system, sheet, derived, readOnly, onPatch, onEditImage, inheritedColor, onEquipChange, onPostCard,
+  section, system, sheet, derived, readOnly, onPatch, onEditImage, onEditCardBack, inheritedColor, onEquipChange, onPostCard,
 }: {
   section: SectionDef;
   system: GameSystem;
@@ -835,6 +824,7 @@ function Section({
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
   onEditImage?: (fieldId: string) => void;
+  onEditCardBack?: () => void;
   inheritedColor?: string;
   onEquipChange?: (itemName: string, verbLabel: string, on: boolean) => void;
   onPostCard?: (card: SheetCard) => void;
@@ -845,7 +835,7 @@ function Section({
       {section.kind === 'fields' && (
         <div className="sheet-grid">
           {section.fields.map((f) => (
-            <FieldInput key={f.id} field={f} system={system} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} onEditImage={onEditImage} inheritedColor={inheritedColor} />
+            <FieldInput key={f.id} field={f} system={system} sheet={sheet} derived={derived} readOnly={readOnly} onPatch={onPatch} onEditImage={onEditImage} onEditCardBack={onEditCardBack} inheritedColor={inheritedColor} />
           ))}
         </div>
       )}
@@ -1365,6 +1355,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
                 onPatch={patch}
                 onEditImage={(fieldId) => openWindow('assetPicker', `${fieldId}:${character.id}`, {},
                   fieldId === 'tokenImage' ? `Token image — ${character.name}` : `Portrait — ${character.name}`)}
+                onEditCardBack={() => openWindow('cardBack', character.id, {}, `Card back — ${character.name}`)}
                 inheritedColor={inheritedColor}
                 onEquipChange={announceEquip}
                 onPostCard={postCard}

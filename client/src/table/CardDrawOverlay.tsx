@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { cardName } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { CardFace } from '../util/PlayingCardView';
-import { CardBackView, cardBackStyle } from '../util/cardBacks';
+import { CardBackView, cardBackCss } from '../util/cardBacks';
 
 /** How long the flipped card lingers on screen before fading out. */
 const FLASH_MS = 2600;
@@ -60,14 +60,13 @@ export function CardDrawOverlay() {
         <div className="card-flip-scene">
           <button
             className="card-back card-deck-btn"
-            style={cardBackStyle((() => {
+            style={cardBackCss((() => {
               // The deck you draw from wears YOUR back: it is your card on
               // top. Read off the sheet, which this client has — the pending
               // token is one of its own.
               const chId = tokens[next.tokenId]?.characterId;
               const sheet = chId ? characters.find((c) => c.id === chId)?.sheet : undefined;
-              const v = sheet?.cardBack;
-              return typeof v === 'string' ? v : undefined;
+              return sheet?.cardBack;
             })())}
             disabled={drawing}
             title={`Draw an action card for ${next.name}`}

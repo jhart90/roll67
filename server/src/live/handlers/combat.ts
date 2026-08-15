@@ -5,14 +5,14 @@ import {
   CHASE_TRACK_DEFAULT, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
   opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
   bumpResult, chaseCritFailure, complicationFor, isComplicationCard, type ChaseTravel,
-  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
+  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type CardBackSpec, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, tokensCaughtInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
-  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, isCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
+  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, normalizeCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type AttackPreviewPayload, type AttackPreviewResultPayload, type CoverGrade, type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeAmmoLeft, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
@@ -659,11 +659,15 @@ function sortInitiative(state: InitiativeState): void {
   state.entries.sort((a, b) => compareCardEntries(a, b, state.round > 1 ? 'suit' : 'draw'));
 }
 
-/** The card back a token's character chose, or undefined for the classic. */
-function cardBackForToken(tokenId: string | null): string | undefined {
+/** The card back a token's character chose, or undefined for the classic.
+ *  Normalized HERE, not trusted from the sheet: whatever a client managed to
+ *  write into that field, what leaves this server is a valid spec whose
+ *  colors are hex and whose pattern and border are two of the sixteen. */
+function cardBackForToken(tokenId: string | null): CardBackSpec | undefined {
   const sheet = sheetForToken(tokenId);
-  const v = sheet ? str(sheet, 'cardBack', '') : '';
-  return isCardBack(v) ? v : undefined;
+  const v = sheet?.cardBack;
+  if (v === undefined || v === null || v === '') return undefined;
+  return normalizeCardBack(v);
 }
 
 /** The sheet behind a token, when there is one. */
@@ -715,7 +719,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     postStatusLine(io, campaignId, '🂠 A Joker was dealt last round — the action deck is reshuffled.');
   }
   state.jokerDealt = false;
-  const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean; back?: string }> = [];
+  const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean; back?: CardBackSpec }> = [];
   // Which sides drew a Joker this round — paid out after the whole deal, so
   // the Bennies land once the table can see every card.
   const jokerDraws: Array<{ name: string; playerSide: boolean; hidden: boolean }> = [];

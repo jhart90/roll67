@@ -10,7 +10,7 @@ import type {
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
 import type { KnownWallSegment } from './vision/wallMemory.js';
-import type { PlayingCard } from './systems/cards.js';
+import type { CardBackSpec, PlayingCard } from './systems/cards.js';
 
 // ---------- Client -> server intents ----------
 
@@ -645,7 +645,7 @@ export interface RoundCardsPayload {
   round: number;
   /** `back` is the card back that combatant chose — how the table tells
    *  whose card is whose while it is still face down. Absent = classic. */
-  cards: Array<{ tokenId: string | null; name: string; card: PlayingCard; back?: string }>;
+  cards: Array<{ tokenId: string | null; name: string; card: PlayingCard; back?: CardBackSpec }>;
 }
 export interface InitCardDrawnPayload {
   tokenId: string;
@@ -654,7 +654,7 @@ export interface InitCardDrawnPayload {
   /** The user who clicked the deck (their client plays the big flip). */
   byUserId: string;
   /** The card back this combatant's cards wear. Absent = classic. */
-  back?: string;
+  back?: CardBackSpec;
 }
 
 export interface DrawPayload { mapId: string; layer: DrawingLayerName; shape: Drawing['shape'] }

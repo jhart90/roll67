@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { intents, useGameStore } from '../store/game';
+import { SecretField } from '../util/SecretField';
 import { readableOn } from '../util/playerColor';
 import { RollStatsTab } from './RollStats';
 
@@ -24,11 +25,9 @@ function PrivateNotesTab({ characterId, name }: { characterId: string; name: str
   useEffect(() => { if (!dirty) setDraft(saved ?? ''); }, [saved, dirty]);
   return (
     <div className="notes-tab" style={{ padding: '8px 10px' }}>
-      <label>
-        My notes on {name} <span className="dim">(only you can see this; saved when you click away)</span>
-      </label>
+      <SecretField label={`My notes on ${name}`} hint="yours alone — no one else sees these, not even the DM">
       <textarea
-        className="notes-field"
+        className="notes-field notes-secret"
         value={draft}
         placeholder="Suspicions, debts, favors, where you last saw them…"
         onChange={(e) => { setDraft(e.target.value); setDirty(true); }}
@@ -37,6 +36,7 @@ function PrivateNotesTab({ characterId, name }: { characterId: string; name: str
           setDirty(false);
         }}
       />
+      </SecretField>
     </div>
   );
 }

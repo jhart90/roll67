@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Handout } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { SecretField } from '../util/SecretField';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 import { ConfirmButton } from '../util/ConfirmButton';
@@ -131,15 +132,15 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
             the window — and, more to the point, only ever SENT to the DM: the
             server strips it from every player payload whatever the handout's
             sharing state, so presenting the prophecy never presents the plan. */}
-        <label>
-          DM secret notes <span className="dim">(never shown to players)</span>
+        <SecretField label="DM secret notes" hint="never shown to players">
           <textarea
+            className="notes-secret"
             rows={4}
             value={dmNotes}
             placeholder="What this handout is really about — only you see this."
             onChange={(e) => setDmNotes(e.target.value)}
           />
-        </label>
+        </SecretField>
         <label className="upload-label">
           Image
           <input type="file" accept="image/*" onChange={onUpload} disabled={uploading} />

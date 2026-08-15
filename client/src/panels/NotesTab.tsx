@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Character } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { SecretField } from '../util/SecretField';
 
 /**
  * The sheet's Notes tab: one big free-text field the character's player (and
@@ -41,10 +42,7 @@ export function NotesTab({ character, editable }: { character: Character; editab
         }}
       />
       {isDm && (
-        <>
-          <label style={{ marginTop: 10 }}>
-            🕶 DM secret notes <span className="dim">(only DM eyes ever see this — it never reaches a player's client)</span>
-          </label>
+        <SecretField label="DM secret notes" hint="never reaches a player's client">
           <textarea
             className="notes-field notes-secret"
             value={secretDraft}
@@ -55,7 +53,7 @@ export function NotesTab({ character, editable }: { character: Character; editab
               setSecretDirty(false);
             }}
           />
-        </>
+        </SecretField>
       )}
     </div>
   );

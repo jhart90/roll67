@@ -3001,6 +3001,28 @@ th > .term { border-bottom-style: dotted; }
   background: var(--panel-2, rgba(255, 255, 255, 0.04)); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 13px; line-height: 1.45;
 }
+/* Secret fields — text that never leaves this screen.
+   One violet grammar across the whole app: a tinted well with a bar down its
+   left edge, a 🕶 on the label, and the same tint inside the input. A warning
+   sentence is something you read once and stop seeing; a colour is something
+   you cannot stop seeing, which is the point when the question is "can they
+   read this?". See util/SecretField.tsx — every such field goes through it. */
+.secret-field {
+  margin-top: 10px;
+  padding: 8px 10px 10px;
+  border-left: 3px solid #7c3aed;
+  border-radius: 0 8px 8px 0;
+  background: rgba(124, 58, 237, 0.08);
+}
+.secret-field-label { display: block; margin-bottom: 4px; color: #c4a9f5; font-weight: 600; }
+.secret-field textarea,
+.secret-field input {
+  width: 100%;
+  border-color: #7c3aed;
+  background: rgba(124, 58, 237, 0.07);
+}
+.secret-field textarea::placeholder { color: rgba(196, 169, 245, 0.45); }
+
 .notes-secret { min-height: 160px; border-color: #7c3aed; background: rgba(124, 58, 237, 0.07); }
 
 /* Public-facing sheet: nameplate header + bio + roll stats, nothing private. */

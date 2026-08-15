@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CARD_BACK_PATTERNS, CARD_BORDERS, defaultCardBack, normalizeCardBack, patternDefaults,
+  CARD_BACK_GEOMETRIES, CARD_BACK_PATTERNS, CARD_BORDERS, defaultCardBack, normalizeCardBack, patternDefaults,
 } from '../src/systems/cards.js';
 
 /**
@@ -8,12 +8,21 @@ import {
  * deal and its colors land inside CSS on every client at the table, so
  * normalizeCardBack is a boundary, not a convenience.
  */
-describe('card back patterns and borders', () => {
-  it('offers sixteen of each, with unique ids', () => {
+describe('card back designs and borders', () => {
+  it('offers sixteen designs and sixteen borders, with unique ids', () => {
     expect(CARD_BACK_PATTERNS).toHaveLength(16);
     expect(new Set(CARD_BACK_PATTERNS.map((p) => p.id)).size).toBe(16);
     expect(CARD_BORDERS).toHaveLength(16);
     expect(new Set(CARD_BORDERS.map((b) => b.id)).size).toBe(16);
+  });
+
+  it('weaves those sixteen designs from only seven geometries — fewer patterns, more designs', () => {
+    expect(CARD_BACK_GEOMETRIES).toHaveLength(7);
+    const used = new Set(CARD_BACK_PATTERNS.map((p) => p.pattern));
+    // Every design stands on a real geometry, and every geometry is worn by
+    // at least one design — no orphans in either direction.
+    for (const g of used) expect(CARD_BACK_GEOMETRIES).toContain(g);
+    for (const g of CARD_BACK_GEOMETRIES) expect(used.has(g)).toBe(true);
   });
 
   it('every pattern ships with a full set of valid default colors', () => {
@@ -31,19 +40,21 @@ describe('normalizeCardBack', () => {
     expect(normalizeCardBack(null)).toEqual(defaultCardBack());
   });
 
-  it('reads the first version’s bare string ids as that pattern with its own colors', () => {
+  it('reads the first version’s bare string ids as that design in its own colors', () => {
     const v = normalizeCardBack('midnight');
-    expect(v.pattern).toBe('midnight');
-    expect(v.primary).toBe('#1d2c52');
+    expect(v.pattern).toBe('stripes');   // the design's geometry
+    expect(v.primary).toBe('#1d2c52');   // the design's own palette
     expect(v.border).toBe('clean');
   });
 
-  it('keeps a fully customised spec exactly', () => {
+  it('keeps a fully customised spec exactly, with a design id resolved to its geometry', () => {
     const spec = {
       pattern: 'ocean', border: 'deco',
       primary: '#123456', secondary: '#abcdef', accent: '#fedcba', borderColor: '#00ff00',
     };
-    expect(normalizeCardBack(spec)).toEqual(spec);
+    expect(normalizeCardBack(spec)).toEqual({ ...spec, pattern: 'medallion' });
+    // A spec already speaking geometry passes through untouched.
+    expect(normalizeCardBack({ ...spec, pattern: 'plaid' })).toEqual({ ...spec, pattern: 'plaid' });
   });
 
   it('clamps anything that is not a hex color back to the pattern default', () => {
@@ -61,7 +72,7 @@ describe('normalizeCardBack', () => {
 
   it('refuses unknown pattern and border ids rather than passing them through', () => {
     const v = normalizeCardBack({ pattern: '<img>', border: '../../etc' });
-    expect(v.pattern).toBe('classic');
+    expect(v.pattern).toBe('stripes');   // the classic design's geometry
     expect(v.border).toBe('clean');
   });
 

@@ -54,24 +54,41 @@ export interface CardBackSpec {
   borderColor: string;
 }
 
-/** The sixteen patterns, each with the colors it wears out of the box. */
+/**
+ * The seven pattern GEOMETRIES — the shapes a back can be woven in. A spec's
+ * `pattern` is always one of these.
+ *
+ * Deliberately few. Sixteen distinct tilings meant sixteen thin variations on
+ * wallpaper; seven geometries, each drawn richly with all three colors, leave
+ * room for the sixteen DESIGNS below to be sixteen actual looks — the same
+ * loom producing tartans and rose windows depending on the thread.
+ */
+export const CARD_BACK_GEOMETRIES = ['stripes', 'plaid', 'dots', 'medallion', 'rays', 'harlequin', 'sweep'] as const;
+
+/**
+ * The sixteen pre-built designs: a geometry plus the palette it wears out of
+ * the box. Several share a geometry — a Highland plaid and an Oxford plaid
+ * are one weave in two wardrobes — which is the point: fewer patterns, more
+ * designs. The ids are stable (they are what old sheets stored), so the set
+ * can be re-dressed without stranding anyone's saved back.
+ */
 export const CARD_BACK_PATTERNS = [
-  { id: 'classic', label: 'Diagonal Stripes', primary: '#7c1f28', secondary: '#641820', accent: '#e8e2d2' },
-  { id: 'midnight', label: 'Reverse Stripes', primary: '#1d2c52', secondary: '#162240', accent: '#cdd6ea' },
-  { id: 'forest', label: 'Lattice', primary: '#1f4d2c', secondary: '#0e2e18', accent: '#d8e6d0' },
-  { id: 'royal', label: 'Polka Dots', primary: '#4a2170', secondary: '#e4d3f0', accent: '#2d1246' },
-  { id: 'goldfil', label: 'Filigree Grid', primary: '#5a4210', secondary: '#f0d06e', accent: '#f2e3b2' },
-  { id: 'steel', label: 'Pinstripe', primary: '#454c55', secondary: '#3d444d', accent: '#dfe3e8' },
-  { id: 'ember', label: 'Woven Bands', primary: '#8a3b10', secondary: '#6d2b0a', accent: '#ffaa3c' },
-  { id: 'ocean', label: 'Scales', primary: '#14536b', secondary: '#0c3a4d', accent: '#cfe6ea' },
-  { id: 'rose', label: 'Argyle', primary: '#8c2f49', secondary: '#6e2138', accent: '#f3d9de' },
-  { id: 'jade', label: 'Rails', primary: '#14624a', secondary: '#0f5340', accent: '#d5ead9' },
-  { id: 'onyx', label: 'Starfield', primary: '#14141c', secondary: '#ffffff', accent: '#8888aa' },
-  { id: 'copper', label: 'Herringbone', primary: '#7a4a24', secondary: '#64391a', accent: '#eed9c8' },
-  { id: 'ivory', label: 'Damask', primary: '#ede3cc', secondary: '#947c50', accent: '#b8a988' },
-  { id: 'neon', label: 'Neon Grid', primary: '#101024', secondary: '#00ffd6', accent: '#ff00be' },
-  { id: 'blood', label: 'Harlequin', primary: '#5c0e16', secondary: '#8c1b26', accent: '#e7cdd0' },
-  { id: 'aurora', label: 'Sweep', primary: '#123c46', secondary: '#1c6b57', accent: '#57306e' },
+  { id: 'classic', label: 'Classic Red', pattern: 'stripes', primary: '#7c1f28', secondary: '#641820', accent: '#e8c86a' },
+  { id: 'midnight', label: 'Midnight Stripe', pattern: 'stripes', primary: '#1d2c52', secondary: '#162240', accent: '#7fa8e0' },
+  { id: 'forest', label: 'Highland Plaid', pattern: 'plaid', primary: '#1f4d2c', secondary: '#0e2e18', accent: '#d8b23a' },
+  { id: 'steel', label: 'Oxford Plaid', pattern: 'plaid', primary: '#39404a', secondary: '#232830', accent: '#9fb4cc' },
+  { id: 'ember', label: 'Firewatch Plaid', pattern: 'plaid', primary: '#7a2d0c', secondary: '#3c1404', accent: '#ffaa3c' },
+  { id: 'royal', label: 'Royal Dots', pattern: 'dots', primary: '#4a2170', secondary: '#e4d3f0', accent: '#c89b3c' },
+  { id: 'ivory', label: 'Ivory Pearls', pattern: 'dots', primary: '#ede3cc', secondary: '#947c50', accent: '#b8a988' },
+  { id: 'ocean', label: 'Ocean Medallion', pattern: 'medallion', primary: '#14536b', secondary: '#0c3a4d', accent: '#7fd4c8' },
+  { id: 'rose', label: 'Rose Window', pattern: 'medallion', primary: '#6e1530', secondary: '#480e1f', accent: '#e0b64a' },
+  { id: 'goldfil', label: 'Gilt Medallion', pattern: 'medallion', primary: '#5a4210', secondary: '#3c2c08', accent: '#f0d06e' },
+  { id: 'onyx', label: 'Black Sun', pattern: 'rays', primary: '#14141c', secondary: '#26262f', accent: '#d8b23a' },
+  { id: 'neon', label: 'Neon Burst', pattern: 'rays', primary: '#101024', secondary: '#1c1c40', accent: '#00ffd6' },
+  { id: 'blood', label: 'Blood Diamonds', pattern: 'harlequin', primary: '#5c0e16', secondary: '#8c1b26', accent: '#e7cdd0' },
+  { id: 'jade', label: 'Jade Court', pattern: 'harlequin', primary: '#14624a', secondary: '#0f5340', accent: '#e8c86a' },
+  { id: 'aurora', label: 'Aurora', pattern: 'sweep', primary: '#123c46', secondary: '#1c6b57', accent: '#57306e' },
+  { id: 'copper', label: 'Copper Dusk', pattern: 'sweep', primary: '#7a4a24', secondary: '#a86a34', accent: '#2c1a10' },
 ] as const;
 
 /** The sixteen borders. Geometry only — the color is the spec's business. */
@@ -98,14 +115,21 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 
 /** The back every card has always worn: what an untouched sheet keeps. */
 export function defaultCardBack(): CardBackSpec {
-  const p = CARD_BACK_PATTERNS[0];
-  return { pattern: p.id, border: 'clean', primary: p.primary, secondary: p.secondary, accent: p.accent, borderColor: '' };
+  return patternDefaults('classic');
 }
 
-/** The spec a freshly-picked pattern starts at: its own colors, border kept. */
-export function patternDefaults(patternId: string, border = 'clean'): CardBackSpec {
-  const p = CARD_BACK_PATTERNS.find((x) => x.id === patternId) ?? CARD_BACK_PATTERNS[0];
-  return { pattern: p.id, border, primary: p.primary, secondary: p.secondary, accent: p.accent, borderColor: '' };
+/**
+ * The spec a freshly-picked design starts at: its geometry, its own colors,
+ * the border kept. Takes a design id OR a bare geometry id (a spec stored by
+ * an earlier version may hold either) — a design resolves to its geometry and
+ * palette; a bare geometry keeps the first design that weaves it, so nothing
+ * ever renders unpainted.
+ */
+export function patternDefaults(id: string, border = 'clean'): CardBackSpec {
+  const design = CARD_BACK_PATTERNS.find((x) => x.id === id)
+    ?? CARD_BACK_PATTERNS.find((x) => x.pattern === id)
+    ?? CARD_BACK_PATTERNS[0];
+  return { pattern: design.pattern, border, primary: design.primary, secondary: design.secondary, accent: design.accent, borderColor: '' };
 }
 
 /**

@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import type { LootItem } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { useCampaignKeyNames } from '../util/campaignKeys';
 import { StockList, type KeyedStock } from '../panels/StockEditor';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 
 export function MapObjectInspector() {
+  const keyNames = useCampaignKeyNames();
   const you = useGameStore((s) => s.you);
   const characters = useGameStore((st) => st.characters);
   const campaign = useGameStore((s) => s.campaign);
@@ -159,13 +161,22 @@ export function MapObjectInspector() {
           {obj.locked && (
             <label>
               Key required
+              {/* The same list the door editor offers, from the same place:
+                  every key that exists anywhere in the campaign. Typing is
+                  still allowed — a DM may name a key before cutting it — but
+                  the ones that already exist are one click away rather than
+                  something to remember the spelling of. */}
               <input
                 key={`${obj.id}-key`}
+                list={`keys-${obj.id}`}
                 defaultValue={obj.keyName ?? 'Key'}
                 placeholder="Key"
-                title="An inventory item with this name opens it. Leave as “Key” for a generic key, or name a specific one."
+                title="An inventory item with this name opens it. Leave as “Key” for a generic key, or pick one you have cut."
                 onBlur={(e) => intents.updateMapObject(obj.id, { keyName: e.target.value.trim() || 'Key' })}
               />
+              <datalist id={`keys-${obj.id}`}>
+                {keyNames.map((n) => <option key={n} value={n} />)}
+              </datalist>
             </label>
           )}
           {/* A chest can be carried by a character instead of sitting on the

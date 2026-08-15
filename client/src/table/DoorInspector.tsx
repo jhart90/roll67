@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DoorType } from 'shared';
-import { keysOnSheet } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { useCampaignKeyNames } from '../util/campaignKeys';
 
 /** Floating editor for a door/gate selected with the cursor tool (right-click,
  *  DM only) -- change door<->gate, toggle open/closed, and lock it behind a
@@ -12,14 +12,11 @@ export function DoorInspector() {
   const door = useGameStore((s) =>
     s.selectedDoorId ? s.dmGeometry?.doors.find((d) => d.id === s.selectedDoorId) : undefined);
 
-  // Every key name already cut, from anyone's inventory — the Key Manager is
-  // where they come from, so the door offers exactly those.
-  const characters = useGameStore((s) => s.characters);
-  const existingKeys = useMemo(() => {
-    const names = new Set<string>();
-    for (const c of characters) for (const k of keysOnSheet(c.sheet)) names.add(k.name);
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [characters]);
+  // Every key that EXISTS — cut into the compendium, stocked in a chest, or
+  // already in somebody's pocket. Looking only at inventories made the
+  // ordinary order of work impossible: cut the key, put it in the chest, then
+  // lock the door it opens, and the dropdown was empty.
+  const existingKeys = useCampaignKeyNames();
   const isGeneric = !door?.keyName || door.keyName === 'Key';
   const [customKey, setCustomKey] = useState(isGeneric ? '' : door?.keyName ?? '');
   const [keyMode, setKeyMode] = useState<'generic' | 'specific'>(isGeneric ? 'generic' : 'specific');

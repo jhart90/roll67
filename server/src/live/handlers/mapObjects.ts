@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, acquirePatch, hexDistance, firstFreeHex, packHex, systemFor,
+  C2S, S2C, acquirePatch, conditionCombat, conditionsOf, hexDistance, firstFreeHex, packHex, systemFor,
   type Character, type DeleteMapObjectPayload, type GameSystem, type OpenChestPayload, type PlaceMapObjectPayload,
   type SheetData, type TakeAllChestPayload, type TakeChestItemPayload,
   type TakeMapItemPayload, type UpdateMapObjectPayload,
@@ -27,6 +27,43 @@ function playerWithinRange(userId: string, mapId: string, q: number, r: number, 
     if (hexDistance({ q: t.q, r: t.r }, { q, r }) <= range) return true;
   }
   return false;
+}
+
+/**
+ * A chest that somebody is CARRYING — a body's pockets rather than a box on
+ * the floor.
+ *
+ * Two things follow from being carried, and both are answered here so every
+ * take path asks the same question. It has no fixed place on the map: reach
+ * is measured to whoever is holding it, wherever they have walked. And it is
+ * shut to the living: a player may go through the pockets only once the
+ * bearer is incapacitated or dead, which is the whole of the rule — the DM,
+ * as ever, is not searching anybody, they are running them.
+ */
+function carrierOf(obj: { linkedCharacterId?: string | null; mapId: string }): {
+  character: Character; token: { q: number; r: number } | null; down: boolean;
+} | null {
+  if (!obj.linkedCharacterId) return null;
+  const character = characters.byId(obj.linkedCharacterId);
+  if (!character) return null;
+  const token = tokens.forMap(obj.mapId).find((t) => t.characterId === character.id) ?? null;
+  const conds = conditionsOf(character.sheet);
+  const down = conditionCombat(conds).incapacitated || conds.includes('dead') || conds.includes('unconscious');
+  return { character, token: token ? { q: token.q, r: token.r } : null, down };
+}
+
+/** Where a container actually IS: a carried one is wherever its bearer is. */
+function containerHex(obj: { q: number; r: number; linkedCharacterId?: string | null; mapId: string }): { q: number; r: number } {
+  return carrierOf(obj)?.token ?? { q: obj.q, r: obj.r };
+}
+
+/** Why this player may not go through it, or null when they may. */
+function carriedBlocks(role: string, obj: { linkedCharacterId?: string | null; mapId: string; name: string }): string | null {
+  if (role === 'dm') return null;
+  const carrier = carrierOf(obj);
+  if (!carrier) return null;
+  if (carrier.down) return null;
+  return `${carrier.character.name} is still on their feet — you cannot go through their pockets.`;
 }
 
 function postTake(io: Server, campaignId: string, playerName: string, itemName: string, intoName?: string): void {
@@ -152,7 +189,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
       emitError(socket, 'You are not close enough to pick that up.'); return;
     }
-    const taker = takerFor(d.role, d.userId, obj.mapId, obj.q, obj.r);
+    const taker = takerFor(d.role, d.userId, obj.mapId, containerHex(obj).q, containerHex(obj).r);
     if (!taker) { emitError(socket, 'No character of yours is here to pick that up.'); return; }
     const into = grantLoot(io, d.campaignId, taker, { name: obj.name, description: obj.description });
     mapObjects.delete(objectId);
@@ -166,8 +203,13 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (!obj || obj.kind !== 'chest') throw new Error('Unknown chest.');
     const map = maps.byId(obj.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
-    if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
-      emitError(socket, 'You are not close enough to reach that chest.'); return;
+    {
+      const at = containerHex(obj);
+      if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, at.q, at.r)) {
+        emitError(socket, 'You are not close enough to reach that chest.'); return;
+      }
+      const shut = carriedBlocks(d.role, obj);
+      if (shut) { emitError(socket, shut); return; }
     }
     {
       const blocked = lockBlocks(d.role, d.userId, d.campaignId, obj);
@@ -175,7 +217,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     }
     const item = obj.items.find((i: { id: string }) => i.id === itemId);
     if (!item) throw new Error('Item not in chest.');
-    const taker = takerFor(d.role, d.userId, obj.mapId, obj.q, obj.r);
+    const taker = takerFor(d.role, d.userId, obj.mapId, containerHex(obj).q, containerHex(obj).r);
     if (!taker) { emitError(socket, 'No character of yours is here to take it.'); return; }
     // A pile of several hands one over and keeps the rest; a single item
     // empties its row.
@@ -195,15 +237,20 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (!obj || obj.kind !== 'chest') throw new Error('Unknown chest.');
     const map = maps.byId(obj.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
-    if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, obj.q, obj.r)) {
-      emitError(socket, 'You are not close enough to reach that chest.'); return;
+    {
+      const at = containerHex(obj);
+      if (d.role !== 'dm' && !playerWithinRange(d.userId, obj.mapId, at.q, at.r)) {
+        emitError(socket, 'You are not close enough to reach that chest.'); return;
+      }
+      const shut = carriedBlocks(d.role, obj);
+      if (shut) { emitError(socket, shut); return; }
     }
     {
       const blocked = lockBlocks(d.role, d.userId, d.campaignId, obj);
       if (blocked) { emitError(socket, blocked); return; }
     }
     if (obj.items.length === 0) return;
-    const taker = takerFor(d.role, d.userId, obj.mapId, obj.q, obj.r);
+    const taker = takerFor(d.role, d.userId, obj.mapId, containerHex(obj).q, containerHex(obj).r);
     if (!taker) { emitError(socket, 'No character of yours is here to take it.'); return; }
     for (const item of obj.items) {
       // Re-read the taker each time: every grant rewrites their sheet, and

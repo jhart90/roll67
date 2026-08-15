@@ -186,12 +186,18 @@ export function MapObjectInspector() {
             <select
               value={obj.linkedCharacterId ?? ''}
               onChange={(e) => intents.updateMapObject(obj.id, { linkedCharacterId: e.target.value || null })}
-              title="Whose token IS this container. Leave unset for a chest on the ground."
+              title="Whose token IS this container. A carried chest leaves the ground and travels with them — and players can only go through it once they are incapacitated or dead."
             >
               <option value="">— on the ground —</option>
               {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
+          {obj.linkedCharacterId && (
+            <p className="dim" style={{ fontSize: 11, margin: '2px 0 6px' }}>
+              🫱 Carried, so it is off the map — players reach it through that token,
+              and only once they are incapacitated or dead.
+            </p>
+          )}
           {/* The same stock surface a shop's shelves use — a chest is just a
               container whose contents are free, so the price column is off. */}
           <StockList

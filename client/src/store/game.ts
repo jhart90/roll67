@@ -155,6 +155,10 @@ function resetChatQueue(): void {
 /** Armed by placeMapObject, spent by the next NEW map object to arrive —
  *  the id does not exist until the server has made one. */
 let pendingInspectPlacement = false;
+/** …and, when that placement was "give this body some loot", who is to carry
+ *  it. Tied on arrival for the same reason: the chest has no id until then. */
+let pendingBodyLootFor: string | null = null;
+export function armBodyLoot(characterId: string): void { pendingBodyLootFor = characterId; }
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain' | 'text';
 export type DockTab = 'chat' | 'initiative' | 'world';
@@ -1603,6 +1607,12 @@ export function wireSocket(): void {
     if (pendingInspectPlacement && isNew) {
       pendingInspectPlacement = false;
       useGameStore.setState({ selectedObjectId: object.id, inspectedObjectId: object.id });
+      // A chest made to BE somebody's pockets is tied to them the moment it
+      // exists, which is also what takes it off the ground.
+      if (pendingBodyLootFor) {
+        intents.updateMapObject(object.id, { linkedCharacterId: pendingBodyLootFor });
+        pendingBodyLootFor = null;
+      }
     }
   });
 

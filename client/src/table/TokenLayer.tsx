@@ -282,11 +282,18 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       useGameStore.getState().selectToken(token.id, e.shiftKey);
       useGameStore.getState().openInspector(token.id);
     } else if (token.characterId) {
-      const shops = useGameStore.getState().shopList;
-      const linkedShop = shops.find((s) => s.linkedCharacterId === token.characterId);
+      const st = useGameStore.getState();
+      const linkedShop = st.shopList.find((s) => s.linkedCharacterId === token.characterId);
       if (linkedShop) {
         useGameStore.setState({ presentedShopId: linkedShop.id });
+        return;
       }
+      // Going through the pockets. Offered only once they are down — the
+      // server enforces it either way, but a menu that opens onto a refusal
+      // is a worse answer than one that never opens.
+      const body = st.mapObjects && Object.values(st.mapObjects)
+        .find((o) => o.kind === 'chest' && o.linkedCharacterId === token.characterId);
+      if (body && bodyIsDown) useGameStore.setState({ lootPopupId: body.id });
     }
   }
 
@@ -314,6 +321,11 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // ever saw that the ogre was Shaken. The sheet still wins when we have it,
   // since it is the live copy the owner is editing.
   const conditionIds = character ? conditionsOf(character.sheet) : (token.conditions ?? []);
+  // Read from the TOKEN's mirrored conditions as well as the sheet: a player
+  // is never sent another character's sheet, and whether the ogre has fallen
+  // over is exactly the thing they can see for themselves.
+  const bodyIsDown = conditionIds.includes('dead') || conditionIds.includes('unconscious')
+    || conditionIds.includes('incapacitated');
   const conditionIcons = conditionIds.map((id) => getCondition(id)?.icon).filter(Boolean) as string[];
   if (character && typeof character.sheet.concentration === 'string' && character.sheet.concentration) {
     conditionIcons.push('🌀');

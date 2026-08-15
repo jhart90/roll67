@@ -5,6 +5,7 @@ import { intents, useGameStore, type MapTarget } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { worldDrag, type WorldDragKind } from '../store/worldDrag';
 import { AnchoredMenu } from '../util/AnchoredMenu';
+import { ChestFolderEditor } from './ChestFolderEditor';
 import { inkOnDark } from '../util/playerColor';
 
 // 'token' nodes live only in this tree and are not draggable, so the kind is
@@ -237,6 +238,7 @@ export function WorldTreePanel() {
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
   const [folderEdit, setFolderEdit] = useState<string | null>(null);
+  const [chestEdit, setChestEdit] = useState<string | null>(null);
   // The dragged item lives in a module-level ref (not state) so `drop` reads
   // it synchronously and so a drop on the map canvas — a different panel
   // entirely — can read it too.
@@ -369,6 +371,10 @@ export function WorldTreePanel() {
       const linked = Object.values(useGameStore.getState().mapObjects)
         .find((o) => o.kind === 'chest' && o.worldFolderId === node.id);
       if (linked) { useGameStore.getState().openObjectInspector(linked.id); return; }
+      // A chest with no piece on the ground yet is still a chest: it holds
+      // its loot on the folder row, and the one thing a new chest is for —
+      // putting things in it — should not wait on placing it somewhere.
+      if (node.displayKind === 'chest') { setChestEdit(node.id); return; }
       setFolderEdit(node.id);
       return;
     }
@@ -718,6 +724,7 @@ export function WorldTreePanel() {
 
       {reading && <ReadModal node={reading} onClose={() => setReading(null)} />}
       {folderEdit && <FolderDetailsModal folderId={folderEdit} onClose={() => setFolderEdit(null)} />}
+      {chestEdit && <ChestFolderEditor folderId={chestEdit} onClose={() => setChestEdit(null)} />}
 
       {ctxMenu && (
         <div className="wt-ctx-backdrop" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}>
@@ -738,6 +745,9 @@ export function WorldTreePanel() {
               );
             })()}
             <hr />
+            {byId.get(ctxMenu.folderId)?.displayKind === 'chest' && (
+              <button onClick={() => { setChestEdit(ctxMenu.folderId); setCtxMenu(null); }}>Chest contents…</button>
+            )}
             <button onClick={() => { setFolderEdit(ctxMenu.folderId); setCtxMenu(null); }}>Folder details…</button>
           </AnchoredMenu>
         </div>

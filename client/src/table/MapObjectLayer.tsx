@@ -244,7 +244,10 @@ export function MapObjectLayer() {
   if (!map) return null;
   // The store holds every map's objects (for the world tree) — render only
   // the ones placed on the map being viewed.
-  const objects = Object.values(mapObjects).filter((o) => o.mapId === map.id);
+  // A chest somebody is CARRYING has no place on the ground — it is their
+  // pockets, reached through their token (see TokenLayer). Drawing a box
+  // beside them would be drawing the same loot twice.
+  const objects = Object.values(mapObjects).filter((o) => o.mapId === map.id && !o.linkedCharacterId);
 
   const { width, height } = mapPixelSize(map);
 

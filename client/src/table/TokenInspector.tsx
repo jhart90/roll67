@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { TokenShape } from 'shared';
 import { hexDistance, num, systemFor } from 'shared';
-import { intents, useGameStore } from '../store/game';
+import { armBodyLoot, intents, useGameStore } from '../store/game';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 import { ConfirmButton } from '../util/ConfirmButton';
@@ -20,6 +20,24 @@ const SHAPES: Array<{ id: TokenShape; label: string }> = [
 ];
 
 /** DM-only floating panel for a token — opened by right-clicking it. */
+/**
+ * Open (or first create) the chest that stands for a character's pockets.
+ *
+ * One per character by construction: the button reads the existing one before
+ * it makes another, so a DM clicking twice edits the same loot rather than
+ * quietly starting a second pile nobody will ever find.
+ */
+function openBodyLoot(characterId: string, mapId: string, q: number, r: number, name: string): void {
+  const st = useGameStore.getState();
+  const existing = Object.values(st.mapObjects)
+    .find((o) => o.kind === 'chest' && o.linkedCharacterId === characterId);
+  if (existing) { st.openObjectInspector(existing.id); return; }
+  intents.placeMapObject(mapId, 'chest', `${name}'s effects`, q, r);
+  // placeMapObject arms the inspector for the object that comes back, so the
+  // only thing left is to tie it to its bearer once it exists.
+  armBodyLoot(characterId);
+}
+
 export function TokenInspector() {
   const you = useGameStore((s) => s.you);
   const campaign = useGameStore((s) => s.campaign);
@@ -79,6 +97,10 @@ export function TokenInspector() {
     }
   }
 
+  const bodyChest = useGameStore((s) => (token?.characterId
+    ? Object.values(s.mapObjects).find((o) => o.kind === 'chest' && o.linkedCharacterId === token.characterId)
+    : undefined));
+
   return (
     <div className="token-inspector">
       <div className="dock-header">
@@ -117,6 +139,23 @@ export function TokenInspector() {
             <option value="gm">GM only (hidden)</option>
           </select>
         </label>
+        {/* What is in their pockets. A body's loot is an ordinary chest that
+            this character CARRIES: it travels with them, is invisible on the
+            ground, and opens to a player only once they are down. Reusing the
+            chest means the lock, the compendium, the range check and the
+            take-and-grant all come for free. */}
+        {token.characterId && (
+          <label>
+            Loot on this body
+            <button
+              className="btn btn-sm"
+              title="Items a player can take off this body once it is incapacitated or dead"
+              onClick={() => openBodyLoot(token.characterId!, token.mapId, token.q, token.r, token.name)}
+            >
+              {bodyChest ? `${bodyChest.items.length} item${bodyChest.items.length === 1 ? '' : 's'} — edit…` : '+ Add loot…'}
+            </button>
+          </label>
+        )}
         {character && (
           <label>
             Controlled by

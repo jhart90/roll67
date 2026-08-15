@@ -20,7 +20,7 @@ import { broadcastCounters } from './counters.js';
 import { buildDirectory, broadcastDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
 import { foldersVisibleTo, shopsForUser, sendShopPresentationTo } from './world.js';
-import { emitMoveBudget } from './tokens.js';
+import { emitMoveBudget, moveBudgetFor } from './tokens.js';
 
 function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   const all = handouts.forCampaign(campaignId);
@@ -60,6 +60,8 @@ export function sendWorldViewTo(socket: Socket): void {
 }
 
 export function buildCampaignState(campaignId: string, userId: string, username: string, isDm: boolean): CampaignStatePayload {
+  const initNow = initiative.get(campaignId);
+  const upNowOnJoin = initNow.active ? initNow.entries[initNow.turnIdx]?.tokenId ?? null : null;
   const campaign = campaigns.byId(campaignId)!;
   return {
     campaign: isDm ? campaign : { ...campaign, inviteCode: '' },
@@ -80,6 +82,11 @@ export function buildCampaignState(campaignId: string, userId: string, username:
     macros: macros.forUser(userId, campaignId),
     initiative: initiativeViewFor(initiative.get(campaignId), isDm, campaignId),
     clockSeconds: campaigns.clockSeconds(campaignId),
+    // In the join payload rather than chasing it: a refresh mid-turn used to
+    // rely on a follow-up message arriving after the client had cleared its
+    // budgets, and a client that missed the window showed a full Pace bar
+    // over a token that had already walked half of it.
+    ...(upNowOnJoin ? { moveBudget: moveBudgetFor(campaignId, upNowOnJoin) ?? undefined } : {}),
     // The GM's own Benny pool. Sent to everyone in the payload's shape but
     // only meaningful to the DM, who is the only one with a chip showing it.
     gmBennies: campaigns.gmBennies(campaignId),

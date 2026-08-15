@@ -939,6 +939,16 @@ export interface CampaignStatePayload {
   /** SWADE: Bennies in the GM's own pool. */
   gmBennies?: number;
   chatTail: ChatMessage[];
+  /**
+   * What is left of the current turn's Pace, for whoever is up.
+   *
+   * Carried IN the join payload rather than sent after it. It used to follow
+   * as its own message a beat later, which meant a client that cleared its
+   * budgets on arrival was relying on message order to get them back — and a
+   * refresh mid-turn could land with a full Pace bar over a token that had
+   * already walked half of it. One message, no window.
+   */
+  moveBudget?: MoveBudgetPayload;
   /** Loot/chest/shop markers across ALL maps (so the world tree can nest
    *  them under every map, not just the one being viewed). */
   mapObjects: MapObject[];

@@ -1028,9 +1028,12 @@ export function wireSocket(): void {
       handoutList: p.handouts,
       macroList: p.macros,
       initiativeState: p.initiative,
-      // Budgets are per-turn and live only in the server's memory; anything
-      // remembered across a rejoin is about a turn that has long since ended.
-      moveBudgets: {},
+      // Budgets are per-turn and live only in the server's memory, so nothing
+      // remembered locally survives a rejoin — but the turn in progress does,
+      // and it arrives HERE rather than in a message afterwards. Clearing to
+      // empty and waiting was how a refresh mid-turn ended up showing a full
+      // Pace bar over a token that had already walked half of it.
+      moveBudgets: p.moveBudget ? { [p.moveBudget.tokenId]: p.moveBudget } : {},
       clockSeconds: p.clockSeconds ?? 0,
       gmBennies: p.gmBennies ?? 0,
       chatLog: p.chatTail,

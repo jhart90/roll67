@@ -3,7 +3,7 @@ import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
   dieSides, playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type TokenShape, type UpdateTokenPayload,
+  type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveBudgetPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type Token, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
 import { assets, campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
@@ -82,16 +82,25 @@ export function hasRunThisTurn(campaignId: string, tokenId: string): boolean {
  * published to the token's owner and to the DM. Sent when a turn begins and
  * after every move, which is exactly when the answer changes.
  */
-export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, only?: Socket): void {
+/**
+ * The same numbers emitMoveBudget publishes, as a value — so the join payload
+ * can carry them instead of racing a second message to get them there.
+ */
+export function moveBudgetFor(campaignId: string, tokenId: string): MoveBudgetPayload | null {
   const token = tokens.byId(tokenId);
   const ch = token?.characterId ? characters.byId(token.characterId) : undefined;
-  if (!token || !ch || ch.system !== 'swade') return;
-  if (!initiative.get(campaignId).active) return;
+  if (!token || !ch || ch.system !== 'swade') return null;
+  if (!initiative.get(campaignId).active) return null;
+  return buildMoveBudget(campaignId, token, ch);
+}
+
+function buildMoveBudget(campaignId: string, token: Token, ch: Character): MoveBudgetPayload {
+  const tokenId = token.id;
   const conds = conditionsOf(ch.sheet);
   const prone = conds.includes('prone');
   const crawling = prone && proneIntent.get(tokenId) === 'crawl';
   const rec = swadeTurnMoves.get(campaignId)?.get(tokenId);
-  const payload = {
+  const payload: MoveBudgetPayload = {
     tokenId,
     from: { q: token.q, r: token.r },
     pace: crawling ? CRAWL_PACE : Math.max(1, swadePace(ch.sheet) - (prone ? 2 : 0)),
@@ -109,6 +118,15 @@ export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, 
     actions: actionsTakenThisTurn(campaignId, ch.id),
     shaken: conds.includes('shaken'),
   };
+  return payload;
+}
+
+export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, only?: Socket): void {
+  const token = tokens.byId(tokenId);
+  const ch = token?.characterId ? characters.byId(token.characterId) : undefined;
+  if (!token || !ch || ch.system !== 'swade') return;
+  if (!initiative.get(campaignId).active) return;
+  const payload = buildMoveBudget(campaignId, token, ch);
   // `only` is the socket that just joined: it needs catching up, and nobody
   // else needs telling again.
   if (only) { only.emit(S2C.MOVE_BUDGET, payload); return; }
@@ -451,6 +469,17 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         }, 0);
         rec.jump = airborne;
         if (rec.moved + stepDist > pace + (rec.runBonus ?? 0)) {
+          // Beyond what a run could buy even on the die's best face: there is
+          // no offer worth making. Asking "do you want to run?" about ground
+          // that running cannot reach spends the die on a move that will then
+          // be refused anyway.
+          const bestRun = dieSides(str(character.sheet, 'runningDie', 'd6')) || 6;
+          if (rec.runBonus === null && rec.moved + stepDist > pace + bestRun) {
+            socket.emit(S2C.TOKEN_UPSERTED, { token });
+            emitError(socket, `Too far — ${rec.moved + stepDist} tiles, and ${pace + bestRun} is everything this turn has,`
+              + ' running and rolling the best face on the die.');
+            return;
+          }
           if (rec.runBonus === null) {
             // Past Pace with no running die spent: ask, never auto-roll —
             // running costs −2 on everything else this turn.

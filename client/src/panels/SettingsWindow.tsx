@@ -195,6 +195,7 @@ function DmSection() {
   const campaign = useGameStore((s) => s.campaign);
   const speed = campaign?.diceSpeed ?? 'cinematic';
   const [busy, setBusy] = useState(false);
+  const [armWipe, setArmWipe] = useState(false);
 
   async function downloadBackup() {
     if (!campaign) return;
@@ -238,6 +239,25 @@ function DmSection() {
       </div>
 
       <div className="settings-row">
+        <span className="settings-label">Chat log</span>
+        <span className="settings-value">
+          {/* Two clicks, not a browser confirm: the first arms it, and looking
+              away disarms it. Erasing months of table history deserves exactly
+              one deliberate second thought, and no more ceremony than that. */}
+          {armWipe ? (
+            <>
+              <button className="link danger" onClick={() => { intents.chatWipe(); setArmWipe(false); }}>
+                really wipe it all
+              </button>
+              <button className="link" onClick={() => setArmWipe(false)}>keep it</button>
+            </>
+          ) : (
+            <button className="link" onClick={() => setArmWipe(true)}>wipe the whole log</button>
+          )}
+        </span>
+      </div>
+
+      <div className="settings-row">
         <span className="settings-label">Backup</span>
         <span className="settings-value">
           <button className="link" disabled={busy} onClick={downloadBackup}>
@@ -247,9 +267,10 @@ function DmSection() {
       </div>
 
       <p className="dim settings-note">
-        These two are the table’s, not yours: everyone watches dice at the same speed, so nobody
+        These are the table’s, not yours: everyone watches dice at the same speed, so nobody
         sees a result before anybody else. The backup is one file holding the whole campaign —
         every sheet, map, wall, chest, image and the chat log — and restores from the shelf screen.
+        Wiping the chat erases the log for everyone, permanently; take a backup first if it matters.
       </p>
     </>
   );

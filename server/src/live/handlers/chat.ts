@@ -50,6 +50,26 @@ export function applyAdv(expr: string, adv: 'adv' | 'dis' | null | undefined): s
 }
 
 export function registerChatHandlers(io: Server, socket: Socket): void {
+  /**
+   * Erase the whole log, for everyone, for good.
+   *
+   * The DM's act alone, and deliberately total: the rows go, the undo records
+   * inside them go with them, and every screen empties at once. What remains
+   * afterwards is one system line saying who did it — a log that starts with
+   * its own erasure is honest about having been erased.
+   */
+  socket.on(C2S.CHAT_WIPE, safe(socket, () => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM wipes the chat log.'); return; }
+    chat.clear(d.campaignId);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT_WIPED, {});
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `🧹 ${d.username} wiped the chat log.`, roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'CHAT_WIPE'));
+
   socket.on(C2S.CHAT, safe(socket, ({ text }: ChatPayload) => {
     const d = requireCampaign(socket);
     handleChatText(io, socket, d.campaignId, d.userId, d.username, d.role, String(text ?? '').trim(), 0);

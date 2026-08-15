@@ -27,14 +27,21 @@ export function InitiativeFloat() {
     wasActive.current = state.active;
   }, [state.active]);
 
+  // Every hook ABOVE the early return, unconditionally. Two of these used to
+  // sit below it, which held together exactly as long as combat was running —
+  // and the moment it ended, the early return skipped them, React counted
+  // fewer hooks than the render before, and the whole app came down to a
+  // black screen. A component's hooks are a contract about every render, not
+  // just the interesting ones.
+  const budgets = useGameStore((st) => st.moveBudgets);
+  const upTokenId = useGameStore((st) => st.initiativeState.entries[st.initiativeState.turnIdx]?.tokenId ?? null);
+
   if (!you || !state.active || dismissed) return null;
 
   const current = state.entries[state.turnIdx];
   const isMine = !!current && current.ownerUserId === you.userId;
   // The same signal the turn coach lights up on: the rules' one demand is
   // dealt with and the turn has been used for something.
-  const budgets = useGameStore((st) => st.moveBudgets);
-  const upTokenId = useGameStore((st) => st.initiativeState.entries[st.initiativeState.turnIdx]?.tokenId ?? null);
   const budget = upTokenId ? budgets[upTokenId] : undefined;
   const turnSpent = !!budget && !budget.shaken && (budget.actions > 0 || budget.moved > 0);
   const myTurn = isMine || you.role === 'dm';

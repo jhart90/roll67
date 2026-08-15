@@ -1464,6 +1464,13 @@ export function wireSocket(): void {
 
   // The DM changed the table's dice pacing. It rides on the campaign so that
   // everyone switches at the same moment and nobody is a few seconds ahead.
+  socket.on(S2C.CHAT_WIPED, () => {
+    // Everything queued was part of the log that no longer exists — a wiped
+    // table must not go on animating messages from before the wipe.
+    resetChatQueue();
+    useGameStore.setState({ chatLog: [], diceAnim: null });
+  });
+
   socket.on(S2C.MAP_ZONES, (p: MapZonesPayload) => {
     const cur = useGameStore.getState().map;
     if (cur && cur.id === p.mapId) useGameStore.setState({ map: { ...cur, zones: p.zones } });
@@ -1971,6 +1978,7 @@ export const intents = {
    *  kept locally so a DM viewing as this player sees it their way. */
   setTurnGuide: (on: boolean) => socket.emit(C2S.SET_TURN_GUIDE, { on }),
   setDiceSpeed: (speed: DiceSpeed) => socket.emit(C2S.SET_DICE_SPEED, { speed }),
+  chatWipe: () => socket.emit(C2S.CHAT_WIPE, {}),
   attackPreview: (targetTokenId: string) => {
     const t = useGameStore.getState().targeting;
     if (!t) return;

@@ -3619,6 +3619,9 @@ th > .term { border-bottom-style: dotted; }
 .settings-swatch.on { border-color: var(--text); }
 
 .settings-note { font-size: 11px; margin-top: 10px; line-height: 1.4; overflow-wrap: break-word; }
+/* The armed half of the chat-wipe confirm: red where it lives, without
+   depending on the dock-scoped danger styling this window never gets. */
+.settings-window .link.danger { color: var(--danger); font-weight: 600; }
 
 /* Blast templates drawn with the dice's Ace animation: a canvas riding inside
    the map's SVG, so it pans and zooms with everything else. */

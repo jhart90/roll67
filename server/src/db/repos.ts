@@ -1481,6 +1481,10 @@ function diceLookFor(characterId: string): DiceLook | null {
 }
 
 export const chat = {
+  /** Erase a campaign's whole log. The DM's own act — see CHAT_WIPE. */
+  clear(campaignId: string): void {
+    stmt('DELETE FROM chat_messages WHERE campaign_id = ?').run(campaignId);
+  },
   add(campaignId: string, msg: {
     userId: string | null; fromName: string; fromCharacter?: string | null; actionName?: string | null; outcomeNote?: string | null; kind: ChatKind; text: string;
     roll: RollBreakdown | null; recipients: string[] | null;

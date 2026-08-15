@@ -89,6 +89,8 @@ export const C2S = {
   DELETE_WORLD_FOLDER: 'deleteWorldFolder',
   // chat & macros
   CHAT: 'chat',
+  /** DM: erase the campaign's whole chat log, for every screen at once. */
+  CHAT_WIPE: 'chatWipe',
   SAVE_MACRO: 'saveMacro',
   DELETE_MACRO: 'deleteMacro',
   REORDER_MACROS: 'reorderMacros',
@@ -846,6 +848,8 @@ export const S2C = {
    *  result lands, so a group save isn't a silent wall of cards. */
   ROLL_CALLOUT: 'rollCallout',
   CHAT_UPDATED: 'chatUpdated',
+  /** The log was erased — drop everything, a fresh line follows. */
+  CHAT_WIPED: 'chatWiped',
   SHOPS: 'shops',
   SHOP_PRESENTATION: 'shopPresentation',
   LOCATIONS: 'locations',

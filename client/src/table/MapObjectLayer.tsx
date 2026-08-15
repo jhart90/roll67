@@ -27,7 +27,7 @@ function TreasureChest({ r }: { r: number }) {
   const iron = '#4a4f57';
   const ironLit = '#767d88';
   return (
-    <g style={{ pointerEvents: 'none' }}>
+    <g>
       {/* Body */}
       <path
         d={`M ${-hx} ${seam} L ${hx} ${seam} L ${hx} ${base - r * 0.12} Q ${hx} ${base} ${hx - r * 0.12} ${base} L ${-hx + r * 0.12} ${base} Q ${-hx} ${base} ${-hx} ${base - r * 0.12} Z`}
@@ -166,6 +166,15 @@ const MapObjectPiece = memo(function MapObjectPiece({ obj }: { obj: MapObject })
       onPointerUp={onPointerUp}
       onContextMenu={onContextMenu}
     >
+      {/* The hit area. SVG hit-testing happens on PAINTED shapes — the g's
+          own pointerEvents: 'all' only sets what children inherit, it does not
+          make the group's area clickable. The chest artwork used to switch
+          its children to 'none', which left the fancy chest with no clickable
+          pixel anywhere: it could not be selected, dragged, or right-clicked
+          while the plain shapes (shop, single item) worked fine. A transparent
+          circle is a painted shape, so the whole footprint answers — art,
+          artwork gaps and all. */}
+      <circle r={r * 1.05} fill="transparent" />
       {flashing && <FlashHalo r={r} />}
       {/* The same gold dashed ring a selected token wears — a chest picked in
           the World pane should look picked here in exactly the same way. */}

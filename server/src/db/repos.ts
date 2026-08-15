@@ -1847,7 +1847,14 @@ export const mapObjects = {
 
 export const customItems = {
   forCampaign(campaignId: string): CustomItem[] {
-    return stmt('SELECT * FROM custom_items WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as CustomItem[];
+    // Mapped column by column, NOT cast: `SELECT *` hands back snake_case
+    // rows, and casting them to the camelCase CustomItem sent every client a
+    // list whose entryJson was undefined — so parseCustomEntries "skipped
+    // corrupt" on all of them, and every custom compendium entry (every cut
+    // key included) was silently invisible in every picker.
+    const rows = stmt('SELECT id, campaign_id, entry_json, created_at FROM custom_items WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as
+      Array<{ id: string; campaign_id: string; entry_json: string; created_at: number }>;
+    return rows.map((r) => ({ id: r.id, campaignId: r.campaign_id, entryJson: r.entry_json, createdAt: r.created_at }));
   },
   byId(id: string): (CustomItem & { campaignId: string }) | undefined {
     const r = stmt('SELECT id, campaign_id, entry_json, created_at FROM custom_items WHERE id = ?').get(id) as

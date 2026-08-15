@@ -252,7 +252,11 @@ function DmSection() {
               <button className="link" onClick={() => setArmWipe(false)}>keep it</button>
             </>
           ) : (
-            <button className="link" onClick={() => setArmWipe(true)}>wipe the whole log</button>
+            <button
+              className="link"
+              title="Erases the chat log for everyone, permanently. A backup captures it first if it matters."
+              onClick={() => setArmWipe(true)}
+            >wipe the whole log</button>
           )}
         </span>
       </div>
@@ -260,18 +264,18 @@ function DmSection() {
       <div className="settings-row">
         <span className="settings-label">Backup</span>
         <span className="settings-value">
-          <button className="link" disabled={busy} onClick={downloadBackup}>
+          <button
+            className="link"
+            title="One file holding the whole campaign — sheets, maps, walls, chests, images, chat. Restores from the shelf screen."
+            disabled={busy}
+            onClick={downloadBackup}
+          >
             {busy ? 'packing it up…' : 'download this campaign'}
           </button>
         </span>
       </div>
 
-      <p className="dim settings-note">
-        These are the table’s, not yours: everyone watches dice at the same speed, so nobody
-        sees a result before anybody else. The backup is one file holding the whole campaign —
-        every sheet, map, wall, chest, image and the chat log — and restores from the shelf screen.
-        Wiping the chat erases the log for everyone, permanently; take a backup first if it matters.
-      </p>
+
     </>
   );
 }

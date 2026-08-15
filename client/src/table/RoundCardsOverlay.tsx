@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useGameStore } from '../store/game';
 import { CardFace } from '../util/PlayingCardView';
+import { CardBackView } from '../util/cardBacks';
 
 /** Pause before the first flip, gap between flips, and the linger after. */
 const LEAD_MS = 500;
@@ -39,14 +40,16 @@ export function RoundCardsOverlay() {
         {deal.cards.map((c, i) => (
           <div key={`${deal.seq}-${i}`} className="round-card">
             <div className="round-card-name">{c.name}</div>
+            {/* Face down, the card wears its owner's chosen back — which is
+                how the table tells whose card is whose before the flip. */}
             {i < flipped
               ? (
                 <div className="card-flipper">
-                  <div className="card-back" />
+                  <CardBackView back={c.back} />
                   <CardFace card={c.card} />
                 </div>
               )
-              : <div className="card-back" />}
+              : <CardBackView back={c.back} />}
           </div>
         ))}
       </div>

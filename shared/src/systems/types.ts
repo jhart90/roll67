@@ -9,7 +9,7 @@ import type { AoeSpec, SheetData, VisionStats } from '../types.js';
  * string so it stays the same shape on the sheet a plain text field had —
  * every reader of these lists already splits on commas.
  */
-export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'multiselect' | 'image' | 'color';
+export type FieldType = 'number' | 'text' | 'textarea' | 'checkbox' | 'select' | 'multiselect' | 'image' | 'color' | 'cardback';
 
 export interface FieldDef {
   id: string;

@@ -915,6 +915,11 @@ const powersTab: SheetTab = {
         { id: 'diceTraitTextColor', label: 'Trait die pip color', type: 'color', width: 'half' },
         { id: 'diceWildColor', label: 'Wild Die color', type: 'color', width: 'half' },
         { id: 'diceWildTextColor', label: 'Wild Die pip color', type: 'color', width: 'half' },
+        // The back this character's Action Cards wear, face down on every
+        // screen at the table. Sixteen fixed designs rather than a free
+        // image: a back everyone recognises at a glance is the point, and
+        // sixteen is enough to tell a table apart without a scroll.
+        { id: 'cardBack', label: 'Card back', type: 'cardback', width: 'full', default: '' },
         {
           id: 'diceAceStyle', label: 'Ace animation', type: 'select', width: 'full', default: '',
           options: ['', ...ACE_STYLES],

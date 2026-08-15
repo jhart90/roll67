@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { cardName } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { CardFace } from '../util/PlayingCardView';
+import { CardBackView, cardBackStyle } from '../util/cardBacks';
 
 /** How long the flipped card lingers on screen before fading out. */
 const FLASH_MS = 2600;
@@ -16,6 +17,8 @@ const FLASH_MS = 2600;
 export function CardDrawOverlay() {
   const you = useGameStore((s) => s.you);
   const state = useGameStore((s) => s.initiativeState);
+  const tokens = useGameStore((s) => s.tokens);
+  const characters = useGameStore((s) => s.characters);
   const flash = useGameStore((s) => s.cardDrawFlash);
   const clearCardFlash = useGameStore((s) => s.clearCardFlash);
   const [drawing, setDrawing] = useState(false);
@@ -48,7 +51,7 @@ export function CardDrawOverlay() {
       {showFlash ? (
         <div className="card-flip-scene" key={flash.seq}>
           <div className="card-flipper">
-            <div className="card-back" />
+            <CardBackView back={flash.back} />
             <CardFace card={flash.card} />
           </div>
           <div className="card-draw-label">{flash.name} — {cardName(flash.card)}</div>
@@ -57,6 +60,15 @@ export function CardDrawOverlay() {
         <div className="card-flip-scene">
           <button
             className="card-back card-deck-btn"
+            style={cardBackStyle((() => {
+              // The deck you draw from wears YOUR back: it is your card on
+              // top. Read off the sheet, which this client has — the pending
+              // token is one of its own.
+              const chId = tokens[next.tokenId]?.characterId;
+              const sheet = chId ? characters.find((c) => c.id === chId)?.sheet : undefined;
+              const v = sheet?.cardBack;
+              return typeof v === 'string' ? v : undefined;
+            })())}
             disabled={drawing}
             title={`Draw an action card for ${next.name}`}
             onClick={() => { setDrawing(true); intents.initCardDraw(next.tokenId); }}

@@ -6,6 +6,7 @@ import {
 } from 'shared';
 import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
 import { intents, useGameStore, CALLED_SHOT_PENDING } from '../store/game';
+import { CARD_BACK_CHOICES, CardBackView } from '../util/cardBacks';
 import { openWindow } from '../store/windowManager';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnFeatures } from './SwnFeatures';
@@ -88,6 +89,31 @@ function FieldInput({
           <span className="dim">{current}{inherited ? ' · from your player color' : ''}</span>
         </span>
       </label>
+    );
+  }
+
+  if (field.type === 'cardback') {
+    // Sixteen little face-down cards, not a dropdown of names: nobody knows
+    // what "Copper Herringbone" looks like until they see it, and the whole
+    // point of a card back is being recognised on sight.
+    const chosen = typeof value === 'string' && value ? value : '';
+    return (
+      <div className={`sheet-field w-${field.width ?? 'full'} cardback-field`}>
+        <span><SheetTerm system={system} label={field.label} /></span>
+        <div className="cardback-grid">
+          {CARD_BACK_CHOICES.map((b) => (
+            <button
+              key={b.id}
+              className={`cardback-pick${(chosen || 'classic') === b.id ? ' on' : ''}`}
+              title={b.label}
+              disabled={readOnly}
+              onClick={() => onPatch({ [field.id]: b.id === 'classic' ? '' : b.id })}
+            >
+              <CardBackView back={b.id} className="cardback-mini" />
+            </button>
+          ))}
+        </div>
+      </div>
     );
   }
 

@@ -1785,6 +1785,28 @@ button.link:hover { text-decoration: underline; }
   position: relative;
 }
 .card-deck-btn { cursor: pointer; padding: 0; transition: transform 0.15s ease; }
+
+/* The card-back picker on the Bio tab: sixteen little face-down cards. */
+.cardback-field > span { display: block; margin-bottom: 6px; }
+.cardback-grid {
+  display: grid; grid-template-columns: repeat(8, auto); gap: 8px;
+  justify-content: start;
+}
+.cardback-pick {
+  padding: 2px; border: 2px solid transparent; border-radius: 8px;
+  background: none; cursor: pointer; line-height: 0;
+  transition: transform 0.12s ease;
+}
+.cardback-pick:hover:not(:disabled) { transform: translateY(-2px); }
+.cardback-pick.on { border-color: var(--accent); }
+.cardback-pick:disabled { cursor: default; opacity: 0.7; }
+/* A mini of the same card, a third the size: same borders, same patterns,
+   scaled — so the picker shows exactly what the table will see. */
+.cardback-mini {
+  width: 34px; height: 48px; border-radius: 4px; border-width: 2px;
+  border-style: solid;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
 .card-deck-btn:hover { transform: translateY(-4px) rotate(-2deg); }
 .card-deck-btn:disabled { opacity: 0.6; cursor: wait; }
 .card-deck-count {

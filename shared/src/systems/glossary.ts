@@ -75,6 +75,7 @@ const SWADE_CONCEPTS: Record<string, string> = {
   'Wild Die color': 'This character’s own Wild Die. Blank uses your own setting.',
   'Wild Die pip color': 'The numbers painted on this character’s Wild Die. Blank picks whatever stays legible on it.',
   'Ace animation': 'How this character’s exploding dice celebrate — flash, flames, confetti and the rest. Blank uses whatever you picked for yourself.',
+  'Card back': 'The design on the back of this character’s Action Cards, shown to the whole table while a card is face down — so everyone knows whose card is coming before it flips.',
   'Line width ft': 'How wide a line template is. Only meaningful for the line shape; leave it at 0 for a burst or a cone.',
   'Can be Evaded': 'This attack is slow or telegraphed enough to throw yourself clear of — a flamethrower, a dragon’s breath, a grenade landing at your feet. Anyone aware of it rolls Agility at −2 and takes NO damage on a success; there is no half. The book is strict about this: if an attack does not SAY it can be evaded, it cannot be, so this is a box the attack ticks rather than something guessed from its shape.',
   Scale: 'The band this creature’s Size falls in, and what that is worth when the two sides of a fight are different sizes: the smaller adds the difference to its attacks, the larger subtracts it. Tiny −6, Very Small −4, Small −2, Normal 0, Large +2, Huge +4, Gargantuan +6.',

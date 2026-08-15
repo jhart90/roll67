@@ -643,7 +643,9 @@ export interface AttackPreviewPayload {
  *  sequenced face-down → flip-over reveal. Hidden combatants are omitted. */
 export interface RoundCardsPayload {
   round: number;
-  cards: Array<{ tokenId: string | null; name: string; card: PlayingCard }>;
+  /** `back` is the card back that combatant chose — how the table tells
+   *  whose card is whose while it is still face down. Absent = classic. */
+  cards: Array<{ tokenId: string | null; name: string; card: PlayingCard; back?: string }>;
 }
 export interface InitCardDrawnPayload {
   tokenId: string;
@@ -651,6 +653,8 @@ export interface InitCardDrawnPayload {
   card: PlayingCard;
   /** The user who clicked the deck (their client plays the big flip). */
   byUserId: string;
+  /** The card back this combatant's cards wear. Absent = classic. */
+  back?: string;
 }
 
 export interface DrawPayload { mapId: string; layer: DrawingLayerName; shape: Drawing['shape'] }

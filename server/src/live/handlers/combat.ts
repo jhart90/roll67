@@ -12,7 +12,7 @@ import {
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
-  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, swadeRangedArmor, swnReloadCheck, withRaiseDie,
+  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, isCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type AttackPreviewPayload, type AttackPreviewResultPayload, type CoverGrade, type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeAmmoLeft, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
@@ -659,6 +659,13 @@ function sortInitiative(state: InitiativeState): void {
   state.entries.sort((a, b) => compareCardEntries(a, b, state.round > 1 ? 'suit' : 'draw'));
 }
 
+/** The card back a token's character chose, or undefined for the classic. */
+function cardBackForToken(tokenId: string | null): string | undefined {
+  const sheet = sheetForToken(tokenId);
+  const v = sheet ? str(sheet, 'cardBack', '') : '';
+  return isCardBack(v) ? v : undefined;
+}
+
 /** The sheet behind a token, when there is one. */
 function sheetForToken(tokenId: string | null): SheetData | null {
   if (!tokenId) return null;
@@ -708,7 +715,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     postStatusLine(io, campaignId, '🂠 A Joker was dealt last round — the action deck is reshuffled.');
   }
   state.jokerDealt = false;
-  const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean }> = [];
+  const dealt: Array<{ tokenId: string | null; name: string; card: PlayingCard; hidden: boolean; back?: string }> = [];
   // Which sides drew a Joker this round — paid out after the whole deal, so
   // the Bennies land once the table can see every card.
   const jokerDraws: Array<{ name: string; playerSide: boolean; hidden: boolean }> = [];
@@ -727,7 +734,7 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     entry.card = card;
     entry.value = card.rank;
     entry.drawSeq = state.drawCounter;
-    dealt.push({ tokenId: entry.tokenId, name: entry.name, card, hidden: entry.hidden });
+    dealt.push({ tokenId: entry.tokenId, name: entry.name, card, hidden: entry.hidden, back: cardBackForToken(entry.tokenId) });
   }
   sortInitiative(state);
   state.turnIdx = 0;
@@ -5790,7 +5797,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       roll: null, recipients: null,
     });
     io.to(room).emit(S2C.CHAT, { msg });
-    io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId, name: token.name, card, byUserId: d.userId });
+    io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId, name: token.name, card, byUserId: d.userId, back: cardBackForToken(tokenId) });
     if (card.rank === 15) jokersWild(io, d.campaignId, token.name, isPlayerSideToken(tokenId), hidden);
   }, 'INIT_DEAL_IN'));
 
@@ -5845,7 +5852,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       roll: null, recipients: null,
     });
     io.to(room).emit(S2C.CHAT, { msg });
-    io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId: pending.tokenId, name: pending.name, card, byUserId: d.userId });
+    io.to(room).emit(S2C.INIT_CARD_DRAWN, { tokenId: pending.tokenId, name: pending.name, card, byUserId: d.userId, back: cardBackForToken(pending.tokenId) });
     if (drewJoker) jokersWild(io, d.campaignId, pending.name, isPlayerSideToken(pending.tokenId), pending.hidden);
   }, 'INIT_CARD_DRAW'));
 }

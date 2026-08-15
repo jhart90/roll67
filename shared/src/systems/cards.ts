@@ -25,6 +25,43 @@ export interface PlayingCard {
   joker?: 'red' | 'black';
 }
 
+/**
+ * The sixteen card backs a player may choose from, by id.
+ *
+ * The ids and names live here because the SERVER speaks them: a card back
+ * rides with the deal so the whole table sees whose card is whose while it is
+ * still face down. What each one looks like is the client's business — a
+ * pattern is CSS, and the server has no more use for it than it has for a
+ * die's color.
+ *
+ * 'classic' is the back every card has always worn, and what any character
+ * who has never opened the picker keeps.
+ */
+export const CARD_BACKS = [
+  { id: 'classic', label: 'Classic Red' },
+  { id: 'midnight', label: 'Midnight Blue' },
+  { id: 'forest', label: 'Forest Lattice' },
+  { id: 'royal', label: 'Royal Purple' },
+  { id: 'goldfil', label: 'Gold Filigree' },
+  { id: 'steel', label: 'Brushed Steel' },
+  { id: 'ember', label: 'Ember Weave' },
+  { id: 'ocean', label: 'Ocean Scales' },
+  { id: 'rose', label: 'Rose Argyle' },
+  { id: 'jade', label: 'Jade Pinstripe' },
+  { id: 'onyx', label: 'Onyx Starfield' },
+  { id: 'copper', label: 'Copper Herringbone' },
+  { id: 'ivory', label: 'Ivory Damask' },
+  { id: 'neon', label: 'Neon Grid' },
+  { id: 'blood', label: 'Blood Diamonds' },
+  { id: 'aurora', label: 'Aurora Sweep' },
+] as const;
+
+export type CardBackId = (typeof CARD_BACKS)[number]['id'];
+
+export function isCardBack(v: unknown): v is CardBackId {
+  return typeof v === 'string' && CARD_BACKS.some((b) => b.id === v);
+}
+
 export const SUIT_SYMBOL: Record<CardSuit, string> = {
   spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣',
 };

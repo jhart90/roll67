@@ -197,10 +197,19 @@ function buildNodes(
     if (obj.kind === 'shop') continue;
     if (obj.worldFolderId && folderIds.has(obj.worldFolderId)) continue;
     const sub = obj.items.length ? `${obj.items.length} item${obj.items.length === 1 ? '' : 's'}` : '';
+    // A chest somebody CARRIES hangs under them, not under the map: it is
+    // their pockets, it goes where they go, and three identically-named
+    // "Robo-Velociraptor's effects" rows loose in a map's children say
+    // nothing about which raptor is which. Only when the bearer is actually
+    // in the tree — a character on another map, or one this viewer cannot
+    // see, would otherwise take its chest out of the tree with it.
+    const bearer = obj.linkedCharacterId && charIds.has(obj.linkedCharacterId)
+      ? obj.linkedCharacterId
+      : null;
     out.push({
       kind: 'mapobject', id: obj.id,
       name: obj.name || (obj.kind === 'chest' ? 'Chest' : 'Loot'),
-      parentId: obj.mapId, sub, mapObjectKind: obj.kind,
+      parentId: bearer ?? obj.mapId, sub, mapObjectKind: obj.kind,
     });
   }
   // Token-carried lights appear under their character

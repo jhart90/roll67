@@ -2484,9 +2484,21 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
             `${action.label} is too big to fire with a foe in reach — pistols only in melee.` };
         }
       }
-      // Bigger targets are easier to hit (Large +2, Huge +4).
-      if (tgt.size === 2) { mod += 2; tags.push('+2 Size'); }
-      else if (tgt.size >= 3) { mod += 4; tags.push('+4 Size'); }
+      // Bigger targets are easier to hit — but SWADE has exactly ONE rule for
+      // that, and it is Scale, read off the creature's Size on its sheet a few
+      // lines below. A token's footprint is a drawing decision: how many hexes
+      // the picture covers, chosen by whoever placed it. Charging for both
+      // billed a Huge creature twice for one fact — +4 for the art and +4 for
+      // the stat block.
+      //
+      // So the footprint speaks only for a token with no sheet to read a Size
+      // from: a prop, a vehicle marker, a piece of scenery with a bar on it.
+      // For anything with a SWADE sheet, Size 0 is a real answer (Normal), not
+      // a missing one.
+      if (!targetChar || targetChar.system !== 'swade') {
+        if (tgt.size === 2) { mod += 2; tags.push('+2 Size'); }
+        else if (tgt.size >= 3) { mod += 4; tags.push('+4 Size'); }
+      }
       // Joker: the real +2 to trait rolls and damage, not just card text.
       const initState = initiative.get(campaignId);
       const myEntry = initState.active ? initState.entries.find((e) => (e.tokenId ? tokens.byId(e.tokenId)?.characterId : undefined) === actor.id) : undefined;

@@ -409,7 +409,9 @@ async function main() {
   const holdSaveP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text?.includes('Test Hold') && p.msg.text.includes('FAIL'));
   const paralyzedP = waitFor(dmSock, 'characterUpserted', 10000, (p) => p.character.id === npc.id && (p.character.sheet.conditions ?? []).includes('paralyzed'));
   // Status changes post as a single combined line naming the cause.
-  const statusLineP = waitFor(playerSock, 'chatMsg', 10000, (p) => p.msg?.text?.includes('is now Paralyzed') && p.msg.text.includes('by Test Hold'));
+  // The wording moved when conditions became coloured cards: the cause used to
+  // be appended as "by X" and is now the card's own note, after an em dash.
+  const statusLineP = waitFor(playerSock, 'chatMsg', 10000, (p) => p.msg?.text?.includes('is now Paralyzed') && p.msg.text.includes('Test Hold'));
   playerSock.emit('combatAction', { characterId: pc.id, actionId: 'spell:0', sourceTokenId: pcToken.id, targetTokenId: npcToken.id, adv: null });
   ok(!!(await holdSaveP), 'a condition-only spell resolves as a targeted save (no damage roll needed)');
   ok(!!(await paralyzedP), "the failed save inflicts the spell's condition on the target's sheet");
@@ -418,7 +420,7 @@ async function main() {
   // Concentration linkage: the caster clearing their concentration lifts the
   // condition from the target automatically.
   const unparalyzedP = waitFor(dmSock, 'characterUpserted', 6000, (p) => p.character.id === npc.id && !(p.character.sheet.conditions ?? []).includes('paralyzed'));
-  const releaseLineP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text?.includes('no longer') && p.msg.text.includes('Paralyzed') && p.msg.text.includes('by Test Hold ending'));
+  const releaseLineP = waitFor(playerSock, 'chatMsg', 6000, (p) => p.msg?.text?.includes('no longer') && p.msg.text.includes('Paralyzed') && p.msg.text.includes('Test Hold ending'));
   playerSock.emit('updateCharacter', { characterId: pc.id, patch: { concentration: '' } });
   ok(!!(await unparalyzedP), "ending the caster's concentration removes the condition it was maintaining");
   ok(!!(await releaseLineP), 'the release posts a combined status chat line with cause');

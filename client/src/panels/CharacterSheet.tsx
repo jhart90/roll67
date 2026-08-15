@@ -268,6 +268,20 @@ const TABLE_SECTIONS = new Set(['skills']);
 
 /** Facts a card must never hide even when they match the column default —
  *  a weapon with no damage listed reads as broken, not as clean. */
+/**
+ * A card chip's classes.
+ *
+ * Severity is the one tone that splits by its own text: a Minor hindrance is
+ * red and a Major one is black, because "how bad is this" is the question the
+ * chip exists to answer and two shades of the same violet made the reader
+ * work it out from the word. Exported so the chat log's copy of a card and
+ * the sheet's own cannot drift apart.
+ */
+export function chipClass(tone: string, text: string): string {
+  const sev = text === 'Major' ? ' chip-major' : text === 'Minor' ? ' chip-minor' : '';
+  return `sc-chip tone-${tone}${sev}`;
+}
+
 const ALWAYS_SHOW = new Set(['damage', 'die', 'severity']);
 
 /** The "is this in my hands / on my body" flag, by section. Surfaced as a
@@ -780,7 +794,7 @@ function ListEditor({
               {(chips.length > 0 || rider) && (
                 <div className="sc-chips">
                   {chips.map((c, j) => (
-                    <span key={j} className={`sc-chip tone-${c.tone}${c.text === 'Major' ? ' chip-major' : ''}`}>{c.text}</span>
+                    <span key={j} className={chipClass(c.tone, c.text)}>{c.text}</span>
                   ))}
                   {rider && <span className="sc-chip sc-rider" title={RIDER_BTN_TITLE}>⚡ {rider}</span>}
                 </div>

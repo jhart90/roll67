@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Character, ChatMessage, DieRoll, MemberInfo, SheetCard, TokenView } from 'shared';
 import { CONDITION_COLORS, CONDITION_LABELS, contentForSystem, num, swadeSnakeEyes, type DiceLook } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { chipClass } from './CharacterSheet';
 import { playerColorFor } from '../util/playerColor';
 import { DIE_COLORS, DieShape } from '../table/DiceShapes';
 import { DICE_ROLE_DEFAULTS } from '../table/dice3d';
@@ -510,7 +511,7 @@ function PostedCard({ card, hl }: { card: SheetCard; hl: NameHighlights }) {
       {card.chips.length > 0 && (
         <div className="sc-chips">
           {card.chips.map((c, i) => (
-            <span key={i} className={`sc-chip tone-${c.tone}`} title={c.title}>
+            <span key={i} className={chipClass(c.tone, c.text)} title={c.title}>
               <Highlighted text={c.text} hl={hl} />
             </span>
           ))}

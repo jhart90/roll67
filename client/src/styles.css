@@ -1048,8 +1048,6 @@ button.link:hover { text-decoration: underline; }
   border-color: color-mix(in srgb, #4a7fc2 50%, var(--border));
 }
 .sheet-card.card-info .sc-title { color: #b9d3f2; }
-/* Major and Minor share the severity color, so Major carries the weight. */
-.sc-chip.chip-major { font-weight: 800; letter-spacing: 0.02em; }
 
 /* Chip tones: the same kind of fact wears the same color everywhere. */
 .sc-chip.tone-damage   { color: #f0a5a0; border-color: #c2564f55; background: #c2564f14; }
@@ -1063,6 +1061,17 @@ button.link:hover { text-decoration: underline; }
 .sc-chip.tone-weight   { color: #b6bccb; border-color: #5a6072aa; background: #5a607214; }
 .sc-chip.tone-use      { color: #b8e0a8; border-color: #6aa84f55; background: #6aa84f14; }
 .sc-chip.tone-flag     { color: #e8dca8; border-color: #a89a4f55; background: #a89a4f14; }
+
+/* Severity splits by its own word: a Minor hindrance is red, a Major one is
+   black. Defined AFTER the tones so they win on source order — the
+   specificity is the same — and the Major chip keeps a visible border and
+   light ink, because black on a near-black panel is not a colour, it is a
+   hole. */
+.sc-chip.chip-minor { color: #f2b0b0; border-color: #c24949aa; background: #c2494922; font-weight: 700; }
+.sc-chip.chip-major {
+  color: #e9ebf2; border-color: #8b90a0; background: #06070a;
+  font-weight: 800; letter-spacing: 0.02em;
+}
 
 /* Nameplate badges (rank, Wild Card / Extra) sit together on one row;
    where-you're-from sinks back toward the card. */

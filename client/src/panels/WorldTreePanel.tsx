@@ -673,7 +673,11 @@ export function WorldTreePanel() {
             style={node.color ? { color: inkOnDark(node.color) } : undefined}
             title={node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? 'Run by a player' : 'Run by the DM') : undefined}
           >
-            {(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦' : ICON[node.kind]}
+            {/* A folder shows what it HOLDS when that is the whole point of
+                it: a chest of loot, a map's drawer of lights. */}
+            {(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦'
+              : node.kind === 'folder' && node.virtual ? '💡'
+                : ICON[node.kind]}
           </span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}
@@ -831,7 +835,7 @@ function ReadModal({ node, onClose }: { node: TreeNode; onClose: () => void }) {
     <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="panel levelup">
         <div className="dock-header">
-          <h3>{ICON[node.kind]} {node.name}</h3>
+          <h3>{node.kind === 'folder' && node.virtual ? '💡' : ICON[node.kind]} {node.name}</h3>
           <button className="link" onClick={onClose}>close</button>
         </div>
         {loc && <p style={{ whiteSpace: 'pre-wrap' }}>{loc.notes || <span className="dim">No description.</span>}</p>}

@@ -3659,6 +3659,15 @@ th > .term { border-bottom-style: dotted; }
 /* The movement lock, armed: the one button in the time panel that stays hot. */
 .time-panel .time-lock.on { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
 
+/* "Controlled by", wearing its owner's colour. The border goes with the
+   background so a coloured picker does not sit in a grey frame, and the
+   compact one is sized to stand in a toolbar row beside + Compendium. */
+.owner-select { font-weight: 600; }
+.owner-select-compact {
+  height: 24px; padding: 0 6px; font-size: 12px; max-width: 140px;
+  border-radius: 6px;
+}
+
 .settings-window .link.danger {
   background: var(--danger); border-color: var(--danger);
   color: #fff; font-weight: 600; padding: 2px 8px; border-radius: 6px;

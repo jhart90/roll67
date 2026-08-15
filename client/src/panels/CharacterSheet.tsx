@@ -7,6 +7,7 @@ import {
 import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
 import { intents, useGameStore, CALLED_SHOT_PENDING } from '../store/game';
 import { CardBackFieldPreview } from './CardBackEditor';
+import { OwnerSelect } from '../util/OwnerSelect';
 import { openWindow } from '../store/windowManager';
 import { ClassFeatures } from './ClassFeatures';
 import { SwnFeatures } from './SwnFeatures';
@@ -1312,6 +1313,13 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
             <button className="link" onClick={() => openWindow('compendium', character.id, {}, `Compendium — ${character.name}`)}>
               + Compendium
             </button>
+          )}
+          {/* Who runs this one, in their own colour — the same control the
+              token inspector shows, so the answer can be read and changed
+              from either place. DM-only: handing a character to somebody is
+              not a thing that character's player decides. */}
+          {you.role === 'dm' && (
+            <OwnerSelect characterId={character.id} ownerUserId={character.ownerUserId} compact />
           )}
         </div>
 

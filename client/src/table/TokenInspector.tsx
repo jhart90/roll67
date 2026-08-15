@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { TokenShape } from 'shared';
 import { hexDistance, num, systemFor } from 'shared';
 import { armBodyLoot, intents, useGameStore } from '../store/game';
+import { OwnerSelect } from '../util/OwnerSelect';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 import { ConfirmButton } from '../util/ConfirmButton';
@@ -74,7 +75,7 @@ export function TokenInspector() {
           <button className="link" onClick={() => useGameStore.getState().openInspector(null)}>close</button>
         </div>
         <label>
-          Color
+          Token Color
           <input
             type="color"
             value={token.color}
@@ -150,7 +151,7 @@ export function TokenInspector() {
             take-and-grant all come for free. */}
         {token.characterId && (
           <label>
-            Loot on this body
+            Loot
             <button
               className="btn btn-sm"
               title="Items a player can take off this body once it is incapacitated or dead"
@@ -161,21 +162,10 @@ export function TokenInspector() {
           </label>
         )}
         {character && (
-          <label>
-            Controlled by
-            <select
-              value={character.ownerUserId ?? ''}
-              onChange={(e) => intents.setCharacterOwner(character.id, e.target.value || null)}
-            >
-              <option value="">DM only (NPC)</option>
-              {members.filter((m) => m.role === 'player').map((m) => (
-                <option key={m.userId} value={m.userId}>{m.username}</option>
-              ))}
-            </select>
-          </label>
+          <OwnerSelect characterId={character.id} ownerUserId={character.ownerUserId} />
         )}
         <label>
-          Color
+          Token Color
           <input
             type="color"
             value={token.color}
@@ -183,7 +173,7 @@ export function TokenInspector() {
           />
         </label>
         <label>
-          Size (hexes)
+          Token Size (hexes)
           <input
             type="number"
             min={1}
@@ -194,7 +184,7 @@ export function TokenInspector() {
           />
         </label>
         <label>
-          Shape
+          Token Shape
           <select
             value={token.shape ?? 'circle'}
             onChange={(e) => intents.updateToken(token.id, { shape: e.target.value as TokenShape })}
@@ -203,7 +193,7 @@ export function TokenInspector() {
           </select>
         </label>
         <label>
-          Art
+          Token Art
           <input ref={fileRef} type="file" accept="image/*" onChange={onArt} disabled={uploading} />
           <UploadProgressBar progress={progress} />
         </label>

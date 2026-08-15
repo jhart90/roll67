@@ -152,6 +152,10 @@ function resetChatQueue(): void {
   lastRollEndedAt = 0;
 }
 
+/** Armed by placeMapObject, spent by the next NEW map object to arrive —
+ *  the id does not exist until the server has made one. */
+let pendingInspectPlacement = false;
+
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain' | 'text';
 export type DockTab = 'chat' | 'initiative' | 'world';
 
@@ -1591,7 +1595,15 @@ export function wireSocket(): void {
 
   socket.on(S2C.MAP_OBJECT_UPSERTED, ({ object }: { object: MapObject }) => {
     const s = useGameStore.getState();
+    const isNew = !s.mapObjects[object.id];
     useGameStore.setState({ mapObjects: { ...s.mapObjects, [object.id]: object } });
+    // The chest this client just placed with the loot tool: open its details.
+    // Guarded on NEW, so an unrelated update arriving first cannot spend the
+    // armed intent on somebody else's chest.
+    if (pendingInspectPlacement && isNew) {
+      pendingInspectPlacement = false;
+      useGameStore.setState({ selectedObjectId: object.id, inspectedObjectId: object.id });
+    }
   });
 
   socket.on(S2C.MAP_OBJECT_REMOVED, ({ objectId }: { objectId: string }) => {
@@ -2282,8 +2294,15 @@ export const intents = {
     socket.emit(C2S.DROP_FOLDER_ON_CHARACTER, { folderId, characterId }),
 
   // map loot objects
-  placeMapObject: (mapId: string, kind: 'item' | 'chest', name: string, q: number, r: number, description?: string) =>
-    socket.emit(C2S.PLACE_MAP_OBJECT, { mapId, kind, name, description, q, r }),
+  placeMapObject: (mapId: string, kind: 'item' | 'chest', name: string, q: number, r: number, description?: string) => {
+    // A chest arrives empty and unnamed, which is the one moment its details
+    // are certainly wanted — so the DM lands in the editor rather than on the
+    // "this chest is empty" notice, which announces the obvious and offers
+    // nothing. The id only exists once the server answers, so the intent to
+    // open is armed here and spent by the upsert handler.
+    pendingInspectPlacement = true;
+    socket.emit(C2S.PLACE_MAP_OBJECT, { mapId, kind, name, description, q, r });
+  },
   updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: LootItem[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }) =>
     socket.emit(C2S.UPDATE_MAP_OBJECT, { objectId, patch }),
   deleteMapObject: (objectId: string) => socket.emit(C2S.DELETE_MAP_OBJECT, { objectId }),

@@ -5,7 +5,10 @@
 // A plain mutable ref (not Zustand state) avoids remounting the dragged row
 // mid-drag, which would silently abort the browser's native drag gesture.
 
-export type WorldDragKind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map' | 'folder' | 'light' | 'counter';
+// 'mapobject' (loot and chests placed on a map) drags for REORDERING only:
+// it belongs to the map it stands on, so it can be sorted among its siblings
+// but never re-homed under something else — the same deal counters get.
+export type WorldDragKind = 'location' | 'character' | 'shop' | 'table' | 'handout' | 'map' | 'folder' | 'light' | 'counter' | 'mapobject';
 
 export interface WorldDragItem {
   kind: WorldDragKind;

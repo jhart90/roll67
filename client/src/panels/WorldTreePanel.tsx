@@ -7,9 +7,10 @@ import { worldDrag, type WorldDragKind } from '../store/worldDrag';
 import { AnchoredMenu } from '../util/AnchoredMenu';
 import { inkOnDark } from '../util/playerColor';
 
-// 'mapobject' nodes (loot/chests placed on the current map) live only in
-// this tree — they are not draggable, so the kind is not part of WorldDragKind.
-type Kind = WorldDragKind | 'mapobject' | 'token';
+// 'token' nodes live only in this tree and are not draggable, so the kind is
+// not part of WorldDragKind. 'mapobject' IS draggable — for reordering among
+// its siblings, never for re-homing (see the drop handler).
+type Kind = WorldDragKind | 'token';
 
 interface TreeNode {
   kind: Kind;
@@ -24,6 +25,10 @@ interface TreeNode {
   lightTokenId?: string;
   /** For mapobject nodes: the placed object's own kind (item/chest). */
   mapObjectKind?: 'item' | 'chest' | 'shop';
+  /** A grouping row the tree invents (the per-map "Lights" folder) rather than
+   *  a stored one. It has no row behind it, so it cannot be renamed, dragged,
+   *  deleted or dropped into — every such action is refused by id. */
+  virtual?: boolean;
   /** A character this viewer has discovered but does not own: clicking it
    *  opens the public-facing sheet, never the private one. */
   notMine?: boolean;
@@ -158,12 +163,25 @@ function buildNodes(
       sub: c.value + '/' + c.max + (c.visible ? '' : ' · hidden'),
     });
   }
-  // Map lights appear under their map
-  if (mapId) {
+  // Map lights gather in a "Lights" folder under their map.
+  //
+  // A lit room has a dozen of them, and loose in the map's children they
+  // buried the handful of things a DM actually navigates to — the chests, the
+  // NPCs. The folder is VIRTUAL: it exists exactly while the map has lights,
+  // is not a row in any table, and cannot be renamed, dragged or deleted out
+  // of step with them. Nothing to keep in sync, and nothing to clean up when
+  // the last light goes.
+  if (mapId && mapLights.length > 0) {
+    const folderId = `lights-${mapId}`;
+    out.push({
+      kind: 'folder', id: folderId, name: 'Lights', parentId: mapId,
+      sub: `${mapLights.length} light${mapLights.length === 1 ? '' : 's'}`,
+      displayKind: 'folder', virtual: true,
+    });
     for (const light of mapLights) {
       const name = light.name || 'Light';
       const sub = `bright ${light.brightRadius}, dim ${light.dimRadius}`;
-      out.push({ kind: 'light', id: light.id, name, parentId: mapId, sub, lightMapId: mapId });
+      out.push({ kind: 'light', id: light.id, name, parentId: folderId, sub, lightMapId: mapId });
     }
   }
   // Loot & chests appear nested under whichever map they're placed on
@@ -341,6 +359,9 @@ export function WorldTreePanel() {
     }
     if (node.kind === 'folder') {
       if (!isDm) return;
+      // The invented "Lights" folder has no record behind it: opening its
+      // rename box would be offering to rename nothing.
+      if (node.virtual) return;
       // A chest with a box standing on a map opens THAT — the window with the
       // lock, the key, the contents and the compendium button, which is the
       // one worth having. Rename, convert and delete are still a right-click
@@ -473,6 +494,9 @@ export function WorldTreePanel() {
     dragRef.current = null;
     setDropTarget(null);
     if (!drag) return;
+    // Nothing can be dropped on or above an invented row: it is not anyone's
+    // parent and has no place among siblings to be sorted into.
+    if (targetId && byId.get(targetId)?.virtual) return;
     // Can't parent an item under itself or its own descendant.
     if (targetId && (targetId === drag.id || isAncestor(drag.id, targetId))) return;
 
@@ -487,8 +511,9 @@ export function WorldTreePanel() {
       if (parentKey && isAncestor(drag.id, parentKey)) return;
       const dragParent = dragNode.parentId && byId.has(dragNode.parentId) ? dragNode.parentId : null;
       if (dragParent !== parentKey) {
-        // Counters only live on maps — an above-drop can't re-home them.
-        if (drag.kind === 'counter') return;
+        // Counters and placed loot only live on maps — an above-drop can't
+        // re-home them, only sort them where they already are.
+        if (drag.kind === 'counter' || drag.kind === 'mapobject') return;
         intents.setParent(drag.kind, drag.id, parentKey);
       }
       const sibs = (childrenOf.get(parentKey) ?? []).filter((n) => n.id !== drag.id);
@@ -546,6 +571,11 @@ export function WorldTreePanel() {
       placeFolderOnMap(drag.id, targetId);
       return;
     }
+    // Placed loot belongs to the map it stands on: it sorts among its
+    // siblings and goes no further. Dropping one INTO something would be
+    // asking to re-home it, which there is no such thing as — move the piece
+    // on the map instead.
+    if (drag.kind === 'mapobject') return;
     intents.setParent(drag.kind, drag.id, targetId);
     // Dragging a character onto a map relocates its token there server-side;
     // switch the DM's view to that map so the new token is immediately
@@ -570,8 +600,8 @@ export function WorldTreePanel() {
           className={`wt-row ${isSelected ? 'selected' : ''} ${isDropOn ? 'drop-on' : ''} ${isDropAbove ? 'drop-above' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
           {...(node.kind === 'map' ? { 'data-map-id': node.id } : {})}
-          draggable={isDm && node.kind !== 'mapobject'}
-          onDragStart={isDm && node.kind !== 'mapobject' ? (e) => {
+          draggable={isDm && !node.virtual}
+          onDragStart={isDm && !node.virtual ? (e) => {
             e.stopPropagation();
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', node.id);
@@ -606,7 +636,7 @@ export function WorldTreePanel() {
           onDoubleClick={() => { open(node); selectNode(node); }}
           onContextMenu={(e) => {
             e.preventDefault();
-            if (isDm && node.kind === 'folder') setCtxMenu({ x: e.clientX, y: e.clientY, folderId: node.id });
+            if (isDm && node.kind === 'folder' && !node.virtual) setCtxMenu({ x: e.clientX, y: e.clientY, folderId: node.id });
             else open(node);
             selectNode(node);
           }}

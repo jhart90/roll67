@@ -1232,6 +1232,7 @@ interface ChatRow {
   id: number; user_id: string | null; from_name: string; from_character: string | null; character_id: string | null; action_name: string | null; outcome_note: string | null; kind: ChatKind; text: string;
   roll_json: string | null; recipients_json: string | null; hidden: number; created_at: number;
   card_json: string | null; callout_json: string | null; thread_id: number | null;
+  obsolete: string | null;
 }
 
 /** Redact a hidden message for non-DM recipients (DM sees the original). */
@@ -1255,6 +1256,7 @@ function toChatMsg(r: ChatRow): ChatMessage {
     recipients: r.recipients_json ? safeParse<string[] | null>(r.recipients_json, null) : null,
     at: r.created_at,
     hidden: r.hidden === 1,
+    ...(r.obsolete ? { obsolete: r.obsolete } : {}),
     ...(r.card_json ? { card: safeParse<ChatMessage['card']>(r.card_json, null) } : {}),
     ...(r.callout_json ? { callout: safeParse<ChatMessage['callout']>(r.callout_json, null) } : {}),
   };
@@ -1577,6 +1579,17 @@ export const chat = {
   },
   /** Hide (or unhide) every message belonging to one cast card, the card
    *  itself included. Returns the ids touched so they can be rebroadcast. */
+  /** Mark a roll as overtaken, with the reason the cover will show. */
+  setObsolete(id: number, reason: string): void {
+    stmt('UPDATE chat_messages SET obsolete = ? WHERE id = ?').run(reason, id);
+  },
+  /** Erase a message and everything posted under it. Returns what went. */
+  deleteThread(threadId: number): number[] {
+    const ids = (stmt('SELECT id FROM chat_messages WHERE id = ? OR thread_id = ?')
+      .all(threadId, threadId) as { id: number }[]).map((r) => r.id);
+    stmt('DELETE FROM chat_messages WHERE id = ? OR thread_id = ?').run(threadId, threadId);
+    return ids;
+  },
   setThreadHidden(threadId: number, hidden: boolean): number[] {
     stmt('UPDATE chat_messages SET hidden = ? WHERE id = ? OR thread_id = ?')
       .run(hidden ? 1 : 0, threadId, threadId);

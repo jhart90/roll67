@@ -6,6 +6,7 @@ import { playerColorFor } from '../util/playerColor';
 import { DIE_COLORS, DieShape } from '../table/DiceShapes';
 import { DICE_ROLE_DEFAULTS } from '../table/dice3d';
 import { AnchoredMenu } from '../util/AnchoredMenu';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -459,7 +460,7 @@ function Message({ msg, isDm, hl, onMenu }: {
   const playerHidden = msg.hidden && !isDm;
   return (
     <div
-      className={`chat-msg ${msg.kind} ${msg.hidden ? 'hidden' : ''}`}
+      className={`chat-msg ${msg.kind} ${msg.hidden ? 'hidden' : ''}${msg.obsolete ? ' obsolete' : ''}`}
       // Not DM-only any more: a player right-clicks their own roll to spend a
       // Benny on it. The menu decides what (if anything) to offer.
       onContextMenu={(e) => { e.preventDefault(); onMenu(msg.id, e.clientX, e.clientY); }}
@@ -474,6 +475,10 @@ function Message({ msg, isDm, hl, onMenu }: {
         )}
         <span className="chat-time">{time}</span>
       </div>
+      {/* A roll that no longer counts keeps its dice — the table watched them
+          land — under a cover saying what overtook it. Reading it is still
+          possible; taking it for the answer is not. */}
+      {msg.obsolete && <div className="chat-obsolete-cover"><span>{msg.obsolete}</span></div>}
       {playerHidden
         ? <div className="chat-text hidden-text">The DM has hidden this message.</div>
         : msg.card ? (
@@ -575,7 +580,19 @@ export function ChatPanel() {
         <AnchoredMenu x={menu.x} y={menu.y} className="chat-context-menu" onClick={(e) => e.stopPropagation()}>
           {menuCh && <BennyRerollItems ch={menuCh} onDone={() => setMenu(null)} />}
           {isDm && (menuMsg.hidden ? (
-            <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>
+            <>
+              <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>
+              {/* Offered only once it is already hidden, so erasing a line is
+                  always the SECOND deliberate act rather than a slip of the
+                  mouse — and it takes the "the DM has hidden this" notice with
+                  it, which is the point: the message never happened. */}
+              <ConfirmButton
+                confirmLabel="really delete? this cannot be undone"
+                onConfirm={() => { intents.moderateMessage(menu.id, 'delete'); setMenu(null); }}
+              >
+                Delete for everyone
+              </ConfirmButton>
+            </>
           ) : (
             <>
               <button onClick={() => { intents.moderateMessage(menu.id, 'hide'); setMenu(null); }}>Hide</button>

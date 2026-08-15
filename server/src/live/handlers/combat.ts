@@ -21,10 +21,10 @@ import {
   durationRounds, durationLabel, tickPowers, toggleFor, type ActivePower,
   fearCheckFailure, fearCheckMod, fearTableRow, fearTableTotal, PANICKED_OUTCOME, type RequestFearPayload,
 } from 'shared';
-import { campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
+import { campaigns, characters, chat, initiative, maps, tokens, redactChat } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { applyAdv } from './chat.js';
 import { emitMoveBudget, hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
@@ -1268,6 +1268,22 @@ function rollBurst(traitSides: number, wildCard: boolean, mod: number, shots: nu
     totals,
     naturalFaces,
   };
+}
+
+/**
+ * Put a cover on a roll that no longer counts, on every screen at once.
+ *
+ * The card stays: those dice were thrown and watched, and a log that quietly
+ * loses them is a log nobody can follow. It simply wears a note saying what
+ * overtook it.
+ */
+function markObsolete(io: Server, campaignId: string, messageId: number, reason: string): void {
+  chat.setObsolete(messageId, reason);
+  const updated = chat.byId(messageId);
+  if (!updated) return;
+  for (const s of campaignSockets(io, campaignId)) {
+    s.emit(S2C.CHAT_UPDATED, { msg: redactChat(updated, sdata(s).role === 'dm') });
+  }
 }
 
 function jokersWild(
@@ -3479,6 +3495,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         },
       }, undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      noteBennyRollMessage(actor.id, 'damage', msg.id);
 
       if (applyToTarget) {
         const settleMs = diceSettleDelayMs(cardRoll.dice);
@@ -3594,6 +3611,9 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         roll: { ...attackBreakdown, outcome: hit ? 'success' as const : 'failure' as const }, recipients: null,
       }, !hit && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: attackMsg });
+      // Tie the banked reroll to this card, so a Benny that overtakes it can
+      // cover the dice the table already watched.
+      noteBennyRollMessage(actor.id, 'trait', attackMsg.id);
       if (!hit) {
         // Innocent Bystander: a missed SWADE shot whose skill die shows a 1
         // hits a random target adjacent to the intended one.
@@ -4706,6 +4726,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         callout: { what, tone: 'benny' as const },
       });
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+      return msg;
     };
 
     switch (use) {
@@ -4788,10 +4809,22 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
                 ? (nowHits ? 'enough to tell' : 'not enough')
                 : (nowHits ? 'HIT' : 'still a miss'))
               + (turned ? ', and it lands!' : better ? '' : ' (the original still stands)');
-          postRoll(
+          const rerollMsg = postRoll(
             `${now.name} rerolls ${rec.label} — ${verdict}`,
             b, rec.tn === undefined ? better : nowHits, `rerolling ${rec.label}`,
           );
+          // Two rolls now sit in the log for one attempt, and only one of them
+          // counts. Cover the other rather than deleting it: the table watched
+          // those dice land, and a log that quietly loses them is a log nobody
+          // can follow. Which one loses depends on which was better.
+          if (better && rec.msgId) {
+            markObsolete(io, d.campaignId, rec.msgId, `Superseded by a Benny reroll — ${b.total} beat this ${rec.total}.`);
+          } else if (!better && rerollMsg) {
+            markObsolete(io, d.campaignId, rerollMsg.id,
+              `The original ${rec.total} still stands — this reroll came up ${b.total}.`);
+          }
+          // Whichever card counts is the one a FURTHER Benny should overtake.
+          noteBennyRollMessage(now.id, kind, (better ? rerollMsg?.id : rec.msgId) ?? rerollMsg?.id ?? 0);
           // A miss turned into a hit finishes the job it started: the damage
           // and everything that follows, run from the attack's own closure so
           // it is the same resolution the first roll would have had.

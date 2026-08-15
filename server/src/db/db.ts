@@ -115,6 +115,8 @@ ensureColumn('tokens', 'shape', "shape TEXT NOT NULL DEFAULT 'circle'");
 ensureColumn('tokens', 'light_json', 'light_json TEXT');
 ensureColumn('chat_messages', 'hidden', 'hidden INTEGER NOT NULL DEFAULT 0');
 ensureColumn('chat_messages', 'undo_json', 'undo_json TEXT');
+// Why a roll no longer counts — a Benny reroll overtook it, and its like.
+ensureColumn('chat_messages', 'obsolete', 'obsolete TEXT');
 // Unified world tree: any entity can be parented to any other by id.
 ensureColumn('characters', 'parent_id', 'parent_id TEXT');
 ensureColumn('handouts', 'parent_id', 'parent_id TEXT');

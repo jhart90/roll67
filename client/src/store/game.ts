@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type MoveLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type ChatRemovedPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type MoveLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -1476,6 +1476,11 @@ export function wireSocket(): void {
 
   // The DM changed the table's dice pacing. It rides on the campaign so that
   // everyone switches at the same moment and nobody is a few seconds ahead.
+  socket.on(S2C.CHAT_REMOVED, (p: ChatRemovedPayload) => {
+    const gone = new Set(p.messageIds);
+    useGameStore.setState((st) => ({ chatLog: st.chatLog.filter((m) => !gone.has(m.id)) }));
+  });
+
   socket.on(S2C.CHAT_WIPED, () => {
     // Everything queued was part of the log that no longer exists — a wiped
     // table must not go on animating messages from before the wipe.
@@ -2046,7 +2051,7 @@ export const intents = {
     jumpToChat();
     socket.emit(C2S.REQUEST_FEAR, p);
   },
-  moderateMessage: (messageId: number, action: 'hide' | 'unhide' | 'hideUndo') =>
+  moderateMessage: (messageId: number, action: 'hide' | 'unhide' | 'hideUndo' | 'delete') =>
     socket.emit(C2S.MODERATE_MESSAGE, { messageId, action }),
   runMacro: (macroId: string) => {
     const s = useGameStore.getState();

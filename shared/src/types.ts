@@ -576,6 +576,14 @@ export interface ChatMessage {
   at: number;
   /** DM hid this roll: players see a placeholder; the DM sees the original. */
   hidden?: boolean;
+  /**
+   * Why this roll no longer counts — "Superseded by a Benny reroll", and its
+   * like. The card stays in the log because it HAPPENED and the table watched
+   * it; it just wears a cover saying it has been overtaken, which is a kinder
+   * answer than deleting the dice everyone saw or leaving two contradictory
+   * results side by side.
+   */
+  obsolete?: string;
   /** A sheet card shown in the log instead of `text` (which stays as the
    *  plain-text fallback for search and for anything that can't render it). */
   card?: SheetCard | null;

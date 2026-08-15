@@ -795,8 +795,24 @@ export interface BennyRollRec {
    * of it that can drift.
    */
   onHit?: () => void;
+  /** The chat card this roll was posted as, so a reroll that overtakes it can
+   *  put a cover on the dice the table already watched. */
+  msgId?: number;
 }
 export const lastBennyRolls = new Map<string, { trait?: BennyRollRec; damage?: BennyRollRec }>();
+
+/**
+ * Tie the roll just banked to the card it was posted as.
+ *
+ * Separate from recordBennyRoll because the card does not exist yet when the
+ * roll is recorded — the id comes back from chat.add a line later. A caller
+ * that forgets simply gets no cover on the superseded roll, which is a
+ * missing nicety rather than a wrong result.
+ */
+export function noteBennyRollMessage(characterId: string, kind: 'trait' | 'damage', msgId: number): void {
+  const rec = lastBennyRolls.get(characterId)?.[kind];
+  if (rec) rec.msgId = msgId;
+}
 const BENNY_REROLL_TTL_MS = 5 * 60_000;
 
 function freshBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRollRec | null {

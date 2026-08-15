@@ -3662,6 +3662,25 @@ th > .term { border-bottom-style: dotted; }
 /* "Controlled by", wearing its owner's colour. The border goes with the
    background so a coloured picker does not sit in a grey frame, and the
    compact one is sized to stand in a toolbar row beside + Compendium. */
+/* A roll a Benny reroll overtook: the dice stay, under a wash that says so.
+   Not hidden and not deleted — the table watched those dice land, and a log
+   that loses them is a log nobody can follow. */
+.chat-msg.obsolete { position: relative; }
+.chat-msg.obsolete > *:not(.chat-obsolete-cover) { opacity: 0.42; filter: saturate(0.5); }
+.chat-obsolete-cover {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  padding: 4px 10px; border-radius: 8px;
+  background: rgba(12, 14, 20, 0.55);
+  pointer-events: none;
+}
+.chat-obsolete-cover span {
+  font-size: 11px; font-weight: 700; line-height: 1.35; text-align: center;
+  color: #e6e8ee; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  background: rgba(12, 14, 20, 0.75);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+}
+
 .owner-select { font-weight: 600; }
 .owner-select-compact {
   height: 24px; padding: 0 6px; font-size: 12px; max-width: 140px;

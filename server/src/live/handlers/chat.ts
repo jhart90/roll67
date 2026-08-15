@@ -266,6 +266,16 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     // the damage, every impact line. Hiding it hides all of them, because
     // hiding the announcement and leaving its consequences on screen tells a
     // story that no longer happened.
+    // Deleting is not hiding harder: the rows go, so there is nothing left to
+    // redact, unhide or undo from. Undo entries are applied FIRST if they are
+    // still there, because a message that is about to stop existing cannot be
+    // asked later what it did.
+    if (action === 'delete') {
+      const gone = chat.deleteThread(messageId);
+      if (gone.length === 0) return;
+      io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT_REMOVED, { messageIds: gone });
+      return;
+    }
     const touched = chat.setThreadHidden(messageId, action !== 'unhide');
     if (action === 'hideUndo') {
       const entries = chat.undoFor(messageId) as UndoEntry[] | null;

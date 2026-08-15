@@ -579,7 +579,10 @@ export type UndoEntry =
  *  recorded effects on character sheets/tokens. */
 export interface ModerateMessagePayload {
   messageId: number;
-  action: 'hide' | 'unhide' | 'hideUndo';
+  // 'delete' is the end of the line: the rows go, and every screen drops
+  // them. Offered only for something already hidden, so erasing the log is
+  // always a second, deliberate act rather than a slip of the mouse.
+  action: 'hide' | 'unhide' | 'hideUndo' | 'delete';
 }
 export interface SaveMacroPayload {
   macro: {
@@ -850,6 +853,8 @@ export const S2C = {
    *  result lands, so a group save isn't a silent wall of cards. */
   ROLL_CALLOUT: 'rollCallout',
   CHAT_UPDATED: 'chatUpdated',
+  /** Messages that no longer exist — drop them, they were never there. */
+  CHAT_REMOVED: 'chatRemoved',
   /** The log was erased — drop everything, a fresh line follows. */
   CHAT_WIPED: 'chatWiped',
   SHOPS: 'shops',
@@ -1238,6 +1243,8 @@ export interface MoveLockPayload { locked: boolean }
  * `tags` is the same list the roll's own tooltip shows afterwards, because it
  * is produced by the same function — see swadeShotModifiers.
  */
+export interface ChatRemovedPayload { messageIds: number[] }
+
 export interface MapZonesPayload { mapId: string; zones: MapZone[] }
 
 export interface AttackPreviewResultPayload {

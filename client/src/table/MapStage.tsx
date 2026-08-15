@@ -383,6 +383,13 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
         onPointerUp={onPointerUp}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        // Chrome treats an SVG <image> like an <img> for NATIVE drag, so a
+        // token wearing art could start a browser drag — ghost copy, 🚫
+        // cursor — that steals the pointer from the app's own drag. Nothing
+        // inside the stage ever legitimately starts a native drag (the world
+        // tree's drops start THEIR drag in the dock, outside this handler),
+        // so anything trying here is the browser being helpful. Decline.
+        onDragStart={(e) => e.preventDefault()}
       >
         <div
           className="map-surface"

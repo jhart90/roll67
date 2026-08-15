@@ -3,7 +3,7 @@ import {
   C2S, S2C, isAceStyle,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
-  type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload, type SetDiceSpeedPayload,
+  type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload, type SetDiceSpeedPayload, type SetMoveLockPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -82,6 +82,7 @@ export function buildCampaignState(campaignId: string, userId: string, username:
     macros: macros.forUser(userId, campaignId),
     initiative: initiativeViewFor(initiative.get(campaignId), isDm, campaignId),
     clockSeconds: campaigns.clockSeconds(campaignId),
+    moveLocked: campaigns.moveLocked(campaignId),
     // In the join payload rather than chasing it: a refresh mid-turn used to
     // rely on a follow-up message arriving after the client had cleared its
     // budgets, and a client that missed the window showed a full Pace bar
@@ -293,6 +294,29 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     campaigns.setDiceSpeed(d.campaignId, speed);
     io.to(campaignRoom(d.campaignId)).emit(S2C.DICE_SPEED, { speed });
   }, 'SET_DICE_SPEED'));
+
+  /**
+   * Freeze the board. While the lock is on nobody but the DM moves a token —
+   * enforced in canMoveToken itself, so every movement path (moves, drags,
+   * mounting, crawling) asks the same question. Announced in chat, because a
+   * player whose token stops answering deserves to know it is the DM's hand
+   * and not a bug.
+   */
+  socket.on(C2S.SET_MOVE_LOCK, safe(socket, ({ locked }: SetMoveLockPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM locks movement.'); return; }
+    const want = locked === true;
+    if (campaigns.moveLocked(d.campaignId) === want) return;   // idempotent: no repeat announcements
+    campaigns.setMoveLocked(d.campaignId, want);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.MOVE_LOCK, { locked: want });
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: want ? '🔒 The DM freezes the board — no one moves until it lifts.' : '🔓 Movement is unlocked.',
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'SET_MOVE_LOCK'));
 
   socket.on(C2S.SET_DICE_ACE_STYLE, safe(socket, ({ style }: SetDiceAceStylePayload) => {
     const d = sdata(socket);

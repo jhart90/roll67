@@ -133,7 +133,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
 
       const s = useGameStore.getState();
       const token = s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined;
-      const canMove = token && s.you && canMoveToken(s.you.role, s.you.userId, token, s.characters.find((c) => c.id === token.characterId));
+      const canMove = token && s.you && canMoveToken(s.you.role, s.you.userId, token, s.characters.find((c) => c.id === token.characterId), s.moveLocked);
 
       if (token && canMove) {
         const vertUp = (token.r & 1) === 0 ? { q: 1, r: -1 } : { q: 0, r: -1 };

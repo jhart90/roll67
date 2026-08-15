@@ -215,6 +215,13 @@ export const campaigns = {
   setDiceSpeed(id: string, speed: DiceSpeed): void {
     stmt('UPDATE campaigns SET dice_speed = ? WHERE id = ?').run(speed, id);
   },
+  moveLocked(id: string): boolean {
+    const row = stmt('SELECT move_locked FROM campaigns WHERE id = ?').get(id) as { move_locked?: number } | undefined;
+    return row?.move_locked === 1;
+  },
+  setMoveLocked(id: string, locked: boolean): void {
+    stmt('UPDATE campaigns SET move_locked = ? WHERE id = ?').run(locked ? 1 : 0, id);
+  },
   setClockSeconds(id: string, seconds: number): number {
     const next = Math.max(0, Math.floor(seconds));
     stmt('UPDATE campaigns SET clock_seconds = ? WHERE id = ?').run(next, id);

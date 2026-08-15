@@ -339,7 +339,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     const map = maps.byId(token.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown token.');
     const character = token.characterId ? characters.byId(token.characterId) : undefined;
-    if (!canMoveToken(d.role, d.userId, token, character)) {
+    if (!canMoveToken(d.role, d.userId, token, character, campaigns.moveLocked(d.campaignId))) {
       emitError(socket, 'You can only move your own character.');
       return;
     }
@@ -559,7 +559,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     const token = tokens.byId(tokenId);
     if (!token) return;
     const character = token.characterId ? characters.byId(token.characterId) : undefined;
-    if (!canMoveToken(d.role, d.userId, token, character)) {
+    if (!canMoveToken(d.role, d.userId, token, character, campaigns.moveLocked(d.campaignId))) {
       emitError(socket, 'That is not yours to move.');
       return;
     }
@@ -631,7 +631,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     if (!token) return;
     const character = token.characterId ? characters.byId(token.characterId) : undefined;
     if (!character || character.system !== 'swade') return;
-    if (!canMoveToken(d.role, d.userId, token, character)) return;
+    if (!canMoveToken(d.role, d.userId, token, character, campaigns.moveLocked(d.campaignId))) return;
     proneIntent.set(tokenId, mode === 'crawl' ? 'crawl' : 'stand');
     postStatusLine(io, d.campaignId, mode === 'crawl'
       ? `${character.name} stays down and crawls (${CRAWL_PACE}″, still Prone).`
@@ -654,7 +654,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     if (!token) return;
     const character = token.characterId ? characters.byId(token.characterId) : undefined;
     if (!character || character.system !== 'swade') return;
-    if (!canMoveToken(d.role, d.userId, token, character)) return;
+    if (!canMoveToken(d.role, d.userId, token, character, campaigns.moveLocked(d.campaignId))) return;
     const per = swadeTurnMoves.get(d.campaignId) ?? new Map<string, TurnMoveRec>();
     swadeTurnMoves.set(d.campaignId, per);
     const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
@@ -688,7 +688,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     if (!token) return;
     const character = token.characterId ? characters.byId(token.characterId) : undefined;
     if (!character || character.system !== 'swade') return;
-    if (!canMoveToken(d.role, d.userId, token, character)) return;
+    if (!canMoveToken(d.role, d.userId, token, character, campaigns.moveLocked(d.campaignId))) return;
     if (!initiative.get(d.campaignId).active) return;
     const per = swadeTurnMoves.get(d.campaignId) ?? new Map<string, TurnMoveRec>();
     swadeTurnMoves.set(d.campaignId, per);
@@ -716,7 +716,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     const token = tokens.byId(tokenId);
     if (!token) return;
     const character = token.characterId ? characters.byId(token.characterId) : undefined;
-    if (!canMoveToken(d.role, d.userId, token, character)) return;
+    if (!canMoveToken(d.role, d.userId, token, character, campaigns.moveLocked(d.campaignId))) return;
     // Ghost positions are ephemeral: relayed only to viewers who already see
     // the token, never persisted, no vision recompute.
     for (const s of socketsSeeingToken(io, d.campaignId, token)) {

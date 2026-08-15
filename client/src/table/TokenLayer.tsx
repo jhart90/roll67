@@ -126,8 +126,11 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const lastSent = useRef(0);
   const dragOrigin = useRef<{ x: number; y: number } | null>(null);
   const isDm = useGameStore((s) => s.isDm());
+  // Subscribed (not just read) so a token goes quiet the moment the DM locks
+  // the board, rather than at its next unrelated re-render.
+  const moveLocked = useGameStore((s) => s.moveLocked);
   const movable = !!you && tool === 'select' && targetState === 'off' &&
-    canMoveToken(you.role, you.userId, token, character);
+    canMoveToken(you.role, you.userId, token, character, moveLocked);
 
   // Where YOU last asked this token to be, if the server hasn't answered yet.
   // Subscribed (not read once) so the token slides to the predicted hex on the

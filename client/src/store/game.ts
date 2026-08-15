@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type MoveLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -420,6 +420,8 @@ interface GameState {
    *  the same baseline, so two at once would overlap each other. */
   /** A Called Shot waiting on its aim, now that the target is known. */
   calledShotPending: { targetTokenId: string } | null;
+  /** The DM's table-wide movement lock. */
+  moveLocked: boolean;
   /** The itemised modifier for the target currently hovered while aiming. */
   attackPreview: AttackPreviewResultPayload | null;
   confirmCalledShot(aim: CalledShotAim): void;
@@ -895,6 +897,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     openWindow('characterSheet', characterId, { characterId }, char?.name ?? 'Character');
   },
   calledShotPending: null,
+  moveLocked: false,
   attackPreview: null,
   confirmCalledShot(aim) {
     const s = get();
@@ -1035,6 +1038,7 @@ export function wireSocket(): void {
       // Pace bar over a token that had already walked half of it.
       moveBudgets: p.moveBudget ? { [p.moveBudget.tokenId]: p.moveBudget } : {},
       clockSeconds: p.clockSeconds ?? 0,
+      moveLocked: p.moveLocked === true,
       gmBennies: p.gmBennies ?? 0,
       chatLog: p.chatTail,
       mapObjects: mapObjectsById(p.mapObjects ?? []),
@@ -1483,6 +1487,10 @@ export function wireSocket(): void {
     const t = useGameStore.getState().targeting;
     if (!t || t.action.id !== p.actionId || t.sourceTokenId !== p.sourceTokenId) return;
     useGameStore.setState({ attackPreview: p });
+  });
+
+  socket.on(S2C.MOVE_LOCK, (p: MoveLockPayload) => {
+    useGameStore.setState({ moveLocked: p.locked === true });
   });
 
   socket.on(S2C.DICE_SPEED, (p: DiceSpeedPayload) => {
@@ -1979,6 +1987,7 @@ export const intents = {
   setTurnGuide: (on: boolean) => socket.emit(C2S.SET_TURN_GUIDE, { on }),
   setDiceSpeed: (speed: DiceSpeed) => socket.emit(C2S.SET_DICE_SPEED, { speed }),
   chatWipe: () => socket.emit(C2S.CHAT_WIPE, {}),
+  setMoveLock: (locked: boolean) => socket.emit(C2S.SET_MOVE_LOCK, { locked }),
   attackPreview: (targetTokenId: string) => {
     const t = useGameStore.getState().targeting;
     if (!t) return;

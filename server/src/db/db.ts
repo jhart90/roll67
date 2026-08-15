@@ -101,6 +101,9 @@ ensureColumn('campaigns', 'clock_seconds', 'clock_seconds INTEGER NOT NULL DEFAU
 // How long the whole table spends watching dice. On the CAMPAIGN because it
 // has to be one number for everyone — see DiceSpeed.
 ensureColumn('campaigns', 'dice_speed', "dice_speed TEXT NOT NULL DEFAULT 'cinematic'");
+// The DM's table-wide movement lock. Persisted: a freeze the DM set should
+// survive a server restart, not quietly thaw.
+ensureColumn('campaigns', 'move_locked', 'move_locked INTEGER NOT NULL DEFAULT 0');
 ensureColumn('macros', 'color', 'color TEXT');
 ensureColumn('macros', 'character_id', 'character_id TEXT');
 ensureColumn('macros', 'rollable_id', 'rollable_id TEXT');

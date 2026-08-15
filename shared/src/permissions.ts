@@ -8,8 +8,16 @@ export function isDm(role: Role): boolean {
 }
 
 /** Players may move only tokens bound to a character they own; DM moves anything. */
-export function canMoveToken(role: Role, userId: string, token: Token, character: Character | undefined): boolean {
+/**
+ * `locked` is the DM's table-wide movement lock: while it is on, nobody but
+ * the DM moves anything. It is a parameter here — rather than a check at each
+ * call site — because this function IS the answer to "may this person move
+ * this token", and a lock that half the callers forgot to ask about would be
+ * a lock in name only.
+ */
+export function canMoveToken(role: Role, userId: string, token: Token, character: Character | undefined, locked = false): boolean {
   if (isDm(role)) return true;
+  if (locked) return false;
   if (token.layer === 'gm') return false;
   return !!character && character.ownerUserId === userId && token.characterId === character.id;
 }

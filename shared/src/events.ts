@@ -105,6 +105,8 @@ export const C2S = {
   SET_TURN_GUIDE: 'setTurnGuide',
   /** DM: how long the whole table spends watching dice. */
   SET_DICE_SPEED: 'setDiceSpeed',
+  /** DM: freeze every player's tokens in place (and thaw them again). */
+  SET_MOVE_LOCK: 'setMoveLock',
   SET_PLAYER_COLOR: 'setPlayerColor',
   SET_USERNAME: 'setUsername',
   /** Save this account's audio mix (music + effects), so it follows the player. */
@@ -896,6 +898,8 @@ export const S2C = {
   CLOCK: 'clock',
   /** The campaign's dice pacing changed — everyone switches together. */
   DICE_SPEED: 'diceSpeed',
+  /** The DM locked or unlocked all player movement. */
+  MOVE_LOCK: 'moveLock',
   /** The modifier a hovered shot would carry, itemised. */
   ATTACK_PREVIEW: 'attackPreviewResult',
   /** The clouds hanging over a map changed — one landed, or one blew away. */
@@ -947,6 +951,8 @@ export interface CampaignStatePayload {
   /** SWADE: Bennies in the GM's own pool. */
   gmBennies?: number;
   chatTail: ChatMessage[];
+  /** The DM's table-wide movement lock, as it stands on arrival. */
+  moveLocked?: boolean;
   /**
    * What is left of the current turn's Pace, for whoever is up.
    *
@@ -1224,6 +1230,8 @@ export interface SetDiceBouncePayload { pct: number | null }
 export interface SetDiceAceStylePayload { style: import('./types.js').AceStyle | null }
 export interface SetTurnGuidePayload { on: boolean }
 export interface SetDiceSpeedPayload { speed: DiceSpeed }
+export interface SetMoveLockPayload { locked: boolean }
+export interface MoveLockPayload { locked: boolean }
 /**
  * The itemised modifier a shot would carry if it were taken right now.
  *

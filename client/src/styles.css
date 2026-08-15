@@ -3623,6 +3623,9 @@ th > .term { border-bottom-style: dotted; }
    danger styling paints a red BACKGROUND under link-colored text, which in
    this window came out as a red pill with invisible words — so the color is
    pinned on both halves, background and ink. */
+/* The movement lock, armed: the one button in the time panel that stays hot. */
+.time-panel .time-lock.on { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+
 .settings-window .link.danger {
   background: var(--danger); border-color: var(--danger);
   color: #fff; font-weight: 600; padding: 2px 8px; border-radius: 6px;

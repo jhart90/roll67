@@ -877,6 +877,17 @@ button.link:hover { text-decoration: underline; }
 .handout-window, .map-window { width: min(560px, 92vw); max-height: 88vh; overflow-y: auto; }
 .map-window .handout-img { max-width: 100%; border-radius: 6px; margin: 4px 0; }
 .handout-window .handout-img { max-width: 100%; border-radius: 6px; margin: 4px 0; }
+/* The share CTA: one full-width primary answer, with the per-player chips
+   demoted to their own quieter row beneath it. */
+.handout-share .share-all {
+  display: block; width: 100%; margin: 4px 0 8px;
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  font-weight: 600; padding: 8px 10px;
+}
+.handout-share .share-all:hover { filter: brightness(1.1); }
+.handout-share .share-all.on {
+  background: transparent; color: var(--accent); font-weight: 600;
+}
 .handout-share { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
 .handout-share h4 { margin: 0 0 6px; font-size: 12px; color: var(--text-dim); text-transform: uppercase; }
 .handout-share .share-controls { display: flex; flex-wrap: wrap; gap: 6px; }

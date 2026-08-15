@@ -157,35 +157,37 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
         {handout && isDm && (
           <div className="handout-share">
             <h4>Share with players</h4>
-            <div className="share-controls">
-              <button
-                className={`btn btn-sm ${handout.sharedAll ? 'btn-accent' : ''}`}
-                onClick={() => intents.shareHandout(handout.id, handout.sharedAll ? 'none' : 'all')}
-              >
-                {handout.sharedAll ? '✓ All players' : 'Share to all players'}
-              </button>
-              {!handout.sharedAll && (
-                <>
-                  <span className="dim" style={{ alignSelf: 'center' }}>Share to…</span>
-                  {players.map((m) => {
-                    const has = handout.sharedWith.includes(m.userId);
-                    return (
-                      <button
-                        key={m.userId}
-                        className={`btn btn-sm ${has ? 'btn-accent' : ''}`}
-                        onClick={() => {
-                          const next = has ? handout.sharedWith.filter((id) => id !== m.userId) : [...handout.sharedWith, m.userId];
-                          intents.shareHandout(handout.id, next.length ? next : 'none');
-                        }}
-                      >
-                        {m.username}{has ? ' ✓' : ''}
-                      </button>
-                    );
-                  })}
-                  {players.length === 0 && <span className="dim">No players have joined yet.</span>}
-                </>
-              )}
-            </div>
+            {/* Two rows for the two different questions. "Everyone?" is the
+                common case and the decision, so it stands alone as the CTA;
+                the per-player chips below are the exception — a secret note
+                slipped to two people — and read as a quieter list. */}
+            <button
+              className={`btn share-all${handout.sharedAll ? ' on' : ''}`}
+              onClick={() => intents.shareHandout(handout.id, handout.sharedAll ? 'none' : 'all')}
+            >
+              {handout.sharedAll ? '✓ Shared with all players — click to unshare' : '📣 Share with all players'}
+            </button>
+            {!handout.sharedAll && (
+              <div className="share-controls">
+                <span className="dim" style={{ alignSelf: 'center' }}>…or just:</span>
+                {players.map((m) => {
+                  const has = handout.sharedWith.includes(m.userId);
+                  return (
+                    <button
+                      key={m.userId}
+                      className={`btn btn-sm ${has ? 'btn-accent' : ''}`}
+                      onClick={() => {
+                        const next = has ? handout.sharedWith.filter((id) => id !== m.userId) : [...handout.sharedWith, m.userId];
+                        intents.shareHandout(handout.id, next.length ? next : 'none');
+                      }}
+                    >
+                      {m.username}{has ? ' ✓' : ''}
+                    </button>
+                  );
+                })}
+                {players.length === 0 && <span className="dim">No players have joined yet.</span>}
+              </div>
+            )}
           </div>
         )}
       </div>

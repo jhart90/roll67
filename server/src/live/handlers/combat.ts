@@ -3888,6 +3888,21 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         return;
       }
 
+      // A template that deals nothing — a smoke grenade, a flare, a marker —
+      // is not a damage roll with a boring result. Rolling `0` and posting a
+      // card reading "0" says an attack happened and failed, when what
+      // happened is that something landed where it was aimed. Say THAT, and
+      // stop: there is nobody to hurt and nothing to apply.
+      //
+      // What such a thing does after it lands — smoke obscuring the ground it
+      // covers, for as long as it hangs there — is not wired yet. The throw,
+      // the scatter and the template are; the lingering area is not.
+      if (!usableAmount(damageExpr)) {
+        postStatusLine(io, d.campaignId,
+          `💨 ${action.label} lands where ${actor.name} aimed it — it covers the area, and does no damage.`);
+        return;
+      }
+
       // No save (rare — every compendium AoE spell has one, but a homebrew
       // action might not): everyone caught in the area takes the same roll.
       const dmg = roll(damageExpr);

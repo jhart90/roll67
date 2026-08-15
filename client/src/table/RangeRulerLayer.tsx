@@ -103,7 +103,9 @@ export function RangeRulerLayer() {
   const color = blocked ? BAND_COLOR.out : BAND_COLOR[reading.band] ?? BAND_COLOR.out;
 
   // The roll this action actually makes, so the penalty names the right skill.
-  const skillName = action.thrown ? 'Athletics (Throwing)' : 'Shooting';
+  // Named after the roll it will actually apply to. Assuming "Shooting" made
+  // the ruler tell a dinosaur its Fighting penalty was a marksmanship problem.
+  const skillName = action.thrown ? 'Athletics (Throwing)' : action.skillName || 'Shooting';
   const measure = `${dist} ${dist === 1 ? 'tile' : 'tiles'} / ${dist * feetPerHex} ft`;
   // Once the cursor is over somebody, the ruler stops quoting the range band
   // on its own and shows the whole sum — a shooter deciding whether to take

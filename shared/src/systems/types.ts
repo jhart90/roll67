@@ -170,6 +170,9 @@ export interface CombatAction {
   healsWounds?: boolean;
   /** This template leaves a cloud behind rather than hurting anyone: smoke. */
   obscures?: boolean;
+  /** The skill this attack actually rolls — so a penalty can be named after
+   *  the roll it applies to rather than assumed to be Shooting. */
+  skillName?: string;
   /** Name of the trait this action rolls, for the chat card ("Healing"). */
   traitName?: string;
   /** SWADE: the weapon's Rate of Fire (parsed from its notes). RoF 2+ fires

@@ -2621,7 +2621,12 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       reply({ mod: 0, tags: [], blocked: `${chaseCtx.gapCards} Chase Card${chaseCtx.gapCards === 1 ? '' : 's'} away` });
       return;
     }
-    const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0);
+    // A big creature reaches from its bulk, not from the pip at its centre —
+    // and is reached from its bulk in turn. The allowance already existed for
+    // a big TARGET; a Huge attacker was still measured from the middle of its
+    // own footprint, which is why a dinosaur could not bite something standing
+    // against its ribs.
+    const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0) + (!action.ranged && src.size >= 3 ? 1 : 0);
     const swadeBands = action.ranged && rangeHexes > 1 && !action.hardRange;
     const effRof = Math.max(1, Math.min(action.rof ?? 1, Math.round(q.rof ?? (action.rof ?? 1))));
     const bandOpts = { aiming: q.adv === 'adv', thrown: action.thrown === true };
@@ -2750,7 +2755,12 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       emitError(socket, `${tgt.name} is ${chaseCtx.yards} yards up the chase — ${chaseCtx.gapCards} Chase Card${chaseCtx.gapCards === 1 ? '' : 's'} away. Close the gap first.`);
       return;
     }
-    const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0);
+    // A big creature reaches from its bulk, not from the pip at its centre —
+    // and is reached from its bulk in turn. The allowance already existed for
+    // a big TARGET; a Huge attacker was still measured from the middle of its
+    // own footprint, which is why a dinosaur could not bite something standing
+    // against its ribs.
+    const effectiveRange = rangeHexes + (tgt.size >= 3 ? 1 : 0) + (!action.ranged && src.size >= 3 ? 1 : 0);
     // SWADE range bands: the listed range is Short; Medium (−2) reaches 2×
     // and Long (−4) reaches 4×. Other systems keep the hard single limit — and
     // so does anything flagged hardRange, whose listed reach IS its maximum.

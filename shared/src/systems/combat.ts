@@ -53,6 +53,17 @@ export function combatActions(character: Character): CombatAction[] {
     const damage = rollables.find((r) => r.id === `damage_${i}`);
     if (!attack && !damage) return;
     const rangeFt = Math.max(0, num(atk, 'range', 5));
+    /**
+     * Reach is not range.
+     *
+     * A Robo T-Rex's bite is listed at 10 feet because the head is ten feet
+     * from where it is standing, and `rangeFt > 5` read that as a SHOT: range
+     * bands, Recoil, no Gang Up, the ranged shield on the target's armor —
+     * every ranged rule, applied to a set of jaws. What decides is the roll it
+     * makes, and a Fighting attack is melee however far the neck goes.
+     */
+    const atkSkill = str(atk, 'skill', '');
+    const meleeSkill = /^fighting$/i.test(atkSkill);
     // A save-based special attack (breath weapons, etc.) forces a saving
     // throw instead of a to-hit roll, and may hit an area rather than one
     // target — mirrors how save-based spells/cantrips are built below, but
@@ -77,10 +88,11 @@ export function combatActions(character: Character): CombatAction[] {
       amountExpr: damage?.expr ?? '0',
       rangeFt,
       damageType: str(atk, 'dtype', ''),
-      ranged: rangeFt > 5,
+      ranged: rangeFt > 5 && !meleeSkill,
       consumesItem: false,
       source: 'attack',
       index: i,
+      ...(atkSkill ? { skillName: atkSkill } : {}),
       // SWADE Rate of Fire, from an explicit column or a "RoF N" note.
       ...(swadeRof(atk) >= 2 ? { rof: swadeRof(atk) } : {}),
       ...(num(atk, 'ap', 0) > 0 ? { ap: num(atk, 'ap', 0) } : {}),

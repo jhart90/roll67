@@ -3576,8 +3576,13 @@ th > .term { border-bottom-style: dotted; }
    wood rather than floating over it. */
 .shelf-logo {
   position: absolute; z-index: 2;
-  left: clamp(10px, 1.6vw, 30px); bottom: clamp(6px, 1.2vh, 22px);
-  width: clamp(90px, 10.5vw, 200px);
+  /* Half the size it first shipped at, but pinned to the same CENTER: the
+     old corner offsets plus a quarter of the old box (half the new one).
+     0.514 is half the image's 512/498 aspect — the height in widths. */
+  --logo-w: clamp(45px, 5.25vw, 100px);
+  left: calc(clamp(10px, 1.6vw, 30px) + var(--logo-w) / 2);
+  bottom: calc(clamp(6px, 1.2vh, 22px) + var(--logo-w) * 0.514);
+  width: var(--logo-w);
   opacity: 0.82;
   filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7));
   pointer-events: none;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from './store/auth';
+import { useGameStore } from './store/game';
 import { Login } from './screens/Login';
 import { ResetPassword, resetTokenFromUrl } from './screens/ResetPassword';
 import { CampaignList } from './screens/CampaignList';
@@ -15,6 +16,21 @@ export function App() {
   useEffect(() => {
     void loadMe();
   }, [loadMe]);
+
+  // Thrown out of a campaign that no longer exists, or that we are no longer
+  // in. Above every early return, because a hook that only runs on some
+  // renders is not a hook.
+  const ejected = useGameStore((s) => s.ejected);
+  useEffect(() => {
+    if (!ejected) return;
+    setOpenCampaignId(null);
+    useGameStore.getState().clearEjected();
+    // The shelf is only loaded at sign-in, so without this the campaign we
+    // were just thrown out of is still sitting on it — a book that opens onto
+    // nothing. Refetched rather than pruned locally: the server is the one
+    // that knows what is left.
+    void useAuthStore.getState().loadCampaigns();
+  }, [ejected]);
 
   if (checking) {
     // The same dark the bookshelf paints under itself, so the session check

@@ -505,6 +505,15 @@ interface GameState {
 
   // actions
   join(campaignId: string): void;
+  /**
+   * Set when the server has taken the campaign away from under us — deleted,
+   * or the DM booting this player. `leave()` empties the STORE, but which
+   * screen is showing is the app shell's own state, so it needs telling: the
+   * table cannot render anything without a campaign, and it used to sit on
+   * "joining campaign…" forever. Cleared by the shell once it has left.
+   */
+  ejected: boolean;
+  clearEjected(): void;
   leave(): void;
   setCamera(c: Camera): void;
   setTool(t: Tool): void;
@@ -837,6 +846,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     socket.emit(C2S.JOIN_CAMPAIGN, { campaignId });
   },
 
+  ejected: false,
+  clearEjected() { set({ ejected: false }); },
   leave() {
     socket.emit(C2S.LEAVE_CAMPAIGN);
     // Queued rolls belong to the campaign being left; firing them into the next
@@ -1571,6 +1582,7 @@ export function wireSocket(): void {
     st.leave();
     useGameStore.setState({
       errorToast: mine ? `“${p.name}” was deleted.` : `The DM deleted “${p.name}”.`,
+      ejected: true,
     });
   });
 
@@ -1648,7 +1660,7 @@ export function wireSocket(): void {
     const s = useGameStore.getState();
     if (s.campaign?.id !== campaignId) return;
     s.leave();
-    useGameStore.setState({ errorToast: 'You were removed from the campaign by the DM.' });
+    useGameStore.setState({ errorToast: 'You were removed from the campaign by the DM.', ejected: true });
   });
 
   // The DM pushed the character-creator wizard to this player's screen.

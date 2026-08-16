@@ -109,6 +109,7 @@ export const C2S = {
   DELETE_CAMPAIGN: 'deleteCampaign',
   /** DM: freeze every player's tokens in place (and thaw them again). */
   SET_MOVE_LOCK: 'setMoveLock',
+  ADJUST_PACE: 'adjustPace',
   SET_ROLL_LOCK: 'setRollLock',
   SET_PLAYER_LOCK: 'setPlayerLock',
   SET_PLAYER_COLOR: 'setPlayerColor',
@@ -1261,6 +1262,9 @@ export interface RenameCampaignPayload { name: string }
  * trusting a click they might have meant for the button above.
  */
 export interface DeleteCampaignPayload { confirmName: string }
+/** Hand a token back some of the Pace it spent this turn (+), or take some
+ *  away (−). The DM's correction for a misstep; see adjustSpentMovement. */
+export interface AdjustPacePayload { tokenId: string; delta: number }
 export interface SetMoveLockPayload { locked: boolean }
 export interface SetRollLockPayload { locked: boolean }
 /** One player's own lock. `which` names which of the two is being aimed. */

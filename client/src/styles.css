@@ -3982,3 +3982,20 @@ th > .term { border-bottom-style: dotted; }
    quieter than the numerator: the number that changes is the answer. */
 .stat-spendable .stat-of { font-size: 0.62em; opacity: 0.6; margin-left: 1px; }
 .stat-spendable .stat-spent { color: var(--danger); }
+
+/* The DM's Pace nudges: two tiny buttons stacked at the right edge of the
+   chip, inside it rather than beside it so the derived row keeps its rhythm. */
+.stat-block { position: relative; }
+.pace-nudge {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.pace-nudge button {
+  width: 16px; height: 13px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1;
+  background: var(--panel-2); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 3px; cursor: pointer;
+}
+.pace-nudge button:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.pace-nudge button:disabled { opacity: 0.3; cursor: default; }

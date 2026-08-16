@@ -3,7 +3,7 @@ import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
   dieSides, playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
   type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveBudgetPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type Token, type TokenShape, type UpdateTokenPayload,
+  type AdjustPacePayload, type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveBudgetPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type Token, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
 import { assets, campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
@@ -120,6 +120,25 @@ function buildMoveBudget(campaignId: string, token: Token, ch: Character): MoveB
     shaken: conds.includes('shaken'),
   };
   return payload;
+}
+
+/**
+ * Give a token back some of the movement it has already spent — or take some.
+ *
+ * The turn's record only ever counted UP, so a misstep was permanent until the
+ * turn ended: the DM could drag the token back, but the drag spent more Pace
+ * doing it. This edits the record itself, which is the only thing that can
+ * actually undo a step.
+ *
+ * Clamped at nothing-spent. Handing back more than was ever spent would be
+ * granting extra Pace rather than undoing a mistake, and that is what the
+ * running die and the DM's own judgement are for.
+ */
+export function adjustSpentMovement(campaignId: string, tokenId: string, delta: number): void {
+  const per = swadeTurnMoves.get(campaignId);
+  const rec = per?.get(tokenId);
+  if (!rec) return;
+  rec.moved = Math.max(0, rec.moved - delta);
 }
 
 export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, only?: Socket): void {
@@ -432,7 +451,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       emitError(socket, `It is not ${token.name}'s turn.`);
       return;
     }
-    const spendsPace = d.role !== 'dm' || upNow === tokenId;
+    // Whose allowance is this to spend? A player always spends their own. The
+    // DM spends only when playing their OWN piece on its turn — moving a
+    // player's token is refereeing (fixing a misstep, shoving someone out of a
+    // blast), and charging the player Pace for the DM's correction is the
+    // opposite of what the correction was for.
+    const dmOwnsIt = !character?.ownerUserId || character.ownerUserId === d.userId;
+    const spendsPace = d.role !== 'dm' ? true : (dmOwnsIt && upNow === tokenId);
     if (spendsPace && character?.system === 'swade') {
       const prone = conditionsOf(character.sheet).includes('prone');
       const combat = initiative.get(d.campaignId).active;
@@ -683,6 +708,22 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'JUMP_ROLL'));
+
+  /** The DM's Pace correction: only they may hand it back, and only in whole
+   *  inches, one nudge at a time. */
+  socket.on(C2S.ADJUST_PACE, safe(socket, ({ tokenId, delta }: AdjustPacePayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM adjusts Pace.'); return; }
+    const step = Math.trunc(Number(delta));
+    if (!Number.isFinite(step) || step === 0 || Math.abs(step) > 20) return;
+    const token = tokens.byId(tokenId);
+    if (!token) return;
+    const map = maps.byId(token.mapId);
+    if (!map || map.campaignId !== d.campaignId) return;
+    adjustSpentMovement(d.campaignId, tokenId, step);
+    emitMoveBudget(io, d.campaignId, tokenId);
+  }, 'ADJUST_PACE'));
 
   socket.on(C2S.RUN_ROLL, safe(socket, ({ tokenId }: RunRollPayload) => {
     if (!rollGate(socket)) return;

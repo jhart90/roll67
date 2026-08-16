@@ -2079,6 +2079,7 @@ export const intents = {
   renameCampaign: (name: string) => socket.emit(C2S.RENAME_CAMPAIGN, { name }),
   deleteCampaign: (confirmName: string) => socket.emit(C2S.DELETE_CAMPAIGN, { confirmName }),
   chatWipe: () => socket.emit(C2S.CHAT_WIPE, {}),
+  adjustPace: (tokenId: string, delta: number) => socket.emit(C2S.ADJUST_PACE, { tokenId, delta }),
   setMoveLock: (locked: boolean) => socket.emit(C2S.SET_MOVE_LOCK, { locked }),
   setRollLock: (locked: boolean) => socket.emit(C2S.SET_ROLL_LOCK, { locked }),
   setPlayerLock: (userId: string, which: 'move' | 'roll', locked: boolean) =>

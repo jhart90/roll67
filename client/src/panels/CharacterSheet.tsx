@@ -826,6 +826,12 @@ function DerivedBlocks({
     const tok = Object.values(st.tokens).find((t) => t.characterId === characterId);
     return tok ? st.moveBudgets[tok.id] : undefined;
   });
+  // The token the budget belongs to, so the DM's nudges have something to aim
+  // at, and whether this viewer is the DM — only they may hand Pace back.
+  const paceTokenId = useGameStore((st) => (characterId
+    ? Object.values(st.tokens).find((t) => t.characterId === characterId)?.id ?? null
+    : null));
+  const isDm = useGameStore((st) => st.isDm());
   return (
     <div className="derived-row">
       {section.items.map((item) => {
@@ -841,6 +847,22 @@ function DerivedBlocks({
                 : derived[item.key] ?? '—'}
             </span>
             <span className="stat-label"><SheetTerm system={system} label={item.label} /></span>
+            {/* The DM's undo for a misspent step. Only they see it, and only
+                while there is a turn's budget to correct. */}
+            {spendable && isDm && paceTokenId && (
+              <span className="pace-nudge">
+                <button
+                  title="Give back 1″ of Pace this turn"
+                  disabled={spendable.left >= spendable.total}
+                  onClick={() => intents.adjustPace(paceTokenId, 1)}
+                >+</button>
+                <button
+                  title="Take away 1″ of Pace this turn"
+                  disabled={spendable.left <= 0}
+                  onClick={() => intents.adjustPace(paceTokenId, -1)}
+                >−</button>
+              </span>
+            )}
           </div>
         );
       })}

@@ -91,23 +91,67 @@ ${best.b}`, fontSize: Math.max(6.5, fs2), lines: 2, spacing: face.spacing };
   return { text: name, fontSize: Math.max(6.5, fs1), lines: 1, spacing: face.spacing };
 }
 
-/** The account pill's dropdown: change password, or leave. */
+/**
+ * The account pill's dropdown: change password, set a recovery email, or leave.
+ *
+ * The recovery email lives here as well as in the table's account window
+ * because this shelf is where everyone lands after signing in, and the table's
+ * copy is only reachable from inside a campaign — a member who has not joined
+ * one yet would have had nowhere at all to put an address, which is the exact
+ * member most likely to still need one.
+ */
 function AccountMenu() {
   const { user, logout } = useAuthStore();
   const [open, setOpen] = useState(false);
-  const [changing, setChanging] = useState(false);
+  const [pane, setPane] = useState<'menu' | 'password' | 'email'>('menu');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
+  const [email, setEmail] = useState('');
+  // What the server holds, so an untouched field submits nothing. null until
+  // loaded; the form asks on open rather than at mount, since most visits to
+  // this shelf never touch the menu at all.
+  const [savedEmail, setSavedEmail] = useState<string | null>(null);
   const [note, setNote] = useState('');
+
+  function reset() {
+    setPane('menu'); setNote(''); setCurrent(''); setNext('');
+  }
+
+  async function openEmail() {
+    setPane('email'); setNote('');
+    try {
+      const { user: u } = await api.get<{ user: { email: string | null } }>('/api/account');
+      setSavedEmail(u.email);
+      setEmail(u.email ?? '');
+    } catch {
+      setNote('Could not load your account.');
+    }
+  }
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
     setNote('');
     try {
       await api.post('/api/account', { currentPassword: current, newPassword: next });
-      setNote('Changed.');
+      setNote('Changed. Your other devices have been signed out.');
       setCurrent(''); setNext('');
-      setChanging(false);
+      setPane('menu');
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Failed.');
+    }
+  }
+
+  async function saveEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setNote('');
+    try {
+      const { user: u } = await api.post<{ user: { email: string | null } }>('/api/account', {
+        currentPassword: current, newEmail: email.trim(),
+      });
+      setSavedEmail(u.email);
+      setEmail(u.email ?? '');
+      setCurrent('');
+      setNote(u.email ? `Saved. Reset links will go to ${u.email}.` : 'Removed.');
     } catch (err) {
       setNote(err instanceof Error ? err.message : 'Failed.');
     }
@@ -115,12 +159,12 @@ function AccountMenu() {
 
   return (
     <div className="account-pill-wrap">
-      <button className="account-pill" onClick={() => { setOpen((o) => !o); setChanging(false); setNote(''); }}>
+      <button className="account-pill" onClick={() => { setOpen((o) => !o); reset(); }}>
         {user?.username} <span className="account-pill-caret">{open ? '▴' : '▾'}</span>
       </button>
       {open && (
         <div className="account-menu">
-          {changing ? (
+          {pane === 'password' && (
             <form className="account-menu-form" onSubmit={changePassword}>
               <input
                 type="password" placeholder="Current password" autoFocus
@@ -132,12 +176,41 @@ function AccountMenu() {
               />
               <div className="portal-row">
                 <button type="submit" className="portal-cta portal-cta-small" disabled={!current || !next}>Change</button>
-                <button type="button" className="link" onClick={() => setChanging(false)}>back</button>
+                <button type="button" className="link" onClick={reset}>back</button>
               </div>
             </form>
-          ) : (
+          )}
+          {pane === 'email' && (
+            <form className="account-menu-form" onSubmit={saveEmail}>
+              <p className="portal-hint" style={{ margin: 0 }}>
+                {savedEmail
+                  ? 'Where a lost-password link is sent. Empty it to remove.'
+                  : 'No address on file. Without one, a forgotten password cannot be reset.'}
+              </p>
+              <input
+                type="email" placeholder="you@example.com" autoFocus
+                value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email"
+              />
+              <input
+                type="password" placeholder="Current password"
+                value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password"
+              />
+              <div className="portal-row">
+                <button
+                  type="submit"
+                  className="portal-cta portal-cta-small"
+                  disabled={!current || email.trim().toLowerCase() === (savedEmail ?? '')}
+                >
+                  Save
+                </button>
+                <button type="button" className="link" onClick={reset}>back</button>
+              </div>
+            </form>
+          )}
+          {pane === 'menu' && (
             <>
-              <button onClick={() => { setChanging(true); setNote(''); }}>Change password…</button>
+              <button onClick={() => { setPane('password'); setNote(''); }}>Change password…</button>
+              <button onClick={openEmail}>Recovery email…</button>
               <button onClick={logout}>Log out</button>
             </>
           )}

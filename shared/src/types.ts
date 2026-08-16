@@ -132,6 +132,18 @@ export interface AoeSpec {
  */
 export type LightingLevel = 'dark' | 'dim' | 'light' | 'pitch';
 
+/**
+ * What the darkness DOES to a roll, as opposed to what it does to sight.
+ *
+ * These were one setting, which forced the two to agree: a moonlit ruin the
+ * players could see across could not also be hard to shoot in, and a pitch
+ * cellar could not be generously lit for play while staying frightening to
+ * fight in. Split, the DM sets how far people SEE and what it COSTS
+ * independently. Unset means "same as the lighting", which is what every map
+ * built before the split meant.
+ */
+export type LightingPenalty = LightingLevel;
+
 export interface GridConfig {
   /** Center-to-corner radius of a hex, in background-image pixels. */
   hexSize: number;
@@ -148,6 +160,9 @@ export interface GridConfig {
   /** Hex-line opacity 0–1; default 0.16. */
   gridOpacity?: number;
   lighting: LightingLevel;
+  /** What the gloom costs on sight-based rolls. Absent = follow `lighting`,
+   *  which is how every map behaved before the two were separable. */
+  lightingPenalty?: LightingPenalty;
   /** Label for the ruler, e.g. 5 (ft per hex). */
   feetPerHex: number;
 }

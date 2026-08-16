@@ -2444,7 +2444,12 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       // Illumination: Dim −2, Dark −4 — unless the target stands in light
       // (a map light's or a carried torch's bright radius washes it out;
       // a dim radius still leaves −2).
-      if (map.grid.lighting !== 'light') {
+      //
+      // This reads the PENALTY setting, not the sight one: a map can be lit
+      // generously for play while still fighting like a cellar, or the other
+      // way about. Unset means the two agree, as they always used to.
+      const penaltyLevel = map.grid.lightingPenalty ?? map.grid.lighting;
+      if (penaltyLevel !== 'light') {
         const nb2 = hexToPixel({ q: tgt.q + 1, r: tgt.r }, map.grid);
         const hexStep = Math.hypot(nb2.x - tgtPx.x, nb2.y - tgtPx.y);
         let lit: 'bright' | 'dim' | 'none' = 'none';
@@ -2462,7 +2467,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
             if (dHex <= t.light.dim) lit = 'dim';
           }
         }
-        const base = map.grid.lighting === 'dim' ? -2 : map.grid.lighting === 'dark' ? -4 : -6;
+        const base = penaltyLevel === 'dim' ? -2 : penaltyLevel === 'dark' ? -4 : -6;
         let illum = lit === 'bright' ? 0 : lit === 'dim' ? -2 : base;
         const illumWord = illum === -2 ? 'Dim light' : illum === -4 ? 'Darkness' : 'Pitch darkness';
         // Low Light Vision ignores Dim and Dark outright — but not Pitch

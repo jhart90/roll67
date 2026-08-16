@@ -184,15 +184,40 @@ export function MapEditorWindow({ mapId, onClose }: { mapId: string | 'new' | 'n
                 </label>
               </div>
             )}
-            <label className="lu-field">
-              Lighting
-              <select value={grid.lighting} onChange={(e) => setGrid({ lighting: e.target.value as GridConfig['lighting'] })}>
-                <option value="dark">Dark (−4, sight 10 hexes)</option>
-                <option value="pitch">Pitch Darkness (−6, light/darkvision only)</option>
-                <option value="dim">Dim (−2 to sight-based actions)</option>
-                <option value="light">Bright (no penalty)</option>
-              </select>
-            </label>
+            {/* Two settings, because a map is not obliged to punish what it
+                hides. The left one decides how far anyone can SEE; the right
+                one decides what the gloom COSTS on a sight-based roll. Left
+                on "match" the right follows the left, which is how a single
+                dropdown always behaved. */}
+            <div className="lighting-pair">
+              <label className="lu-field">
+                Lighting
+                <select value={grid.lighting} onChange={(e) => setGrid({ lighting: e.target.value as GridConfig['lighting'] })}>
+                  <option value="dark">Dark (sight 10 hexes)</option>
+                  <option value="pitch">Pitch Darkness (light/darkvision only)</option>
+                  <option value="dim">Dim (short ambient radius)</option>
+                  <option value="light">Bright (everything in range)</option>
+                </select>
+              </label>
+              <label className="lu-field">
+                Lighting Penalty
+                <select
+                  value={grid.lightingPenalty ?? ''}
+                  title="What the dark costs on sight-based rolls. Independent of how far people can see."
+                  onChange={(e) => setGrid({
+                    lightingPenalty: e.target.value === ''
+                      ? undefined
+                      : e.target.value as GridConfig['lightingPenalty'],
+                  })}
+                >
+                  <option value="">Match lighting</option>
+                  <option value="pitch">−6 (pitch darkness)</option>
+                  <option value="dark">−4 (darkness)</option>
+                  <option value="dim">−2 (dim light)</option>
+                  <option value="light">No penalty</option>
+                </select>
+              </label>
+            </div>
           </>
         )}
       </div>

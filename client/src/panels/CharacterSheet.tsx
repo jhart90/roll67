@@ -811,31 +811,51 @@ function ListEditor({
 }
 
 function DerivedBlocks({
-  section, system, derived,
+  section, system, derived, characterId,
 }: {
   section: DerivedSection;
   system: GameSystem;
   derived: Record<string, number | string>;
+  characterId?: string;
 }) {
+  // Mid-turn, Pace is not a constant — it is an allowance being spent. The
+  // budget the map draws its reach from is the same one shown here, so the
+  // sheet and the board can never disagree about how far is left.
+  const budget = useGameStore((st) => {
+    if (!characterId) return undefined;
+    const tok = Object.values(st.tokens).find((t) => t.characterId === characterId);
+    return tok ? st.moveBudgets[tok.id] : undefined;
+  });
   return (
     <div className="derived-row">
-      {section.items.map((item) => (
-        <div key={item.key} className="stat-block">
-          <span className="stat-value">{derived[item.key] ?? '—'}</span>
-          <span className="stat-label"><SheetTerm system={system} label={item.label} /></span>
-        </div>
-      ))}
+      {section.items.map((item) => {
+        const spendable = item.key === 'pace' && budget
+          ? { left: Math.max(0, budget.pace - budget.moved), total: budget.pace }
+          : null;
+        return (
+          <div key={item.key} className={`stat-block${spendable ? ' stat-spendable' : ''}`}>
+            <span className="stat-value">
+              {spendable
+                ? <><span className={spendable.left === 0 ? 'stat-spent' : ''}>{spendable.left}</span>
+                    <span className="stat-of">/{spendable.total}</span></>
+                : derived[item.key] ?? '—'}
+            </span>
+            <span className="stat-label"><SheetTerm system={system} label={item.label} /></span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function Section({
-  section, system, sheet, derived, readOnly, onPatch, onEditImage, onEditCardBack, inheritedColor, onEquipChange, onPostCard,
+  section, system, sheet, derived, readOnly, onPatch, onEditImage, onEditCardBack, inheritedColor, onEquipChange, onPostCard, characterId,
 }: {
   section: SectionDef;
   system: GameSystem;
   sheet: SheetData;
   derived: Record<string, number | string>;
+  characterId?: string;
   readOnly: boolean;
   onPatch: (patch: SheetData) => void;
   onEditImage?: (fieldId: string) => void;
@@ -861,7 +881,7 @@ function Section({
           onPostCard={POSTABLE_SECTIONS.has(section.id) ? onPostCard : undefined}
         />
       )}
-      {section.kind === 'derived' && <DerivedBlocks section={section} system={system} derived={derived} />}
+      {section.kind === 'derived' && <DerivedBlocks section={section} system={system} derived={derived} characterId={characterId} />}
     </section>
   );
 }
@@ -1373,6 +1393,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
                 system={character.system}
                 sheet={character.sheet}
                 derived={derived}
+                characterId={character.id}
                 readOnly={!editable}
                 onPatch={patch}
                 onEditImage={(fieldId) => openWindow('assetPicker', `${fieldId}:${character.id}`, {},

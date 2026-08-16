@@ -3971,3 +3971,14 @@ th > .term { border-bottom-style: dotted; }
    because "your link is on its way" is not a failure. */
 .portal-ok { margin: 4px 0; font-size: 13px; color: #9ed6a4; }
 .portal-login { bottom: 12%; }
+
+/* Lighting and its penalty sit side by side: they are one decision made in
+   two parts, and separating them across the panel would hide that. */
+.lighting-pair { display: flex; gap: 10px; }
+.lighting-pair .lu-field { flex: 1; min-width: 0; }
+.lighting-pair select { width: 100%; }
+
+/* Pace mid-turn reads "what is left / what there was". The denominator is
+   quieter than the numerator: the number that changes is the answer. */
+.stat-spendable .stat-of { font-size: 0.62em; opacity: 0.6; margin-left: 1px; }
+.stat-spendable .stat-spent { color: var(--danger); }

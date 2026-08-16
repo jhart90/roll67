@@ -888,6 +888,8 @@ function normalizeGrid(raw: GridConfig & { globalIllumination?: boolean }): Grid
     ...raw,
     gridEnabled: raw.gridEnabled ?? true,
     lighting: raw.lighting ?? (raw.globalIllumination ? 'light' : 'dark'),
+    // Undefined stays undefined: it MEANS "follow the lighting".
+    lightingPenalty: raw.lightingPenalty,
   };
 }
 

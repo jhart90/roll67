@@ -186,6 +186,7 @@ function fallbackWhy(system: string | undefined): string {
 
 function ExprWithWhy({ r, text }: { r: NonNullable<ChatMessage['roll']>; text?: string }) {
   const system = useGameStore((s) => s.campaign?.system);
+  const detail = useGameStore((s) => s.rollDetail);
   const expr = r.expression;
   const lines = whyLines(r, text).filter((l) => l !== UNSKILLED_WHY);
   const tailWhy = lines.length ? `This modifier combines:\n• ${lines.join('\n• ')}` : fallbackWhy(system);
@@ -194,15 +195,21 @@ function ExprWithWhy({ r, text }: { r: NonNullable<ChatMessage['roll']>; text?: 
   const head = tail ? expr.slice(0, tail.index) : expr;
   // The unskilled fallback's own −2s inside the head get their own story.
   const headParts = head.split(/(!-2)/g);
+  // Reading it in the card means the hover affordance comes off: two accounts
+  // of one modifier, with the hidden one repeating what is already in plain
+  // sight, is worse than either alone.
+  const inCard = detail === 'chat';
+  const why = (t: string) => (inCard ? undefined : t);
+  const whyClass = inCard ? undefined : 'mod-why';
   return (
     <span className="roll-expr">
       {headParts.map((p, i) => p === '!-2'
-        ? <span key={i}>!<span className="mod-why" title={UNSKILLED_WHY}>-2</span></span>
+        ? <span key={i}>!<span className={whyClass} title={why(UNSKILLED_WHY)}>-2</span></span>
         : <span key={i}>{p}</span>)}
-      {tail && <span className="mod-why" title={tailWhy}>{tail[1]}</span>}
+      {tail && <span className={whyClass} title={why(tailWhy)}>{tail[1]}</span>}
       {/* Nothing trailing the dice because the modifiers cancelled — but they
           were still applied, so say so rather than let the roll look bare. */}
-      {!tail && lines.length > 0 && <span className="mod-why" title={tailWhy}>+0</span>}
+      {!tail && lines.length > 0 && <span className={whyClass} title={why(tailWhy)}>+0</span>}
     </span>
   );
 }
@@ -216,6 +223,7 @@ function DiceEquation({ r, why, fromUserId, look }: {
   const counted = r.dice.filter((d) => d.kept);
   const system = useGameStore((s) => s.campaign?.system);
   const member = useGameStore((s) => (fromUserId ? s.members.find((m) => m.userId === fromUserId) : undefined));
+  const detail = useGameStore((s) => s.rollDetail);
   if (counted.length === 0) return null;
   const shown = counted.slice(0, MAX_SHOWN_DICE);
   const hidden = counted.length - shown.length;
@@ -273,7 +281,11 @@ function DiceEquation({ r, why, fromUserId, look }: {
           chip stays whenever there is something to explain, and only a roll
           with genuinely nothing on it goes without. */}
       {!burst && (mod !== 0 || lines.length > 0) && (
-        <span className="roll-op" style={{ cursor: 'help', textDecoration: 'underline dotted' }} title={modTitle}>
+        <span
+          className="roll-op"
+          style={detail === 'chat' ? undefined : { cursor: 'help', textDecoration: 'underline dotted' }}
+          title={detail === 'chat' ? undefined : modTitle}
+        >
           {mod < 0 ? '−' : '+'} {Math.abs(mod)}
         </span>
       )}
@@ -286,6 +298,14 @@ function DiceEquation({ r, why, fromUserId, look }: {
 function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
   const r = msg.roll!;
   const system = useGameStore((s) => s.campaign?.system);
+  const detail = useGameStore((s) => s.rollDetail);
+  // The same lines the tooltips carry, for the reader who asked to see them
+  // without hovering. A roll with a flat modifier and nothing itemized still
+  // owes an answer, so the fallback stands in; a roll with no modifier at all
+  // has nothing to explain and stays quiet.
+  const whys = whyLines(r, msg.text);
+  const showWhy = detail === 'chat' && (whys.length > 0 || /[+−-]\d+\s*$/.test(r.expression));
+  const whyItems = whys.length > 0 ? whys : [fallbackWhy(system)];
   // A pass/fail roll (e.g. a saving throw) reuses the crit/fumble green/red
   // theme so it reads at a glance without inventing a separate color scheme.
   const isCrit = r.outcome === 'success' || r.dice.some((d) => d.sides === 20 && d.kept && d.value === 20);
@@ -313,6 +333,11 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
         <DiceEquation r={r} why={msg.text} fromUserId={msg.fromUserId} look={msg.callout?.look ?? null} />
         <span className="roll-total">{r.total}</span>
       </div>
+      {showWhy && (
+        <ul className="roll-why">
+          {whyItems.map((l, i) => <li key={i}>{l}</li>)}
+        </ul>
+      )}
       <div className="roll-detail">
         {r.detail}
         {r.iron && (

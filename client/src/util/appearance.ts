@@ -72,8 +72,31 @@ export const MAP_COLORS_DEFAULT: MapColors = {
   doorOpenOpacity: 0.7,
 };
 
+/**
+ * Where a roll's modifier explains itself: on hover, or in the card.
+ *
+ * The tooltip keeps the log terse but costs a hover per roll, which is a poor
+ * trade for anyone reading on a touchscreen, sharing a screen, or still
+ * learning why a number came out the way it did. Same words either way.
+ */
+export type RollDetail = 'tooltip' | 'chat';
+
+export const ROLL_DETAILS: { id: RollDetail; label: string; hint: string }[] = [
+  { id: 'tooltip', label: 'In tooltip', hint: 'Hover a modifier to read what went into it. Keeps the log compact.' },
+  { id: 'chat', label: 'In chat', hint: 'Every modifier is itemized in the roll card itself, with no hovering.' },
+];
+
 const THEME_KEY = 'roll67.uiTheme';
 const COLORS_KEY = 'roll67.mapColors';
+const ROLL_DETAIL_KEY = 'roll67.rollDetail';
+
+export function readRollDetail(): RollDetail {
+  return safeRead(ROLL_DETAIL_KEY) === 'chat' ? 'chat' : 'tooltip';
+}
+
+export function saveRollDetail(v: RollDetail): void {
+  safeWrite(ROLL_DETAIL_KEY, v);
+}
 
 export function readTheme(): UiTheme {
   const v = safeRead(THEME_KEY);

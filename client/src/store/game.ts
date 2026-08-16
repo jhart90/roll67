@@ -15,7 +15,10 @@ import {
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
-import { readMapColors, readTheme, saveMapColors, saveTheme, type MapColors, type UiTheme } from '../util/appearance';
+import {
+  readMapColors, readRollDetail, readTheme, saveMapColors, saveRollDetail, saveTheme,
+  type MapColors, type RollDetail, type UiTheme,
+} from '../util/appearance';
 import { closeWindow, openWindow, useWindowManager } from './windowManager';
 import { BENNY_FLIP_MS, estimateDiceAnimMs } from '../table/dice3d';
 import { pathCost } from '../util/moveReach';
@@ -442,6 +445,9 @@ interface GameState {
   /** How this viewer likes the app to look. Local only — see util/appearance. */
   uiTheme: UiTheme;
   setUiTheme(theme: UiTheme): void;
+  /** Whether a roll card explains its modifier on hover or in the card. */
+  rollDetail: RollDetail;
+  setRollDetail(v: RollDetail): void;
   mapColors: MapColors;
   setMapColors(colors: MapColors): void;
   localMusicVolume: number;
@@ -768,6 +774,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   setClientMuted(clientMuted) { set({ clientMuted }); },
   uiTheme: readTheme(),
   setUiTheme(theme) { saveTheme(theme); set({ uiTheme: theme }); },
+  rollDetail: readRollDetail(),
+  setRollDetail(v) { saveRollDetail(v); set({ rollDetail: v }); },
   mapColors: readMapColors(),
   setMapColors(colors) { saveMapColors(colors); set({ mapColors: colors }); },
   localMusicVolume: readLocalVolume('roll67.musicVolume'),

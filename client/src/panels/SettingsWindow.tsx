@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { DiceSpeed } from 'shared';
 import { authHeaders } from '../api';
 import { intents, useGameStore } from '../store/game';
-import { MAP_COLORS_DEFAULT, UI_THEMES, type MapColors } from '../util/appearance';
+import { MAP_COLORS_DEFAULT, ROLL_DETAILS, UI_THEMES, type MapColors } from '../util/appearance';
 import { WHEEL_COLORS } from '../util/palette';
 
 /**
@@ -30,6 +30,8 @@ export function SettingsWindow() {
   const setTheme = useGameStore((s) => s.setUiTheme);
   const colors = useGameStore((s) => s.mapColors);
   const setColors = useGameStore((s) => s.setMapColors);
+  const rollDetail = useGameStore((s) => s.rollDetail);
+  const setRollDetail = useGameStore((s) => s.setRollDetail);
   const you = useGameStore((s) => s.you);
   const members = useGameStore((s) => s.members);
   const isDm = useGameStore((s) => s.isDm());
@@ -70,6 +72,26 @@ export function SettingsWindow() {
               onClick={() => setTheme(t.id)}
             >
               {t.label}
+            </button>
+          ))}
+        </span>
+      </div>
+
+      {/* Where a roll's modifier shows its working. The tooltip keeps the log
+          compact; itemizing it in the card costs a few lines and asks nothing
+          of the reader, which is the better trade on a touchscreen or a
+          shared screen. Same words either way. */}
+      <div className="settings-row">
+        <span className="settings-label">Roll modifiers</span>
+        <span className="settings-value settings-themes">
+          {ROLL_DETAILS.map((d) => (
+            <button
+              key={d.id}
+              className={`settings-theme ${rollDetail === d.id ? 'on' : ''}`}
+              title={d.hint}
+              onClick={() => setRollDetail(d.id)}
+            >
+              {d.label}
             </button>
           ))}
         </span>

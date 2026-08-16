@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, DiceParseError, SKILLS_SWADE, castableLevels, dieSides, fmtMod, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor, traitExpr, traitModWhy,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
-  type ModerateMessagePayload, type ReorderMacrosPayload, type RollStatRow, type RollStatsGetPayload,
+  type ModerateMessagePayload, type ReorderMacrosPayload, type RollBreakdown, type RollStatRow, type RollStatsGetPayload,
   type RollStatsUserBlock, type SaveMacroPayload,
   sanitizeCard, swadeStowedRollable, type SheetData, type SheetRollPayload, type UndoEntry, type PostSheetCardPayload,
 } from 'shared';
@@ -14,6 +14,20 @@ import { applyUndo } from '../undo.js';
 // call time, never during module evaluation).
 import { clearConcentrationEffects, critFailFor, recordBennyRoll } from '../hp.js';
 import { ironDiceInfo, rotateIronDice } from '../ironDice.js';
+
+/**
+ * Itemize the flat modifier a player typed into `/r` themselves.
+ *
+ * Without this the card falls back to "sheet math", which is a guess and, for
+ * a hand-typed expression, a wrong one — harmless while it hid in a tooltip,
+ * misinformation once a player asks to read modifiers in the log. The amount
+ * is derived the same way the card derives the chip it labels (total less the
+ * dice that counted), so the two can never disagree whatever the expression.
+ */
+function typedModWhy(breakdown: RollBreakdown): string[] {
+  const flat = breakdown.total - breakdown.dice.filter((d) => d.kept).reduce((s, d) => s + d.value, 0);
+  return flat === 0 ? [] : [`${fmtMod(flat)} Typed into the roll command`];
+}
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -488,6 +502,7 @@ function handleChatText(
       // roll, so a bare expression isn't the only thing the table sees.
       const { expr, label } = splitRollLabel(rollMatch[1]);
       const breakdown = roll(expr);
+      breakdown.modWhy = typedModWhy(breakdown);
       const msg = chat.add(campaignId, {
         userId, fromName: username, kind: 'roll', text: label, roll: breakdown, recipients: null,
       });
@@ -506,6 +521,7 @@ function handleChatText(
     try {
       const { expr, label } = splitRollLabel(gmRollMatch[1]);
       const breakdown = roll(expr);
+      breakdown.modWhy = typedModWhy(breakdown);
       const dmNames = campaigns.members(campaignId).filter((m) => m.role === 'dm').map((m) => m.username);
       const msg = chat.add(campaignId, {
         userId, fromName: username, kind: 'whisper', text: label ? `(GM roll) ${label}` : '(GM roll)', roll: breakdown,

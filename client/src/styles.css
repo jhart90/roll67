@@ -3133,6 +3133,16 @@ th > .term { border-bottom-style: dotted; }
 /* Modifier why-tooltips inside roll expressions and equations. */
 .mod-why { cursor: help; text-decoration: underline dotted; text-underline-offset: 2px; }
 
+/* The same explanation, itemized in the card, for players who set roll
+   modifiers to "In chat". It sits directly under the equation it accounts
+   for and reads as small print — the numbers above it are still the story. */
+.roll-why {
+  margin: 3px 0 0; padding-left: 15px;
+  font-size: 11px; line-height: 1.4; color: var(--text-dim);
+}
+.roll-why li { margin: 1px 0; }
+.roll-why li::marker { color: var(--accent); }
+
 /* DM counters: giant segmented banner bars over the map pane. */
 /* The root spans the usable map pane: clear of the 53px tool rail and the
    300px chat dock. Every dock positions inside it, so those insets live in one

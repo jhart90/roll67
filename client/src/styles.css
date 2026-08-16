@@ -3644,7 +3644,10 @@ th > .term { border-bottom-style: dotted; }
 }
 /* A long title breaks into a second vertical line — vertical writing wraps
    into a neighbouring column on its own once wrapping is allowed. */
-.shelf-spine.two-line { white-space: normal; text-align: center; }
+/* The break is chosen by the fitting math and written as a newline, so the
+   browser renders exactly the split that was measured — greedy wrapping at a
+   computed size is how columns end up uneven. */
+.shelf-spine.two-line { white-space: pre-line; text-align: center; }
 
 /* Chrome kept off the painting: a slim bar up top… */
 .shelf-topbar {

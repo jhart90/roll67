@@ -40,37 +40,55 @@ const SPINE_FACES: SpineFace[] = [
 ];
 
 /**
- * Letter the spine so the whole name FITS.
+ * Letter the spine as LARGE as the zone allows.
  *
- * The lettering runs down the book, so its budget is the book's height; a
- * long name on a short book must either shrink or wrap. This tries one line
- * at a comfortable size, and when that would fall below legibility it breaks
- * into two vertical lines instead — vertical writing wraps into a second
- * column on its own once the height is capped, so "two lines" costs nothing
- * but a width check against the spine. Everything is figured in IMAGE pixels
- * and scaled by --su, the same trick the whole shelf runs on.
+ * The budget is the zone between head ornament and sigil, and the brief is to
+ * fill it. The run length is MEASURED, not estimated: in vertical writing
+ * Latin glyphs lie sideways, so each character advances by its horizontal
+ * width — roughly six tenths of an em, varying wildly by face — and any
+ * per-character guess either overflows the zone or wastes half of it. A
+ * canvas measures the actual name in the actual font once, and the font size
+ * is just the zone divided by that.
+ *
+ * Both shapes are tried — one line, and two split at the word boundary that
+ * minimises the longer half — and whichever sets bigger type wins. The break
+ * is rendered explicitly, so the browser wraps exactly where the math did.
  */
-function spineFit(name: string, slotIdx: number): { fontSize: number; lines: 1 | 2; spacing: number } {
+const measureCtx = document.createElement('canvas').getContext('2d')!;
+const REF = 100;
+function runLength(text: string, face: SpineFace): number {
+  measureCtx.font = `${face.style ?? ''} ${face.weight ?? 600} ${REF}px ${face.family}`.trim();
+  const t = face.caps ? text.toUpperCase() : text;
+  return measureCtx.measureText(t).width + t.length * face.spacing * REF;
+}
+
+function spineFit(name: string, slotIdx: number): { text: string; fontSize: number; lines: 1 | 2; spacing: number } {
   const slot = BOOK_SLOTS[slotIdx];
   const face = SPINE_FACES[slotIdx];
-  // The budget is the slot's own lettering zone — the strip between the head
-  // ornament and the sigil, measured per book — not the whole spine.
-  const span = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.94;
+  const span = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.96;
   const bookW = (slot.width / 100) * SHELF_W;
-  const perChar = 1.06 + face.spacing;           // advance per character, in em
-  const len = Math.max(1, name.length);
 
-  const oneLine = span / (len * perChar);
-  if (oneLine >= 14) return { fontSize: Math.min(oneLine, 32), lines: 1, spacing: face.spacing };
+  const fs1 = Math.min((span * REF) / runLength(name, face), 40);
 
-  // Two vertical lines: the longest column is roughly half the name (word
-  // wrap makes it a little worse, hence the 0.58), and the pair of columns
-  // must still sit on the leather, clear of the edges. A name this long also
-  // gives up most of its letter-spacing — tracking is a luxury of room.
-  const squeezed = face.spacing * 0.3;
-  const twoLine = span / (Math.ceil(len * 0.58) * (1.06 + squeezed));
-  const widthCap = (bookW * 0.8) / (2 * 1.15);
-  return { fontSize: Math.max(8, Math.min(twoLine, widthCap, 26)), lines: 2, spacing: squeezed };
+  const words = name.split(/\s+/).filter(Boolean);
+  let best: { a: string; b: string; max: number } | null = null;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(' ');
+    const b = words.slice(i).join(' ');
+    const m = Math.max(runLength(a, face), runLength(b, face));
+    if (!best || m < best.max) best = { a, b, max: m };
+  }
+  const widthCap = (bookW * 0.85) / (2 * 1.18);
+  const fs2 = best ? Math.min((span * REF) / best.max, widthCap, 34) : 0;
+
+  // Two lines win whenever they set meaningfully bigger type — filling the
+  // leather beats the elegance of a single line. No generous floor below:
+  // one that outruns the zone trades "small" for "clipped".
+  if (best && fs2 > fs1 * 1.08) {
+    return { text: `${best.a}
+${best.b}`, fontSize: Math.max(6.5, fs2), lines: 2, spacing: face.spacing };
+  }
+  return { text: name, fontSize: Math.max(6.5, fs1), lines: 1, spacing: face.spacing };
 }
 
 /** The account pill's dropdown: change password, or leave. */
@@ -395,6 +413,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
             {campaign && fit && (
               <span
                 className={`shelf-spine${fit.lines === 2 ? ' two-line' : ''}`}
+                data-lines={fit.lines}
                 style={{
                   // Placed by the slot's own lettering zone, converted into
                   // this book div's coordinate space.
@@ -408,7 +427,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
                   fontSize: `calc(var(--su) * ${fit.fontSize.toFixed(1)}px)`,
                 }}
               >
-                {campaign.name}
+                {fit.text}
               </span>
             )}
           </div>

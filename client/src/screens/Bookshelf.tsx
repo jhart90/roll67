@@ -42,17 +42,17 @@ export interface BookSlot {
   textBottom: number;
 }
 export const BOOK_SLOTS: BookSlot[] = [
-  { left: 6.6, width: 7.9, top: 20.8, sigil: '⚔️', textTop: 27.6, textBottom: 44.2 },
-  { left: 14.9, width: 7.3, top: 25.0, sigil: '🤠', textTop: 32.2, textBottom: 48.3 },
-  { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍', textTop: 31.3, textBottom: 48.3 },
-  { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️', textTop: 27.6, textBottom: 47.0 },
-  { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉', textTop: 30.8, textBottom: 47.9 },
-  { left: 47.8, width: 7.1, top: 24.0, sigil: '🪐', textTop: 30.3, textBottom: 48.3 },
-  { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐', textTop: 30.4, textBottom: 47.0 },
-  { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙', textTop: 34.1, textBottom: 46.0 },
-  { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌', textTop: 33.1, textBottom: 46.5 },
-  { left: 79.4, width: 7.1, top: 27.2, sigil: '☣️', textTop: 39.1, textBottom: 46.0 },
-  { left: 86.8, width: 7.3, top: 24.9, sigil: '🔫', textTop: 34.5, textBottom: 47.4 },
+  { left: 6.6, width: 7.9, top: 20.8, sigil: '⚔️', textTop: 30.8, textBottom: 44.9 },
+  { left: 14.9, width: 7.3, top: 25.0, sigil: '🤠', textTop: 31.8, textBottom: 49.1 },
+  { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍', textTop: 30.8, textBottom: 49.1 },
+  { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️', textTop: 27.6, textBottom: 47.7 },
+  { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉', textTop: 31.3, textBottom: 48.6 },
+  { left: 47.8, width: 7.1, top: 24.0, sigil: '🪐', textTop: 30.4, textBottom: 49.1 },
+  { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐', textTop: 29.9, textBottom: 47.7 },
+  { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙', textTop: 33.6, textBottom: 46.8 },
+  { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌', textTop: 30.8, textBottom: 47.2 },
+  { left: 79.4, width: 7.1, top: 27.2, sigil: '☣️', textTop: 38.7, textBottom: 46.8 },
+  { left: 86.8, width: 7.3, top: 24.9, sigil: '🔫', textTop: 34.3, textBottom: 48.2 },
 ];
 export const BOOK_BOTTOM = 60.5;
 

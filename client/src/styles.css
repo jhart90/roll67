@@ -3568,6 +3568,19 @@ th > .term { border-bottom-style: dotted; }
     url('/bg/ttp-books-1920.webp') type('image/webp'));
   background-size: 100% 100%;
 }
+/* The maker's mark, stamped low in the corner of the desk. Anchored to the
+   VIEWPORT, not the painting — whatever the crop, the corner is always there.
+   A touch translucent with a dark press beneath, so the white ink sits ON the
+   wood rather than floating over it. */
+.shelf-logo {
+  position: absolute; z-index: 2;
+  left: clamp(10px, 1.6vw, 30px); bottom: clamp(6px, 1.2vh, 22px);
+  width: clamp(90px, 10.5vw, 200px);
+  opacity: 0.82;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7));
+  pointer-events: none;
+  user-select: none;
+}
 @media (max-width: 900px) {
   .shelf-canvas {
     background-image: url('/bg/ttp-books-1280.webp');

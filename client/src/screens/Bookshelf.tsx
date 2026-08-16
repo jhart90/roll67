@@ -97,6 +97,7 @@ export function ShelfStage({ children, overlay }: { children?: ReactNode; overla
       >
         {children}
       </div>
+      <img className="shelf-logo" src="/ttp-logo-mono.png" alt="Tabletop Portal" draggable={false} />
       {overlay}
     </div>
   );

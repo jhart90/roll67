@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type ChatRemovedPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type CampaignRenamedPayload, type MoveLockPayload, type RollLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type ChatRemovedPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type CampaignRenamedPayload, type CampaignDeletedPayload, type MoveLockPayload, type RollLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -1552,6 +1552,18 @@ export function wireSocket(): void {
     if (cur) useGameStore.setState({ campaign: { ...cur, name: p.name } });
   });
 
+  // The campaign is gone. Everyone at the table leaves the same way a booted
+  // player does — the table screen cannot mean anything without it.
+  socket.on(S2C.CAMPAIGN_DELETED, (p: CampaignDeletedPayload) => {
+    const st = useGameStore.getState();
+    if (st.campaign?.id !== p.campaignId) return;
+    const mine = st.you?.role === 'dm';
+    st.leave();
+    useGameStore.setState({
+      errorToast: mine ? `“${p.name}” was deleted.` : `The DM deleted “${p.name}”.`,
+    });
+  });
+
   let roundCardsSeq = 0;
   socket.on(S2C.ROUND_CARDS, (p: RoundCardsPayload) => {
     useGameStore.setState({ roundCardsDeal: { ...p, seq: ++roundCardsSeq } });
@@ -2055,6 +2067,7 @@ export const intents = {
   setTurnGuide: (on: boolean) => socket.emit(C2S.SET_TURN_GUIDE, { on }),
   setDiceSpeed: (speed: DiceSpeed) => socket.emit(C2S.SET_DICE_SPEED, { speed }),
   renameCampaign: (name: string) => socket.emit(C2S.RENAME_CAMPAIGN, { name }),
+  deleteCampaign: (confirmName: string) => socket.emit(C2S.DELETE_CAMPAIGN, { confirmName }),
   chatWipe: () => socket.emit(C2S.CHAT_WIPE, {}),
   setMoveLock: (locked: boolean) => socket.emit(C2S.SET_MOVE_LOCK, { locked }),
   setRollLock: (locked: boolean) => socket.emit(C2S.SET_ROLL_LOCK, { locked }),

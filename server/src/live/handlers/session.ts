@@ -4,10 +4,12 @@ import {
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
   type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload, type SetDiceSpeedPayload, type RenameCampaignPayload, type SetMoveLockPayload,
-  type SetRollLockPayload, type SetPlayerLockPayload,
+  type SetRollLockPayload, type SetPlayerLockPayload, type DeleteCampaignPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
-import { CHAT_TAIL } from '../../config.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { CHAT_TAIL, UPLOADS_DIR } from '../../config.js';
 import { validUsername } from '../../auth.js';
 import {
   assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings, isDiceSpeed,
@@ -325,6 +327,59 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'RENAME_CAMPAIGN'));
+
+  /**
+   * Erase a campaign, and everything that was ever in it.
+   *
+   * The only irreversible act in the application, so it is gated three ways:
+   * the DM's role, the DM's OWNERSHIP of this particular campaign, and the
+   * campaign's name typed back by hand. A backup is offered beforehand in the
+   * UI, which is the only thing that can undo this.
+   *
+   * Order matters. The file list is taken BEFORE the delete, because once the
+   * rows have cascaded away nothing remembers which uploads belonged to this
+   * campaign, and the bytes would sit in the uploads directory forever with
+   * nothing left to name them. Everyone is turfed out afterwards: a client
+   * left pointed at a campaign that no longer exists shows an empty table it
+   * can never recover from.
+   */
+  socket.on(C2S.DELETE_CAMPAIGN, safe(socket, ({ confirmName }: DeleteCampaignPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can delete a campaign.'); return; }
+    const campaignId = d.campaignId;
+    const campaign = campaigns.byId(campaignId);
+    if (!campaign) return;
+    if (campaign.dmUserId !== d.userId) {
+      emitError(socket, 'Only the DM who owns this campaign can delete it.');
+      return;
+    }
+    const typed = typeof confirmName === 'string' ? confirmName.trim() : '';
+    if (typed.toLowerCase() !== campaign.name.trim().toLowerCase()) {
+      emitError(socket, `That name does not match. Type “${campaign.name}” exactly to delete it.`);
+      return;
+    }
+
+    const files = assets.filesForCampaign(campaignId);
+    campaigns.delete(campaignId);
+    let cleaned = 0;
+    for (const f of files) {
+      try { fs.unlinkSync(path.join(UPLOADS_DIR, `${f.id}.${f.ext}`)); cleaned++; } catch { /* already gone */ }
+    }
+    console.log(`campaign deleted: ${campaign.name} (${campaignId}) — ${cleaned}/${files.length} uploads removed`);
+
+    // Tell the room before emptying it, then detach every socket so nobody is
+    // left holding a campaign that is no longer there.
+    io.to(campaignRoom(campaignId)).emit(S2C.CAMPAIGN_DELETED, { campaignId, name: campaign.name });
+    for (const s2 of campaignSockets(io, campaignId)) {
+      const sd = sdata(s2);
+      s2.leave(campaignRoom(campaignId));
+      s2.leave(dmRoom(campaignId));
+      sd.campaignId = undefined;
+      sd.role = undefined;
+      sd.viewingAs = undefined;
+    }
+  }, 'DELETE_CAMPAIGN'));
 
   /**
    * Freeze the board. While the lock is on nobody but the DM moves a token —

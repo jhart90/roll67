@@ -267,6 +267,11 @@ function DmSection({ closed, onToggle }: { closed: Set<string>; onToggle: (t: st
   const [armWipe, setArmWipe] = useState(false);
   // null = not editing; a string = the draft in the rename box.
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  // The delete flow, three states: closed, armed (asking for the name), and
+  // typing. Kept separate from the rename draft so one can never submit the
+  // other.
+  const [armDelete, setArmDelete] = useState(false);
+  const [deleteDraft, setDeleteDraft] = useState('');
 
   function submitRename() {
     const trimmed = (nameDraft ?? '').trim();
@@ -379,6 +384,56 @@ function DmSection({ closed, onToggle }: { closed: Set<string>; onToggle: (t: st
           >
             {busy ? 'packing it up…' : 'download this campaign'}
           </button>
+        </span>
+      </div>
+
+      {/* The end of the campaign. Nothing undoes this but a backup, so the
+          backup is offered in the same breath, and the DM types the name
+          rather than clicking twice — the point is to be sure WHICH campaign
+          is being erased, which a second click cannot establish. */}
+      <div className="settings-row settings-danger-row">
+        <span className="settings-label">Delete</span>
+        <span className="settings-value">
+          {!armDelete ? (
+            <button
+              className="link danger"
+              title="Erase this campaign and everything in it, for everyone, permanently."
+              onClick={() => { setArmDelete(true); setDeleteDraft(''); }}
+            >
+              delete this campaign
+            </button>
+          ) : (
+            <span className="settings-delete-form">
+              <span className="dim">
+                This erases every map, sheet, chest and message for everyone, and
+                cannot be undone. Download a backup first if you might want it back.
+                Type <strong>{campaign?.name}</strong> to confirm.
+              </span>
+              <input
+                className="settings-rename-input"
+                value={deleteDraft}
+                placeholder={campaign?.name ?? ''}
+                autoFocus
+                onChange={(e) => setDeleteDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setArmDelete(false);
+                  if (e.key === 'Enter' && deleteDraft.trim().toLowerCase() === (campaign?.name ?? '').trim().toLowerCase()) {
+                    intents.deleteCampaign(deleteDraft);
+                  }
+                }}
+              />
+              <span className="settings-delete-actions">
+                <button
+                  className="link danger"
+                  disabled={deleteDraft.trim().toLowerCase() !== (campaign?.name ?? '').trim().toLowerCase()}
+                  onClick={() => intents.deleteCampaign(deleteDraft)}
+                >
+                  delete it forever
+                </button>
+                <button className="link" onClick={() => setArmDelete(false)}>keep it</button>
+              </span>
+            </span>
+          )}
         </span>
       </div>
       </Section>

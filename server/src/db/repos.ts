@@ -309,6 +309,15 @@ export const campaigns = {
   rename(id: string, name: string): void {
     stmt('UPDATE campaigns SET name = ? WHERE id = ?').run(name, id);
   },
+  /**
+   * Erase the campaign itself. Sixteen tables reference campaigns(id) ON
+   * DELETE CASCADE and foreign_keys is ON by the time the server serves, so
+   * this one statement takes the maps, tokens, sheets, chat and the rest with
+   * it. Files on disk are NOT its business — see assets.filesForCampaign.
+   */
+  delete(id: string): void {
+    stmt('DELETE FROM campaigns WHERE id = ?').run(id);
+  },
   moveLocked(id: string): boolean {
     const row = stmt('SELECT move_locked FROM campaigns WHERE id = ?').get(id) as { move_locked?: number } | undefined;
     return row?.move_locked === 1;
@@ -457,6 +466,15 @@ export const assets = {
   },
   byId(id: string): AssetRow | undefined {
     return stmt('SELECT * FROM assets WHERE id = ?').get(id) as AssetRow | undefined;
+  },
+  /**
+   * Every uploaded file this campaign owns, audio included — which is what
+   * separates it from forCampaign, whose job is the art browser. Used when a
+   * campaign is erased: the rows cascade away on their own, but the bytes on
+   * disk would be left behind with nothing left to name them.
+   */
+  filesForCampaign(campaignId: string): Array<{ id: string; ext: string }> {
+    return stmt('SELECT id, ext FROM assets WHERE campaign_id = ?').all(campaignId) as Array<{ id: string; ext: string }>;
   },
   /** Browsable art assets (images) for a campaign. */
   forCampaign(campaignId: string): AssetInfo[] {

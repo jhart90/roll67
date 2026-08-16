@@ -3533,6 +3533,14 @@ th > .term { border-bottom-style: dotted; }
 .settings-note { font-size: 11px; margin-top: 10px; line-height: 1.4; overflow-wrap: break-word; }
 .settings-campaign-name { font-weight: 600; margin-right: 6px; overflow: hidden; text-overflow: ellipsis; max-width: 200px; white-space: nowrap; }
 .settings-rename-input { flex: 1; min-width: 140px; }
+/* The delete flow needs room to explain itself, so its row stacks instead of
+   sitting on one line like every other setting. */
+.settings-danger-row { align-items: flex-start; }
+.settings-delete-form { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.settings-delete-form .dim { font-size: 11px; line-height: 1.4; }
+.settings-delete-form .settings-rename-input { flex: none; width: 100%; box-sizing: border-box; }
+.settings-delete-actions { display: flex; gap: 10px; align-items: center; }
+.settings-delete-actions .link.danger:disabled { opacity: 0.45; cursor: not-allowed; }
 /* The armed half of the chat-wipe confirm: red where it lives. The dock's
    danger styling paints a red BACKGROUND under link-colored text, which in
    this window came out as a red pill with invisible words — so the color is

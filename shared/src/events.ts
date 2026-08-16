@@ -106,6 +106,7 @@ export const C2S = {
   /** DM: how long the whole table spends watching dice. */
   SET_DICE_SPEED: 'setDiceSpeed',
   RENAME_CAMPAIGN: 'renameCampaign',
+  DELETE_CAMPAIGN: 'deleteCampaign',
   /** DM: freeze every player's tokens in place (and thaw them again). */
   SET_MOVE_LOCK: 'setMoveLock',
   SET_ROLL_LOCK: 'setRollLock',
@@ -917,6 +918,7 @@ export const S2C = {
   /** The campaign's dice pacing changed — everyone switches together. */
   DICE_SPEED: 'diceSpeed',
   CAMPAIGN_RENAMED: 'campaignRenamed',
+  CAMPAIGN_DELETED: 'campaignDeleted',
   /** The DM locked or unlocked all player movement. */
   MOVE_LOCK: 'moveLock',
   ROLL_LOCK: 'rollLock',
@@ -1252,6 +1254,13 @@ export interface SetDiceAceStylePayload { style: import('./types.js').AceStyle |
 export interface SetTurnGuidePayload { on: boolean }
 export interface SetDiceSpeedPayload { speed: DiceSpeed }
 export interface RenameCampaignPayload { name: string }
+/**
+ * Erase a campaign and everything in it. `confirmName` must match the
+ * campaign's own name: this is the one action in the app with nothing behind
+ * it, so it asks the DM to type the thing they are destroying rather than
+ * trusting a click they might have meant for the button above.
+ */
+export interface DeleteCampaignPayload { confirmName: string }
 export interface SetMoveLockPayload { locked: boolean }
 export interface SetRollLockPayload { locked: boolean }
 /** One player's own lock. `which` names which of the two is being aimed. */
@@ -1279,6 +1288,7 @@ export interface AttackPreviewResultPayload {
 }
 export interface DiceSpeedPayload { speed: DiceSpeed }
 export interface CampaignRenamedPayload { name: string }
+export interface CampaignDeletedPayload { campaignId: string; name: string }
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }
 export interface SoakOfferPayload { characterId: string; name: string; wounds: number; bennies: number }

@@ -2872,11 +2872,31 @@ th > .term { border-bottom-style: dotted; }
 }
 .turn-banner strong { font-size: 14px; }
 .turn-banner-sub { font-size: 10px; opacity: 0.8; }
-/* While someone is up the whole bar wears their color, so the flanking
-   controls have to inherit the readable text color rather than keep theirs. */
+/* While someone is up the whole bar wears their color, so EVERY piece of text
+   in it has to inherit the readable ink rather than keep its own — a dim grey
+   or an accent tan is legible on the panel it was chosen for and on nothing
+   else. */
 .topbar.in-combat button, .topbar.in-combat .link,
-.topbar.in-combat select, .topbar.in-combat .dim { color: inherit; }
+.topbar.in-combat select, .topbar.in-combat .dim,
+.topbar.in-combat label, .topbar.in-combat .topbar-title { color: inherit; }
 .topbar.in-combat .link { text-decoration: underline; }
+/* ...and every filled control has to drop its own dark fill with it. The ink
+   is chosen to read against the BAR, so beneath a pale player color it turns
+   black — and black on the usual dark chip is invisible. These scrims move
+   away from the ink instead (see useTurnTint), so they can only add contrast:
+   the worst case across the whole color wheel is about 4.7:1, and most are
+   far better. */
+.topbar.in-combat button:not(.link), .topbar.in-combat select {
+  background: var(--tint-chip);
+  border-color: var(--tint-edge);
+}
+.topbar.in-combat button:not(.link):hover, .topbar.in-combat select:hover {
+  background: var(--tint-chip-hi);
+  border-color: currentColor;
+}
+/* The open dropdown is drawn by the browser outside the bar, where the tint
+   does not reach, so it keeps the app's own panel colors. */
+.topbar.in-combat select option { background: var(--panel-2); color: var(--text); }
 
 /* The account name trails the character it acted as, so the character reads first. */
 .chat-from-player { font-weight: 400; opacity: 0.75; font-size: 0.9em; }

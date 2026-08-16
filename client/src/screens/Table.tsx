@@ -159,7 +159,18 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
   return (
     <div className="table-shell">
-      <header className={`topbar ${turnTint ? 'in-combat' : ''}`} style={turnTint ? { background: turnTint.bg, color: turnTint.fg } : undefined}>
+      <header
+        className={`topbar ${turnTint ? 'in-combat' : ''}`}
+        style={turnTint ? {
+          background: turnTint.bg,
+          color: turnTint.fg,
+          // The controls' fill and edge travel as variables: the contrast
+          // decision belongs with the color that forced it (useTurnTint).
+          ['--tint-chip' as never]: turnTint.chip,
+          ['--tint-chip-hi' as never]: turnTint.chipHi,
+          ['--tint-edge' as never]: turnTint.edge,
+        } : undefined}
+      >
         <button className="link" onClick={onExit}>← campaigns</button>
         <span className="topbar-title">{campaign.name}</span>
         {map && <span className="dim">· {map.name}</span>}

@@ -3629,6 +3629,21 @@ th > .term { border-bottom-style: dotted; }
     0 0 calc(var(--su) * 42px) rgba(120, 170, 255, 0.35),
     inset 0 0 calc(var(--su) * 22px) rgba(255, 240, 200, 0.10);
 }
+/* The only campaign on the shelf: this book IS the screen, so its edge
+   breathes — a faint slow pulse that says "clickable" without shouting.
+   Hover hands off to the full .lit glow, which out-shines it. */
+.shelf-book.occupied.solo:not(.lit) { animation: shelf-solo-pulse 3.2s ease-in-out infinite; }
+@keyframes shelf-solo-pulse {
+  0%, 100% { box-shadow: 0 0 calc(var(--su) * 18px) rgba(120, 170, 255, 0.18); }
+  50% {
+    box-shadow:
+      0 0 calc(var(--su) * 14px) rgba(140, 190, 255, 0.42),
+      0 0 calc(var(--su) * 46px) rgba(120, 170, 255, 0.22);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shelf-book.occupied.solo:not(.lit) { animation: none; }
+}
 .shelf-book.occupied.lit .shelf-spine { color: rgba(255, 233, 176, 0.98); text-shadow: 0 0 calc(var(--su) * 8px) rgba(255, 220, 140, 0.7), 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95); }
 
 /* The lettering runs down the spine, as lettering on a spine does, sized in

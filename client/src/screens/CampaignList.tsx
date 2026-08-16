@@ -187,6 +187,12 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
       if (typeof s === 'number' && s >= 0 && s < BOOK_SLOTS.length && !byBook[s]) byBook[s] = c;
       else unplaced.push(c);
     }
+    // Someone with exactly one campaign gets it in the CENTER book — the one
+    // book on this screen they came for, seated where the eye lands. Only by
+    // default: a stored slot means they shelved it themselves, and stands.
+    if (campaignList.length === 1 && unplaced.length === 1) {
+      byBook[Math.floor(BOOK_SLOTS.length / 2)] = unplaced.pop()!;
+    }
     for (const c of unplaced) {
       const free = byBook.findIndex((x) => x === null);
       if (free >= 0) byBook[free] = c;
@@ -194,6 +200,8 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
     const overflow = campaignList.filter((c) => !byBook.includes(c));
     return { byBook, overflow };
   }, [campaignList]);
+  /** One campaign on the whole shelf: its book is the screen's primary CTA. */
+  const solo = campaignList.length === 1;
 
   function persist(byBook: Array<CampaignListItem | null>) {
     const slots: Record<string, number> = {};
@@ -389,7 +397,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
         return (
           <div
             key={i}
-            className={`shelf-book${campaign ? ' occupied' : ''}${hover === i && campaign ? ' lit' : ''}`}
+            className={`shelf-book${campaign ? ' occupied' : ''}${hover === i && campaign ? ' lit' : ''}${campaign && solo ? ' solo' : ''}`}
             style={{
               left: `${slot.left}%`,
               width: `${slot.width}%`,

@@ -439,6 +439,14 @@ interface GameState {
   attackPreview: AttackPreviewResultPayload | null;
   confirmCalledShot(aim: CalledShotAim): void;
   cancelCalledShot(): void;
+  /**
+   * Has the floating turn tracker been dismissed? In the store rather than in
+   * the component because the Initiative tab needs to bring it back — a
+   * window you can close and not reopen is a window you can lose until the
+   * next combat, which is no answer mid-fight.
+   */
+  initFloatHidden: boolean;
+  setInitFloatHidden(v: boolean): void;
   openChip: 'benny' | 'keyring' | null;
   setOpenChip(c: 'benny' | 'keyring' | null): void;
   /** Local-only: mute audio on this device without affecting others. */
@@ -935,6 +943,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     socket.emit(C2S.TARGET_PREVIEW, { sourceTokenId: t.sourceTokenId, rangeFt: 0, effect: 'damage', label: '', active: false });
   },
   cancelCalledShot() { set({ calledShotPending: null }); get().cancelTargeting(); },
+  initFloatHidden: false,
+  setInitFloatHidden(initFloatHidden) { set({ initFloatHidden }); },
   openChip: null,
   setOpenChip(openChip) { set({ openChip }); },
   clearError() { set({ errorToast: null }); },

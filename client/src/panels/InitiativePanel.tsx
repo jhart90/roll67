@@ -18,6 +18,8 @@ export function InitiativePanel() {
   const [fearing, setFearing] = useState(false);
 
   const isDm = useGameStore((s) => s.isDm());
+  const floatHidden = useGameStore((s) => s.initFloatHidden);
+  const setFloatHidden = useGameStore((s) => s.setInitFloatHidden);
   if (!you) return null;
   const swade = campaign?.system === 'swade';
   const cardMode = !!state.cardMode;
@@ -28,6 +30,20 @@ export function InitiativePanel() {
     <div className="dock-panel">
       <div className="dock-header">
         <h3>Initiative {state.active && <span className="tag">round {state.round}</span>}</h3>
+        {/* The floating tracker's way back. It is closable by everyone and
+            was previously only restored by a NEW combat, so anyone who shut
+            it mid-fight had lost it until the fight ended. */}
+        {state.active && (
+          <button
+            className="link"
+            title={floatHidden
+              ? 'Bring back the floating turn tracker over the map'
+              : 'Hide the floating turn tracker (this list keeps working)'}
+            onClick={() => setFloatHidden(!floatHidden)}
+          >
+            {floatHidden ? 'show tracker' : 'hide tracker'}
+          </button>
+        )}
         {isDm && (
           <button className="link" onClick={() => intents.initSetActive(!state.active)}>
             {state.active ? 'end combat' : 'start combat'}

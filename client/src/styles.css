@@ -3375,21 +3375,29 @@ th > .term { border-bottom-style: dotted; }
 .lock-menu { position: fixed; right: 542px; bottom: 16px; z-index: 69; }
 .lock-chip {
   width: 68px; padding: 6px 0; text-align: center; border-radius: 999px; font-weight: 700;
-  background: var(--panel); border: 2px solid #d08a8a; color: var(--text);
+  background: var(--panel); color: var(--text);
+  /* The rest state is GREEN and open: everyone can move and everyone can
+     roll. Red is reserved for the exception, so the colour alone answers
+     "is anyone being held?" from across the room. */
+  border: 2px solid #6fb583;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: pointer;
 }
 .lock-chip.open { background: var(--accent); color: #10131a; }
-/* Something is held. The chip says so from across the room, so a lock can
-   never be left on by accident. */
-.lock-chip.engaged { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(200, 70, 70, 0.28), 0 4px 14px rgba(0, 0, 0, 0.45); }
+/* Something is held — the table, or one player, in movement or in dice. */
+.lock-chip.engaged {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px rgba(200, 70, 70, 0.28), 0 4px 14px rgba(0, 0, 0, 0.45);
+}
 .lock-panel {
   position: absolute; bottom: calc(100% + 8px); right: 0;
   display: flex; flex-direction: column; gap: 8px; width: 250px;
   max-height: 66vh; overflow-y: auto;
   padding: 10px 12px; border-radius: 10px;
-  background: var(--panel); border: 2px solid #d08a8a;
+  background: var(--panel); border: 2px solid #6fb583;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
 }
+/* The open panel wears the same answer its chip does. */
+.lock-menu:has(.lock-chip.engaged) .lock-panel { border-color: var(--danger); }
 .lock-section { display: flex; flex-direction: column; gap: 6px; }
 .lock-panel button { width: 100%; text-align: left; }
 .lock-all.on { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }

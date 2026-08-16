@@ -16,7 +16,8 @@ const DEFAULT_POS = { x: TOOL_RAIL_W + 16, y: 140 }; // from the bottom-left cor
 export function InitiativeFloat() {
   const you = useGameStore((s) => s.you);
   const state = useGameStore((s) => s.initiativeState);
-  const [dismissed, setDismissed] = useState(false);
+  const dismissed = useGameStore((s) => s.initFloatHidden);
+  const setDismissed = useGameStore((s) => s.setInitFloatHidden);
   const [pos, setPos] = useState(DEFAULT_POS);
   const wasActive = useRef(state.active);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);

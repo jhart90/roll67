@@ -9,6 +9,7 @@ import {
 import { campaigns, chat, drawings, handouts, maps, rollableTables, tokens } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, viewerFor } from '../hub.js';
 import { socketsSeeingToken } from '../visionService.js';
+import { rollGate } from '../locks.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -215,6 +216,7 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
   }, 'DELETE_TABLE'));
 
   socket.on(C2S.ROLL_TABLE, safe(socket, ({ tableId }: RollTablePayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const t = rollableTables.byId(tableId);
     if (!t || t.campaignId !== d.campaignId) throw new Error('Unknown table.');

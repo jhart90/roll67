@@ -4,8 +4,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
-import { PORT, UPLOADS_DIR, ensureDataDirs } from './config.js';
+import { APP_URL, PORT, UPLOADS_DIR, ensureDataDirs } from './config.js';
 import { socketAuth } from './auth.js';
+import { mailConfigured } from './mail.js';
 import { authRouter, campaignRouter } from './routes/authRoutes.js';
 import { uploadRouter } from './routes/uploadRoutes.js';
 import { mapPreviewRouter } from './routes/mapPreviewRoutes.js';
@@ -31,6 +32,10 @@ ensureDataDirs();
 initIronDice();
 
 const app = express();
+// One hop: Railway's edge. Without this every request arrives wearing the
+// proxy's address, and the reset-mail rate limiter would count the whole
+// internet as a single caller and lock everyone out at the tenth try.
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/healthz', (_req, res) => {
@@ -83,6 +88,12 @@ io.on('connection', (socket) => {
 
 httpServer.listen(PORT, () => {
   console.log(`Roll67 server listening on :${PORT}`);
+  if (!mailConfigured()) {
+    console.log('  mail: RESEND_API_KEY unset — password reset links will be printed here instead of emailed');
+  }
+  if (!APP_URL) {
+    console.log('  mail: APP_URL unset — reset links will be built from the request Host header (set APP_URL in production)');
+  }
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

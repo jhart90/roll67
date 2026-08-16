@@ -64,6 +64,12 @@ export interface MemberInfo {
    *  presence so that a DM standing in for them shows what THEY would see —
    *  a guide is for the person being taught, not for whoever is looking. */
   turnGuide: boolean;
+  /** The DM's two locks aimed at this member alone. Sent with presence so the
+   *  lock menu can colour a pill per player, and so a locked player's own
+   *  screen can say why nothing is answering. The table-wide locks are
+   *  separate and win on their own — effective = table's OR this. */
+  moveLocked: boolean;
+  rollLocked: boolean;
 }
 
 /** Share of dice that bounce off a wall when a player hasn't chosen. */

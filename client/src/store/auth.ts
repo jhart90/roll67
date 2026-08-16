@@ -17,9 +17,14 @@ interface AuthState {
   user: UserInfo | null;
   checking: boolean;
   campaignList: CampaignListItem[];
-  register(username: string, password: string): Promise<void>;
+  register(username: string, password: string, email?: string): Promise<void>;
   login(username: string, password: string): Promise<void>;
   logout(): void;
+  /** Ask for a reset link. Resolves with the server's deliberately
+   *  uninformative message — it does not reveal whether the account exists. */
+  forgotPassword(account: string): Promise<string>;
+  /** Spend a reset link and sign in as the account it belonged to. */
+  resetPassword(token: string, newPassword: string): Promise<void>;
   loadMe(): Promise<void>;
   loadCampaigns(): Promise<void>;
   createCampaign(name: string, system: GameSystem): Promise<void>;
@@ -34,10 +39,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   checking: true,
   campaignList: [],
 
-  async register(username, password) {
-    const { token, user } = await api.post<{ token: string; user: UserInfo }>('/api/register', { username, password });
+  async register(username, password, email) {
+    const { token, user } = await api.post<{ token: string; user: UserInfo }>(
+      '/api/register',
+      { username, password, ...(email ? { email } : {}) },
+    );
     setToken(token);
     set({ user });
+    await get().loadCampaigns();
+  },
+
+  async forgotPassword(account) {
+    const { message } = await api.post<{ message: string }>('/api/forgot-password', { account });
+    return message;
+  },
+
+  async resetPassword(token, newPassword) {
+    const res = await api.post<{ token: string; user: UserInfo }>('/api/reset-password', { token, newPassword });
+    // The reset revoked every session this account had, so whatever token this
+    // browser was holding is now dead — replace it before anything else reads
+    // it, and drop the socket that authenticated with it.
+    disconnectSocket();
+    setToken(res.token);
+    set({ user: res.user });
     await get().loadCampaigns();
   },
 

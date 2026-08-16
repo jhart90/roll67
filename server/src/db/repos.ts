@@ -30,6 +30,10 @@ export interface MemberRow {
   diceAceStyle: AceStyle | null;
   /** 1/0/null in the row; null means never chosen, which is ON. */
   turnGuide: number | null;
+  /** This player's own locks at THIS table. The table-wide lock is separate
+   *  and wins on its own: effective = campaign lock OR this. */
+  moveLocked: number | null;
+  rollLocked: number | null;
 }
 
 /**
@@ -53,20 +57,38 @@ export interface UserRow {
   id: string;
   username: string;
   password_hash: string;
+  /** Recovery address, or null for the accounts that never set one. */
+  email: string | null;
+}
+
+/** Storage form for an address: trimmed, lowercased, '' collapsed to null.
+ *  One shape in the column means byEmail() is a plain equality lookup and the
+ *  partial unique index can actually enforce one-account-per-address. */
+export function normalizeEmail(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim().toLowerCase();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export const users = {
-  create(username: string, passwordHash: string): UserRow {
+  create(username: string, passwordHash: string, email: string | null = null): UserRow {
     const id = newId();
-    stmt('INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)')
-      .run(id, username, passwordHash, now());
-    return { id, username, password_hash: passwordHash };
+    stmt('INSERT INTO users (id, username, password_hash, email, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(id, username, passwordHash, email, now());
+    return { id, username, password_hash: passwordHash, email };
   },
   byUsername(username: string): UserRow | undefined {
-    return stmt('SELECT id, username, password_hash FROM users WHERE username = ?').get(username) as UserRow | undefined;
+    return stmt('SELECT id, username, password_hash, email FROM users WHERE username = ?').get(username) as UserRow | undefined;
   },
   byId(id: string): UserRow | undefined {
-    return stmt('SELECT id, username, password_hash FROM users WHERE id = ?').get(id) as UserRow | undefined;
+    return stmt('SELECT id, username, password_hash, email FROM users WHERE id = ?').get(id) as UserRow | undefined;
+  },
+  /** Expects an address already through normalizeEmail. */
+  byEmail(email: string): UserRow | undefined {
+    return stmt('SELECT id, username, password_hash, email FROM users WHERE email = ?').get(email) as UserRow | undefined;
+  },
+  setEmail(userId: string, email: string | null): void {
+    stmt('UPDATE users SET email = ? WHERE id = ?').run(email, userId);
   },
   /** The account's shelf: campaignId -> book slot (0..10). */
   shelfSlots(userId: string): Record<string, number> {
@@ -129,7 +151,7 @@ export const sessions = {
   },
   resolve(token: string): UserRow | undefined {
     const row = stmt(
-      `SELECT u.id, u.username, u.password_hash FROM sessions s
+      `SELECT u.id, u.username, u.password_hash, u.email FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token = ? AND s.expires_at > ?`,
     ).get(token, now()) as UserRow | undefined;
@@ -137,6 +159,67 @@ export const sessions = {
   },
   delete(token: string): void {
     stmt('DELETE FROM sessions WHERE token = ?').run(token);
+  },
+  /** Sign this account out everywhere. Run on any password change: if the
+   *  reason for the reset was that somebody else had the old password, they
+   *  are holding a session token too, and changing the password alone would
+   *  leave it working for another thirty days. */
+  deleteForUser(userId: string): void {
+    stmt('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  },
+  /** The same sweep, sparing the session asking for it — changing your own
+   *  password from the account panel should sign out the other devices, not
+   *  the tab you are typing in. */
+  deleteForUserExcept(userId: string, keepToken: string): void {
+    stmt('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(userId, keepToken);
+  },
+};
+
+// ---------- password resets ----------
+
+/**
+ * Reset links, stored as hashes.
+ *
+ * `consume` is the only way to spend one, and it checks and stamps in a single
+ * statement — two clicks on the same link arriving together cannot both come
+ * back with a user id, because the second UPDATE matches zero rows.
+ */
+export const passwordResets = {
+  create(userId: string, tokenHash: string, ttlMs: number): void {
+    stmt('INSERT INTO password_resets (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
+      .run(tokenHash, userId, now(), now() + ttlMs);
+  },
+  /** Is this link still spendable? Read-only — for the "is this link any good"
+   *  check the reset screen makes before showing its form. */
+  peek(tokenHash: string): { userId: string; username: string } | undefined {
+    return stmt(
+      `SELECT r.user_id as userId, u.username as username FROM password_resets r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.token_hash = ? AND r.used_at IS NULL AND r.expires_at > ?`,
+    ).get(tokenHash, now()) as { userId: string; username: string } | undefined;
+  },
+  /** Spend it. Returns the account it belonged to, or undefined if the link was
+   *  unknown, expired, or already used. */
+  consume(tokenHash: string): string | undefined {
+    const res = stmt(
+      `UPDATE password_resets SET used_at = ?
+       WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`,
+    ).run(now(), tokenHash, now());
+    if (res.changes === 0) return undefined;
+    const row = stmt('SELECT user_id as userId FROM password_resets WHERE token_hash = ?')
+      .get(tokenHash) as { userId: string } | undefined;
+    return row?.userId;
+  },
+  /** Retire every outstanding link for an account — called whenever the
+   *  password changes by any route, so a reset mail already in flight cannot
+   *  undo a change the account holder just made themselves. */
+  invalidateForUser(userId: string): void {
+    stmt('UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL')
+      .run(now(), userId);
+  },
+  /** Housekeeping: drop rows nobody can act on any more. */
+  purge(olderThanMs: number): void {
+    stmt('DELETE FROM password_resets WHERE expires_at < ?').run(now() - olderThanMs);
   },
 };
 
@@ -233,6 +316,34 @@ export const campaigns = {
   setMoveLocked(id: string, locked: boolean): void {
     stmt('UPDATE campaigns SET move_locked = ? WHERE id = ?').run(locked ? 1 : 0, id);
   },
+  rollLocked(id: string): boolean {
+    const row = stmt('SELECT roll_locked FROM campaigns WHERE id = ?').get(id) as { roll_locked?: number } | undefined;
+    return row?.roll_locked === 1;
+  },
+  setRollLocked(id: string, locked: boolean): void {
+    stmt('UPDATE campaigns SET roll_locked = ? WHERE id = ?').run(locked ? 1 : 0, id);
+  },
+  /**
+   * One player's own lock at this table. `which` names the column so the two
+   * locks cannot drift apart in their handling — they differ only in what
+   * they forbid.
+   */
+  setMemberLock(campaignId: string, userId: string, which: 'move' | 'roll', locked: boolean): void {
+    const col = which === 'move' ? 'move_locked' : 'roll_locked';
+    stmt(`UPDATE campaign_members SET ${col} = ? WHERE campaign_id = ? AND user_id = ?`)
+      .run(locked ? 1 : 0, campaignId, userId);
+  },
+  memberLock(campaignId: string, userId: string, which: 'move' | 'roll'): boolean {
+    const col = which === 'move' ? 'move_locked' : 'roll_locked';
+    const row = stmt(`SELECT ${col} AS v FROM campaign_members WHERE campaign_id = ? AND user_id = ?`)
+      .get(campaignId, userId) as { v?: number } | undefined;
+    return row?.v === 1;
+  },
+  /** Lift every per-player lock of one kind — what "unlock everyone" means. */
+  clearMemberLocks(campaignId: string, which: 'move' | 'roll'): void {
+    const col = which === 'move' ? 'move_locked' : 'roll_locked';
+    stmt(`UPDATE campaign_members SET ${col} = 0 WHERE campaign_id = ?`).run(campaignId);
+  },
   setClockSeconds(id: string, seconds: number): number {
     const next = Math.max(0, Math.floor(seconds));
     stmt('UPDATE campaigns SET clock_seconds = ? WHERE id = ?').run(next, id);
@@ -269,7 +380,8 @@ export const campaigns = {
               u.dice_trait_color as diceTraitColor, u.dice_wild_color as diceWildColor,
               u.dice_raise_color as diceRaiseColor, u.player_color as playerColor,
               u.dice_bounce_pct as diceBouncePct, u.dice_ace_style as diceAceStyle,
-              u.turn_guide as turnGuide
+              u.turn_guide as turnGuide,
+              m.move_locked as moveLocked, m.roll_locked as rollLocked
        FROM campaign_members m
        JOIN users u ON u.id = m.user_id WHERE m.campaign_id = ?`,
     ).all(campaignId) as MemberRow[]);

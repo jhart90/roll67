@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { intents, useGameStore } from '../store/game';
+
+interface AccountUser { id: string; username: string; email: string | null }
 
 export function AccountDetails({ onClose }: { onClose: () => void }) {
   const you = useGameStore((s) => s.you);
@@ -8,13 +10,32 @@ export function AccountDetails({ onClose }: { onClose: () => void }) {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  // The address on file, and the field's working copy. Kept apart so an
+  // untouched field submits nothing at all — sending back what we loaded would
+  // make "I didn't touch it" indistinguishable from "set it to this".
+  const [savedEmail, setSavedEmail] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void api.get<{ user: AccountUser }>('/api/account')
+      .then(({ user }) => {
+        if (!live) return;
+        setSavedEmail(user.email);
+        setEmail(user.email ?? '');
+      })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+
+  const emailChanged = email.trim().toLowerCase() !== (savedEmail ?? '');
 
   async function onSave() {
     if (!currentPassword) { setStatus({ ok: false, msg: 'Enter your current password.' }); return; }
     if (newPassword && newPassword !== confirmPassword) { setStatus({ ok: false, msg: 'New passwords do not match.' }); return; }
-    if (!newUsername && !newPassword) { setStatus({ ok: false, msg: 'Nothing to change.' }); return; }
+    if (!newUsername && !newPassword && !emailChanged) { setStatus({ ok: false, msg: 'Nothing to change.' }); return; }
 
     setSaving(true);
     setStatus(null);
@@ -22,11 +43,17 @@ export function AccountDetails({ onClose }: { onClose: () => void }) {
       const body: Record<string, string> = { currentPassword };
       if (newUsername) body.newUsername = newUsername;
       if (newPassword) body.newPassword = newPassword;
-      const { user } = await api.post<{ user: { id: string; username: string } }>('/api/account', body);
+      if (emailChanged) body.newEmail = email.trim();
+      const { user } = await api.post<{ user: AccountUser }>('/api/account', body);
       if (newUsername && user.username !== you?.username) {
         intents.setUsername(user.username);
       }
-      setStatus({ ok: true, msg: 'Account updated.' });
+      setSavedEmail(user.email);
+      setEmail(user.email ?? '');
+      setStatus({
+        ok: true,
+        msg: newPassword ? 'Account updated. Your other devices have been signed out.' : 'Account updated.',
+      });
       setCurrentPassword('');
       setNewUsername('');
       setNewPassword('');
@@ -45,6 +72,22 @@ export function AccountDetails({ onClose }: { onClose: () => void }) {
         <label>
           Current password <span className="dim">(required to change anything)</span>
           <input type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+        </label>
+        <hr />
+        <label>
+          Recovery email{' '}
+          <span className="dim">
+            {savedEmail
+              ? '(where a lost-password link is sent; clear it to remove)'
+              : '(none on file — without one, a forgotten password cannot be reset)'}
+          </span>
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
         </label>
         <hr />
         <label>

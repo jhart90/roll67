@@ -29,6 +29,7 @@ import { SoakPrompt } from '../table/SoakPrompt';
 import { BennyMenu } from '../table/BennyMenu';
 import { KeyringMenu } from '../table/KeyringMenu';
 import { TimeMenu } from '../table/TimeMenu';
+import { LockMenu } from '../table/LockMenu';
 import { CookPrompt } from '../table/CookPrompt';
 import { CalledShotPrompt } from '../table/CalledShotPrompt';
 import { BlastPrompt } from '../table/BlastPrompt';
@@ -507,6 +508,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <BennyMenu />
         <KeyringMenu />
         <TimeMenu />
+        <LockMenu />
         <PresenceBar />
         <AudioPlayer />
         <ShopStorefront />

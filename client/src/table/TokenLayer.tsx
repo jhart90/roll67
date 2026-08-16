@@ -128,7 +128,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const isDm = useGameStore((s) => s.isDm());
   // Subscribed (not just read) so a token goes quiet the moment the DM locks
   // the board, rather than at its next unrelated re-render.
-  const moveLocked = useGameStore((s) => s.moveLocked);
+  const moveLocked = useGameStore((s) => s.myMoveLocked());
   const movable = !!you && tool === 'select' && targetState === 'off' &&
     canMoveToken(you.role, you.userId, token, character, moveLocked);
 

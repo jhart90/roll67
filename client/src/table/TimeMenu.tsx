@@ -28,7 +28,6 @@ export function TimeMenu() {
   const isDm = useGameStore((s) => s.isDm());
   const seconds = useGameStore((s) => s.clockSeconds);
   const inCombat = useGameStore((s) => s.initiativeState.active);
-  const moveLocked = useGameStore((s) => s.moveLocked);
   const [open, setOpen] = useState(false);
   if (!isDm) return null;
 
@@ -81,20 +80,9 @@ export function TimeMenu() {
               </button>
             );
           })}
-          {/* Freezing the board is a TIME move — "nothing happens until I
-              say" — which is why it lives with the clock and not in settings.
-              One button, two states, announced in chat either way. */}
-          <button
-            className={moveLocked ? 'time-lock on' : 'time-lock'}
-            title={moveLocked
-              ? 'Players cannot move any tokens. Click to unlock.'
-              : 'Freeze every player token where it stands (the DM can still move anything).'}
-            onClick={() => intents.setMoveLock(!moveLocked)}
-          >
-            {moveLocked ? '🔒 Movement locked — unlock' : '🔓 Lock movement'}
-          </button>
           <span className="dim" style={{ fontSize: 11 }}>
-            Bennies are drawn per session, not per day — that button lives in the Benny menu.
+            Bennies are drawn per session, not per day — that button lives in the
+            Benny menu, and the locks live under the padlock.
           </span>
         </div>
       )}

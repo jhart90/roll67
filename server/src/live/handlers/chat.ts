@@ -14,6 +14,7 @@ import { applyUndo } from '../undo.js';
 // call time, never during module evaluation).
 import { clearConcentrationEffects, critFailFor, recordBennyRoll } from '../hp.js';
 import { ironDiceInfo, rotateIronDice } from '../ironDice.js';
+import { rollGate } from '../locks.js';
 
 /**
  * Itemize the flat modifier a player typed into `/r` themselves.
@@ -122,6 +123,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
   }, 'POST_SHEET_CARD'));
 
   socket.on(C2S.SHEET_ROLL, safe(socket, ({ characterId, rollableId, adv }: SheetRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
@@ -222,6 +224,7 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
   }, 'SAVE_MACRO'));
 
   socket.on(C2S.CAST_SPELL, safe(socket, ({ characterId, rollableId, slotLevel }: CastSpellPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     let character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
@@ -496,6 +499,9 @@ function handleChatText(
   // /r or /roll — public roll: a dice expression, or a sheet trait by name.
   const rollMatch = text.match(/^\/r(?:oll)?\s+(.+)$/i);
   if (rollMatch) {
+    // The lock is asked HERE rather than on the chat event: the same event
+    // carries ordinary talk, and a frozen player keeps their voice.
+    if (!rollGate(socket)) return;
     if (tryTraitRoll(io, socket, campaignId, userId, username, rollMatch[1], false)) return;
     try {
       // "/r 1d20+3 # Stealth check" — anything after the first # labels the
@@ -517,6 +523,7 @@ function handleChatText(
   // /gr — roll seen only by the roller and the DM.
   const gmRollMatch = text.match(/^\/gr\s+(.+)$/i);
   if (gmRollMatch) {
+    if (!rollGate(socket)) return;
     if (tryTraitRoll(io, socket, campaignId, userId, username, gmRollMatch[1], true)) return;
     try {
       const { expr, label } = splitRollLabel(gmRollMatch[1]);

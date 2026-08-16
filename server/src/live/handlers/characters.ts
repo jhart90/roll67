@@ -13,6 +13,7 @@ import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
+import { rollGate } from '../locks.js';
 
 /**
  * A player's keys are exactly the ones the DM issued — no more, no fewer.
@@ -320,6 +321,7 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
   }, 'UPDATE_CHARACTER'));
 
   socket.on(C2S.LEVEL_UP_ROLL, safe(socket, ({ characterId, patch, hitDie, conMod, avgHp, label }: LevelUpRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) return;

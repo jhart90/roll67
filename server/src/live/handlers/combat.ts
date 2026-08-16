@@ -26,6 +26,7 @@ import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
 import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
+import { rollGate } from '../locks.js';
 import { applyAdv } from './chat.js';
 import { emitMoveBudget, hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
 
@@ -2718,6 +2719,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   }, 'ATTACK_PREVIEW'));
 
   socket.on(C2S.COMBAT_ACTION, safe(socket, (p: CombatActionPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const actorMaybe = characters.byId(p.characterId);
     if (!actorMaybe || actorMaybe.campaignId !== d.campaignId) throw new Error('Unknown character.');
@@ -3693,6 +3695,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // the same sequenced save-and-damage pipeline as the DM's "call for save"
   // tool — one roll per hit target, damage always last.
   socket.on(C2S.CAST_AOE, safe(socket, (pIn: CastAoePayload) => {
+    if (!rollGate(socket)) return;
     let p = pIn;
     const d = requireCampaign(socket);
     let actor = characters.byId(p.characterId);
@@ -4092,6 +4095,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // Attunement or Astral Wandering): commits Effort and rolls the discipline
   // check, same as a targeted power, but never touches anyone's HP.
   socket.on(C2S.USE_POWER, safe(socket, (p: UsePowerPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     let actor = characters.byId(p.characterId);
     if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
@@ -4124,6 +4128,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // (swnReloadCheck is the single source of truth for whether this is legal
   // right now — the client uses the same check to enable/disable its button).
   socket.on(C2S.RELOAD_WEAPON, safe(socket, ({ characterId, attackIndex }: ReloadWeaponPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const actor = characters.byId(characterId);
     if (!actor || actor.campaignId !== d.campaignId) throw new Error('Unknown character.');
@@ -4210,6 +4215,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // A 5e death saving throw for a character at 0 HP. Server-authoritative:
   // rolls, tallies successes/failures, and resolves stabilize/wake/death.
   socket.on(C2S.DEATH_SAVE, safe(socket, ({ characterId }: DeathSavePayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const character = characters.byId(characterId);
     if (!character || character.campaignId !== d.campaignId) throw new Error('Unknown character.');
@@ -4451,6 +4457,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
    * landed; it expires if ignored.
    */
   socket.on(C2S.SOAK_ROLL, safe(socket, ({ characterId, spend }: SoakRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const ch = characters.byId(characterId);
     if (!ch || ch.campaignId !== d.campaignId) return;
@@ -4503,6 +4510,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
    * grenade hanging until the grace period bails it out.
    */
   socket.on(C2S.BLAST_RESPONSE, safe(socket, ({ blastId, characterId, choice }: BlastResponsePayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const pb = pendingBlasts.get(blastId);
     // Already settled by someone faster, or the fuse ran out mid-click.
@@ -4568,6 +4576,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
 
   // A Shaken combatant answers the prompt: make the Spirit roll now.
   socket.on(C2S.SHAKEN_ROLL, safe(socket, ({ characterId }: ShakenRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const ch = characters.byId(characterId);
     if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
@@ -4578,6 +4587,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
 
   // A Bleeding Out player answers the prompt: make the Vigor roll now.
   socket.on(C2S.BLEED_ROLL, safe(socket, ({ characterId }: BleedRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const ch = characters.byId(characterId);
     if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
@@ -4621,6 +4631,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
 
   // A Stunned combatant answers the prompt: make the free Vigor roll now.
   socket.on(C2S.STUN_ROLL, safe(socket, ({ characterId }: StunRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const ch = characters.byId(characterId);
     if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
@@ -4631,6 +4642,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
 
   // A downed Wild Card faces the music: the Incapacitation Vigor roll.
   socket.on(C2S.INCAP_ROLL, safe(socket, ({ characterId }: IncapRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const ch = characters.byId(characterId);
     if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
@@ -4696,6 +4708,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // The Benny menu: every automatable use from the SWADE Benny table. Soak
   // rides the existing SOAK_ROLL flow; everything else lands here.
   socket.on(C2S.BENNY_USE, safe(socket, ({ characterId, use }: BennyUsePayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const ch = characters.byId(characterId);
     if (!ch || ch.campaignId !== d.campaignId || ch.system !== 'swade') return;
@@ -5022,6 +5035,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   }, 'ADVANCE_TIME'));
 
   socket.on(C2S.VEHICLE_OOC_ROLL, safe(socket, ({ characterId, roll: shouldRoll }: VehicleOocRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     if (!takeOocOffer(characterId)) return;
@@ -5035,18 +5049,21 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   }, 'VEHICLE_OOC_ROLL'));
 
   socket.on(C2S.HEALING_ROLL, safe(socket, ({ roll: shouldRoll }: HealingRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     runNaturalHealing(io, d.campaignId, !!shouldRoll);
   }, 'HEALING_ROLL'));
 
   socket.on(C2S.REPAIR_ROLL, safe(socket, ({ roll: shouldRoll }: RepairRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     runRepairs(io, d.campaignId, !!shouldRoll);
   }, 'REPAIR_ROLL'));
 
   socket.on(C2S.AFTERMATH_ROLL, safe(socket, ({ roll: shouldRoll }: AftermathRollPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     aftermathForExtras(io, d.campaignId, !!shouldRoll);
@@ -5255,6 +5272,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
    * thinks is possible, but the track is the server's.
    */
   socket.on(C2S.CHASE_ACTION, safe(socket, ({ entryId, action, targetEntryId }: ChaseActionPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const state = initiative.get(d.campaignId);
     const chase = state.chase;
@@ -5697,6 +5715,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // they own; the DM can roll for anyone (NPCs, or an absent player's token).
   // Each roll posts its own chat card, so the table sees every result land.
   socket.on(C2S.INIT_ROLL_MINE, safe(socket, ({ tokenId }: InitRollMinePayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const state = initiative.get(d.campaignId);
     const idx = (state.pendingRolls ?? []).findIndex((p) => p.tokenId === tokenId);
@@ -5841,6 +5860,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // One combatant draws the top card. Players draw for their own tokens; the
   // DM can draw for anyone (NPCs, or an AFK player's token).
   socket.on(C2S.INIT_CARD_DRAW, safe(socket, ({ tokenId }: InitCardDrawPayload) => {
+    if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const state = initiative.get(d.campaignId);
     if (!state.cardMode) { emitError(socket, 'No card draw is in progress.'); return; }

@@ -104,6 +104,14 @@ ensureColumn('campaigns', 'dice_speed', "dice_speed TEXT NOT NULL DEFAULT 'cinem
 // The DM's table-wide movement lock. Persisted: a freeze the DM set should
 // survive a server restart, not quietly thaw.
 ensureColumn('campaigns', 'move_locked', 'move_locked INTEGER NOT NULL DEFAULT 0');
+// ...and its twin for dice: nobody rolls while the DM is holding the table.
+ensureColumn('campaigns', 'roll_locked', 'roll_locked INTEGER NOT NULL DEFAULT 0');
+// The same two locks aimed at ONE player. They live on the membership rather
+// than the user, because being frozen is something that happens to you at a
+// table — it must not follow you into another DM's campaign. Effective lock =
+// the table's OR your own.
+ensureColumn('campaign_members', 'move_locked', 'move_locked INTEGER NOT NULL DEFAULT 0');
+ensureColumn('campaign_members', 'roll_locked', 'roll_locked INTEGER NOT NULL DEFAULT 0');
 ensureColumn('macros', 'color', 'color TEXT');
 ensureColumn('macros', 'character_id', 'character_id TEXT');
 ensureColumn('macros', 'rollable_id', 'rollable_id TEXT');
@@ -172,6 +180,13 @@ ensureColumn('users', 'turn_guide', 'turn_guide INTEGER');
 // device instead of living only in one browser's localStorage.
 ensureColumn('users', 'music_volume', 'music_volume REAL');
 ensureColumn('users', 'sfx_volume', 'sfx_volume REAL');
+// Optional recovery address. NULL means "no email on file", which is the only
+// other state — the repo normalizes '' to NULL so the partial unique index
+// below cannot be defeated by a row full of empty strings. Accounts stay
+// username-first: an email is something you add, never something you must.
+ensureColumn('users', 'email', 'email TEXT');
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
+         ON users(email COLLATE NOCASE) WHERE email IS NOT NULL`);
 // Per-player world knowledge: what a player has seen belongs to THAT player,
 // not the party — a brand-new member starts with a blank map, not everything
 // the veterans already scouted. Rebuilds world_discovery with a user_id

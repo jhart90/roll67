@@ -108,6 +108,8 @@ export const C2S = {
   RENAME_CAMPAIGN: 'renameCampaign',
   /** DM: freeze every player's tokens in place (and thaw them again). */
   SET_MOVE_LOCK: 'setMoveLock',
+  SET_ROLL_LOCK: 'setRollLock',
+  SET_PLAYER_LOCK: 'setPlayerLock',
   SET_PLAYER_COLOR: 'setPlayerColor',
   SET_USERNAME: 'setUsername',
   /** Save this account's audio mix (music + effects), so it follows the player. */
@@ -907,6 +909,7 @@ export const S2C = {
   CAMPAIGN_RENAMED: 'campaignRenamed',
   /** The DM locked or unlocked all player movement. */
   MOVE_LOCK: 'moveLock',
+  ROLL_LOCK: 'rollLock',
   /** The modifier a hovered shot would carry, itemised. */
   ATTACK_PREVIEW: 'attackPreviewResult',
   /** The clouds hanging over a map changed — one landed, or one blew away. */
@@ -960,6 +963,8 @@ export interface CampaignStatePayload {
   chatTail: ChatMessage[];
   /** The DM's table-wide movement lock, as it stands on arrival. */
   moveLocked?: boolean;
+  /** ...and the dice lock, so a player who refreshes mid-freeze still knows. */
+  rollLocked?: boolean;
   /**
    * What is left of the current turn's Pace, for whoever is up.
    *
@@ -1216,14 +1221,13 @@ export interface WorldOverridePayload {
 /** The campaign's whole membership, authoritative: whoever is absent from
  *  this list is no longer a member and their pill should go. */
 export interface MemberPresencePayload {
-  members: Array<{
-    userId: string; username: string; role: 'dm' | 'player'; online: boolean; mapId: string | null;
-    diceColor: string | null; diceTextColor: string | null; playerColor: string | null;
-    diceTraitColor: string | null; diceWildColor: string | null; diceRaiseColor: string | null;
-    diceBouncePct: number | null; diceAceStyle: import('./types.js').AceStyle | null;
-    /** Their combat-turn-guide setting; see MemberInfo.turnGuide. */
-    turnGuide: boolean;
-  }>;
+  /**
+   * MemberInfo itself, not a structural copy of it. This was a hand-maintained
+   * duplicate of the same fields, and it did what duplicates do: a field added
+   * to MemberInfo did not arrive here, so the client assigned this payload
+   * into a MemberInfo[] slot that no longer matched it.
+   */
+  members: import('./types.js').MemberInfo[];
 }
 /** Set your own 3D-dice color ("#rrggbb", or null for the defaults). */
 export interface SetDiceColorPayload { color: string | null }
@@ -1239,7 +1243,11 @@ export interface SetTurnGuidePayload { on: boolean }
 export interface SetDiceSpeedPayload { speed: DiceSpeed }
 export interface RenameCampaignPayload { name: string }
 export interface SetMoveLockPayload { locked: boolean }
+export interface SetRollLockPayload { locked: boolean }
+/** One player's own lock. `which` names which of the two is being aimed. */
+export interface SetPlayerLockPayload { userId: string; which: 'move' | 'roll'; locked: boolean }
 export interface MoveLockPayload { locked: boolean }
+export interface RollLockPayload { locked: boolean }
 /**
  * The itemised modifier a shot would carry if it were taken right now.
  *

@@ -117,7 +117,7 @@ const SPECS: TableSpec[] = [
 
 /** Tables that exist but belong to the server, not to any campaign. */
 export const SERVER_TABLES = new Set([
-  'users', 'sessions', 'meta', 'meta_migrations', 'sqlite_sequence',
+  'users', 'sessions', 'password_resets', 'meta', 'meta_migrations', 'sqlite_sequence',
   'iron_dice_seeds', 'iron_dice_state',
   // A pre-migration husk kept around by migrateAssetsAudioKind.
   'assets_pre_audio_migration',

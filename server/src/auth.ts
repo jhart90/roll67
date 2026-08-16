@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import type { Socket } from 'socket.io';
 import { SESSION_TTL_MS } from './config.js';
@@ -57,4 +58,29 @@ export function validUsername(name: unknown): name is string {
 
 export function validPassword(pw: unknown): pw is string {
   return typeof pw === 'string' && pw.length >= 4 && pw.length <= 128;
+}
+
+/**
+ * Loose on purpose.
+ *
+ * The only real test of an address is whether mail sent to it arrives, and
+ * this one gets exactly that test the moment it is used. So this rejects the
+ * shapes that are certainly not addresses — no @, spaces, two @s, nothing
+ * after the dot — and lets everything else through rather than arguing with
+ * the long tail of what a valid address is.
+ */
+export function validEmail(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length <= 254
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+/** A reset link's secret half: 32 random bytes, URL-safe. */
+export function newResetToken(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+/** What gets stored for a token. See the password_resets table comment. */
+export function hashResetToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }

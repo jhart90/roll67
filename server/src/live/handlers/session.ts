@@ -4,6 +4,7 @@ import {
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
   type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload, type SetDiceSpeedPayload, type RenameCampaignPayload, type SetMoveLockPayload,
+  type SetRollLockPayload, type SetPlayerLockPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -71,6 +72,10 @@ export function buildCampaignState(campaignId: string, userId: string, username:
       mapId: campaigns.viewMapIdFor(campaignId, m.userId),
       // Never chosen means ON — see the presence build below.
       turnGuide: m.turnGuide !== 0,
+      // Same 1/0-to-boolean conversion presence does. Spreading the raw row
+      // would leave these as numbers that merely behave like booleans.
+      moveLocked: m.moveLocked === 1,
+      rollLocked: m.rollLocked === 1,
     })),
     // Players only receive character sheets they own; the DM sees all
     // (NPC and other-player sheets stay private).
@@ -83,6 +88,7 @@ export function buildCampaignState(campaignId: string, userId: string, username:
     initiative: initiativeViewFor(initiative.get(campaignId), isDm, campaignId),
     clockSeconds: campaigns.clockSeconds(campaignId),
     moveLocked: campaigns.moveLocked(campaignId),
+    rollLocked: campaigns.rollLocked(campaignId),
     // In the join payload rather than chasing it: a refresh mid-turn used to
     // rely on a follow-up message arriving after the client had cleared its
     // budgets, and a client that missed the window showed a full Pace bar
@@ -161,6 +167,8 @@ export function broadcastPresence(io: Server, campaignId: string): void {
     // Never chosen means ON: a guide you have to go and switch on is a
     // guide the person who needed it never saw.
     turnGuide: m.turnGuide !== 0,
+    moveLocked: m.moveLocked === 1,
+    rollLocked: m.rollLocked === 1,
   }));
   io.to(campaignRoom(campaignId)).emit(S2C.MEMBER_PRESENCE, { members });
 }
@@ -340,6 +348,42 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'SET_MOVE_LOCK'));
+
+  /**
+   * The same freeze aimed at the dice. Enforced in rollGate, which every path
+   * that can throw dice asks first, so a locked player cannot roll from chat,
+   * from a sheet, from a macro or from an attack.
+   */
+  socket.on(C2S.SET_ROLL_LOCK, safe(socket, ({ locked }: SetRollLockPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM locks the dice.'); return; }
+    const want = locked === true;
+    if (campaigns.rollLocked(d.campaignId) === want) return;   // idempotent: no repeat announcements
+    campaigns.setRollLocked(d.campaignId, want);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.ROLL_LOCK, { locked: want });
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: want ? '🎲 The DM holds the dice — no one rolls until it lifts.' : '🎲 The dice are free again.',
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'SET_ROLL_LOCK'));
+
+  /**
+   * One player, one lock. Quiet by design: freezing a single player is often
+   * a private correction mid-scene, so it rides presence rather than
+   * announcing itself to the table the way the room-wide locks do.
+   */
+  socket.on(C2S.SET_PLAYER_LOCK, safe(socket, ({ userId, which, locked }: SetPlayerLockPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM locks a player.'); return; }
+    if (which !== 'move' && which !== 'roll') return;
+    if (typeof userId !== 'string' || !campaigns.memberRole(d.campaignId, userId)) return;
+    campaigns.setMemberLock(d.campaignId, userId, which, locked === true);
+    broadcastPresence(io, d.campaignId);
+  }, 'SET_PLAYER_LOCK'));
 
   socket.on(C2S.SET_DICE_ACE_STYLE, safe(socket, ({ style }: SetDiceAceStylePayload) => {
     const d = sdata(socket);

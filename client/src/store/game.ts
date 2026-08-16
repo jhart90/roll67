@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type ChatRemovedPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type CampaignRenamedPayload, type MoveLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type ChatRemovedPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type CampaignRenamedPayload, type MoveLockPayload, type RollLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -433,6 +433,8 @@ interface GameState {
   calledShotPending: { targetTokenId: string } | null;
   /** The DM's table-wide movement lock. */
   moveLocked: boolean;
+  /** The DM's table-wide dice lock. Per-player locks ride on `members`. */
+  rollLocked: boolean;
   /** The itemised modifier for the target currently hovered while aiming. */
   attackPreview: AttackPreviewResultPayload | null;
   confirmCalledShot(aim: CalledShotAim): void;
@@ -509,6 +511,9 @@ interface GameState {
    *  whole point of the preview is to stand in their shoes, so every capability
    *  gate and every DM-only overlay should read this. */
   isDm(): boolean;
+  /** Am I frozen right now — by the table's lock or by one aimed at me? */
+  myMoveLocked(): boolean;
+  myRollLocked(): boolean;
   /** Is my ACCOUNT the DM, preview or not? Only for the controls that manage
    *  the preview itself, which must survive being inside it. */
   isDmAccount(): boolean;
@@ -914,6 +919,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   calledShotPending: null,
   moveLocked: false,
+  rollLocked: false,
   attackPreview: null,
   confirmCalledShot(aim) {
     const s = get();
@@ -942,6 +948,21 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   isDm() { const s = get(); return s.you?.role === 'dm' && !s.viewingAs; },
+  // Mirrors the server's moveLockedFor/rollLockedFor: two scopes, one answer.
+  // Read through the EFFECTIVE user so a DM previewing a player sees the
+  // board exactly as locked as that player does.
+  myMoveLocked() {
+    const s = get();
+    if (s.you?.role === 'dm' && !s.viewingAs) return false;
+    const me = s.members.find((m) => m.userId === (s.viewingAs ?? s.you?.userId));
+    return s.moveLocked || me?.moveLocked === true;
+  },
+  myRollLocked() {
+    const s = get();
+    if (s.you?.role === 'dm' && !s.viewingAs) return false;
+    const me = s.members.find((m) => m.userId === (s.viewingAs ?? s.you?.userId));
+    return s.rollLocked || me?.rollLocked === true;
+  },
   isDmAccount() { return get().you?.role === 'dm'; },
   asUserId() { const s = get(); return s.viewingAs ?? s.you?.userId ?? null; },
   effectiveVisible() {
@@ -1055,6 +1076,7 @@ export function wireSocket(): void {
       moveBudgets: p.moveBudget ? { [p.moveBudget.tokenId]: p.moveBudget } : {},
       clockSeconds: p.clockSeconds ?? 0,
       moveLocked: p.moveLocked === true,
+      rollLocked: p.rollLocked === true,
       gmBennies: p.gmBennies ?? 0,
       chatLog: p.chatTail,
       mapObjects: mapObjectsById(p.mapObjects ?? []),
@@ -1512,6 +1534,10 @@ export function wireSocket(): void {
 
   socket.on(S2C.MOVE_LOCK, (p: MoveLockPayload) => {
     useGameStore.setState({ moveLocked: p.locked === true });
+
+  socket.on(S2C.ROLL_LOCK, (p: RollLockPayload) => {
+    useGameStore.setState({ rollLocked: p.locked === true });
+  });
   });
 
   socket.on(S2C.DICE_SPEED, (p: DiceSpeedPayload) => {
@@ -2031,6 +2057,9 @@ export const intents = {
   renameCampaign: (name: string) => socket.emit(C2S.RENAME_CAMPAIGN, { name }),
   chatWipe: () => socket.emit(C2S.CHAT_WIPE, {}),
   setMoveLock: (locked: boolean) => socket.emit(C2S.SET_MOVE_LOCK, { locked }),
+  setRollLock: (locked: boolean) => socket.emit(C2S.SET_ROLL_LOCK, { locked }),
+  setPlayerLock: (userId: string, which: 'move' | 'roll', locked: boolean) =>
+    socket.emit(C2S.SET_PLAYER_LOCK, { userId, which, locked }),
   attackPreview: (targetTokenId: string) => {
     const t = useGameStore.getState().targeting;
     if (!t) return;

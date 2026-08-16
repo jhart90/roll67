@@ -17,6 +17,21 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL
 );
 
+-- Outstanding "forgot my password" links.
+--
+-- The token itself is NOT stored: a link is a bearer key, and this table is in
+-- every DB backup the operator takes. Only its SHA-256 lives here, so reading
+-- the table gives you nothing you can put in a URL. Rows are kept after use
+-- (used_at stamped) so a replayed link can be told apart from an unknown one.
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+
 CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

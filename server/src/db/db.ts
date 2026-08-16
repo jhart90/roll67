@@ -140,6 +140,8 @@ ensureColumn('map_objects', 'key_name', 'key_name TEXT');
 // A container can BE a character: the token carries the chest / is the shop.
 ensureColumn('map_objects', 'linked_character_id', 'linked_character_id TEXT');
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
+// Which book on the lobby shelf holds which campaign, per account.
+ensureColumn('users', 'shelf_json', 'shelf_json TEXT');
 ensureColumn('users', 'dice_text_color', 'dice_text_color TEXT');
 // Chat shows "Character (Player)" for anything a character did.
 ensureColumn('chat_messages', 'from_character', 'from_character TEXT');

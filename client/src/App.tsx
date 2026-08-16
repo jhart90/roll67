@@ -13,13 +13,11 @@ export function App() {
   }, [loadMe]);
 
   if (checking) {
+    // The same dark the bookshelf paints under itself, so the session check
+    // reads as the library's lights coming up rather than a different room.
     return (
-      <div className="center-screen retro-lobby">
-        <div className="store-sign">
-          <span className="store-sign-name">ROLL67</span>
-          <span className="store-sign-sub">PLEASE STAND BY…</span>
-        </div>
-        <div className="checker-strip" aria-hidden />
+      <div className="shelf-screen shelf-checking">
+        <span className="shelf-brand">ROLL67</span>
       </div>
     );
   }

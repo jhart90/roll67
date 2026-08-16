@@ -85,6 +85,7 @@ export const campaignRouter = Router();
 campaignRouter.use(requireAuth);
 
 campaignRouter.get('/', (req: AuthedRequest, res) => {
+  const slots = users.shelfSlots(req.user!.id);
   const mine = campaigns.forUser(req.user!.id).map((c) => ({
     id: c.id,
     name: c.name,
@@ -92,8 +93,35 @@ campaignRouter.get('/', (req: AuthedRequest, res) => {
     role: c.role,
     // The invite code is DM-only information.
     inviteCode: c.role === 'dm' ? c.inviteCode : null,
+    // Which book on the lobby shelf this campaign lives in. Null = never
+    // placed; the client seats it in the first free slot.
+    shelfSlot: typeof slots[c.id] === 'number' ? slots[c.id] : null,
   }));
   res.json({ campaigns: mine });
+});
+
+/**
+ * Rearrange the shelf: which book holds which campaign.
+ *
+ * Validated down to exactly what the shelf can mean — integer slots 0..10,
+ * one campaign per slot, only campaigns this account is actually in — because
+ * this is a raw JSON column and the lobby renders whatever it says.
+ */
+campaignRouter.post('/shelf', (req: AuthedRequest, res) => {
+  const raw = (req.body ?? {}).slots;
+  if (!raw || typeof raw !== 'object') { res.status(400).json({ error: 'slots required' }); return; }
+  const mine = new Set(campaigns.forUser(req.user!.id).map((c) => c.id));
+  const clean: Record<string, number> = {};
+  const taken = new Set<number>();
+  for (const [campaignId, slot] of Object.entries(raw as Record<string, unknown>)) {
+    if (!mine.has(campaignId)) continue;
+    if (typeof slot !== 'number' || !Number.isInteger(slot) || slot < 0 || slot > 10) continue;
+    if (taken.has(slot)) continue;
+    taken.add(slot);
+    clean[campaignId] = slot;
+  }
+  users.setShelfSlots(req.user!.id, clean);
+  res.json({ ok: true });
 });
 
 campaignRouter.post('/', (req: AuthedRequest, res) => {

@@ -68,6 +68,14 @@ export const users = {
   byId(id: string): UserRow | undefined {
     return stmt('SELECT id, username, password_hash FROM users WHERE id = ?').get(id) as UserRow | undefined;
   },
+  /** The account's shelf: campaignId -> book slot (0..10). */
+  shelfSlots(userId: string): Record<string, number> {
+    const row = stmt('SELECT shelf_json FROM users WHERE id = ?').get(userId) as { shelf_json?: string | null } | undefined;
+    return safeParse<Record<string, number>>(row?.shelf_json ?? '{}', {});
+  },
+  setShelfSlots(userId: string, slots: Record<string, number>): void {
+    stmt('UPDATE users SET shelf_json = ? WHERE id = ?').run(JSON.stringify(slots), userId);
+  },
   setDiceColor(userId: string, color: string | null): void {
     stmt('UPDATE users SET dice_color = ? WHERE id = ?').run(color, userId);
   },

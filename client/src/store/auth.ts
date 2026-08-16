@@ -9,6 +9,8 @@ export interface CampaignListItem {
   system: GameSystem;
   role: Role;
   inviteCode: string | null;
+  /** Which book on the lobby shelf holds this campaign; null = never placed. */
+  shelfSlot: number | null;
 }
 
 interface AuthState {
@@ -22,6 +24,9 @@ interface AuthState {
   loadCampaigns(): Promise<void>;
   createCampaign(name: string, system: GameSystem): Promise<void>;
   joinCampaign(inviteCode: string): Promise<void>;
+  /** Rearrange the shelf: campaignId -> book slot. Saved to the account, so
+   *  the same shelf greets this member on every machine. */
+  saveShelf(slots: Record<string, number>): Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -70,6 +75,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   async loadCampaigns() {
     const { campaigns } = await api.get<{ campaigns: CampaignListItem[] }>('/api/campaigns');
     set({ campaignList: campaigns });
+  },
+
+  async saveShelf(slots) {
+    // Optimistic: the books swap under the cursor, then the server's copy
+    // becomes the truth on the next load.
+    set({ campaignList: get().campaignList.map((c) => ({ ...c, shelfSlot: slots[c.id] ?? null })) });
+    await api.post('/api/campaigns/shelf', { slots });
   },
 
   async createCampaign(name, system) {

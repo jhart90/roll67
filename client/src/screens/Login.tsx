@@ -1,11 +1,17 @@
 import { useState } from 'react';
 import { useAuthStore } from '../store/auth';
+import { ShelfStage } from './Bookshelf';
 
 /** Set once a login/registration ever succeeds in this browser — returning
- *  members get the sign-in form first; a fresh visitor gets NEW MEMBERSHIP
- *  as the storefront's primary call to action. */
+ *  members get the sign-in form first; a fresh visitor gets the new-account
+ *  side as the door's first offer. */
 const MEMBER_FLAG = 'roll67.hasAccount';
 
+/**
+ * The front door: the same bookshelf the members' shelf uses, with the
+ * sign-in card floating over the summoning circle on the desk. The books are
+ * furniture here — they belong to whoever signs in.
+ */
 export function Login() {
   const { login, register } = useAuthStore();
   const [mode, setMode] = useState<'login' | 'register'>(
@@ -34,58 +40,43 @@ export function Login() {
   const registering = mode === 'register';
 
   return (
-    <div className="center-screen retro-lobby">
-      <div className="store-sign">
-        <span className="store-sign-name">ROLL67</span>
-        <span className="store-sign-sub">GAMES &amp; TABLETOP · HEX-GRID VIRTUAL TABLETOP</span>
-      </div>
-      <div className="checker-strip" aria-hidden />
-
-      <div className="member-card">
-        <div className="member-card-head">
-          <span className="member-card-title">
-            {registering ? '★ NEW MEMBERSHIP ★' : 'MEMBER SIGN-IN'}
-          </span>
-          <span className="open-sign">OPEN</span>
-        </div>
-        {registering && (
-          <p className="member-card-blurb">
-            Free membership card. No late fees. Dice always in stock.
-          </p>
-        )}
-        <form onSubmit={submit}>
-          <label>
-            Member name
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-              autoComplete="username"
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={registering ? 'new-password' : 'current-password'}
-            />
-          </label>
-          {error && <p className="error">{error}</p>}
-          <button type="submit" className="retro-cta" disabled={busy}>
-            {registering ? '🎲 CREATE NEW ACCOUNT' : '▶ LOG IN'}
-          </button>
-        </form>
-        <button
-          className="taped-note"
-          onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); }}
-        >
-          {registering ? 'Already a member? Sign in here' : 'First visit? Create a new account →'}
-        </button>
-      </div>
-
-      <p className="store-footer">BE KIND · ROLL TWENTIES · EST. 1967</p>
-    </div>
+    <ShelfStage
+      overlay={(
+        <>
+          <div className="shelf-topbar">
+            <span className="shelf-brand">ROLL67</span>
+          </div>
+          <div className="portal-card portal-login">
+            <h2 className="portal-title">{registering ? 'New account' : 'Sign in'}</h2>
+            <form onSubmit={submit} className="portal-form">
+              <input
+                placeholder="Name"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoFocus
+                autoComplete="username"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={registering ? 'new-password' : 'current-password'}
+              />
+              {error && <p className="error">{error}</p>}
+              <button type="submit" className="portal-cta" disabled={busy}>
+                {registering ? '🎲 Create account' : '▶ Enter'}
+              </button>
+            </form>
+            <button
+              className="link portal-switch"
+              onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); }}
+            >
+              {registering ? 'Already a member? Sign in' : 'First visit? Create an account →'}
+            </button>
+          </div>
+        </>
+      )}
+    />
   );
 }

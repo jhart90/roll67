@@ -3,6 +3,7 @@ import { intents, useGameStore } from '../store/game';
 import { CardChip } from '../util/PlayingCardView';
 import { SavePrompt } from './SavePrompt';
 import { ChasePrompt } from './ChasePrompt';
+import { DealCardsPrompt } from './DealCardsPrompt';
 import { FearPrompt } from './FearPrompt';
 
 export function InitiativePanel() {
@@ -13,6 +14,7 @@ export function InitiativePanel() {
   const campaign = useGameStore((s) => s.campaign);
   const [saving, setSaving] = useState(false);
   const [chasing, setChasing] = useState(false);
+  const [dealing, setDealing] = useState(false);
   const [fearing, setFearing] = useState(false);
 
   const isDm = useGameStore((s) => s.isDm());
@@ -113,7 +115,7 @@ export function InitiativePanel() {
         <div className="row" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
           {swade ? (
             <>
-              <button title="Shuffle a fresh 54-card action deck; every token on the map draws" onClick={() => intents.initCardCall(map.id, false)}>🂠 Deal action cards</button>
+              <button title="Name the battle, choose who is in it, and shuffle a fresh 54-card action deck" onClick={() => setDealing(true)}>🂠 Deal action cards</button>
               <button title="Also deal to hidden (GM-layer) tokens" onClick={() => intents.initCardCall(map.id, true)}>+ hidden NPCs</button>
             </>
           ) : (
@@ -132,6 +134,7 @@ export function InitiativePanel() {
       )}
       {saving && <SavePrompt onClose={() => setSaving(false)} />}
       {chasing && <ChasePrompt onClose={() => setChasing(false)} />}
+      {dealing && <DealCardsPrompt onClose={() => setDealing(false)} />}
       {fearing && <FearPrompt onClose={() => setFearing(false)} />}
 
       {isDm && state.entries.length > 0 && (

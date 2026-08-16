@@ -2151,7 +2151,8 @@ export const intents = {
     jumpToChat();
     socket.emit(C2S.INIT_ROLL_MAP, { mapId, includeGm });
   },
-  initCardCall: (mapId: string, includeGm: boolean) => socket.emit(C2S.INIT_CARD_CALL, { mapId, includeGm }),
+  initCardCall: (mapId: string, includeGm: boolean, tokenIds?: string[], battleName?: string) =>
+    socket.emit(C2S.INIT_CARD_CALL, { mapId, includeGm, tokenIds, battleName }),
   initCardDraw: (tokenId: string) => socket.emit(C2S.INIT_CARD_DRAW, { tokenId }),
   initDealIn: (tokenId: string) => socket.emit(C2S.INIT_DEAL_IN, { tokenId }),
   initRollCall: (mapId: string, includeGm: boolean) => socket.emit(C2S.INIT_ROLL_CALL, { mapId, includeGm }),

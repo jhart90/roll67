@@ -5755,7 +5755,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
   // put every token on the map on the owes-a-draw list. Player-owned tokens
   // are drawn by their player (a deck button pops on their screen); unowned
   // (NPC) tokens are drawn by the DM.
-  socket.on(C2S.INIT_CARD_CALL, safe(socket, ({ mapId, includeGm }: InitCardCallPayload) => {
+  socket.on(C2S.INIT_CARD_CALL, safe(socket, ({ mapId, includeGm, tokenIds, battleName }: InitCardCallPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM deals action cards.'); return; }
     const campaign = campaigns.byId(d.campaignId)!;
@@ -5763,9 +5763,12 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     const map = maps.byId(mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
 
+    // An explicit roster wins outright: the DM ticked these boxes, so a
+    // gm-layer token they kept ticked belongs in the fight.
+    const chosen = Array.isArray(tokenIds) && tokenIds.length > 0 ? new Set(tokenIds) : null;
     const pendingDraws: PendingCardDraw[] = [];
     for (const t of tokens.forMap(mapId)) {
-      if (t.layer === 'gm' && !includeGm) continue;
+      if (chosen ? !chosen.has(t.id) : (t.layer === 'gm' && !includeGm)) continue;
       const character = t.characterId ? characters.byId(t.characterId) : undefined;
       pendingDraws.push({
         tokenId: t.id, name: t.name,
@@ -5774,6 +5777,10 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       });
     }
     if (pendingDraws.length === 0) { emitError(socket, 'No tokens on this map to deal to.'); return; }
+
+    // The fight's name, if the DM gave it one. Trimmed and capped so a
+    // pasted paragraph cannot become a chat banner.
+    const title = typeof battleName === 'string' ? battleName.trim().slice(0, 60) : '';
 
     // Dealing the deck IS starting combat; see INIT_ROLL_CALL.
     const state: InitiativeState = {
@@ -5784,7 +5791,9 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     broadcastInitiative(io, d.campaignId);
     const msg = chat.add(d.campaignId, {
       userId: null, fromName: 'System', kind: 'system',
-      text: `🂠 The DM deals action cards — ${pendingDraws.filter((p) => !p.hidden).length} combatant(s) draw for initiative!`,
+      text: title
+        ? `⚔️ ${title} begins! — ${pendingDraws.filter((p) => !p.hidden).length} combatant(s) draw for initiative.`
+        : `🂠 The DM deals action cards — ${pendingDraws.filter((p) => !p.hidden).length} combatant(s) draw for initiative!`,
       roll: null, recipients: null,
     });
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });

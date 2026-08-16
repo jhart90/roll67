@@ -14,7 +14,9 @@ export function ChasePrompt({ onClose }: { onClose: () => void }) {
   const tokens = useGameStore((s) => s.tokens);
   const map = useGameStore((s) => s.map);
   const mapTokens = Object.values(tokens).filter((t) => t.mapId === map?.id);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Everyone on the map starts IN it. A chase usually sweeps up the whole
+  // scene, so unticking the two bystanders beats ticking the other nine.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(mapTokens.map((t) => t.id)));
   const [incrementId, setIncrementId] = useState<ChaseIncrementId>('foot');
   const [trackLength, setTrackLength] = useState(CHASE_TRACK_DEFAULT);
 

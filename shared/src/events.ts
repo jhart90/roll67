@@ -632,7 +632,17 @@ export interface InitUpdatePayload {
 }
 
 /** SWADE: DM calls for action cards for every token on a map. */
-export interface InitCardCallPayload { mapId: string; includeGm?: boolean }
+/**
+ * Deal the action deck. `tokenIds`, when present, IS the roster — the DM has
+ * ticked exactly who is in this fight, so it overrides the includeGm shortcut
+ * rather than filtering after it. `battleName` is what chat calls the fight.
+ */
+export interface InitCardCallPayload {
+  mapId: string;
+  includeGm?: boolean;
+  tokenIds?: string[];
+  battleName?: string;
+}
 /** 5e/SWN: DM calls every token on a map to roll its own initiative. */
 export interface InitRollCallPayload { mapId: string; includeGm?: boolean }
 /** 5e/SWN: roll initiative for one pending combatant's token. */

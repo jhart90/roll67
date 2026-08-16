@@ -371,7 +371,11 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
 
           {/* The portal card: one flow at a time. The stacked menu is the
               rest state; opening a flow clears the desk of the others. */}
-          <div className="portal-card">
+          {/* Once there are books on the shelf, THEY are what this screen is
+              for. The portal steps back — smaller and faded — and comes
+              forward again when the cursor approaches it. It never steps back
+              mid-flow: a form you are typing into must not be dimmed. */}
+          <div className={`portal-card${campaignList.length > 0 && portal === 'menu' ? ' portal-card-quiet' : ''}`}>
             {portal === 'menu' && (
               <div className="portal-stack">
                 <button className="portal-cta" onClick={() => { setPortal('create'); setError(''); }}>New Campaign</button>

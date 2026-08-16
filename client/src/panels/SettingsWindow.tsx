@@ -2,7 +2,9 @@ import { useState } from 'react';
 import type { DiceSpeed } from 'shared';
 import { authHeaders } from '../api';
 import { intents, useGameStore } from '../store/game';
-import { MAP_COLORS_DEFAULT, ROLL_DETAILS, UI_THEMES, type MapColors } from '../util/appearance';
+import {
+  MAP_COLORS_DEFAULT, ROLL_DETAILS, UI_THEMES, readClosedSections, saveClosedSections, type MapColors,
+} from '../util/appearance';
 import { WHEEL_COLORS } from '../util/palette';
 
 /**
@@ -14,6 +16,37 @@ import { WHEEL_COLORS } from '../util/palette';
  * and writes the same store fields those surfaces do, so the two can never
  * disagree: there is one value, shown twice.
  */
+/**
+ * One foldable section of the window.
+ *
+ * The header IS the control — the whole strip toggles, not just the caret, so
+ * the target is the full width of the window rather than a 10px glyph. Which
+ * sections are folded is remembered per browser, because a fold you have to
+ * redo every time you open settings is worse than no fold at all.
+ */
+function Section({ title, closed, onToggle, children }: {
+  title: string;
+  closed: Set<string>;
+  onToggle: (title: string) => void;
+  children: React.ReactNode;
+}) {
+  const open = !closed.has(title);
+  return (
+    <>
+      <button
+        className="settings-head settings-head-btn"
+        aria-expanded={open}
+        title={open ? `Collapse ${title}` : `Expand ${title}`}
+        onClick={() => onToggle(title)}
+      >
+        <span className="settings-caret">{open ? '▾' : '▸'}</span>
+        {title}
+      </button>
+      {open && <div className="settings-section">{children}</div>}
+    </>
+  );
+}
+
 export function SettingsWindow() {
   const audioState = useGameStore((s) => s.audioState);
   const tracks = useGameStore((s) => s.audioTracks);
@@ -39,11 +72,21 @@ export function SettingsWindow() {
   const nowPlaying = tracks.find((t) => t.id === audioState.trackId);
   const myColor = members.find((m) => m.userId === you?.userId)?.playerColor ?? null;
 
+  const [closed, setClosed] = useState<Set<string>>(() => new Set(readClosedSections()));
+  function toggleSection(title: string) {
+    setClosed((prev) => {
+      const next = new Set(prev);
+      next.has(title) ? next.delete(title) : next.add(title);
+      saveClosedSections([...next]);
+      return next;
+    });
+  }
+
   const patch = (over: Partial<MapColors>) => setColors({ ...colors, ...over });
 
   return (
     <div className="settings-window">
-      <h4 className="settings-head">Sound</h4>
+      <Section title="Sound" closed={closed} onToggle={toggleSection}>
 
       <div className="settings-row">
         <span className="settings-label">Now playing</span>
@@ -59,7 +102,9 @@ export function SettingsWindow() {
       <VolumeRow label="Music" value={musicVolume} onChange={setMusic} />
       <VolumeRow label="Effects" value={sfxVolume} onChange={setSfx} />
 
-      <h4 className="settings-head">Visual</h4>
+      </Section>
+
+      <Section title="Visual" closed={closed} onToggle={toggleSection}>
 
       <div className="settings-row">
         <span className="settings-label">Interface</span>
@@ -155,7 +200,9 @@ export function SettingsWindow() {
         nothing for anyone else at the table.
       </p>
 
-      {isDm && <DmSection />}
+      </Section>
+
+      {isDm && <DmSection closed={closed} onToggle={toggleSection} />}
     </div>
   );
 }
@@ -213,7 +260,7 @@ const DICE_SPEEDS: Array<{ id: DiceSpeed; label: string; hint: string }> = [
  * before the second — and reacts where everyone can see. One number for the
  * table, and the DM's to choose.
  */
-function DmSection() {
+function DmSection({ closed, onToggle }: { closed: Set<string>; onToggle: (t: string) => void }) {
   const campaign = useGameStore((s) => s.campaign);
   const speed = campaign?.diceSpeed ?? 'cinematic';
   const [busy, setBusy] = useState(false);
@@ -250,7 +297,7 @@ function DmSection() {
 
   return (
     <>
-      <h4 className="settings-head">Table (DM)</h4>
+      <Section title="Table (DM)" closed={closed} onToggle={onToggle}>
 
       {/* A rename is just a new label on the same row — members, invite code,
           maps and history all stay exactly where they are. */}
@@ -334,8 +381,7 @@ function DmSection() {
           </button>
         </span>
       </div>
-
-
+      </Section>
     </>
   );
 }

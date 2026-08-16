@@ -3008,10 +3008,20 @@ th > .term { border-bottom-style: dotted; }
   background: var(--panel);
   padding: 12px 18px 16px;
   border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px;
+  /* Fully expanded — every section open, a DM's extra half included — this
+     runs past the bottom of a laptop screen, and a floating window has no
+     frame of its own to catch it. So it carries its own ceiling and scrolls
+     inside it. 78vh rather than 100 leaves the chip that opened it visible. */
+  max-height: 78vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* Popped into a window of its own, there is nothing to be wide against: let
    it use whatever the user has dragged that window out to. */
-.win-frame-body-popped .settings-window { max-width: none; }
+/* Popped into a window of its own, there is nothing to be wide against: let
+   it use whatever the user has dragged that window out to — and scroll within
+   that window's height rather than against the viewport's. */
+.win-frame-body-popped .settings-window { max-width: none; max-height: 100%; }
 
 /* World-tab visibility: DM badge + right-click reveal/hide menu. */
 .dir-vis { margin-right: 5px; font-size: 10px; opacity: 0.75; cursor: help; }
@@ -3482,6 +3492,21 @@ th > .term { border-bottom-style: dotted; }
   color: var(--text-dim); border-bottom: 1px solid var(--border); padding-bottom: 4px;
 }
 .settings-head:first-child { margin-top: 0; }
+/* The whole strip is the target, not the caret alone: a 10px glyph is a mean
+   thing to ask anyone to hit, and the header was already the section's name. */
+.settings-head-btn {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; text-align: left;
+  background: none; border: none; border-bottom: 1px solid var(--border);
+  border-radius: 0; padding: 0 0 4px; cursor: pointer;
+  font-family: inherit; font-weight: 700;
+}
+.settings-head-btn:hover { color: var(--text); border-color: var(--accent); }
+/* Two glyphs rather than one rotated by CSS: the caret is 9px of text in a
+   flex row, and pointing it with a character is one moving part fewer than
+   pointing it with a transform. */
+.settings-caret { font-size: 9px; line-height: 1; width: 9px; }
+.settings-section { display: flex; flex-direction: column; gap: 2px; }
 .settings-row {
   display: flex; align-items: center; gap: 10px;
   padding: 5px 0; font-size: 12px; min-width: 0;

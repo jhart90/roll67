@@ -98,6 +98,30 @@ export function saveRollDetail(v: RollDetail): void {
   safeWrite(ROLL_DETAIL_KEY, v);
 }
 
+/**
+ * Which settings sections this viewer has folded away.
+ *
+ * Stored by section title, and stored as the CLOSED set rather than the open
+ * one: a section added later is then open by default for everyone, instead of
+ * arriving silently collapsed for anybody who had saved a list without it.
+ */
+const SECTIONS_KEY = 'roll67.settingsClosed';
+
+export function readClosedSections(): string[] {
+  const raw = safeRead(SECTIONS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveClosedSections(titles: string[]): void {
+  safeWrite(SECTIONS_KEY, JSON.stringify(titles));
+}
+
 export function readTheme(): UiTheme {
   const v = safeRead(THEME_KEY);
   return v === 'dark' || v === 'light' || v === 'standard' ? v : 'standard';

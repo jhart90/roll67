@@ -11,7 +11,7 @@ import {
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
-  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type ChatRemovedPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type MoveLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
+  type FearSource, type SheetCard, type RollCalloutPayload, type RollCalloutTone, type CrawlPromptPayload, type AftermathPromptPayload, type ClockPayload, type TimeStepId, type HealingPromptPayload, type VehicleOocPromptPayload, type RepairPromptPayload, type ChaseIncrementId, type ChaseActionId, type AttackPreviewResultPayload, type ChatRemovedPayload, type DiceLook, type MapZonesPayload, type DiceSpeed, type DiceSpeedPayload, type CampaignRenamedPayload, type MoveLockPayload, type GmBenniesPayload, type MoveBudgetPayload, type BennyFlipPayload, type KnownWallSegment, reachableAlong, packHex,
   blastSoundClip, blastSoundVolume,
 } from 'shared';
 import { connectSocket, socket } from '../socket';
@@ -1511,6 +1511,13 @@ export function wireSocket(): void {
     if (cur) useGameStore.setState({ campaign: { ...cur, diceSpeed: p.speed } });
   });
 
+  // The label on the door changed — same campaign, new name, everywhere at
+  // once: the header, the settings window, and the shelf next visit.
+  socket.on(S2C.CAMPAIGN_RENAMED, (p: CampaignRenamedPayload) => {
+    const cur = useGameStore.getState().campaign;
+    if (cur) useGameStore.setState({ campaign: { ...cur, name: p.name } });
+  });
+
   let roundCardsSeq = 0;
   socket.on(S2C.ROUND_CARDS, (p: RoundCardsPayload) => {
     useGameStore.setState({ roundCardsDeal: { ...p, seq: ++roundCardsSeq } });
@@ -2013,6 +2020,7 @@ export const intents = {
    *  kept locally so a DM viewing as this player sees it their way. */
   setTurnGuide: (on: boolean) => socket.emit(C2S.SET_TURN_GUIDE, { on }),
   setDiceSpeed: (speed: DiceSpeed) => socket.emit(C2S.SET_DICE_SPEED, { speed }),
+  renameCampaign: (name: string) => socket.emit(C2S.RENAME_CAMPAIGN, { name }),
   chatWipe: () => socket.emit(C2S.CHAT_WIPE, {}),
   setMoveLock: (locked: boolean) => socket.emit(C2S.SET_MOVE_LOCK, { locked }),
   attackPreview: (targetTokenId: string) => {

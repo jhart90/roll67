@@ -105,6 +105,7 @@ export const C2S = {
   SET_TURN_GUIDE: 'setTurnGuide',
   /** DM: how long the whole table spends watching dice. */
   SET_DICE_SPEED: 'setDiceSpeed',
+  RENAME_CAMPAIGN: 'renameCampaign',
   /** DM: freeze every player's tokens in place (and thaw them again). */
   SET_MOVE_LOCK: 'setMoveLock',
   SET_PLAYER_COLOR: 'setPlayerColor',
@@ -903,6 +904,7 @@ export const S2C = {
   CLOCK: 'clock',
   /** The campaign's dice pacing changed — everyone switches together. */
   DICE_SPEED: 'diceSpeed',
+  CAMPAIGN_RENAMED: 'campaignRenamed',
   /** The DM locked or unlocked all player movement. */
   MOVE_LOCK: 'moveLock',
   /** The modifier a hovered shot would carry, itemised. */
@@ -1235,6 +1237,7 @@ export interface SetDiceBouncePayload { pct: number | null }
 export interface SetDiceAceStylePayload { style: import('./types.js').AceStyle | null }
 export interface SetTurnGuidePayload { on: boolean }
 export interface SetDiceSpeedPayload { speed: DiceSpeed }
+export interface RenameCampaignPayload { name: string }
 export interface SetMoveLockPayload { locked: boolean }
 export interface MoveLockPayload { locked: boolean }
 /**
@@ -1257,6 +1260,7 @@ export interface AttackPreviewResultPayload {
   blocked?: string;
 }
 export interface DiceSpeedPayload { speed: DiceSpeed }
+export interface CampaignRenamedPayload { name: string }
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }
 export interface SoakOfferPayload { characterId: string; name: string; wounds: number; bennies: number }

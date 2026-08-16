@@ -3436,6 +3436,8 @@ th > .term { border-bottom-style: dotted; }
 .settings-swatch.on { border-color: var(--text); }
 
 .settings-note { font-size: 11px; margin-top: 10px; line-height: 1.4; overflow-wrap: break-word; }
+.settings-campaign-name { font-weight: 600; margin-right: 6px; overflow: hidden; text-overflow: ellipsis; max-width: 200px; white-space: nowrap; }
+.settings-rename-input { flex: 1; min-width: 140px; }
 /* The armed half of the chat-wipe confirm: red where it lives. The dock's
    danger styling paints a red BACKGROUND under link-colored text, which in
    this window came out as a red pill with invisible words — so the color is
@@ -3660,7 +3662,7 @@ th > .term { border-bottom-style: dotted; }
 /* The break is chosen by the fitting math and written as a newline, so the
    browser renders exactly the split that was measured — greedy wrapping at a
    computed size is how columns end up uneven. */
-.shelf-spine.two-line { white-space: pre-line; text-align: center; }
+.shelf-spine.two-line { white-space: pre; text-align: center; }
 
 /* Chrome kept off the painting: a slim bar up top… */
 .shelf-topbar {

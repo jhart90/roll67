@@ -3,7 +3,7 @@ import {
   C2S, S2C, isAceStyle,
   type AssignPlayerMapPayload, type CampaignStatePayload, type DmViewAsPayload,
   type BootPlayerPayload, type ForgetKnowledgePayload, type JoinCampaignPayload, type SendCreatorPayload, type SetDiceColorPayload, type SetDiceTextColorPayload, type SetDiceRoleColorPayload,
-  type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload, type SetDiceSpeedPayload, type SetMoveLockPayload,
+  type SetDiceAceStylePayload, type SetTurnGuidePayload, type SetDiceBouncePayload, type SetDiceSpeedPayload, type RenameCampaignPayload, type SetMoveLockPayload,
   type SetPlayerColorPayload, type SetUsernamePayload, type SetVolumesPayload, type SwitchActiveMapPayload, type ViewMapPayload,
 } from 'shared';
 import { CHAT_TAIL } from '../../config.js';
@@ -294,6 +294,29 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     campaigns.setDiceSpeed(d.campaignId, speed);
     io.to(campaignRoom(d.campaignId)).emit(S2C.DICE_SPEED, { speed });
   }, 'SET_DICE_SPEED'));
+
+  /**
+   * Rename the campaign. Nothing else changes — members, invites, maps and
+   * ids all stay put; the name is just a label on the same row. Announced in
+   * chat, because the title on everyone's door just changed.
+   */
+  socket.on(C2S.RENAME_CAMPAIGN, safe(socket, ({ name }: RenameCampaignPayload) => {
+    const d = sdata(socket);
+    if (!d.campaignId) return;
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM renames the campaign.'); return; }
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (trimmed.length < 1 || trimmed.length > 60) {
+      emitError(socket, 'Campaign name must be 1–60 characters.'); return;
+    }
+    campaigns.rename(d.campaignId, trimmed);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CAMPAIGN_RENAMED, { name: trimmed });
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `📖 The campaign is now called “${trimmed}”.`,
+      roll: null, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'RENAME_CAMPAIGN'));
 
   /**
    * Freeze the board. While the lock is on nobody but the DM moves a token —

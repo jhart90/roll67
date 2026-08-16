@@ -65,10 +65,10 @@ function runLength(text: string, face: SpineFace): number {
 function spineFit(name: string, slotIdx: number): { text: string; fontSize: number; lines: 1 | 2; spacing: number } {
   const slot = BOOK_SLOTS[slotIdx];
   const face = SPINE_FACES[slotIdx];
-  const span = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.96;
+  const span = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.98;
   const bookW = (slot.width / 100) * SHELF_W;
 
-  const fs1 = Math.min((span * REF) / runLength(name, face), 40);
+  const fs1 = Math.min((span * REF) / runLength(name, face), 48);
 
   const words = name.split(/\s+/).filter(Boolean);
   let best: { a: string; b: string; max: number } | null = null;
@@ -78,13 +78,13 @@ function spineFit(name: string, slotIdx: number): { text: string; fontSize: numb
     const m = Math.max(runLength(a, face), runLength(b, face));
     if (!best || m < best.max) best = { a, b, max: m };
   }
-  const widthCap = (bookW * 0.85) / (2 * 1.18);
-  const fs2 = best ? Math.min((span * REF) / best.max, widthCap, 34) : 0;
+  const widthCap = (bookW * 0.88) / (2 * 1.18);
+  const fs2 = best ? Math.min((span * REF) / best.max, widthCap, 40) : 0;
 
   // Two lines win whenever they set meaningfully bigger type — filling the
   // leather beats the elegance of a single line. No generous floor below:
   // one that outruns the zone trades "small" for "clipped".
-  if (best && fs2 > fs1 * 1.08) {
+  if (best && fs2 > fs1 * 1.02) {
     return { text: `${best.a}
 ${best.b}`, fontSize: Math.max(6.5, fs2), lines: 2, spacing: face.spacing };
   }

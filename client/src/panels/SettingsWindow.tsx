@@ -196,6 +196,14 @@ function DmSection() {
   const speed = campaign?.diceSpeed ?? 'cinematic';
   const [busy, setBusy] = useState(false);
   const [armWipe, setArmWipe] = useState(false);
+  // null = not editing; a string = the draft in the rename box.
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+
+  function submitRename() {
+    const trimmed = (nameDraft ?? '').trim();
+    if (trimmed && trimmed !== campaign?.name) intents.renameCampaign(trimmed);
+    setNameDraft(null);
+  }
 
   async function downloadBackup() {
     if (!campaign) return;
@@ -221,6 +229,36 @@ function DmSection() {
   return (
     <>
       <h4 className="settings-head">Table (DM)</h4>
+
+      {/* A rename is just a new label on the same row — members, invite code,
+          maps and history all stay exactly where they are. */}
+      <div className="settings-row">
+        <span className="settings-label">Campaign name</span>
+        <span className="settings-value">
+          {nameDraft === null ? (
+            <>
+              <span className="settings-campaign-name">{campaign?.name}</span>
+              <button className="link" onClick={() => setNameDraft(campaign?.name ?? '')}>rename</button>
+            </>
+          ) : (
+            <>
+              <input
+                className="settings-rename-input"
+                value={nameDraft}
+                maxLength={60}
+                autoFocus
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitRename();
+                  if (e.key === 'Escape') setNameDraft(null);
+                }}
+              />
+              <button className="link" disabled={!nameDraft.trim()} onClick={submitRename}>save</button>
+              <button className="link" onClick={() => setNameDraft(null)}>cancel</button>
+            </>
+          )}
+        </span>
+      </div>
 
       <div className="settings-row">
         <span className="settings-label">Dice speed</span>

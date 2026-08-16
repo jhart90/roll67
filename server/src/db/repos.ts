@@ -223,6 +223,9 @@ export const campaigns = {
   setDiceSpeed(id: string, speed: DiceSpeed): void {
     stmt('UPDATE campaigns SET dice_speed = ? WHERE id = ?').run(speed, id);
   },
+  rename(id: string, name: string): void {
+    stmt('UPDATE campaigns SET name = ? WHERE id = ?').run(name, id);
+  },
   moveLocked(id: string): boolean {
     const row = stmt('SELECT move_locked FROM campaigns WHERE id = ?').get(id) as { move_locked?: number } | undefined;
     return row?.move_locked === 1;

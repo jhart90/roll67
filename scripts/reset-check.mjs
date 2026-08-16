@@ -21,7 +21,12 @@ import path from 'node:path';
  * A fixed port is a trap: an orphaned server from an earlier run answers the
  * health poll, our own bind quietly fails with EADDRINUSE, and every assertion
  * below then tests a stranger's build. Actually binding is the only honest
- * test of "free", so this holds the socket just long enough to know.
+ * test of "free".
+ *
+ * Bound the way the server binds it — no host argument, i.e. the wildcard. A
+ * probe against 127.0.0.1 succeeds on Windows even while another process holds
+ * the wildcard on the same port, which reports "free" for a port that is about
+ * to fail, and puts us straight back in the trap this function exists to avoid.
  */
 function freePort(from = 3910, to = 3990) {
   return new Promise((resolve, reject) => {
@@ -30,7 +35,7 @@ function freePort(from = 3910, to = 3990) {
       if (port > to) { reject(new Error(`no free port in ${from}-${to}`)); return; }
       const probe = net.createServer();
       probe.once('error', () => { port++; attempt(); });
-      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(port)));
+      probe.listen(port, () => probe.close(() => resolve(port)));
     };
     attempt();
   });
@@ -61,7 +66,13 @@ const log = [];
 
 function startServer(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
-  const proc = spawn('npx', ['tsx', 'src/index.ts'], {
+  // No `npx`, and deliberately no shell. Through a shell, proc.pid is the
+  // shell's — kill() then reaps the wrapper and leaves the actual server alive
+  // holding the port forever, which is how this machine collected two dozen
+  // orphaned test servers. Running tsx's CLI directly makes proc.pid the
+  // server, so kill() means what it says.
+  const tsx = path.resolve('node_modules', 'tsx', 'dist', 'cli.mjs');
+  const proc = spawn(process.execPath, [tsx, 'src/index.ts'], {
     cwd: path.resolve('server'),
     env: {
       ...process.env,
@@ -70,8 +81,12 @@ function startServer(dataDir) {
       // Deliberately no RESEND_API_KEY: we want the console fallback.
       APP_URL: BASE,
     },
-    shell: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  // A server that dies (EADDRINUSE, a throw during migrations) must fail the
+  // run loudly rather than let the health poll time out eighty seconds later.
+  proc.once('exit', (code) => {
+    if (code !== 0 && code !== null) console.error(`server exited early (${code}):\n${log.join('')}`);
   });
   proc.stdout.on('data', (b) => log.push(String(b)));
   proc.stderr.on('data', (b) => log.push(String(b)));

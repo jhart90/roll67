@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import type { GameSystem } from 'shared';
-import { authHeaders } from '../api';
+import { api, authHeaders } from '../api';
 import { useAuthStore, type CampaignListItem } from '../store/auth';
-import { BOOK_BOTTOM, BOOK_SLOTS, ShelfStage } from './Bookshelf';
+import { BOOK_BOTTOM, BOOK_SLOTS, SHELF_H, SHELF_W, ShelfStage } from './Bookshelf';
 
 const SYSTEM_LABELS: Record<GameSystem, string> = {
   dnd5e: 'D&D 5e',
@@ -11,18 +11,135 @@ const SYSTEM_LABELS: Record<GameSystem, string> = {
 };
 
 /**
+ * Each book letters its spine in its own hand — a western playbill for the
+ * cowboy-hat tome, blackletter for the dragon, a typewriter face for the
+ * circuit-board one. Stacks lean on faces Windows actually ships, with plain
+ * serifs underneath so a machine without them still gets a book, just a less
+ * characterful one. `spacing` is letter-spacing in em and feeds the fitting
+ * math below, which is why it lives here and not in the stylesheet.
+ */
+interface SpineFace {
+  family: string;
+  spacing: number;
+  weight?: number;
+  style?: 'italic';
+  caps?: boolean;
+}
+const SPINE_FACES: SpineFace[] = [
+  { family: "'Perpetua Titling MT', 'Trajan Pro', Georgia, serif", spacing: 0.10, weight: 700, caps: true },   // ⚔️
+  { family: "Playbill, 'Rockwell Condensed', 'Bookman Old Style', serif", spacing: 0.14, weight: 400, caps: true }, // 🤠
+  { family: "'Baskerville Old Face', Baskerville, Georgia, serif", spacing: 0.06, weight: 600 },               // 🔍
+  { family: "'Perpetua Titling MT', 'Copperplate Gothic Light', serif", spacing: 0.12, weight: 400, caps: true }, // 🏛️
+  { family: "'Old English Text MT', 'Palatino Linotype', serif", spacing: 0.03, weight: 400 },                 // 🐉
+  { family: "'Copperplate Gothic Light', 'Eurostile', Georgia, serif", spacing: 0.14, weight: 400, caps: true }, // 🪐
+  { family: "Rockwell, 'Bookman Old Style', Georgia, serif", spacing: 0.08, weight: 700, caps: true },          // ⭐
+  { family: "Garamond, 'Palatino Linotype', Georgia, serif", spacing: 0.05, weight: 600, style: 'italic' },     // 🐙
+  { family: "'OCR A Extended', Consolas, 'Courier New', monospace", spacing: 0.06, weight: 400 },               // 🔌
+  { family: "Stencil, Impact, 'Arial Black', sans-serif", spacing: 0.10, weight: 400, caps: true },             // ☣️
+  { family: "'Bookman Old Style', Georgia, serif", spacing: 0.07, weight: 700, caps: true },                    // 🔫
+];
+
+/**
+ * Letter the spine so the whole name FITS.
+ *
+ * The lettering runs down the book, so its budget is the book's height; a
+ * long name on a short book must either shrink or wrap. This tries one line
+ * at a comfortable size, and when that would fall below legibility it breaks
+ * into two vertical lines instead — vertical writing wraps into a second
+ * column on its own once the height is capped, so "two lines" costs nothing
+ * but a width check against the spine. Everything is figured in IMAGE pixels
+ * and scaled by --su, the same trick the whole shelf runs on.
+ */
+function spineFit(name: string, slotIdx: number): { fontSize: number; lines: 1 | 2 } {
+  const slot = BOOK_SLOTS[slotIdx];
+  const face = SPINE_FACES[slotIdx];
+  const bookH = ((BOOK_BOTTOM - slot.top) / 100) * SHELF_H;
+  const bookW = (slot.width / 100) * SHELF_W;
+  const span = bookH * 0.62;                     // the label box, less padding
+  const perChar = 1.04 + face.spacing;           // advance per character, in em
+  const len = Math.max(1, name.length);
+
+  const oneLine = span / (len * perChar);
+  if (oneLine >= 15) return { fontSize: Math.min(oneLine, 34), lines: 1 };
+
+  // Two vertical lines: the longest column is roughly half the name (word
+  // wrap makes it a little worse, hence the 0.58), and the pair of columns
+  // must still sit on the leather, clear of the edges.
+  const twoLine = span / (Math.ceil(len * 0.58) * perChar);
+  const widthCap = (bookW * 0.8) / (2 * 1.15);
+  return { fontSize: Math.max(10, Math.min(twoLine, widthCap, 26)), lines: 2 };
+}
+
+/** The account pill's dropdown: change password, or leave. */
+function AccountMenu() {
+  const { user, logout } = useAuthStore();
+  const [open, setOpen] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [note, setNote] = useState('');
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setNote('');
+    try {
+      await api.post('/api/account', { currentPassword: current, newPassword: next });
+      setNote('Changed.');
+      setCurrent(''); setNext('');
+      setChanging(false);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Failed.');
+    }
+  }
+
+  return (
+    <div className="account-pill-wrap">
+      <button className="account-pill" onClick={() => { setOpen((o) => !o); setChanging(false); setNote(''); }}>
+        {user?.username} <span className="account-pill-caret">{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div className="account-menu">
+          {changing ? (
+            <form className="account-menu-form" onSubmit={changePassword}>
+              <input
+                type="password" placeholder="Current password" autoFocus
+                value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password"
+              />
+              <input
+                type="password" placeholder="New password"
+                value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password"
+              />
+              <div className="portal-row">
+                <button type="submit" className="portal-cta portal-cta-small" disabled={!current || !next}>Change</button>
+                <button type="button" className="link" onClick={() => setChanging(false)}>back</button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <button onClick={() => { setChanging(true); setNote(''); }}>Change password…</button>
+              <button onClick={logout}>Log out</button>
+            </>
+          )}
+          {note && <p className="portal-hint">{note}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * The shelf: your campaigns ARE the books.
  *
  * Eleven tomes stand in the painting, so an account gets eleven campaign
- * slots. A joined campaign takes a book and letters its name down the spine;
- * an empty book stays part of the furniture. Books can be dragged onto one
- * another to rearrange which campaign lives where — the assignment is the
- * account's, saved server-side, so your shelf looks the same from any
- * machine.
+ * slots. A joined campaign takes a book and letters its name down the spine
+ * in that book's own face; an empty book stays furniture. Books drag onto one
+ * another to swap places, and the arrangement is the account's — saved
+ * server-side, the same shelf on every machine.
  */
 export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void }) {
-  const { user, campaignList, createCampaign, joinCampaign, logout, saveShelf } = useAuthStore();
-  const [showCreate, setShowCreate] = useState(false);
+  const { campaignList, createCampaign, joinCampaign, saveShelf } = useAuthStore();
+  /** What the portal card is showing: the stacked menu, or one flow opened. */
+  const [portal, setPortal] = useState<'menu' | 'join' | 'create'>('menu');
   const [name, setName] = useState('');
   const [system, setSystem] = useState<GameSystem>('dnd5e');
   const [inviteCode, setInviteCode] = useState('');
@@ -37,10 +154,9 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
   const dragFrom = useRef<number | null>(null);
 
   /**
-   * Who sits in which book. Stored slots win; anything unplaced (a campaign
-   * just joined, or a clash after leaving one) fills the first free book in
-   * list order, so the shelf is always fully seated without anyone arranging
-   * it first.
+   * Who sits in which book. Stored slots win; anything unplaced fills the
+   * first free book in list order, so the shelf is always fully seated
+   * without anyone arranging it first.
    */
   const seats = useMemo(() => {
     const byBook: Array<CampaignListItem | null> = Array(BOOK_SLOTS.length).fill(null);
@@ -54,8 +170,6 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
       const free = byBook.findIndex((x) => x === null);
       if (free >= 0) byBook[free] = c;
     }
-    // More campaigns than books: whatever would not fit waits on the desk
-    // (rendered in the portal card). Eleven per account is the shelf's cap.
     const overflow = campaignList.filter((c) => !byBook.includes(c));
     return { byBook, overflow };
   }, [campaignList]);
@@ -81,7 +195,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
     try {
       await createCampaign(name, system);
       setName('');
-      setShowCreate(false);
+      setPortal('menu');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create campaign.');
     }
@@ -93,12 +207,13 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
     try {
       await joinCampaign(inviteCode);
       setInviteCode('');
+      setPortal('menu');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join campaign.');
     }
   }
 
-  /** Restore-from-backup — the same flow the old shelf had, reskinned. */
+  /** Restore-from-backup — the same flow as ever, reskinned. */
   async function sendRestore(file: File, replace: boolean) {
     setError('');
     setRestoreNote(null);
@@ -136,12 +251,10 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
     <ShelfStage
       overlay={(
         <>
-          {/* Slim chrome: the wordmark and the person, out of the painting's way. */}
           <div className="shelf-topbar">
             <span className="shelf-brand">ROLL67</span>
             <span className="spacer" />
-            <span className="shelf-member">{user?.username}</span>
-            <button className="link" onClick={logout}>log out</button>
+            <AccountMenu />
           </div>
 
           {/* The plaque: whatever book the cursor is on, spelled out. */}
@@ -154,9 +267,40 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
             </div>
           )}
 
-          {/* The portal card: everything that is not "open a campaign". */}
+          {/* The portal card: one flow at a time. The stacked menu is the
+              rest state; opening a flow clears the desk of the others. */}
           <div className="portal-card">
-            {showCreate ? (
+            {portal === 'menu' && (
+              <div className="portal-stack">
+                <button className="portal-cta" onClick={() => { setPortal('create'); setError(''); }}>New Campaign</button>
+                <button className="portal-cta" onClick={() => { setPortal('join'); setError(''); }}>Join Campaign</button>
+                <button
+                  className="portal-cta"
+                  disabled={restoring}
+                  title="Rebuild a campaign from a .r67campaign backup file"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {restoring ? 'Restoring…' : 'Restore Campaign'}
+                </button>
+              </div>
+            )}
+            {portal === 'join' && (
+              <form onSubmit={handleJoin} className="portal-form">
+                <input
+                  placeholder="INVITE CODE"
+                  className="portal-invite"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  autoFocus
+                />
+                <div className="portal-row">
+                  <button type="submit" className="portal-cta" disabled={inviteCode.length < 6}>Join</button>
+                  <button type="button" className="link" onClick={() => setPortal('menu')}>back</button>
+                </div>
+              </form>
+            )}
+            {portal === 'create' && (
               <form onSubmit={handleCreate} className="portal-form">
                 <input
                   placeholder="Campaign name"
@@ -170,33 +314,12 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
                   <option value="swade">Savage Worlds (SWADE)</option>
                 </select>
                 <div className="portal-row">
-                  <button type="submit" className="portal-cta">🎲 Summon it</button>
-                  <button type="button" className="link" onClick={() => setShowCreate(false)}>cancel</button>
+                  <button type="submit" className="portal-cta">Summon It</button>
+                  <button type="button" className="link" onClick={() => setPortal('menu')}>back</button>
                 </div>
               </form>
-            ) : (
-              <div className="portal-row">
-                <button className="portal-cta" onClick={() => setShowCreate(true)}>🎲 New campaign</button>
-                <form onSubmit={handleJoin} className="portal-join">
-                  <input
-                    placeholder="INVITE CODE"
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                    maxLength={6}
-                  />
-                  <button type="submit" disabled={inviteCode.length < 6}>Join</button>
-                </form>
-                <button
-                  className="link"
-                  disabled={restoring}
-                  title="Rebuild a campaign from a .r67campaign backup file"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  {restoring ? 'restoring…' : '📼 restore'}
-                </button>
-              </div>
             )}
-            {campaignList.length === 0 && !showCreate && (
+            {campaignList.length === 0 && portal === 'menu' && (
               <p className="portal-hint">The shelf is bare — summon a campaign, or join a friend’s with their code.</p>
             )}
             {seats.overflow.length > 0 && (
@@ -240,6 +363,8 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
     >
       {BOOK_SLOTS.map((slot, i) => {
         const campaign = seats.byBook[i];
+        const face = SPINE_FACES[i];
+        const fit = campaign ? spineFit(campaign.name, i) : null;
         return (
           <div
             key={i}
@@ -264,8 +389,20 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
             onPointerLeave={() => setHover((h) => (h === i ? null : h))}
             onClick={() => campaign && onOpen(campaign.id)}
           >
-            {campaign && (
-              <span className="shelf-spine">{campaign.name}</span>
+            {campaign && fit && (
+              <span
+                className={`shelf-spine${fit.lines === 2 ? ' two-line' : ''}`}
+                style={{
+                  fontFamily: face.family,
+                  fontWeight: face.weight ?? 600,
+                  fontStyle: face.style ?? 'normal',
+                  textTransform: face.caps ? 'uppercase' : 'none',
+                  letterSpacing: `${face.spacing}em`,
+                  fontSize: `calc(var(--su) * ${fit.fontSize.toFixed(1)}px)`,
+                }}
+              >
+                {campaign.name}
+              </span>
             )}
           </div>
         );

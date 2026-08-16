@@ -3609,7 +3609,7 @@ th > .term { border-bottom-style: dotted; }
     0 0 calc(var(--su) * 42px) rgba(120, 170, 255, 0.35),
     inset 0 0 calc(var(--su) * 22px) rgba(255, 240, 200, 0.10);
 }
-.shelf-book.occupied.lit .shelf-spine { color: #ffe9b0; text-shadow: 0 0 calc(var(--su) * 8px) rgba(255, 220, 140, 0.8), 0 calc(var(--su) * 2px) calc(var(--su) * 3px) rgba(0,0,0,0.9); }
+.shelf-book.occupied.lit .shelf-spine { color: rgba(255, 233, 176, 0.98); text-shadow: 0 0 calc(var(--su) * 8px) rgba(255, 220, 140, 0.7), 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95); }
 
 /* The lettering runs down the spine, as lettering on a spine does, sized in
    IMAGE pixels via --su so it grows and shrinks with the painting. It stops
@@ -3618,21 +3618,29 @@ th > .term { border-bottom-style: dotted; }
   position: absolute;
   left: 50%; top: 6%;
   height: 66%;
+  max-width: 96%;
   transform: translateX(-50%);
   writing-mode: vertical-rl;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-weight: 700;
-  font-size: calc(var(--su) * 30px);
-  letter-spacing: calc(var(--su) * 3px);
-  color: #e8c86a;
-  text-shadow: 0 calc(var(--su) * 2px) calc(var(--su) * 3px) rgba(0, 0, 0, 0.9), 0 0 calc(var(--su) * 6px) rgba(0, 0, 0, 0.6);
+  line-height: 1.15;
+  /* Gold leaf pressed INTO the leather rather than paint floating over it:
+     slightly translucent so the hide's grain ghosts through, a dark press
+     under each stroke and a thin catch-light above it, and no glow at rest.
+     Face, size and spacing arrive inline — each book letters its own spine,
+     sized to its own title (see SPINE_FACES / spineFit). */
+  color: rgba(224, 190, 106, 0.9);
+  text-shadow:
+    0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
+    0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
   transition: color 0.18s ease, text-shadow 0.18s ease;
 }
+/* A long title breaks into a second vertical line — vertical writing wraps
+   into a neighbouring column on its own once wrapping is allowed. */
+.shelf-spine.two-line { white-space: normal; text-align: center; }
 
 /* Chrome kept off the painting: a slim bar up top… */
 .shelf-topbar {
@@ -3646,8 +3654,44 @@ th > .term { border-bottom-style: dotted; }
   color: #e8c86a; font-size: 15px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
-.shelf-member { color: #d9cdb4; font-size: 13px; }
 .shelf-checking { display: flex; align-items: center; justify-content: center; }
+
+/* The account pill and its little drawer. Aged brass on old leather, so it
+   belongs to the room rather than to the operating system. */
+.account-pill-wrap { position: relative; }
+.account-pill {
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-family: Georgia, serif; font-size: 13px; font-weight: 700; letter-spacing: 0.05em;
+  color: #f0dfae;
+  background: linear-gradient(#4a371e, #2c1f10);
+  border: 1px solid #8a6a34;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 170, 0.25), 0 2px 6px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+.account-pill:hover { filter: brightness(1.15); }
+.account-pill-caret { font-size: 10px; opacity: 0.8; }
+.account-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 5;
+  min-width: 190px;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  background: linear-gradient(#2a1c10, #1a1108);
+  border: 1px solid #8a6a34;
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 150, 0.12), 0 10px 26px rgba(0, 0, 0, 0.7);
+}
+.account-menu > button {
+  text-align: left; padding: 7px 10px; border-radius: 7px;
+  font-family: Georgia, serif; font-size: 13px;
+  color: #e9dfc8; background: none; border: none; cursor: pointer;
+}
+.account-menu > button:hover { background: rgba(232, 200, 106, 0.14); color: #ffe9b0; }
+.account-menu-form { display: flex; flex-direction: column; gap: 6px; }
+.account-menu-form input {
+  background: rgba(12, 8, 4, 0.8); color: #e9dfc8;
+  border: 1px solid #6a5228; border-radius: 7px; padding: 6px 8px; font-size: 13px;
+}
 .shelf-topbar .link { color: #b8a988; }
 
 /* …the hover plaque under the shelf… */
@@ -3674,36 +3718,51 @@ th > .term { border-bottom-style: dotted; }
   left: 50%; bottom: 5%;
   transform: translateX(-50%);
   max-width: min(560px, 92vw);
-  padding: 12px 18px;
-  border-radius: 14px;
-  background: rgba(10, 8, 14, 0.66);
-  border: 1px solid rgba(110, 150, 255, 0.35);
-  box-shadow: 0 0 34px rgba(90, 130, 255, 0.25), 0 10px 30px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(5px);
-  color: #dfe4f2;
+  padding: 14px 20px;
+  border-radius: 10px;
+  /* Old leather and brass, not glass: a game-box lid sitting on the desk.
+     The portal's blue stays in the painting where it belongs. */
+  background: linear-gradient(rgba(46, 32, 18, 0.93), rgba(25, 16, 9, 0.95));
+  border: 2px solid #8a6a34;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 220, 150, 0.14),
+    inset 0 0 24px rgba(0, 0, 0, 0.55),
+    0 12px 32px rgba(0, 0, 0, 0.65);
+  color: #e9dfc8;
   text-align: center;
 }
+.portal-stack { display: flex; flex-direction: column; gap: 10px; min-width: min(260px, 74vw); }
 .portal-title { margin: 2px 0 10px; font-family: Georgia, serif; color: #f2df9e; letter-spacing: 0.08em; }
 .portal-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
 .portal-form { display: flex; flex-direction: column; gap: 8px; min-width: min(320px, 80vw); }
-.portal-form input, .portal-form select, .portal-join input {
-  background: rgba(8, 10, 18, 0.8); color: #e6e8ee;
-  border: 1px solid rgba(110, 150, 255, 0.35); border-radius: 8px;
-  padding: 8px 10px; font-size: 14px;
+.portal-form input, .portal-form select {
+  background: rgba(14, 9, 5, 0.85); color: #e9dfc8;
+  border: 1px solid #6a5228; border-radius: 6px;
+  padding: 8px 10px; font-size: 14px; font-family: Georgia, serif;
 }
-.portal-join { display: flex; gap: 6px; }
-.portal-join input { width: 120px; text-align: center; letter-spacing: 0.2em; }
+.portal-invite { text-align: center; letter-spacing: 0.35em; text-transform: uppercase; }
 .portal-cta {
-  padding: 8px 16px; border-radius: 999px;
-  font-weight: 700; letter-spacing: 0.03em;
-  color: #0c0e18;
-  background: linear-gradient(#9db8ff, #5d82e8);
-  border: 1px solid #b9ccff;
-  box-shadow: 0 0 18px rgba(120, 160, 255, 0.5);
+  padding: 9px 18px; border-radius: 6px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700; font-size: 15px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: #3a2508;
+  /* Aged parchment over wood: a printed game-box button, letterpressed. */
+  background: linear-gradient(#e8d5a8, #cbae72 60%, #b3945a);
+  border: 2px solid #6a4a1e;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 215, 0.8),
+    inset 0 -2px 0 rgba(90, 60, 20, 0.45),
+    0 3px 0 #4a3312,
+    0 6px 12px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 1px 0 rgba(255, 245, 215, 0.5);
   cursor: pointer;
 }
-.portal-cta:hover:not(:disabled) { filter: brightness(1.1); }
-.portal-hint { margin: 8px 0 0; font-size: 12px; color: #b9c2d8; }
+.portal-cta:hover:not(:disabled) { filter: brightness(1.06); }
+.portal-cta:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,245,215,0.8), inset 0 -2px 0 rgba(90,60,20,0.45), 0 1px 0 #4a3312, 0 3px 8px rgba(0,0,0,0.5); }
+.portal-cta:disabled { opacity: 0.55; cursor: default; }
+.portal-cta-small { font-size: 12px; padding: 6px 12px; }
+.portal-hint { margin: 8px 0 0; font-size: 12px; color: #cbbfa3; }
 .portal-hint .link { color: #ffd75e; }
 .portal-switch { margin-top: 8px; color: #b8a988; }
 .portal-login { bottom: 12%; }

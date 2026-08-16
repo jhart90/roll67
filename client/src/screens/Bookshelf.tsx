@@ -31,19 +31,28 @@ export interface BookSlot {
   width: number;
   top: number;
   sigil: string;
+  /**
+   * Where lettering is ALLOWED on this spine, in image-height percentages.
+   * Every book wears a decorative band at its head and its gold sigil low on
+   * the spine, at a slightly different height each — these were measured off
+   * the painting, book by book, with a buffer on both sides, so a title can
+   * never sit on the ornament or crowd the emblem.
+   */
+  textTop: number;
+  textBottom: number;
 }
 export const BOOK_SLOTS: BookSlot[] = [
-  { left: 6.6, width: 7.9, top: 20.8, sigil: '⚔️' },
-  { left: 14.9, width: 7.3, top: 25.0, sigil: '🤠' },
-  { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍' },
-  { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️' },
-  { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉' },
-  { left: 47.8, width: 7.1, top: 24.0, sigil: '🪐' },
-  { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐' },
-  { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙' },
-  { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌' },
-  { left: 79.4, width: 7.1, top: 27.2, sigil: '☣️' },
-  { left: 86.8, width: 7.3, top: 24.9, sigil: '🔫' },
+  { left: 6.6, width: 7.9, top: 20.8, sigil: '⚔️', textTop: 27.6, textBottom: 44.2 },
+  { left: 14.9, width: 7.3, top: 25.0, sigil: '🤠', textTop: 32.2, textBottom: 48.3 },
+  { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍', textTop: 31.3, textBottom: 48.3 },
+  { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️', textTop: 27.6, textBottom: 47.0 },
+  { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉', textTop: 30.8, textBottom: 47.9 },
+  { left: 47.8, width: 7.1, top: 24.0, sigil: '🪐', textTop: 30.3, textBottom: 48.3 },
+  { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐', textTop: 30.4, textBottom: 47.0 },
+  { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙', textTop: 34.1, textBottom: 46.0 },
+  { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌', textTop: 33.1, textBottom: 46.5 },
+  { left: 79.4, width: 7.1, top: 27.2, sigil: '☣️', textTop: 39.1, textBottom: 46.0 },
+  { left: 86.8, width: 7.3, top: 24.9, sigil: '🔫', textTop: 34.5, textBottom: 47.4 },
 ];
 export const BOOK_BOTTOM = 60.5;
 

@@ -3616,8 +3616,8 @@ th > .term { border-bottom-style: dotted; }
    above the gold sigil (~52% down the book), which stays the book's own. */
 .shelf-spine {
   position: absolute;
-  left: 50%; top: 6%;
-  height: 66%;
+  left: 50%;
+  /* top/height arrive inline: each book's lettering zone is its own. */
   max-width: 96%;
   transform: translateX(-50%);
   writing-mode: vertical-rl;
@@ -3629,7 +3629,11 @@ th > .term { border-bottom-style: dotted; }
      under each stroke and a thin catch-light above it, and no glow at rest.
      Face, size and spacing arrive inline — each book letters its own spine,
      sized to its own title (see SPINE_FACES / spineFit). */
-  color: rgba(224, 190, 106, 0.9);
+  color: rgba(228, 194, 108, 0.94);
+  /* A thin stroke of the same gold fattens every face — several of the spine
+     fonts only exist in one thin cut, and lettering pressed into leather
+     should read HEAVY. */
+  -webkit-text-stroke: calc(var(--su) * 0.7px) rgba(228, 194, 108, 0.9);
   text-shadow:
     0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
     0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);

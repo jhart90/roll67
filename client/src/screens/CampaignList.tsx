@@ -26,17 +26,17 @@ interface SpineFace {
   caps?: boolean;
 }
 const SPINE_FACES: SpineFace[] = [
-  { family: "'Perpetua Titling MT', 'Trajan Pro', Georgia, serif", spacing: 0.10, weight: 700, caps: true },   // ⚔️
-  { family: "Playbill, 'Rockwell Condensed', 'Bookman Old Style', serif", spacing: 0.14, weight: 400, caps: true }, // 🤠
-  { family: "'Baskerville Old Face', Baskerville, Georgia, serif", spacing: 0.06, weight: 600 },               // 🔍
-  { family: "'Perpetua Titling MT', 'Copperplate Gothic Light', serif", spacing: 0.12, weight: 400, caps: true }, // 🏛️
-  { family: "'Old English Text MT', 'Palatino Linotype', serif", spacing: 0.03, weight: 400 },                 // 🐉
-  { family: "'Copperplate Gothic Light', 'Eurostile', Georgia, serif", spacing: 0.14, weight: 400, caps: true }, // 🪐
-  { family: "Rockwell, 'Bookman Old Style', Georgia, serif", spacing: 0.08, weight: 700, caps: true },          // ⭐
-  { family: "Garamond, 'Palatino Linotype', Georgia, serif", spacing: 0.05, weight: 600, style: 'italic' },     // 🐙
-  { family: "'OCR A Extended', Consolas, 'Courier New', monospace", spacing: 0.06, weight: 400 },               // 🔌
-  { family: "Stencil, Impact, 'Arial Black', sans-serif", spacing: 0.10, weight: 400, caps: true },             // ☣️
-  { family: "'Bookman Old Style', Georgia, serif", spacing: 0.07, weight: 700, caps: true },                    // 🔫
+  { family: "'Perpetua Titling MT', 'Trajan Pro', Georgia, serif", spacing: 0.10, weight: 900, caps: true },   // ⚔️
+  { family: "Playbill, 'Rockwell Condensed', 'Bookman Old Style', serif", spacing: 0.14, weight: 700, caps: true }, // 🤠
+  { family: "'Baskerville Old Face', Baskerville, Georgia, serif", spacing: 0.06, weight: 800 },               // 🔍
+  { family: "'Perpetua Titling MT', 'Copperplate Gothic Bold', serif", spacing: 0.12, weight: 900, caps: true }, // 🏛️
+  { family: "'Old English Text MT', 'Palatino Linotype', serif", spacing: 0.03, weight: 800 },                 // 🐉
+  { family: "'Copperplate Gothic Bold', 'Eurostile', Georgia, serif", spacing: 0.12, weight: 800, caps: true }, // 🪐
+  { family: "Rockwell, 'Bookman Old Style', Georgia, serif", spacing: 0.08, weight: 900, caps: true },          // ⭐
+  { family: "Garamond, 'Palatino Linotype', Georgia, serif", spacing: 0.05, weight: 800, style: 'italic' },     // 🐙
+  { family: "'OCR A Extended', Consolas, 'Courier New', monospace", spacing: 0.06, weight: 800 },               // 🔌
+  { family: "Stencil, Impact, 'Arial Black', sans-serif", spacing: 0.10, weight: 700, caps: true },             // ☣️
+  { family: "'Bookman Old Style', Georgia, serif", spacing: 0.07, weight: 900, caps: true },                    // 🔫
 ];
 
 /**
@@ -50,24 +50,27 @@ const SPINE_FACES: SpineFace[] = [
  * but a width check against the spine. Everything is figured in IMAGE pixels
  * and scaled by --su, the same trick the whole shelf runs on.
  */
-function spineFit(name: string, slotIdx: number): { fontSize: number; lines: 1 | 2 } {
+function spineFit(name: string, slotIdx: number): { fontSize: number; lines: 1 | 2; spacing: number } {
   const slot = BOOK_SLOTS[slotIdx];
   const face = SPINE_FACES[slotIdx];
-  const bookH = ((BOOK_BOTTOM - slot.top) / 100) * SHELF_H;
+  // The budget is the slot's own lettering zone — the strip between the head
+  // ornament and the sigil, measured per book — not the whole spine.
+  const span = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.94;
   const bookW = (slot.width / 100) * SHELF_W;
-  const span = bookH * 0.62;                     // the label box, less padding
-  const perChar = 1.04 + face.spacing;           // advance per character, in em
+  const perChar = 1.06 + face.spacing;           // advance per character, in em
   const len = Math.max(1, name.length);
 
   const oneLine = span / (len * perChar);
-  if (oneLine >= 15) return { fontSize: Math.min(oneLine, 34), lines: 1 };
+  if (oneLine >= 14) return { fontSize: Math.min(oneLine, 32), lines: 1, spacing: face.spacing };
 
   // Two vertical lines: the longest column is roughly half the name (word
   // wrap makes it a little worse, hence the 0.58), and the pair of columns
-  // must still sit on the leather, clear of the edges.
-  const twoLine = span / (Math.ceil(len * 0.58) * perChar);
+  // must still sit on the leather, clear of the edges. A name this long also
+  // gives up most of its letter-spacing — tracking is a luxury of room.
+  const squeezed = face.spacing * 0.3;
+  const twoLine = span / (Math.ceil(len * 0.58) * (1.06 + squeezed));
   const widthCap = (bookW * 0.8) / (2 * 1.15);
-  return { fontSize: Math.max(10, Math.min(twoLine, widthCap, 26)), lines: 2 };
+  return { fontSize: Math.max(8, Math.min(twoLine, widthCap, 26)), lines: 2, spacing: squeezed };
 }
 
 /** The account pill's dropdown: change password, or leave. */
@@ -393,11 +396,15 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
               <span
                 className={`shelf-spine${fit.lines === 2 ? ' two-line' : ''}`}
                 style={{
+                  // Placed by the slot's own lettering zone, converted into
+                  // this book div's coordinate space.
+                  top: `${((slot.textTop - slot.top) / (BOOK_BOTTOM - slot.top)) * 100}%`,
+                  height: `${((slot.textBottom - slot.textTop) / (BOOK_BOTTOM - slot.top)) * 100}%`,
                   fontFamily: face.family,
                   fontWeight: face.weight ?? 600,
                   fontStyle: face.style ?? 'normal',
                   textTransform: face.caps ? 'uppercase' : 'none',
-                  letterSpacing: `${face.spacing}em`,
+                  letterSpacing: `${fit.spacing}em`,
                   fontSize: `calc(var(--su) * ${fit.fontSize.toFixed(1)}px)`,
                 }}
               >

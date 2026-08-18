@@ -42,26 +42,32 @@ const SPINE_FACES: SpineFace[] = [
 /**
  * Letter the spine as LARGE as the leather allows.
  *
- * The title is ordinary horizontal type turned a quarter turn as a BLOCK, not
- * vertical writing. The difference is what happens to a long name: a rotated
- * block wraps the way a book jacket does, into as many lines as it needs —
- * each line running the length of the spine, the stack of them filling its
- * width. Vertical writing could only ever add another column.
+ * The title reads the right way up, across the spine, and wraps down it — the
+ * way the title on a thick book's spine is set when the publisher has the
+ * width for it. So the box is simply the lettering zone as it stands: as wide
+ * as the book, as tall as the gap between the head ornament and the sigil.
  *
- * So the fit is an ordinary "biggest type that fits this box" problem, the box
- * being the lettering zone laid on its side: as long as the gap between the
- * head ornament and the sigil, as wide as the book. Sizes are tried from
- * generous downwards and the first that fits wins, which is the largest that
- * does. Widths are measured once at a reference size and scaled, since both
- * canvas text and letter-spacing are linear in font size.
+ * That makes the fit an ordinary "biggest type that fits this box" problem.
+ * Sizes are tried from generous downwards and the first that fits wins, which
+ * is the largest that does. Widths are measured once at a reference size and
+ * scaled, since both canvas text and letter-spacing are linear in font size.
+ *
+ * Tracking is pulled in tight here. A spine read across is only ~100 image
+ * pixels wide and the longest word decides the size for the whole title, so
+ * the 0.1em the display faces like to wear would cost a tenth of the type.
  */
 const measureCtx = document.createElement('canvas').getContext('2d')!;
 const REF = 100;
+/** What a face is tracked at when read across a spine, not down one. */
+function spineTracking(face: SpineFace): number {
+  return Math.min(face.spacing, 0.03);
+}
+
 /** Width of one line at REF px, its letter-spacing included. */
 function runLenRef(text: string, face: SpineFace): number {
   measureCtx.font = `${face.style ?? ''} ${face.weight ?? 600} ${REF}px ${face.family}`.trim();
   const t = face.caps ? text.toUpperCase() : text;
-  return measureCtx.measureText(t).width + t.length * face.spacing * REF;
+  return measureCtx.measureText(t).width + t.length * spineTracking(face) * REF;
 }
 
 /** Greedy wrap at one font size; null if a single word cannot fit the run. */
@@ -85,21 +91,21 @@ const SPINE_LINE_HEIGHT = 1.06;
 function spineLayout(name: string, slotIdx: number): { lines: string[]; fontSize: number; spacing: number } {
   const slot = BOOK_SLOTS[slotIdx];
   const face = SPINE_FACES[slotIdx];
-  // The zone on its side: length along the spine, width across it.
-  const maxLen = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.97;
-  const maxStack = (slot.width / 100) * SHELF_W * 0.86;
+  // The zone as it stands: lines run ACROSS the book, and stack DOWN it.
+  const maxLen = (slot.width / 100) * SHELF_W * 0.90;
+  const maxStack = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.97;
   const words = name.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return { lines: [name], fontSize: 10, spacing: face.spacing };
+  if (words.length === 0) return { lines: [name], fontSize: 10, spacing: spineTracking(face) };
 
   for (let fs = 92; fs >= 5; fs -= 0.5) {
     const lines = wrapAt(words, face, fs, maxLen);
     if (!lines) continue;
     if (lines.length * fs * SPINE_LINE_HEIGHT <= maxStack) {
-      return { lines, fontSize: fs, spacing: face.spacing };
+      return { lines, fontSize: fs, spacing: spineTracking(face) };
     }
   }
   // Nothing fits even at 5px — set it there rather than show nothing at all.
-  return { lines: wrapAt(words, face, 5, maxLen) ?? [name], fontSize: 5, spacing: face.spacing };
+  return { lines: wrapAt(words, face, 5, maxLen) ?? [name], fontSize: 5, spacing: spineTracking(face) };
 }
 
 /**
@@ -511,14 +517,13 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
                 className="shelf-spine"
                 data-lines={fit.lines.length}
                 style={{
-                  // Laid out flat and turned a quarter turn, so its WIDTH is
-                  // the run along the spine and its HEIGHT is the stack across
-                  // the book. Both in image pixels scaled by --su, like
-                  // everything else on this shelf. Centred ON the zone, which
-                  // is what holds it between the ornament and the sigil.
+                  // The zone itself: as wide as the book, as tall as the gap
+                  // between ornament and sigil, in image pixels scaled by --su
+                  // like everything else on this shelf. Centred ON the zone,
+                  // which is what holds it between the two.
                   top: `${(((slot.textTop + slot.textBottom) / 2 - slot.top) / (BOOK_BOTTOM - slot.top)) * 100}%`,
-                  width: `calc(var(--su) * ${(((slot.textBottom - slot.textTop) / 100) * SHELF_H).toFixed(1)}px)`,
-                  height: `calc(var(--su) * ${((slot.width / 100) * SHELF_W).toFixed(1)}px)`,
+                  width: `calc(var(--su) * ${((slot.width / 100) * SHELF_W).toFixed(1)}px)`,
+                  height: `calc(var(--su) * ${(((slot.textBottom - slot.textTop) / 100) * SHELF_H).toFixed(1)}px)`,
                   fontFamily: face.family,
                   fontWeight: face.weight ?? 600,
                   fontStyle: face.style ?? 'normal',

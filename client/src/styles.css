@@ -3784,12 +3784,11 @@ th > .term { border-bottom-style: dotted; }
 .shelf-spine {
   position: absolute;
   left: 50%;
-  /* Size and placement arrive inline: each book letters its own zone, and the
-     box is that zone LAID ON ITS SIDE — width along the spine, height across
-     it. A quarter turn about its own centre, pinned to the centre of the
-     zone, so the block sits squarely between the head ornament and the sigil
-     however many lines the title takes. */
-  transform: translate(-50%, -50%) rotate(90deg);
+  /* Size and placement arrive inline: the box IS the book's lettering zone.
+     Pinned by its own centre to the centre of that zone, so the title sits
+     squarely between the head ornament and the sigil however many lines it
+     takes. Read the right way up, across the spine. */
+  transform: translate(-50%, -50%);
   /* The wrap is chosen by the fitting math and each line is its own element,
      so the browser sets exactly the lines that were measured rather than
      re-breaking them at a size it was never asked about. */

@@ -3779,24 +3779,30 @@ th > .term { border-bottom-style: dotted; }
 }
 .shelf-book.occupied.lit .shelf-spine { color: rgba(255, 233, 176, 0.98); text-shadow: 0 0 calc(var(--su) * 8px) rgba(255, 220, 140, 0.7), 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95); }
 
-/* The lettering runs down the spine, as lettering on a spine does, sized in
-   IMAGE pixels via --su so it grows and shrinks with the painting. It stops
-   above the gold sigil (~52% down the book), which stays the book's own. */
+/* The title is set flat and turned a quarter turn, sized in IMAGE pixels via
+   --su so it grows and shrinks with the painting. */
 .shelf-spine {
   position: absolute;
   left: 50%;
-  /* top/height arrive inline: each book's lettering zone is its own. */
-  max-width: 96%;
-  transform: translateX(-50%);
-  writing-mode: vertical-rl;
-  display: flex; align-items: center; justify-content: center;
+  /* Size and placement arrive inline: each book letters its own zone, and the
+     box is that zone LAID ON ITS SIDE — width along the spine, height across
+     it. A quarter turn about its own centre, pinned to the centre of the
+     zone, so the block sits squarely between the head ornament and the sigil
+     however many lines the title takes. */
+  transform: translate(-50%, -50%) rotate(90deg);
+  /* The wrap is chosen by the fitting math and each line is its own element,
+     so the browser sets exactly the lines that were measured rather than
+     re-breaking them at a size it was never asked about. */
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center;
+  white-space: nowrap;
   overflow: hidden;
-  line-height: 1.15;
   /* Gold leaf pressed INTO the leather rather than paint floating over it:
      slightly translucent so the hide's grain ghosts through, a dark press
      under each stroke and a thin catch-light above it, and no glow at rest.
      Face, size and spacing arrive inline — each book letters its own spine,
-     sized to its own title (see SPINE_FACES / spineFit). */
+     sized to its own title (see SPINE_FACES / spineLayout). */
   color: rgba(228, 194, 108, 0.94);
   /* A thin stroke of the same gold fattens every face — several of the spine
      fonts only exist in one thin cut, and lettering pressed into leather
@@ -3805,17 +3811,9 @@ th > .term { border-bottom-style: dotted; }
   text-shadow:
     0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
     0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);
-  text-overflow: ellipsis;
-  white-space: nowrap;
   pointer-events: none;
   transition: color 0.18s ease, text-shadow 0.18s ease;
 }
-/* A long title breaks into a second vertical line — vertical writing wraps
-   into a neighbouring column on its own once wrapping is allowed. */
-/* The break is chosen by the fitting math and written as a newline, so the
-   browser renders exactly the split that was measured — greedy wrapping at a
-   computed size is how columns end up uneven. */
-.shelf-spine.two-line { white-space: pre; text-align: center; }
 
 /* Chrome kept off the painting: a slim bar up top… */
 .shelf-topbar {

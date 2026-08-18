@@ -5,13 +5,13 @@ import {
   CHASE_TRACK_DEFAULT, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
   opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
   bumpResult, chaseCritFailure, complicationFor, isComplicationCard, type ChaseTravel,
-  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type CardBackSpec, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
+  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILLS_SWADE, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type CardBackSpec, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, tokensCaughtInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
-  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RequestTestPayload, type TestOutcomePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, normalizeCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type AttackPreviewPayload, type AttackPreviewResultPayload, type CoverGrade, type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -40,6 +40,15 @@ function requireCampaign(socket: Socket) {
 // single die within ~1700ms (delay 0 + dur up to 1450-1700ms). Add a 1s pause
 // on top per the requested "wait for the animation, pause a beat" pacing.
 const SAVE_STEP_DELAY_MS = 2800;
+
+/**
+ * Tests the dice have answered but the DM has not yet judged: the win is a
+ * fact, what it earns is a ruling. Module scope, because sockets come and go
+ * and the judgement may arrive on a different one than called for the Test.
+ */
+const pendingTests = new Map<string, {
+  campaignId: string; targetCharacterId: string; attackerName: string; targetName: string; raise: boolean;
+}>();
 /** How long the "who is rolling" banner holds. Shorter than the beat
  *  between saves, so it clears before the next name goes up. */
 const CALLOUT_HOLD_MS = 2000;
@@ -4311,6 +4320,120 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       emitError(socket, 'No valid targets — a Fear check needs a SWADE character sheet.');
     }
   }, 'REQUEST_FEAR'));
+
+  /**
+   * SWADE Test: one character rattles another. The attacker's chosen skill is
+   * rolled against the attribute that skill is LINKED to — Fighting used as a
+   * Test meets Agility, not Parry; Taunt meets Smarts — with both sides
+   * carrying their own wounds and conditions, because traitExpr folds those
+   * in for whoever is rolling. Ties go to the resister, as opposed rolls do.
+   *
+   * The dice are public; the ruling is not. On a success the DM alone is
+   * offered the judgement seat (Distracted or Vulnerable, Shaken riding a
+   * raise), because the book leaves the outcome partly subjective and the
+   * table should hear the answer, not the deliberation.
+   */
+  socket.on(C2S.REQUEST_TEST, safe(socket, (p: RequestTestPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM calls for a Test.'); return; }
+    const atkTok = tokens.byId(String(p.attackerTokenId));
+    const defTok = tokens.byId(String(p.targetTokenId));
+    const atk = atkTok?.characterId ? characters.byId(atkTok.characterId) : undefined;
+    const def = defTok?.characterId ? characters.byId(defTok.characterId) : undefined;
+    if (!atk || !def || atk.system !== 'swade' || def.system !== 'swade' || atk.campaignId !== d.campaignId || def.campaignId !== d.campaignId) {
+      emitError(socket, 'A Test needs two tokens with SWADE sheets — one to try the trick, one to resist it.');
+      return;
+    }
+    if (atk.id === def.id) { emitError(socket, 'A Test needs a foe, not a mirror.'); return; }
+
+    const rawSkill = String(p.skill ?? '').slice(0, 40);
+    const canonical = SKILLS_SWADE.find((k) => k.toLowerCase() === rawSkill.toLowerCase());
+    const skillName = canonical ?? rawSkill;
+    // Resisted by the linked attribute; a homebrew skill defaults to Agility,
+    // the book's answer for physical tricks and the least swingy of the four.
+    const attr = (canonical && SKILL_ATTR_SWADE[canonical]) || 'agility';
+    const attrLabel = attr.charAt(0).toUpperCase() + attr.slice(1);
+    const mod = Math.max(-10, Math.min(10, Math.trunc(Number(p.mod ?? 0)) || 0));
+    const campaignId = d.campaignId;
+
+    const post = (text: string, br: ReturnType<typeof roll> | null, ch: Character, callout?: RollCalloutInfo) => {
+      const msg = chat.add(campaignId, {
+        userId: d.userId, fromName: d.username, kind: br ? 'roll' : 'system', text,
+        characterId: ch.id, statsUserId: ch.ownerUserId ?? null,
+        roll: br, recipients: null,
+        ...(callout ? { callout } : {}),
+      });
+      io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+    };
+
+    // The attacker's arm of the opposed roll.
+    const aBr = roll(traitExpr(atk.sheet, skillDie(atk.sheet, skillName), mod));
+    aBr.modWhy = [
+      ...traitModWhy(atk.sheet),
+      ...(mod !== 0 ? [`${fmtMod(mod)} GM's situational modifier`] : []),
+    ];
+    post(
+      `${atk.name} — Test: ${skillName}${mod !== 0 ? ` (${fmtMod(mod)})` : ''} vs ${def.name}`,
+      aBr, atk, { what: `Test — ${skillName}`, tone: 'trait' },
+    );
+    const atkCrit = critFailFor(io, campaignId, atk, aBr.dice);
+
+    setTimeout(() => {
+      if (atkCrit) {
+        postStatusLine(io, campaignId, `${atk.name}'s Test collapses on its own — critical failure.`);
+        return;
+      }
+      // The resister's arm: the linked ATTRIBUTE, never Parry.
+      const fresh = characters.byId(def.id) ?? def;
+      const dBr = roll(traitExpr(fresh.sheet, dieSides(String((fresh.sheet as Record<string, unknown>)[attr] ?? 'd4'))));
+      dBr.modWhy = traitModWhy(fresh.sheet);
+      post(`${fresh.name} — resists with ${attrLabel}`, dBr, fresh, { what: `Resisting the Test — ${attrLabel}`, tone: 'save' });
+
+      setTimeout(() => {
+        const margin = aBr.total - dBr.total;
+        if (margin <= 0) {
+          postStatusLine(io, campaignId, `${fresh.name} shrugs off ${atk.name}'s ${skillName} Test (${aBr.total} vs ${dBr.total}).`);
+          return;
+        }
+        const raise = margin >= 4;
+        postStatusLine(io, campaignId,
+          `${atk.name}'s Test lands${raise ? ' with a raise' : ''} (${aBr.total} vs ${dBr.total}) — the GM weighs what it earns.`);
+        const testId = newId();
+        pendingTests.set(testId, {
+          campaignId, targetCharacterId: fresh.id,
+          attackerName: atk.name, targetName: fresh.name, raise,
+        });
+        io.to(dmRoom(campaignId)).emit(S2C.TEST_PROMPT, {
+          testId, attackerName: atk.name, targetName: fresh.name, skill: skillName, margin, raise,
+        });
+      }, diceSettleDelayMs(dBr.dice));
+    }, diceSettleDelayMs(aBr.dice));
+  }, 'REQUEST_TEST'));
+
+  /** The DM's ruling on a won Test. Shaken only rides a raise, per the book. */
+  socket.on(C2S.TEST_OUTCOME, safe(socket, ({ testId, outcome, shaken }: TestOutcomePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM judges a Test.'); return; }
+    const rec = pendingTests.get(String(testId));
+    if (!rec || rec.campaignId !== d.campaignId) return;
+    pendingTests.delete(String(testId));
+    const target = characters.byId(rec.targetCharacterId);
+    if (!target) return;
+    const source = `${rec.attackerName}'s Test`;
+    const applied: string[] = [];
+    if (outcome === 'distracted' || outcome === 'vulnerable') {
+      applyConditionTo(io, d.campaignId, target, outcome, source);
+      applied.push(outcome);
+    }
+    if (rec.raise && shaken !== false) {
+      const fresh = characters.byId(target.id) ?? target;
+      applyConditionTo(io, d.campaignId, fresh, 'shaken', source);
+      applied.push('shaken');
+    }
+    if (applied.length === 0) {
+      postStatusLine(io, d.campaignId, `The GM rules ${source} leaves no lasting mark on ${rec.targetName}.`);
+    }
+  }, 'TEST_OUTCOME'));
 
   socket.on(C2S.INIT_ADD, safe(socket, (payload: InitAddPayload) => {
     const d = requireCampaign(socket);

@@ -26,6 +26,7 @@ import { TokenNameplateCard } from '../table/TokenNameplateCard';
 import { CardDrawOverlay } from '../table/CardDrawOverlay';
 import { InitiativeRollPrompt } from '../table/InitiativeRollPrompt';
 import { SoakPrompt } from '../table/SoakPrompt';
+import { TestOutcomePrompt } from '../table/TestOutcomePrompt';
 import { BennyMenu } from '../table/BennyMenu';
 import { KeyringMenu } from '../table/KeyringMenu';
 import { TimeMenu } from '../table/TimeMenu';
@@ -492,6 +493,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <CountersOverlay />
         <InitiativeRollPrompt />
         <SoakPrompt />
+        <TestOutcomePrompt />
         <BleedPrompt />
         <ShakenPrompt />
         <StunPrompt />

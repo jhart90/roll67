@@ -7,7 +7,7 @@ import {
   type InitCardDrawnPayload, type InitiativeState, type Light, type LootItem, type Macro, type MapEditedPayload, type MapMeta, type MapObject,
   type AssetFolder, type AssetInfo, type AudioState, type AudioTrack,
   type LocationNode, type MapStatePayload, type MapView, type MeasureShownPayload,
-  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type AceStyle, type BennyStatePayload, type BennyUseId, type BlastChoice, type BlastOfferClosedPayload, type BlastOfferPayload, type BleedPromptPayload, type StunPromptPayload, type IncapPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type SoundboardPayload, type SoundboardSlot,
+  type DiceRole, type MemberInfo, type MemberPresencePayload, type PingShownPayload, type Point, type ProjectilePayload, type RollableTable, type AceStyle, type BennyStatePayload, type BennyUseId, type BlastChoice, type BlastOfferClosedPayload, type BlastOfferPayload, type BleedPromptPayload, type StunPromptPayload, type IncapPromptPayload, type Counter, type CountersPayload, type DmNotesPayload, type PrivateNotesPayload, type IronDicePayload, type PublicSheetPayload, type RollStatsPayload, type RoundCardsPayload, type RunPromptPayload, type ShakenPromptPayload, type SfxPlayPayload, type Shop, type SoakOfferPayload, type TestPromptPayload, type RequestTestPayload, type TestOutcomePayload, type SoundboardPayload, type SoundboardSlot,
   type SheetData, type VisibilityLitMask,
   type TableResultPayload, type TargetPreviewShownPayload,
   type TokenView, type VisionStats, type VisionUpdatePayload, type Wall, type WorldFolder, type YouArePayload,
@@ -315,6 +315,8 @@ interface GameState {
   diceAnimEnding: boolean;
   /** SWADE: your Wild Card just took wounds it may Soak with a Benny. */
   soakOffer: SoakOfferPayload | null;
+  /** A won Test awaiting the DM's ruling. Only DM screens ever receive it. */
+  testPrompt: TestPromptPayload | null;
   /** SWADE: a live grenade landed on one of yours — throw it back, or on it. */
   blastOffer: BlastOfferPayload | null;
   /** SWADE: your Shaken character may roll Spirit to recover. */
@@ -631,6 +633,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceAnim: null,
   diceAnimEnding: false,
   soakOffer: null,
+  testPrompt: null,
   blastOffer: null,
   bennyState: {},
   gmBennies: 0,
@@ -1461,6 +1464,10 @@ export function wireSocket(): void {
 
   // One-shot effect. Each gets its own Audio element so overlapping hits stack
   // rather than cutting each other off, and so the music track is untouched.
+  socket.on(S2C.TEST_PROMPT, (p: TestPromptPayload) => {
+    useGameStore.setState({ testPrompt: p });
+  });
+
   socket.on(S2C.SOAK_OFFER, (p: SoakOfferPayload) => {
     useGameStore.setState({ soakOffer: p });
   });
@@ -2134,6 +2141,11 @@ export const intents = {
   },
   moderateMessage: (messageId: number, action: 'hide' | 'unhide' | 'hideUndo' | 'delete') =>
     socket.emit(C2S.MODERATE_MESSAGE, { messageId, action }),
+  requestTest: (p: RequestTestPayload) => socket.emit(C2S.REQUEST_TEST, p),
+  testOutcome: (p: TestOutcomePayload) => {
+    socket.emit(C2S.TEST_OUTCOME, p);
+    useGameStore.setState({ testPrompt: null });
+  },
   runMacro: (macroId: string) => {
     const s = useGameStore.getState();
     const m = s.macroList.find((x) => x.id === macroId);

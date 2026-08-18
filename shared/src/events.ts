@@ -67,6 +67,8 @@ export const C2S = {
   DEATH_SAVE: 'deathSave',
   REQUEST_SAVE: 'requestSave',
   REQUEST_FEAR: 'requestFear',
+  REQUEST_TEST: 'requestTest',
+  TEST_OUTCOME: 'testOutcome',
   POST_SHEET_CARD: 'postSheetCard',
   AOE_PREVIEW: 'aoePreview',
   CAST_AOE: 'castAoe',
@@ -883,6 +885,7 @@ export const S2C = {
   SFX_PLAY: 'sfxPlay',
   /** SWADE: your Wild Card took wounds and may Soak them with a Benny. */
   SOAK_OFFER: 'soakOffer',
+  TEST_PROMPT: 'testPrompt',
   /** SWADE: a live grenade landed on you — the blast is parked for a beat
    *  while you decide whether to throw it back or throw yourself on it. */
   BLAST_OFFER: 'blastOffer',
@@ -1295,6 +1298,34 @@ export interface CampaignRenamedPayload { name: string }
 export interface CampaignDeletedPayload { campaignId: string; name: string }
 /** SWADE Soak: spend=false declines and keeps the wounds. */
 export interface SoakRollPayload { characterId: string; spend: boolean }
+/**
+ * SWADE Tests: an opposed trick — Taunt, Intimidation, a trip — resolved as
+ * the attacker's skill against the attribute that skill is linked to. The
+ * server rolls both sides; on a success the DM alone is asked what it earns.
+ */
+export interface RequestTestPayload {
+  attackerTokenId: string;
+  targetTokenId: string;
+  /** The skill the trick is performed with; resisted by its linked attribute. */
+  skill: string;
+  /** The GM's situational modifier (range, cover, repetition, a bruised ego). */
+  mod?: number;
+}
+/** Sent to the DM when a Test succeeds: the judgement seat. */
+export interface TestPromptPayload {
+  testId: string;
+  attackerName: string;
+  targetName: string;
+  skill: string;
+  margin: number;
+  raise: boolean;
+}
+/** The DM's ruling. `shaken` only counts when the Test won with a raise. */
+export interface TestOutcomePayload {
+  testId: string;
+  outcome: 'distracted' | 'vulnerable' | 'none';
+  shaken?: boolean;
+}
 export interface SoakOfferPayload { characterId: string; name: string; wounds: number; bennies: number }
 
 /**

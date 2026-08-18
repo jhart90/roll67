@@ -5,6 +5,7 @@ import { SavePrompt } from './SavePrompt';
 import { ChasePrompt } from './ChasePrompt';
 import { DealCardsPrompt } from './DealCardsPrompt';
 import { FearPrompt } from './FearPrompt';
+import { TestPrompt } from './TestPrompt';
 
 export function InitiativePanel() {
   const you = useGameStore((s) => s.you);
@@ -16,6 +17,7 @@ export function InitiativePanel() {
   const [chasing, setChasing] = useState(false);
   const [dealing, setDealing] = useState(false);
   const [fearing, setFearing] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   const isDm = useGameStore((s) => s.isDm());
   const floatHidden = useGameStore((s) => s.initFloatHidden);
@@ -146,12 +148,14 @@ export function InitiativePanel() {
             ? <button title="Tear down the Chase Card track; the fight carries on" onClick={() => intents.chaseEnd()}>🏁 End chase</button>
             : <button title="Lay out a Chase Card track — a chase IS the combat, and deals Action Cards as usual" onClick={() => setChasing(true)}>🏁 Start a chase</button>)}
           {swade && <button title="Spirit roll against something horrific, with the Fear Table for failures" onClick={() => setFearing(true)}>😱 Call for Fear</button>}
+          {swade && <button title="An opposed trick — Taunt, a trip, a stare-down — to leave a foe Distracted or Vulnerable" onClick={() => setTesting(true)}>🤼 Call for a Test</button>}
         </div>
       )}
       {saving && <SavePrompt onClose={() => setSaving(false)} />}
       {chasing && <ChasePrompt onClose={() => setChasing(false)} />}
       {dealing && <DealCardsPrompt onClose={() => setDealing(false)} />}
       {fearing && <FearPrompt onClose={() => setFearing(false)} />}
+      {testing && <TestPrompt onClose={() => setTesting(false)} />}
 
       {isDm && state.entries.length > 0 && (
         <div className="row init-controls">

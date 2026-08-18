@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CARD_BACK_GEOMETRIES, CARD_BACK_PATTERNS, CARD_BORDERS, defaultCardBack, normalizeCardBack, patternDefaults,
+  CARD_BACK_GEOMETRIES, CARD_BACK_GROUPS, CARD_BACK_PATTERNS, CARD_BORDERS, defaultCardBack, normalizeCardBack, patternDefaults,
 } from '../src/systems/cards.js';
 
 /**
@@ -9,20 +9,53 @@ import {
  * normalizeCardBack is a boundary, not a convenience.
  */
 describe('card back designs and borders', () => {
-  it('offers sixteen designs and sixteen borders, with unique ids', () => {
-    expect(CARD_BACK_PATTERNS).toHaveLength(16);
-    expect(new Set(CARD_BACK_PATTERNS.map((p) => p.id)).size).toBe(16);
+  it('offers the full 75-design catalogue and sixteen borders, all ids unique', () => {
+    expect(CARD_BACK_PATTERNS).toHaveLength(75);
+    expect(new Set(CARD_BACK_PATTERNS.map((p) => p.id)).size).toBe(75);
+    expect(new Set(CARD_BACK_PATTERNS.map((p) => p.label)).size).toBe(75);
     expect(CARD_BORDERS).toHaveLength(16);
     expect(new Set(CARD_BORDERS.map((b) => b.id)).size).toBe(16);
   });
 
-  it('weaves those sixteen designs from only seven geometries — fewer patterns, more designs', () => {
-    expect(CARD_BACK_GEOMETRIES).toHaveLength(7);
+  it('no two designs are alike: every (geometry, palette) pairing is one of a kind', () => {
+    const looks = CARD_BACK_PATTERNS.map((p) => `${p.pattern}|${p.primary}|${p.secondary}|${p.accent}`);
+    expect(new Set(looks).size).toBe(75);
+  });
+
+  it('every design sits under a real shelf heading, and no heading is empty', () => {
+    for (const p of CARD_BACK_PATTERNS) expect(CARD_BACK_GROUPS).toContain(p.group);
+    for (const g of CARD_BACK_GROUPS) {
+      expect(CARD_BACK_PATTERNS.some((p) => p.group === g)).toBe(true);
+    }
+  });
+
+  it('the geometry list is exactly the geometries the catalogue wears', () => {
     const used = new Set(CARD_BACK_PATTERNS.map((p) => p.pattern));
-    // Every design stands on a real geometry, and every geometry is worn by
-    // at least one design — no orphans in either direction.
-    for (const g of used) expect(CARD_BACK_GEOMETRIES).toContain(g);
-    for (const g of CARD_BACK_GEOMETRIES) expect(used.has(g)).toBe(true);
+    expect(new Set(CARD_BACK_GEOMETRIES)).toEqual(used);
+    expect(CARD_BACK_GEOMETRIES).toHaveLength(used.size);
+    // The classic seven survive: an early spec may hold a bare geometry id.
+    for (const g of ['stripes', 'plaid', 'dots', 'medallion', 'rays', 'harlequin', 'sweep']) {
+      expect(CARD_BACK_GEOMETRIES).toContain(g);
+    }
+  });
+
+  it('the original sixteen keep their ids, geometries and palettes — old sheets still render', () => {
+    const frozen: Array<[string, string, string]> = [
+      ['classic', 'stripes', '#7c1f28'], ['midnight', 'stripes', '#1d2c52'],
+      ['forest', 'plaid', '#1f4d2c'], ['steel', 'plaid', '#39404a'],
+      ['ember', 'plaid', '#7a2d0c'], ['royal', 'dots', '#4a2170'],
+      ['ivory', 'dots', '#ede3cc'], ['ocean', 'medallion', '#14536b'],
+      ['rose', 'medallion', '#6e1530'], ['goldfil', 'medallion', '#5a4210'],
+      ['onyx', 'rays', '#14141c'], ['neon', 'rays', '#101024'],
+      ['blood', 'harlequin', '#5c0e16'], ['jade', 'harlequin', '#14624a'],
+      ['aurora', 'sweep', '#123c46'], ['copper', 'sweep', '#7a4a24'],
+    ];
+    frozen.forEach(([id, geometry, primary], i) => {
+      const d = CARD_BACK_PATTERNS[i];
+      expect(d.id).toBe(id);
+      expect(d.pattern).toBe(geometry);
+      expect(d.primary).toBe(primary);
+    });
   });
 
   it('every pattern ships with a full set of valid default colors', () => {

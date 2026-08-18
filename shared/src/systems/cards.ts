@@ -55,41 +55,120 @@ export interface CardBackSpec {
 }
 
 /**
- * The seven pattern GEOMETRIES — the shapes a back can be woven in. A spec's
- * `pattern` is always one of these.
+ * The design catalogue: every back the studio offers, each a GEOMETRY (the
+ * painter the client renders it with) plus the palette it wears out of the
+ * box, filed under the shelf heading the picker shows it on.
  *
- * Deliberately few. Sixteen distinct tilings meant sixteen thin variations on
- * wallpaper; seven geometries, each drawn richly with all three colors, leave
- * room for the sixteen DESIGNS below to be sixteen actual looks — the same
- * loom producing tartans and rose windows depending on the thread.
- */
-export const CARD_BACK_GEOMETRIES = ['stripes', 'plaid', 'dots', 'medallion', 'rays', 'harlequin', 'sweep'] as const;
-
-/**
- * The sixteen pre-built designs: a geometry plus the palette it wears out of
- * the box. Several share a geometry — a Highland plaid and an Oxford plaid
- * are one weave in two wardrobes — which is the point: fewer patterns, more
- * designs. The ids are stable (they are what old sheets stored), so the set
- * can be re-dressed without stranding anyone's saved back.
+ * The first sixteen are the originals and their ids and palettes are frozen
+ * — they are what old sheets stored. Everything after them is a themed
+ * design with a painter of its own, which is what "not one is like another"
+ * costs: a fire that actually burns upward and a Saturn that actually wears
+ * rings cannot be the same weave in two palettes.
+ *
+ * A design's colors still live in the spec's three slots, so every one of
+ * these can be repainted by its player — a blue wildfire is theirs to want.
  */
 export const CARD_BACK_PATTERNS = [
-  { id: 'classic', label: 'Classic Red', pattern: 'stripes', primary: '#7c1f28', secondary: '#641820', accent: '#e8c86a' },
-  { id: 'midnight', label: 'Midnight Stripe', pattern: 'stripes', primary: '#1d2c52', secondary: '#162240', accent: '#7fa8e0' },
-  { id: 'forest', label: 'Highland Plaid', pattern: 'plaid', primary: '#1f4d2c', secondary: '#0e2e18', accent: '#d8b23a' },
-  { id: 'steel', label: 'Oxford Plaid', pattern: 'plaid', primary: '#39404a', secondary: '#232830', accent: '#9fb4cc' },
-  { id: 'ember', label: 'Firewatch Plaid', pattern: 'plaid', primary: '#7a2d0c', secondary: '#3c1404', accent: '#ffaa3c' },
-  { id: 'royal', label: 'Royal Dots', pattern: 'dots', primary: '#4a2170', secondary: '#e4d3f0', accent: '#c89b3c' },
-  { id: 'ivory', label: 'Ivory Pearls', pattern: 'dots', primary: '#ede3cc', secondary: '#947c50', accent: '#b8a988' },
-  { id: 'ocean', label: 'Ocean Medallion', pattern: 'medallion', primary: '#14536b', secondary: '#0c3a4d', accent: '#7fd4c8' },
-  { id: 'rose', label: 'Rose Window', pattern: 'medallion', primary: '#6e1530', secondary: '#480e1f', accent: '#e0b64a' },
-  { id: 'goldfil', label: 'Gilt Medallion', pattern: 'medallion', primary: '#5a4210', secondary: '#3c2c08', accent: '#f0d06e' },
-  { id: 'onyx', label: 'Black Sun', pattern: 'rays', primary: '#14141c', secondary: '#26262f', accent: '#d8b23a' },
-  { id: 'neon', label: 'Neon Burst', pattern: 'rays', primary: '#101024', secondary: '#1c1c40', accent: '#00ffd6' },
-  { id: 'blood', label: 'Blood Diamonds', pattern: 'harlequin', primary: '#5c0e16', secondary: '#8c1b26', accent: '#e7cdd0' },
-  { id: 'jade', label: 'Jade Court', pattern: 'harlequin', primary: '#14624a', secondary: '#0f5340', accent: '#e8c86a' },
-  { id: 'aurora', label: 'Aurora', pattern: 'sweep', primary: '#123c46', secondary: '#1c6b57', accent: '#57306e' },
-  { id: 'copper', label: 'Copper Dusk', pattern: 'sweep', primary: '#7a4a24', secondary: '#a86a34', accent: '#2c1a10' },
+  // ---- Classics: the original sixteen, ids and palettes frozen ----
+  { id: 'classic', label: 'Classic Red', group: 'Classics', pattern: 'stripes', primary: '#7c1f28', secondary: '#641820', accent: '#e8c86a' },
+  { id: 'midnight', label: 'Midnight Stripe', group: 'Classics', pattern: 'stripes', primary: '#1d2c52', secondary: '#162240', accent: '#7fa8e0' },
+  { id: 'forest', label: 'Highland Plaid', group: 'Classics', pattern: 'plaid', primary: '#1f4d2c', secondary: '#0e2e18', accent: '#d8b23a' },
+  { id: 'steel', label: 'Oxford Plaid', group: 'Classics', pattern: 'plaid', primary: '#39404a', secondary: '#232830', accent: '#9fb4cc' },
+  { id: 'ember', label: 'Firewatch Plaid', group: 'Classics', pattern: 'plaid', primary: '#7a2d0c', secondary: '#3c1404', accent: '#ffaa3c' },
+  { id: 'royal', label: 'Royal Dots', group: 'Classics', pattern: 'dots', primary: '#4a2170', secondary: '#e4d3f0', accent: '#c89b3c' },
+  { id: 'ivory', label: 'Ivory Pearls', group: 'Classics', pattern: 'dots', primary: '#ede3cc', secondary: '#947c50', accent: '#b8a988' },
+  { id: 'ocean', label: 'Ocean Medallion', group: 'Classics', pattern: 'medallion', primary: '#14536b', secondary: '#0c3a4d', accent: '#7fd4c8' },
+  { id: 'rose', label: 'Rose Window', group: 'Classics', pattern: 'medallion', primary: '#6e1530', secondary: '#480e1f', accent: '#e0b64a' },
+  { id: 'goldfil', label: 'Gilt Medallion', group: 'Classics', pattern: 'medallion', primary: '#5a4210', secondary: '#3c2c08', accent: '#f0d06e' },
+  { id: 'onyx', label: 'Black Sun', group: 'Classics', pattern: 'rays', primary: '#14141c', secondary: '#26262f', accent: '#d8b23a' },
+  { id: 'neon', label: 'Neon Burst', group: 'Classics', pattern: 'rays', primary: '#101024', secondary: '#1c1c40', accent: '#00ffd6' },
+  { id: 'blood', label: 'Blood Diamonds', group: 'Classics', pattern: 'harlequin', primary: '#5c0e16', secondary: '#8c1b26', accent: '#e7cdd0' },
+  { id: 'jade', label: 'Jade Court', group: 'Classics', pattern: 'harlequin', primary: '#14624a', secondary: '#0f5340', accent: '#e8c86a' },
+  { id: 'aurora', label: 'Aurora', group: 'Classics', pattern: 'sweep', primary: '#123c46', secondary: '#1c6b57', accent: '#57306e' },
+  { id: 'copper', label: 'Copper Dusk', group: 'Classics', pattern: 'sweep', primary: '#7a4a24', secondary: '#a86a34', accent: '#2c1a10' },
+  // ---- Elements ----
+  { id: 'elem-fire', label: 'Wildfire', group: 'Elements', pattern: 'elem-fire', primary: '#1c0805', secondary: '#c8401a', accent: '#ffb62e' },
+  { id: 'elem-water', label: 'Riptide', group: 'Elements', pattern: 'elem-water', primary: '#0a2e4a', secondary: '#1565a0', accent: '#9fe0f0' },
+  { id: 'elem-earth', label: 'Bedrock', group: 'Elements', pattern: 'elem-earth', primary: '#3e2c1c', secondary: '#6b4e2e', accent: '#b89968' },
+  { id: 'elem-wind', label: 'Zephyr', group: 'Elements', pattern: 'elem-wind', primary: '#2e3d4d', secondary: '#6f8ea6', accent: '#d8ecf4' },
+  // ---- Seasons ----
+  { id: 'sea-spring', label: 'Cherry Blossom', group: 'Seasons', pattern: 'sea-spring', primary: '#35603a', secondary: '#f2b8cc', accent: '#fff0d8' },
+  { id: 'sea-summer', label: 'High Summer', group: 'Seasons', pattern: 'sea-summer', primary: '#3f8fd4', secondary: '#d8a53c', accent: '#ffd24a' },
+  { id: 'sea-autumn', label: 'Autumn Drift', group: 'Seasons', pattern: 'sea-autumn', primary: '#5a2c14', secondary: '#b45a1c', accent: '#e8a832' },
+  { id: 'sea-winter', label: 'First Frost', group: 'Seasons', pattern: 'sea-winter', primary: '#16324e', secondary: '#7fa8c8', accent: '#f4faff' },
+  // ---- Sun & Moon ----
+  { id: 'sun', label: 'Solar Crown', group: 'Sun & Moon', pattern: 'sun', primary: '#2c1608', secondary: '#c8641e', accent: '#ffd24a' },
+  { id: 'moon', label: 'Moonrise', group: 'Sun & Moon', pattern: 'moon', primary: '#10182e', secondary: '#3c4a70', accent: '#e8e4d0' },
+  // ---- Biomes ----
+  { id: 'bio-forest', label: 'Pinewood', group: 'Biomes', pattern: 'bio-forest', primary: '#0f2c1e', secondary: '#24523a', accent: '#c2ddc8' },
+  { id: 'bio-desert', label: 'Dune Sea', group: 'Biomes', pattern: 'bio-desert', primary: '#a8622a', secondary: '#d89a4c', accent: '#f6e2ac' },
+  { id: 'bio-jungle', label: 'Deep Canopy', group: 'Biomes', pattern: 'bio-jungle', primary: '#0f3a20', secondary: '#1e6434', accent: '#f0c040' },
+  { id: 'bio-swamp', label: 'Blackwater Fen', group: 'Biomes', pattern: 'bio-swamp', primary: '#242e1c', secondary: '#4a6034', accent: '#a0b868' },
+  { id: 'bio-tundra', label: 'White Waste', group: 'Biomes', pattern: 'bio-tundra', primary: '#dce8f0', secondary: '#8fb0c8', accent: '#f8fcff' },
+  { id: 'bio-mountain', label: 'High Passes', group: 'Biomes', pattern: 'bio-mountain', primary: '#2c3a52', secondary: '#55708c', accent: '#e8eef4' },
+  { id: 'bio-plains', label: 'Golden Plains', group: 'Biomes', pattern: 'bio-plains', primary: '#86a83e', secondary: '#8cc8e8', accent: '#f4ecd0' },
+  { id: 'bio-reef', label: 'Coral Shallows', group: 'Biomes', pattern: 'bio-reef', primary: '#0c4658', secondary: '#17879c', accent: '#ff8a5c' },
+  // ---- Planets ----
+  { id: 'pl-mercury', label: 'Mercury', group: 'Planets', pattern: 'pl-mercury', primary: '#191922', secondary: '#8a8a92', accent: '#d0d0d8' },
+  { id: 'pl-venus', label: 'Venus', group: 'Planets', pattern: 'pl-venus', primary: '#201812', secondary: '#d8a860', accent: '#f4e0b0' },
+  { id: 'pl-earth', label: 'Blue Marble', group: 'Planets', pattern: 'pl-earth', primary: '#0a1024', secondary: '#2670c8', accent: '#5cb058' },
+  { id: 'pl-mars', label: 'Mars', group: 'Planets', pattern: 'pl-mars', primary: '#150e16', secondary: '#c05a30', accent: '#f0e0d0' },
+  { id: 'pl-jupiter', label: 'Jupiter', group: 'Planets', pattern: 'pl-jupiter', primary: '#12101a', secondary: '#c89660', accent: '#d86848' },
+  { id: 'pl-saturn', label: 'Saturn', group: 'Planets', pattern: 'pl-saturn', primary: '#0e1220', secondary: '#d8b878', accent: '#f0e0b8' },
+  { id: 'pl-uranus', label: 'Uranus', group: 'Planets', pattern: 'pl-uranus', primary: '#0e1a22', secondary: '#7fd4d8', accent: '#d8f4f4' },
+  { id: 'pl-neptune', label: 'Neptune', group: 'Planets', pattern: 'pl-neptune', primary: '#0a0e20', secondary: '#2850c0', accent: '#9fc0ff' },
+  // ---- Ace Styles ----
+  { id: 'ace-flash', label: 'Flashpoint', group: 'Ace Styles', pattern: 'ace-flash', primary: '#14142a', secondary: '#ffcf3c', accent: '#f8f8ff' },
+  { id: 'ace-explosion', label: 'Shockwave', group: 'Ace Styles', pattern: 'ace-explosion', primary: '#200c08', secondary: '#ff7a1e', accent: '#ffe8a0' },
+  { id: 'ace-flames', label: 'Ring of Fire', group: 'Ace Styles', pattern: 'ace-flames', primary: '#180a06', secondary: '#d84a10', accent: '#ffc22e' },
+  { id: 'ace-disco', label: 'Mirrorball', group: 'Ace Styles', pattern: 'ace-disco', primary: '#180a2e', secondary: '#c0c8e0', accent: '#ff4ab8' },
+  { id: 'ace-rainbow', label: 'Prism', group: 'Ace Styles', pattern: 'ace-rainbow', primary: '#4a78c8', secondary: '#ff6a5a', accent: '#ffd84a' },
+  { id: 'ace-smoke', label: 'Smokescreen', group: 'Ace Styles', pattern: 'ace-smoke', primary: '#16191d', secondary: '#3c444c', accent: '#929ca6' },
+  { id: 'ace-water', label: 'Splashdown', group: 'Ace Styles', pattern: 'ace-water', primary: '#0c3050', secondary: '#2a80b8', accent: '#bfe8f8' },
+  { id: 'ace-confetti', label: 'Confetti', group: 'Ace Styles', pattern: 'ace-confetti', primary: '#f4ecd8', secondary: '#ff5a7a', accent: '#38b8e8' },
+  { id: 'ace-bubblegum', label: 'Bubblegum', group: 'Ace Styles', pattern: 'ace-bubblegum', primary: '#ef6aa4', secondary: '#f8a8cc', accent: '#fff0f6' },
+  // ---- Fruits ----
+  { id: 'fruit-banana', label: 'Banana', group: 'Fruits', pattern: 'fruit-banana', primary: '#f8ecc0', secondary: '#f0c030', accent: '#7a5a1c' },
+  { id: 'fruit-strawberry', label: 'Strawberry', group: 'Fruits', pattern: 'fruit-strawberry', primary: '#d83048', secondary: '#f8e0a8', accent: '#3c9048' },
+  { id: 'fruit-grape', label: 'Grapevine', group: 'Fruits', pattern: 'fruit-grape', primary: '#efe6d3', secondary: '#6a3a8c', accent: '#4a8838' },
+  { id: 'fruit-watermelon', label: 'Watermelon', group: 'Fruits', pattern: 'fruit-watermelon', primary: '#e04858', secondary: '#2c8a3c', accent: '#f4f0e0' },
+  // ---- Shelf Sigils ----
+  { id: 'sig-blade', label: 'The Blade', group: 'Shelf Sigils', pattern: 'sig-blade', primary: '#1c2a4a', secondary: '#9fb2c8', accent: '#d8b23a' },
+  { id: 'sig-hat', label: 'The Outrider', group: 'Shelf Sigils', pattern: 'sig-hat', primary: '#5a3a20', secondary: '#8a5c30', accent: '#e0b06a' },
+  { id: 'sig-glass', label: 'The Sleuth', group: 'Shelf Sigils', pattern: 'sig-glass', primary: '#17352a', secondary: '#7fa896', accent: '#c8a24a' },
+  { id: 'sig-column', label: 'The Forum', group: 'Shelf Sigils', pattern: 'sig-column', primary: '#59281a', secondary: '#8a4a2c', accent: '#e8ddc8' },
+  { id: 'sig-dragon', label: 'The Wyrm', group: 'Shelf Sigils', pattern: 'sig-dragon', primary: '#173c28', secondary: '#2c6242', accent: '#e8b23c' },
+  { id: 'sig-planet', label: 'The Wanderer', group: 'Shelf Sigils', pattern: 'sig-planet', primary: '#1a2340', secondary: '#4a5c8c', accent: '#c8a858' },
+  { id: 'sig-star', label: 'The Marshal', group: 'Shelf Sigils', pattern: 'sig-star', primary: '#6a4a26', secondary: '#a8814a', accent: '#e8d8a0' },
+  { id: 'sig-kraken', label: 'The Kraken', group: 'Shelf Sigils', pattern: 'sig-kraken', primary: '#4a1a24', secondary: '#7a2f3c', accent: '#d8a878' },
+  { id: 'sig-circuit', label: 'The Machine', group: 'Shelf Sigils', pattern: 'sig-circuit', primary: '#0f2418', secondary: '#1d4530', accent: '#6ae8a8' },
+  { id: 'sig-hazard', label: 'The Contagion', group: 'Shelf Sigils', pattern: 'sig-hazard', primary: '#141414', secondary: '#2c2c2c', accent: '#d8e83c' },
+  { id: 'sig-sixgun', label: 'The Sixgun', group: 'Shelf Sigils', pattern: 'sig-sixgun', primary: '#2e2018', secondary: '#57402e', accent: '#c8b898' },
+  // ---- Patterns ----
+  { id: 'argyle', label: 'Argyle', group: 'Patterns', pattern: 'argyle', primary: '#263c5c', secondary: '#8c2c38', accent: '#e8e0c8' },
+  { id: 'chevron', label: 'Chevron', group: 'Patterns', pattern: 'chevron', primary: '#201c2c', secondary: '#3c3452', accent: '#e8c86a' },
+  { id: 'honeycomb', label: 'Honeycomb', group: 'Patterns', pattern: 'honeycomb', primary: '#6a4a14', secondary: '#c89030', accent: '#f0d078' },
+  { id: 'scales', label: 'Dragon Scales', group: 'Patterns', pattern: 'scales', primary: '#143c34', secondary: '#1e5c4a', accent: '#d8b23a' },
+  { id: 'lattice', label: 'Trellis', group: 'Patterns', pattern: 'lattice', primary: '#33573f', secondary: '#dce8dc', accent: '#e8c86a' },
+  { id: 'pinstripe', label: 'Boardroom', group: 'Patterns', pattern: 'pinstripe', primary: '#22262e', secondary: '#3a404c', accent: '#a8b0c0' },
+  { id: 'decofan', label: 'Gatsby Fans', group: 'Patterns', pattern: 'decofan', primary: '#101820', secondary: '#1e3040', accent: '#d8b23a' },
+  { id: 'starfield', label: 'Starfall', group: 'Patterns', pattern: 'starfield', primary: '#1a1030', secondary: '#4a3a78', accent: '#f0f0ff' },
+  { id: 'circuit', label: 'Motherboard', group: 'Patterns', pattern: 'circuit', primary: '#0c2030', secondary: '#1a4058', accent: '#48c8e8' },
 ] as const;
+
+/** The shelf headings, in the order the picker shows them. */
+export const CARD_BACK_GROUPS = [
+  'Classics', 'Elements', 'Seasons', 'Sun & Moon', 'Biomes', 'Planets',
+  'Ace Styles', 'Fruits', 'Shelf Sigils', 'Patterns',
+] as const;
+
+/**
+ * Every geometry a spec's `pattern` may name, derived from the catalogue so
+ * the two can never drift. The classic seven survive because the first
+ * sixteen designs still weave them — and because a spec stored by an early
+ * version may hold a bare geometry id.
+ */
+export const CARD_BACK_GEOMETRIES: readonly string[] = [...new Set(CARD_BACK_PATTERNS.map((p) => p.pattern))];
 
 /** The sixteen borders. Geometry only — the color is the spec's business. */
 export const CARD_BORDERS = [

@@ -1840,6 +1840,12 @@ button.link:hover { text-decoration: underline; }
   transition: transform 0.12s ease;
 }
 .cardback-pick:hover:not(:disabled) { transform: translateY(-2px); }
+/* A shelf label inside the design browse: quieter than the section heads
+   above it, because there are ten of these and three of those. */
+.cbe-group-head {
+  margin: 8px 0 4px; font-size: 9px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-dim); opacity: 0.85;
+}
 .cardback-pick.on { border-color: var(--accent); }
 .cardback-pick:disabled { cursor: default; opacity: 0.7; }
 /* A mini of the same card, a third the size: same borders, same patterns,

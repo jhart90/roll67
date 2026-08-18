@@ -1,5 +1,5 @@
 import type { CardBackSpec, Character } from 'shared';
-import { CARD_BACK_PATTERNS, CARD_BORDERS, normalizeCardBack, patternDefaults } from 'shared';
+import { CARD_BACK_GROUPS, CARD_BACK_PATTERNS, CARD_BORDERS, normalizeCardBack, patternDefaults } from 'shared';
 import { intents } from '../store/game';
 import { CardBackView, cardBackCss } from '../util/cardBacks';
 
@@ -37,26 +37,33 @@ export function CardBackEditor({ character, onClose }: { character: Character; o
       </div>
 
       <h4 className="settings-head">Design</h4>
-      <div className="cardback-grid cbe-grid">
-        {CARD_BACK_PATTERNS.map((p) => {
-          // Three designs can share a weave, so "which tile is mine" is the
-          // whole starting spec, not the geometry — otherwise picking one
-          // plaid lights up all three.
-          const d = patternDefaults(p.id, spec.border);
-          const on = spec.pattern === d.pattern && spec.primary === d.primary
-            && spec.secondary === d.secondary && spec.accent === d.accent;
-          return (
-            <button
-              key={p.id}
-              className={`cardback-pick${on ? ' on' : ''}`}
-              title={p.label}
-              onClick={() => pickPattern(p.id)}
-            >
-              <CardBackView back={d} className="cardback-mini" />
-            </button>
-          );
-        })}
-      </div>
+      {/* Seventy-five designs is a browse, so they are shelved the way the
+          catalogue files them — a heading per theme, minis under each. */}
+      {CARD_BACK_GROUPS.map((g) => (
+        <div key={g} className="cbe-group">
+          <h5 className="cbe-group-head">{g}</h5>
+          <div className="cardback-grid cbe-grid">
+            {CARD_BACK_PATTERNS.filter((pt) => pt.group === g).map((pt) => {
+              // Designs can share a weave (the classics do), so "which tile
+              // is mine" is the whole starting spec, not the geometry —
+              // otherwise picking one plaid lights up all three.
+              const d = patternDefaults(pt.id, spec.border);
+              const on = spec.pattern === d.pattern && spec.primary === d.primary
+                && spec.secondary === d.secondary && spec.accent === d.accent;
+              return (
+                <button
+                  key={pt.id}
+                  className={`cardback-pick${on ? ' on' : ''}`}
+                  title={pt.label}
+                  onClick={() => pickPattern(pt.id)}
+                >
+                  <CardBackView back={d} className="cardback-mini" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
       <h4 className="settings-head">Colors</h4>
       <div className="cbe-colors">

@@ -26,6 +26,11 @@ import { registerMapObjectHandlers } from './live/handlers/mapObjects.js';
 import { registerCounterHandlers } from './live/handlers/counters.js';
 import { flushAllVisionMemory } from './live/visionService.js';
 
+/** Stamped at commit time so a running server can say which build it is —
+ *  and so a deploy that claims to watch only part of this repo has something
+ *  in the server tree to notice. */
+const BUILD_REF = 'd40e6b3+bg';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 ensureDataDirs();
@@ -87,7 +92,7 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`Roll67 server listening on :${PORT}`);
+  console.log(`Roll67 server listening on :${PORT} (build ` + BUILD_REF + `)`);
   if (!mailConfigured()) {
     console.log('  mail: RESEND_API_KEY unset — password reset links will be printed here instead of emailed');
   }

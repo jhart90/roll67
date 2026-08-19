@@ -40,19 +40,26 @@ export interface BookSlot {
    */
   textTop: number;
   textBottom: number;
+  /**
+   * How much of the book's width the lettering may span — the panel between
+   * the spine's own vertical gold rules, measured book by book off the
+   * painting. The circuit book's rules sit far inside its edges; the
+   * kraken's are generous. Centred, since the borders are symmetric.
+   */
+  textW: number;
 }
 export const BOOK_SLOTS: BookSlot[] = [
-  { left: 6.6, width: 7.9, top: 20.8, sigil: '⚔️', textTop: 30.6, textBottom: 49.3 },
-  { left: 14.9, width: 7.3, top: 25.0, sigil: '🤠', textTop: 30.0, textBottom: 51.8 },
-  { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍', textTop: 29.0, textBottom: 50.5 },
-  { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️', textTop: 28.8, textBottom: 50.0 },
-  { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉', textTop: 30.3, textBottom: 50.0 },
-  { left: 47.8, width: 7.1, top: 24.0, sigil: '🪐', textTop: 31.0, textBottom: 50.8 },
-  { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐', textTop: 29.5, textBottom: 50.3 },
-  { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙', textTop: 31.3, textBottom: 50.0 },
-  { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌', textTop: 29.8, textBottom: 50.0 },
-  { left: 79.4, width: 7.1, top: 27.2, sigil: '☣️', textTop: 39.0, textBottom: 50.2 },
-  { left: 86.8, width: 7.3, top: 24.9, sigil: '🔫', textTop: 30.3, textBottom: 51.5 },
+  { left: 6.6, width: 7.9, top: 20.8, sigil: '⚔️', textTop: 30.6, textBottom: 49.3 , textW: 0.72 },
+  { left: 14.9, width: 7.3, top: 25.0, sigil: '🤠', textTop: 30.0, textBottom: 51.8 , textW: 0.72 },
+  { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍', textTop: 29.0, textBottom: 50.5 , textW: 0.68 },
+  { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️', textTop: 28.8, textBottom: 50.0 , textW: 0.7 },
+  { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉', textTop: 30.3, textBottom: 50.0 , textW: 0.72 },
+  { left: 47.8, width: 7.1, top: 24.0, sigil: '🪐', textTop: 31.0, textBottom: 50.8 , textW: 0.66 },
+  { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐', textTop: 29.5, textBottom: 50.3 , textW: 0.7 },
+  { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙', textTop: 31.3, textBottom: 50.0 , textW: 0.72 },
+  { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌', textTop: 29.8, textBottom: 50.0 , textW: 0.62 },
+  { left: 79.4, width: 7.1, top: 27.2, sigil: '☣️', textTop: 39.0, textBottom: 50.2 , textW: 0.7 },
+  { left: 86.8, width: 7.3, top: 24.9, sigil: '🔫', textTop: 30.3, textBottom: 51.5 , textW: 0.7 },
 ];
 export const BOOK_BOTTOM = 60.5;
 

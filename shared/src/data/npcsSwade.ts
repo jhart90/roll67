@@ -350,6 +350,31 @@ const ROWS: Row[] = [
   { name: 'PT Boat', category: 'Vehicles', tier: 4, wild: false, attrs: ['d4', 'd4', 'd4', 'd8', 'd8'], skills: [['Boating', 'd4']], attacks: [['50cal MG', 'Shooting', '2d8!', 'kinetic', 300, { ap: 2 }], ['Torpedo', 'Shooting', '5d10!', 'kinetic', 900, { heavy: true }]], pace: 14, immune: 'poison', note: 'Plywood, three engines, and four torpedoes.', vehicle: { kind: 'watercraft', size: 12, handling: 1, topSpeed: 40, toughness: 14, armor: 2, crew: 10, cost: '250K', features: ['Heavy Armor'] } },
   { name: 'Small Yacht', category: 'Vehicles', tier: 2, wild: false, attrs: ['d4', 'd4', 'd4', 'd8', 'd8'], skills: [['Boating', 'd4']], attacks: [], pace: 12, immune: 'poison', note: 'Sleeps eight in comfort.', vehicle: { kind: 'watercraft', size: 8, handling: 0, topSpeed: 35, toughness: 14, armor: 2, crew: 1, passengers: 9, cost: '500K+' } },
 
+  // ---------- Egypt ----------
+  // The Khemet-Prime intervention team: a rival timeline's soldiers, sent to
+  // keep a tomb unrobbed. They are not here to kill Agents — a dead time
+  // traveller in the Eighteenth Dynasty is a variable nobody can model.
+  { name: 'Nekhet, Khemet Field Commander', category: 'Egypt', tier: 4, wild: true,
+    attrs: ['d8', 'd8', 'd10', 'd6', 'd8'],
+    skills: [['Athletics', 'd6'], ['Battle', 'd10'], ['Common Knowledge', 'd8'], ['Fighting', 'd8'], ['Intimidation', 'd8'], ['Notice', 'd10'], ['Persuasion', 'd10'], ['Research', 'd6'], ['Shooting', 'd8'], ['Stealth', 'd6'], ['Taunt', 'd8']],
+    attacks: [
+      ['Ceremonial Staff', 'Fighting', '1d6!+1d4!', 'bludgeoning', 10],
+      ['Concealed Pulse Projector', 'Shooting', '2d6!', 'energy', 72, { ap: 2 }],
+    ],
+    armor: [['Concealed Khemet Mesh', 2, 0]],
+    edges: ['Command', 'Command Presence', 'Level Headed', 'Strong Willed'],
+    hindrances: [['Code of Honor', 'Major'], ['Cautious', 'Minor'], ['Loyal', 'Minor']],
+    gear: [
+      ['Scarab Pendant (temporal communicator)', 'Reaches the rest of the Khemet team anywhere in the operating window. Looks like devotional jewellery to anyone who has not seen one before.'],
+      ['Chronometric Scanner', 'Reads temporal signatures at close range — how he sometimes seems to know what the Agents are about to do. An Agent carrying active futuretech is far easier for him to pick out of a crowd.'],
+      ['Forged Administrative Seals & Period Documents', 'Passes any ordinary inspection by ancient authority, and lets him order Egyptians about with every appearance of the right to do it.'],
+      ['Translation Implant', 'Speaks and reads whatever is spoken to him, flawlessly and without a tell.'],
+      ['Compact Medical Patch', 'One use: a Healing roll on himself or an adjacent Khemet operative.'],
+      ['Egyptian Currency', 'Deben of copper and silver — bribes, passage, and the appearance of legitimate office.'],
+    ],
+    pace: 6,
+    note: 'Wild Card. \u201CMy civilization is no less real than yours.\u201D Commander of the Khemet-Prime intervention team, out of a 27th-century Earth where an Egyptian-descended civilization never fell; he considers the CSB\u2019s \u201Cprime timeline\u201D designation arbitrary, and believes keeping this tomb intact until its historical robbery window closes saves billions of lives. He will negotiate, lie, and fight \u2014 but he does not want Agents dead, because killing time travellers here introduces variables nobody can control.\n\nPLAYER-FACING: a high-ranking official of the royal necropolis, impeccable in dress, language and custom, controlled and very hard to surprise. More interested in learning who the Agents are than in arresting them.\n\nMOVESET \u2014 Opening: stays behind the Enforcer and opens with Battle and Tests rather than attacking. Command the Room: supports Khemet allies and manoeuvres them into position; allies in Command Range get +1 to recover from Shaken. Expose Them: loves Tests against Agents while Egyptians are watching \u2014 \u201CShow them what you are carrying\u201D \u2014 trying to force futuretech into the open. Pulse Shot: the concealed weapon only comes out if things are deteriorating, and firing it before ancient witnesses may cost Timeline Integrity. Withdrawal: once two Khemet Wild Cards are carrying 2+ Wounds he organises a retreat.\n\nThe staff reads as entirely historical and has Reach 1; the pulse projector is built into it. Strong Willed is why Tests against him with Smarts or Spirit are +2 harder.' },
+
   // ---------- Nazareth (Scenario) ----------
   // NPCs for the first-century time-intrusion scenario. Novice-tuned: low
   // Toughness, simple actions. SWADE has no Throwing skill — thrown weapons

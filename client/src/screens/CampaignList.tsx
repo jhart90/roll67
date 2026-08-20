@@ -88,13 +88,19 @@ function wrapAt(words: string[], face: SpineFace, fontSize: number, maxLen: numb
 /** Line box as a multiple of the font size — tight, since these are caps. */
 const SPINE_LINE_HEIGHT = 1.06;
 
+/** Must match the scaleX in .shelf-spine (styles.css). */
+const SPINE_SCALE_X = 0.92;
+
 function spineLayout(name: string, slotIdx: number): { lines: string[]; fontSize: number; spacing: number } {
   const slot = BOOK_SLOTS[slotIdx];
   const face = SPINE_FACES[slotIdx];
   // The zone as it stands: lines run ACROSS the book, and stack DOWN it.
   // Across means between the spine's own vertical gold rules — each book's
   // measured panel, not its full leather.
-  const maxLen = (slot.width / 100) * SHELF_W * slot.textW * 0.97;
+  // The box is laid out WIDER by the condensation factor, because the CSS
+  // scaleX squeezes it back down to exactly the panel: width bought
+  // invisibly, paid back as larger type.
+  const maxLen = ((slot.width / 100) * SHELF_W * slot.textW / SPINE_SCALE_X) * 0.97;
   const maxStack = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.97;
   const words = name.split(/\s+/).filter(Boolean);
   if (words.length === 0) return { lines: [name], fontSize: 10, spacing: spineTracking(face) };
@@ -524,7 +530,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
                   // like everything else on this shelf. Centred ON the zone,
                   // which is what holds it between the two.
                   top: `${(((slot.textTop + slot.textBottom) / 2 - slot.top) / (BOOK_BOTTOM - slot.top)) * 100}%`,
-                  width: `calc(var(--su) * ${((slot.width / 100) * SHELF_W * slot.textW).toFixed(1)}px)`,
+                  width: `calc(var(--su) * ${((slot.width / 100) * SHELF_W * slot.textW / SPINE_SCALE_X).toFixed(1)}px)`,
                   height: `calc(var(--su) * ${(((slot.textBottom - slot.textTop) / 100) * SHELF_H).toFixed(1)}px)`,
                   fontFamily: face.family,
                   fontWeight: face.weight ?? 600,

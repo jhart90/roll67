@@ -359,7 +359,7 @@ const ROWS: Row[] = [
     skills: [['Athletics', 'd6'], ['Battle', 'd10'], ['Common Knowledge', 'd8'], ['Fighting', 'd8'], ['Intimidation', 'd8'], ['Notice', 'd10'], ['Persuasion', 'd10'], ['Research', 'd6'], ['Shooting', 'd8'], ['Stealth', 'd6'], ['Taunt', 'd8']],
     attacks: [
       ['Ceremonial Staff', 'Fighting', '1d6!+1d4!', 'bludgeoning', 10],
-      ['Concealed Pulse Projector', 'Shooting', '2d6!', 'energy', 72, { ap: 2 }],
+      ['Concealed Pulse Projector', 'Shooting', '2d6!', 'energy', 60, { ap: 2 }],
     ],
     armor: [['Concealed Khemet Mesh', 2, 0]],
     edges: ['Command', 'Command Presence', 'Level Headed', 'Strong Willed'],
@@ -374,6 +374,28 @@ const ROWS: Row[] = [
     ],
     pace: 6,
     note: 'Wild Card. \u201CMy civilization is no less real than yours.\u201D Commander of the Khemet-Prime intervention team, out of a 27th-century Earth where an Egyptian-descended civilization never fell; he considers the CSB\u2019s \u201Cprime timeline\u201D designation arbitrary, and believes keeping this tomb intact until its historical robbery window closes saves billions of lives. He will negotiate, lie, and fight \u2014 but he does not want Agents dead, because killing time travellers here introduces variables nobody can control.\n\nPLAYER-FACING: a high-ranking official of the royal necropolis, impeccable in dress, language and custom, controlled and very hard to surprise. More interested in learning who the Agents are than in arresting them.\n\nMOVESET \u2014 Opening: stays behind the Enforcer and opens with Battle and Tests rather than attacking. Command the Room: supports Khemet allies and manoeuvres them into position; allies in Command Range get +1 to recover from Shaken. Expose Them: loves Tests against Agents while Egyptians are watching \u2014 \u201CShow them what you are carrying\u201D \u2014 trying to force futuretech into the open. Pulse Shot: the concealed weapon only comes out if things are deteriorating, and firing it before ancient witnesses may cost Timeline Integrity. Withdrawal: once two Khemet Wild Cards are carrying 2+ Wounds he organises a retreat.\n\nThe staff reads as entirely historical and has Reach 1; the pulse projector is built into it. Strong Willed is why Tests against him with Smarts or Spirit are +2 harder.' },
+  { name: 'Sabu, Khemet Priest-Infiltrator', category: 'Egypt', tier: 3, wild: true,
+    attrs: ['d8', 'd10', 'd8', 'd6', 'd6'],
+    skills: [['Athletics', 'd6'], ['Common Knowledge', 'd10'], ['Fighting', 'd6'], ['Notice', 'd8'], ['Occult', 'd8'], ['Performance', 'd8'], ['Persuasion', 'd10'], ['Research', 'd8'], ['Stealth', 'd10'], ['Taunt', 'd8'], ['Thievery', 'd8']],
+    attacks: [
+      ['Bronze Ritual Knife', 'Fighting', '1d6!+1d4!', 'piercing', 5],
+      ['Neural Stunner Ring', 'Shooting', '0', 'energy', 10, { save: 'vigor', onSave: 'negate', condition: 'stunned' }],
+    ],
+    armor: [['Concealed Protective Weave', 1, 0]],
+    edges: ['Charismatic', 'Connections', 'Investigator', 'Thief'],
+    hindrances: [['Curious', 'Major'], ['Pacifist', 'Minor'], ['Secret', 'Minor']],
+    gear: [
+      ['Ankh Communicator', 'Encrypted, and indistinguishable from devotional jewellery. Reaches Nekhet and the rest of the Khemet team.'],
+      ['Sensor Incense', 'The smoke carries microscopic particles. Anywhere he has censed, Khemet can see \u2014 which is most of the necropolis by now.'],
+      ['Forged Priestly Seals', 'Open doors no stranger should be able to open, and explain his presence anywhere in the complex.'],
+      ['Lockpicks, Rope, Chalk', 'The infiltrator\u2019s trade, none of it anachronistic. Chalk marks the route back out.'],
+      ['Small Oil Lamp', 'Period-correct light, and a reason to be walking a corridor at night.'],
+      ['Egyptian Medical Supplies', 'Linen, honey, resin \u2014 a Healing roll he can make in front of witnesses without a single question.'],
+      ['Hidden Temporal Beacon', 'His way home, cached rather than carried. Finding it is worth more to the Agents than finding him.'],
+    ],
+    pace: 6,
+    note: 'Wild Card. \u201CHistory is negotiable.\u201D Khemet-Prime\u2019s primary infiltrator, embedded almost eight months \u2014 and the operative the Agents have least reason to suspect.\n\nPLAYER-FACING: a friendly priest of the necropolis. Where the guards are suspicious and the administrators officious, Sabu is helpful: he knows the gossip, knows which officials take bribes, and may warn the party about patrols. He seems genuinely to want people kept safe.\n\nDM-ONLY: the friendliness is the operation. He is counting their numbers, cataloguing their equipment, working out their extraction method, learning what CSB knows, and above all which artifacts SYSTEM believes must disappear. If it serves that, he will genuinely help them reach the tomb \u2014 and then tell Nekhet.\n\nMOVESET \u2014 he should almost never stand and trade Fighting rolls. Disappear: Stealth d10 to break line of sight. Test: Taunt or Persuasion to make an Agent hesitate or look the wrong way. Stunner: the ring, for Agents who have got themselves isolated \u2014 no visible projectile, but an ancient witness watching someone drop for no reason is its own problem. Support: Persuasion and the right skill to prop up Nekhet or the Engineer. Human Shield Without A Human Shield: his nastiest habit is moving among civilians and priests. The Agents can shoot him. Across a temple full of witnesses, with a plasma weapon?\n\nThe knife is an ordinary ancient blade; he deliberately carries almost nothing incriminating. Of all the Khemet operatives, he is the one most likely to come round to the Agents\u2019 side.' },
+
 
   // ---------- Nazareth (Scenario) ----------
   // NPCs for the first-century time-intrusion scenario. Novice-tuned: low

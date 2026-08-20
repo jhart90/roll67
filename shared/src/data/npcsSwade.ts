@@ -73,6 +73,28 @@ interface Row {
   hindrances?: [string, 'Minor' | 'Major'][];
   /** Non-weapon kit: [name, notes]. Rollable weapons belong in `attacks`. */
   gear?: [string, string][];
+  /**
+   * An arcane caster's background, skill and pool — and the powers it knows.
+   *
+   * Existing arcane rows describe their magic in the note, which reads fine
+   * and rolls nothing. A row that gives its powers HERE gets them on the
+   * sheet's Powers list instead, where the DM can actually cast them: the
+   * same list a player's caster uses, so range, resisting trait and inflicted
+   * condition all run through the machinery that already exists.
+   */
+  arcane?: {
+    background: string;
+    skill: string;
+    pp: number;
+    powers: Array<{
+      name: string; cost: number; notes: string;
+      damage?: string; dtype?: string; range?: number;
+      save?: 'agility' | 'smarts' | 'spirit' | 'strength' | 'vigor';
+      onSave?: 'negate' | 'half';
+      condition?: string; duration?: string;
+      aoeShape?: 'sphere' | 'cone' | 'line' | 'cube'; aoeSize?: number;
+    }>;
+  };
   pace?: number;
   /** Comma list of damage types the engine shifts by 4 (sheet `resist`). */
   resist?: string;
@@ -395,6 +417,54 @@ const ROWS: Row[] = [
     ],
     pace: 6,
     note: 'Wild Card. \u201CHistory is negotiable.\u201D Khemet-Prime\u2019s primary infiltrator, embedded almost eight months \u2014 and the operative the Agents have least reason to suspect.\n\nPLAYER-FACING: a friendly priest of the necropolis. Where the guards are suspicious and the administrators officious, Sabu is helpful: he knows the gossip, knows which officials take bribes, and may warn the party about patrols. He seems genuinely to want people kept safe.\n\nDM-ONLY: the friendliness is the operation. He is counting their numbers, cataloguing their equipment, working out their extraction method, learning what CSB knows, and above all which artifacts SYSTEM believes must disappear. If it serves that, he will genuinely help them reach the tomb \u2014 and then tell Nekhet.\n\nMOVESET \u2014 he should almost never stand and trade Fighting rolls. Disappear: Stealth d10 to break line of sight. Test: Taunt or Persuasion to make an Agent hesitate or look the wrong way. Stunner: the ring, for Agents who have got themselves isolated \u2014 no visible projectile, but an ancient witness watching someone drop for no reason is its own problem. Support: Persuasion and the right skill to prop up Nekhet or the Engineer. Human Shield Without A Human Shield: his nastiest habit is moving among civilians and priests. The Agents can shoot him. Across a temple full of witnesses, with a plasma weapon?\n\nThe knife is an ordinary ancient blade; he deliberately carries almost nothing incriminating. Of all the Khemet operatives, he is the one most likely to come round to the Agents\u2019 side.' },
+  { name: 'Khay, Khemet Security Engineer', category: 'Egypt', tier: 3, wild: true,
+    attrs: ['d6', 'd12', 'd6', 'd4', 'd6'],
+    skills: [['Academics', 'd8'], ['Athletics', 'd4'], ['Common Knowledge', 'd8'], ['Electronics', 'd12'], ['Fighting', 'd4'], ['Hacking', 'd12'], ['Notice', 'd10'], ['Repair', 'd12'], ['Research', 'd10'], ['Science', 'd10'], ['Stealth', 'd6'], ['Thievery', 'd8'], ['Weird Science', 'd10']],
+    attacks: [
+      ['Tool Rod', 'Fighting', '1d4!+1d4!', 'bludgeoning', 5],
+      ['Emergency Pulse Pistol', 'Shooting', '2d6!', 'energy', 60, { ap: 2 }],
+    ],
+    edges: ['Arcane Background', 'McGyver', 'Mr. Fix It', 'Scholar'],
+    hindrances: [['Yellow', 'Major'], ['Quirk', 'Minor'], ['Loyal', 'Minor']],
+    arcane: {
+      background: 'Weird Science', skill: 'Weird Science', pp: 15,
+      powers: [
+        { name: 'Scarab Restraint (Entangle)', cost: 2, range: 60, save: 'agility', onSave: 'negate', condition: 'entangled', duration: 'Special', notes: 'Tiny scarab machines throw a near-invisible filament around the target. Entangled, or Bound with a raise; the target breaks free with Athletics or Strength.' },
+        { name: 'Neural Pulse (Stun)', cost: 2, range: 60, save: 'vigor', onSave: 'negate', condition: 'stunned', duration: 'Instant', notes: 'A concealed emitter fires a directed pulse. Vigor or Stunned — which in SWADE also puts them Prone.' },
+        { name: 'Chronometric Scanner (Detect Arcana)', cost: 2, range: 30, duration: '5', notes: 'Reads anomalous or futuristic technology, which is exactly what a CSB Agent is carrying. Conceal, cast the other way, hides Khemet\u2019s own kit from a scan.' },
+        { name: 'Reactive Field (Protection)', cost: 2, range: 0, duration: '5', notes: '+2 Armor, or +4 with a raise. Khay\u2019s only defence — he wears no armour at all.' },
+        { name: 'Survival Field (Environmental Protection)', cost: 2, range: 0, duration: '1H', notes: 'Emergency temporal-environment suit: heat, cold, bad air, and whatever a tomb has been sealed with for three centuries.' },
+      ],
+    },
+    gear: [
+      ['Engineer\u2019s Toolkit', 'With McGyver, this is a device waiting to be improvised out of whatever is in the room.'],
+      ['Scarab Drone Controller', 'Commands the swarm hidden in the tomb\u2019s carvings.'],
+      ['Holographic Interface', 'Disguised as a scribe\u2019s writing tablet, and the reason he is always holding one.'],
+      ['Portable Scanner & Spare Sensor Modules', 'For placing more security, and for finding the security someone else has moved.'],
+      ['Measuring Cord, Chisels, Microfilament', 'A surveyor\u2019s kit that stands up to inspection \u2014 and the filament his restraints are spun from.'],
+      ['Temporal Diagnostic Device', 'Tells him how badly the timeline has been disturbed. Tells the Agents the same, if they take it.'],
+    ],
+    pace: 6,
+    note: 'Wild Card. \u201CI surrender!\u201D \u2014 and he means it. The engineer behind virtually every covert system in the tomb, which is why it feels like ancient Egypt designed by someone who has played Portal: his work is camouflaged as scarabs, carvings, lamps, statues, jewellery and architecture.\n\nPLAYER-FACING: an awkward young scribe or surveyor, carrying tablets, measuring cords and tools. He avoids conversation, watches everything, and some of his instruments look\u2026 odd.\n\nDM-ONLY: brilliant, anxious, and absolutely not willing to die for Nekhet. Captured, he is the easiest Khemet operative to interrogate \u2014 no ideology, he just wants to go home.\n\nMOVESET \u2014 Khay makes the environment fight for him. Round 1: Reactive Field. Round 2: Scarab Restraint on the most dangerous melee PC. Round 3 onward: instead of attacking, an Electronics or Hacking roll to work whatever the DM has placed on the map \u2014 seal a stone door, kill the lamps, wake the scarab drones, start a Guardian Statue, lock a chamber, floodlight the intruders, raise the alarm, or brick stolen Khemet equipment. Cornered, he surrenders honestly.\n\nParry 4 and Toughness 5 with no armour: he is a puzzle, not a fight. Powers are on the Powers tab and cast with Weird Science; the pulse pistol is a last resort he hates.' },
+  { name: 'Menka, Khemet Enforcer', category: 'Egypt', tier: 4, wild: true,
+    attrs: ['d8', 'd6', 'd8', 'd10', 'd10'],
+    skills: [['Athletics', 'd10'], ['Battle', 'd6'], ['Fighting', 'd10'], ['Intimidation', 'd10'], ['Notice', 'd8'], ['Shooting', 'd8'], ['Stealth', 'd6'], ['Survival', 'd6']],
+    attacks: [
+      ['Egyptian War Club', 'Fighting', '1d10!+1d6!', 'bludgeoning', 5],
+      ['Khemet Shock Baton', 'Fighting', '1d10!+1d6!+2', 'energy', 5, { ap: 2, save: 'vigor', onSave: 'negate', condition: 'stunned' }],
+      ['Concealed Pulse Sidearm', 'Shooting', '2d6!', 'energy', 60, { ap: 2 }],
+    ],
+    armor: [['Khemet Reactive Mesh', 3, 0]],
+    edges: ['Brawny', 'Block', 'Combat Reflexes', 'First Strike'],
+    hindrances: [['Loyal', 'Major'], ['Mean', 'Minor'], ['Vengeful', 'Minor']],
+    gear: [
+      ['Restraints Disguised As Rope', 'He would rather take an Agent than kill one.'],
+      ['Emergency Medical Patch', 'One use, on himself or an ally beside him.'],
+      ['Khemet Communicator', 'Nekhet hears whatever Menka sees.'],
+      ['Egyptian Shield, Rope, Water, Period Currency', 'The kit of an ordinary necropolis guard, maintained far better than an ordinary guard maintains anything.'],
+    ],
+    pace: 6,
+    note: 'Wild Card. Nekhet\u2019s bodyguard, and the only Khemet operative cleared to use serious force without asking first. This is the one your combat characters get to properly fight.\n\nPLAYER-FACING: an unusually imposing necropolis guard who speaks little. His gear looks Egyptian but is extraordinarily well kept, and unlike the other guards he watches the Agents\u2019 hands and equipment rather than their faces.\n\nDM-ONLY: he likes CSB\u2019s mission least, for a personal reason \u2014 in Khemet-Prime\u2019s history his hometown exists because Egypt stayed dominant, and restoring the CSB timeline erases it. He is defending a family who will not be born for three thousand years.\n\nTHE ARMOUR IS THE REVEAL. A PC shoots him, the shot lands, there is a small blue shimmer, and Menka looks down at the flattened round and then back up. Then call for Notice. Do not explain the +3 mesh before that moment.\n\nMOVESET \u2014 his logic is simple: protect Nekhet, and intercept anyone who reaches him. Shove: an Athletics Test to move a PC away from artifacts, stairs or a doorway rather than hurt them. Grapple: Strength d10 and Athletics d10 make him the team\u2019s capture specialist. Shock Baton: his preferred answer to CSB \u2014 Stunned, not dead. The war club is genuinely historical, which he prefers, and the pulse sidearm is an absolute last resort.\n\nINTERPOSE (optional, and very much worth using): once per round, when an adjacent Khemet ally is hit, Menka may make himself the target instead. Nothing teaches a party what he is for faster.' },
 
 
   // ---------- Nazareth (Scenario) ----------
@@ -568,6 +638,27 @@ function sheetFor(r: Row): SheetData {
     ...(r.edges ? { edges: r.edges.map((name) => ({ name, ...traitColumnsFor(name) })) } : {}),
     ...(r.hindrances ? { hindrances: r.hindrances.map(([name, severity]) => ({ name, severity, ...traitColumnsFor(name) })) } : {}),
     ...(r.gear ? { inventory: r.gear.map(([name, notes]) => ({ name, qty: 1, weight: 0, equipped: true, notes })) } : {}),
+    ...(r.arcane ? {
+      arcaneBackground: r.arcane.background,
+      arcaneSkill: r.arcane.skill,
+      pp: r.arcane.pp,
+      ppMax: r.arcane.pp,
+      powers: r.arcane.powers.map((pw) => ({
+        name: pw.name,
+        cost: pw.cost,
+        effect: pw.damage ? 'damage' : 'damage',
+        damage: pw.damage ?? '',
+        dtype: pw.dtype ?? '',
+        range: pw.range ?? 0,
+        save: pw.save ?? '',
+        onSave: pw.onSave ?? 'negate',
+        aoeShape: pw.aoeShape ?? '',
+        aoeSize: pw.aoeSize ?? 0,
+        condition: pw.condition ?? '',
+        duration: pw.duration ?? '',
+        notes: pw.notes,
+      })),
+    } : {}),
     ...(r.resist ? { resist: r.resist } : {}),
     ...(r.immune ? { immune: r.immune } : {}),
     ...(r.vulnerable ? { vulnerable: r.vulnerable } : {}),

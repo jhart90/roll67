@@ -3768,8 +3768,7 @@ th > .term { border-bottom-style: dotted; }
    Hover hands off to the full .lit glow, which out-shines it. */
 /* Every shelved campaign breathes — outline and title on one clock per
    book, quiet enough to read as alive rather than blinking. The lone
-   campaign's louder breath below overrides this by specificity, so the
-   one-book case keeps its emphasis. */
+   campaign's louder breath below overrides this by specificity. */
 .shelf-book.occupied:not(.lit) { animation: shelf-breathe 3.2s ease-in-out infinite; }
 @keyframes shelf-breathe {
   0%, 100% { box-shadow: 0 0 calc(var(--su) * 18px) rgba(120, 170, 255, 0.18); }
@@ -3782,12 +3781,17 @@ th > .term { border-bottom-style: dotted; }
 .shelf-book.occupied:not(.lit) .shelf-spine { animation: shelf-spine-breathe 3.2s ease-in-out infinite; }
 @keyframes shelf-spine-breathe {
   0%, 100% {
-    color: #e8c771;
-    text-shadow: 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95), 0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25), 0 0 calc(var(--su) * 5px) rgba(12, 7, 2, 0.9), 0 0 calc(var(--su) * 11px) rgba(12, 7, 2, 0.7), 0 0 calc(var(--su) * 20px) rgba(12, 7, 2, 0.5);
+    color: rgba(228, 194, 108, 0.94);
+    text-shadow:
+      0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
+      0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);
   }
   50% {
-    color: #f0d682;
-    text-shadow: 0 0 calc(var(--su) * 7px) rgba(255, 220, 140, 0.35), 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95), 0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25), 0 0 calc(var(--su) * 5px) rgba(12, 7, 2, 0.9), 0 0 calc(var(--su) * 11px) rgba(12, 7, 2, 0.7), 0 0 calc(var(--su) * 20px) rgba(12, 7, 2, 0.5);
+    color: rgba(240, 214, 130, 0.97);
+    text-shadow:
+      0 0 calc(var(--su) * 7px) rgba(255, 220, 140, 0.35),
+      0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
+      0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);
   }
 }
 .shelf-book.occupied.solo:not(.lit) { animation: shelf-solo-pulse 3.2s ease-in-out infinite; }
@@ -3802,15 +3806,22 @@ th > .term { border-bottom-style: dotted; }
 /* The lettering breathes with the edge, on the same 3.2s clock so the two
    read as one object waking rather than two effects sharing a book. The gold
    lifts toward the hover colour and takes a little of its glow. */
-.shelf-book.occupied.solo:not(.lit) .shelf-spine { animation: shelf-solo-spine 3.2s ease-in-out infinite; }
+.shelf-book.occupied.solo:not(.lit) .shelf-spine {
+  animation: shelf-solo-spine 3.2s ease-in-out infinite;
+}
 @keyframes shelf-solo-spine {
   0%, 100% {
-    color: #e8c771;
-    text-shadow: 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95), 0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25), 0 0 calc(var(--su) * 5px) rgba(12, 7, 2, 0.9), 0 0 calc(var(--su) * 11px) rgba(12, 7, 2, 0.7), 0 0 calc(var(--su) * 20px) rgba(12, 7, 2, 0.5);
+    color: rgba(228, 194, 108, 0.94);
+    text-shadow:
+      0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
+      0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);
   }
   50% {
     color: rgba(255, 233, 176, 0.99);
-    text-shadow: 0 0 calc(var(--su) * 7px) rgba(255, 220, 140, 0.55), 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95), 0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25), 0 0 calc(var(--su) * 5px) rgba(12, 7, 2, 0.9), 0 0 calc(var(--su) * 11px) rgba(12, 7, 2, 0.7), 0 0 calc(var(--su) * 20px) rgba(12, 7, 2, 0.5);
+    text-shadow:
+      0 0 calc(var(--su) * 7px) rgba(255, 220, 140, 0.55),
+      0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
+      0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3819,21 +3830,18 @@ th > .term { border-bottom-style: dotted; }
   .shelf-book.occupied:not(.lit) .shelf-spine,
   .shelf-book.occupied.solo:not(.lit) .shelf-spine { animation: none; }
 }
-.shelf-book.occupied.lit .shelf-spine { color: rgba(255, 233, 176, 0.98); text-shadow: 0 0 calc(var(--su) * 8px) rgba(255, 220, 140, 0.7), 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95), 0 0 calc(var(--su) * 5px) rgba(12, 7, 2, 0.9), 0 0 calc(var(--su) * 11px) rgba(12, 7, 2, 0.7), 0 0 calc(var(--su) * 20px) rgba(12, 7, 2, 0.5); }
+.shelf-book.occupied.lit .shelf-spine { color: rgba(255, 233, 176, 0.98); text-shadow: 0 0 calc(var(--su) * 8px) rgba(255, 220, 140, 0.7), 0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95); }
 
 /* The title is set flat and turned a quarter turn, sized in IMAGE pixels via
    --su so it grows and shrinks with the painting. */
 .shelf-spine {
   position: absolute;
   left: 50%;
-  /* Size and placement arrive inline: the box IS the book's lettering panel.
+  /* Size and placement arrive inline: the box IS the book's lettering zone.
      Pinned by its own centre to the centre of that zone, so the title sits
      squarely between the head ornament and the sigil however many lines it
-     takes. The scaleX condenses the type ~8% — width bought invisibly, and
-     the fitter pays it back as larger sizes. SPINE_SCALE_X in
-     CampaignList.tsx must match this number: the box is laid out wider by
-     exactly the factor the scale takes away. */
-  transform: translate(-50%, -50%) scaleX(0.92);
+     takes. Read the right way up, across the spine. */
+  transform: translate(-50%, -50%);
   /* The wrap is chosen by the fitting math and each line is its own element,
      so the browser sets exactly the lines that were measured rather than
      re-breaking them at a size it was never asked about. */
@@ -3842,17 +3850,19 @@ th > .term { border-bottom-style: dotted; }
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
-  /* Gilt lettering the way binders actually do it: full gold, edged DARK —
-     a gold stroke fattened the letters but never separated them from
-     mid-tone leather; a near-black rim does. Under it all, a soft dark halo
-     hugging the letterforms, so the leather's crackle reads as shadowed
-     behind the title instead of competing with it. */
-  color: #e8c771;
-  -webkit-text-stroke: calc(var(--su) * 0.8px) rgba(24, 14, 5, 0.85);
+  /* Gold leaf pressed INTO the leather rather than paint floating over it:
+     slightly translucent so the hide's grain ghosts through, a dark press
+     under each stroke and a thin catch-light above it, and no glow at rest.
+     Face, size and spacing arrive inline — each book letters its own spine,
+     sized to its own title (see SPINE_FACES / spineLayout). */
+  color: rgba(228, 194, 108, 0.94);
+  /* A thin stroke of the same gold fattens every face — several of the spine
+     fonts only exist in one thin cut, and lettering pressed into leather
+     should read HEAVY. */
+  -webkit-text-stroke: calc(var(--su) * 0.7px) rgba(228, 194, 108, 0.9);
   text-shadow:
     0 calc(var(--su) * 1.5px) calc(var(--su) * 2px) rgba(20, 10, 4, 0.95),
-    0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25),
-    0 0 calc(var(--su) * 5px) rgba(12, 7, 2, 0.9), 0 0 calc(var(--su) * 11px) rgba(12, 7, 2, 0.7), 0 0 calc(var(--su) * 20px) rgba(12, 7, 2, 0.5);
+    0 calc(var(--su) * -1px) calc(var(--su) * 1px) rgba(255, 238, 190, 0.25);
   pointer-events: none;
   transition: color 0.18s ease, text-shadow 0.18s ease;
 }

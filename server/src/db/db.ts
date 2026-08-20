@@ -130,6 +130,11 @@ ensureColumn('characters', 'parent_id', 'parent_id TEXT');
 ensureColumn('handouts', 'parent_id', 'parent_id TEXT');
 // The DM's private margin on a handout; never leaves the DM's own payloads.
 ensureColumn('handouts', 'dm_notes_md', "dm_notes_md TEXT NOT NULL DEFAULT ''");
+// Images two through four. The first still lives in asset_id, which every
+// older row already has and every older reader still understands — this
+// column only ever holds the ONES AFTER IT, so nothing has to be migrated
+// and a server rolled back keeps showing the original image.
+ensureColumn('handouts', 'extra_assets_json', "extra_assets_json TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('shops', 'parent_id', 'parent_id TEXT');
 ensureColumn('rollable_tables', 'parent_id', 'parent_id TEXT');
 ensureColumn('maps', 'parent_id', 'parent_id TEXT');

@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { HandoutImages } from './HandoutsPanel';
 import type { Character, Counter, DirectoryPayload, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
 import { str } from 'shared';
 import { intents, useGameStore, type MapTarget } from '../store/game';
@@ -841,7 +842,7 @@ function ReadModal({ node, onClose }: { node: TreeNode; onClose: () => void }) {
         {loc && <p style={{ whiteSpace: 'pre-wrap' }}>{loc.notes || <span className="dim">No description.</span>}</p>}
         {handout && (
           <>
-            {handout.imageUrl && <img src={handout.imageUrl} alt={handout.title} style={{ maxWidth: '100%', borderRadius: 6 }} />}
+            <HandoutImages handout={handout} className="world-handout-img" />
             <p style={{ whiteSpace: 'pre-wrap' }}>{handout.bodyMd || <span className="dim">(empty)</span>}</p>
           </>
         )}

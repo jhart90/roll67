@@ -774,6 +774,9 @@ export interface TargetPreviewInfo {
 
 // ---------- Handouts ----------
 
+/** A handout carries at most this many images, stacked in reading order. */
+export const MAX_HANDOUT_IMAGES = 4;
+
 export interface Handout {
   id: string;
   title: string;
@@ -782,7 +785,12 @@ export interface Handout {
    *  receives — stripped server-side, whatever the sharing state — because a
    *  secret that merely isn't RENDERED is a secret in the network tab. */
   dmNotesMd: string;
+  /** The FIRST image, or null. Kept beside `imageUrls` because a thumbnail
+   *  wants one picture, not a gallery. */
   imageUrl: string | null;
+  /** Every image in reading order, up to MAX_HANDOUT_IMAGES. Empty when the
+   *  handout has none; `imageUrls[0]` is always `imageUrl`. */
+  imageUrls: string[];
   sharedAll: boolean;
   /** userIds; only meaningful for the DM's view. */
   sharedWith: string[];

@@ -4,7 +4,7 @@ import type {
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   Counter, MapZone, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, RollCalloutInfo, Token, Wall, WorldFolder,
 } from 'shared';
-import { isAceStyle, isCounterPosition, statEntriesFromDice, type AceStyle, type DiceLook, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
+import { MAX_HANDOUT_IMAGES, isAceStyle, isCounterPosition, statEntriesFromDice, type AceStyle, type DiceLook, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
 /** SWADE's dice roles, and the column each one persists to. */
@@ -1184,6 +1184,7 @@ interface HandoutRow {
   body_md: string;
   dm_notes_md?: string | null;
   asset_id: string | null;
+  extra_assets_json?: string | null;
   shared_all: number;
   folder_id?: string | null;
   parent_id?: string | null;
@@ -1197,6 +1198,12 @@ function toHandout(row: HandoutRow): Handout {
     bodyMd: row.body_md,
     dmNotesMd: row.dm_notes_md ?? '',
     imageUrl: assets.urlFor(row.asset_id),
+    // The whole gallery in reading order, first image first. Built from both
+    // columns so callers never have to know there are two, and filtered so a
+    // deleted asset leaves a shorter gallery rather than a broken <img>.
+    imageUrls: [row.asset_id, ...safeParse<string[]>(row.extra_assets_json ?? '[]', [])]
+      .map((id) => assets.urlFor(id))
+      .filter((u): u is string => !!u),
     sharedAll: !!row.shared_all,
     sharedWith: shares.map((s) => s.user_id),
     folderId: row.folder_id ?? null,
@@ -1219,14 +1226,29 @@ export const handouts = {
     const rows = stmt('SELECT * FROM handouts WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as HandoutRow[];
     return rows.map(toHandout);
   },
-  update(id: string, fields: { title?: string; bodyMd?: string; dmNotesMd?: string; assetId?: string | null; parentId?: string | null }): void {
+  /**
+   * `imageAssetIds` replaces the WHOLE gallery when given — the first id
+   * becomes the handout's image, the rest ride in the extras column. It is
+   * all-or-nothing on purpose: a per-slot API would need an ordering
+   * argument, and the caller always knows the finished list anyway.
+   */
+  update(id: string, fields: {
+    title?: string; bodyMd?: string; dmNotesMd?: string; assetId?: string | null;
+    parentId?: string | null; imageAssetIds?: string[];
+  }): void {
     const cur = stmt('SELECT * FROM handouts WHERE id = ?').get(id) as HandoutRow | undefined;
     if (!cur) return;
+    if (fields.imageAssetIds) {
+      const list = fields.imageAssetIds.slice(0, MAX_HANDOUT_IMAGES);
+      stmt('UPDATE handouts SET asset_id = ?, extra_assets_json = ? WHERE id = ?')
+        .run(list[0] ?? null, JSON.stringify(list.slice(1)), id);
+    }
+    const after = stmt('SELECT * FROM handouts WHERE id = ?').get(id) as HandoutRow;
     stmt('UPDATE handouts SET title = ?, body_md = ?, dm_notes_md = ?, asset_id = ?, parent_id = ? WHERE id = ?').run(
       fields.title ?? cur.title,
       fields.bodyMd ?? cur.body_md,
       fields.dmNotesMd ?? cur.dm_notes_md ?? '',
-      fields.assetId !== undefined ? fields.assetId : cur.asset_id,
+      fields.assetId !== undefined ? fields.assetId : after.asset_id,
       fields.parentId !== undefined ? fields.parentId : (cur.parent_id ?? null),
       id,
     );

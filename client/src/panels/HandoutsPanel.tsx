@@ -1,10 +1,94 @@
 import { useState } from 'react';
-import type { Handout } from 'shared';
+import { MAX_HANDOUT_IMAGES, type Handout } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { SecretField } from '../util/SecretField';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 import { ConfirmButton } from '../util/ConfirmButton';
+
+/**
+ * Every image a handout carries, stacked in reading order — the one place
+ * that decides what "a handout's pictures" looks like, so the player window,
+ * the presented card and the world tree cannot drift apart. Falls back to
+ * the single legacy field for anything that predates the gallery.
+ */
+export function HandoutImages({ handout, className }: { handout: Handout; className?: string }) {
+  const urls = galleryUrlsOf(handout);
+  if (urls.length === 0) return null;
+  return (
+    <div className="handout-gallery">
+      {urls.map((url, i) => (
+        <img
+          key={url + i}
+          className={className ?? 'handout-img'}
+          src={url}
+          alt={`${handout.title}${urls.length > 1 ? ` (${i + 1} of ${urls.length})` : ''}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** What a handout has now, tolerating rows written before `imageUrls`. */
+function galleryUrlsOf(handout: Handout | null): string[] {
+  if (!handout) return [];
+  if (handout.imageUrls?.length) return handout.imageUrls;
+  return handout.imageUrl ? [handout.imageUrl] : [];
+}
+
+/** "/uploads/<id>.<ext>" -> "<id>". A handout's image URL IS its asset id,
+ *  dressed — so an image the DM keeps can be named back to the server
+ *  without the client having to carry a parallel list of ids. */
+function assetIdFromUrl(url: string): string | null {
+  const m = /\/uploads\/([^./]+)\./.exec(url);
+  return m ? m[1] : null;
+}
+
+/**
+ * The editing state for a handout's pictures, shared by both editors so they
+ * cannot disagree about what "add an image" means.
+ *
+ * `urls` is what the DM is looking at; the ids to save are recovered from
+ * those URLs, which keeps one list rather than two that could fall out of
+ * step when a tile is removed from the middle.
+ */
+function useHandoutGallery(handout: Handout | null) {
+  const [urls, setUrls] = useState<string[]>(() => galleryUrlsOf(handout));
+  const was = galleryUrlsOf(handout);
+  const touched = urls.length !== was.length || urls.some((u, i) => u !== was[i]);
+  return {
+    urls,
+    full: urls.length >= MAX_HANDOUT_IMAGES,
+    add: (url: string) => setUrls((u) => [...u, url].slice(0, MAX_HANDOUT_IMAGES)),
+    removeAt: (i: number) => setUrls((u) => u.filter((_, k) => k !== i)),
+    /** Only sent when this editor actually changed the pictures — an
+     *  untouched handout keeps whatever it has, including images added from
+     *  the other editor while this one sat open. */
+    patch: (): { imageAssetIds?: string[] } => (touched
+      ? { imageAssetIds: urls.map(assetIdFromUrl).filter((x): x is string => !!x) }
+      : {}),
+  };
+}
+
+/** The DM's image strip: the stack players will see, each tile removable. */
+function GalleryEditor({ g }: { g: ReturnType<typeof useHandoutGallery> }) {
+  if (g.urls.length === 0) return null;
+  return (
+    <div className="handout-gallery-edit">
+      {g.urls.map((url, i) => (
+        <div className="handout-gallery-tile" key={url + i}>
+          <img className="handout-img" src={url} alt={`Image ${i + 1}`} />
+          <button
+            type="button"
+            className="handout-gallery-x"
+            title="Remove this image from the handout (the file stays in your library)"
+            onClick={() => g.removeAt(i)}
+          >×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function HandoutEditor({ handout, onDone }: { handout: Handout | null; onDone: () => void }) {
   const campaign = useGameStore((s) => s.campaign)!;
@@ -13,6 +97,7 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
   const [assetId, setAssetId] = useState<string | null>(null);
+  const gallery = useHandoutGallery(handout);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -21,10 +106,12 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
     try {
       const res = await upload(file, campaign.id, 'handout');
       setAssetId(res.assetId);
+      gallery.add(res.url);
     } catch (err) {
       useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
+      e.target.value = '';   // so the same file can be picked again
     }
   }
 
@@ -32,9 +119,9 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
     e.preventDefault();
     if (!title.trim()) return;
     if (handout) {
-      intents.updateHandout(handout.id, { title: title.trim(), bodyMd: body, ...(assetId ? { assetId } : {}) });
+      intents.updateHandout(handout.id, { title: title.trim(), bodyMd: body, ...gallery.patch() });
     } else {
-      intents.createHandout(title.trim(), body, assetId);
+      intents.createHandout(title.trim(), body, assetId, gallery.patch().imageAssetIds);
     }
     onDone();
   }
@@ -50,10 +137,12 @@ export function HandoutEditor({ handout, onDone }: { handout: Handout | null; on
         <textarea rows={6} value={body} onChange={(e) => setBody(e.target.value)} />
       </label>
       <label className="upload-label">
-        Image
-        <input type="file" accept="image/*" onChange={onUpload} disabled={uploading} />
+        {gallery.urls.length === 0 ? 'Image' : `Images (${gallery.urls.length} of ${MAX_HANDOUT_IMAGES})`}
+        <input type="file" accept="image/*" onChange={onUpload} disabled={uploading || gallery.full} />
         <UploadProgressBar progress={progress} />
+        {gallery.full && <span className="dim" style={{ fontSize: 11 }}>Four is the limit — remove one to add another.</span>}
       </label>
+      <GalleryEditor g={gallery} />
       <div className="row">
         <button type="submit" className="primary" style={{ width: 'auto' }}>Save</button>
         <button type="button" onClick={onDone}>Cancel</button>
@@ -74,6 +163,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
   const [assetId, setAssetId] = useState<string | null>(null);
+  const gallery = useHandoutGallery(handout);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -82,17 +172,19 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
     try {
       const res = await upload(file, campaign.id, 'handout');
       setAssetId(res.assetId);
+      gallery.add(res.url);
     } catch (err) {
       useGameStore.getState().toast(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
+      e.target.value = '';   // so the same file can be picked again
     }
   }
 
   function save() {
     if (!title.trim()) return;
-    if (handout) intents.updateHandout(handout.id, { title: title.trim(), bodyMd: body, dmNotesMd: dmNotes, ...(assetId ? { assetId } : {}) });
-    else intents.createHandout(title.trim(), body, assetId);
+    if (handout) intents.updateHandout(handout.id, { title: title.trim(), bodyMd: body, dmNotesMd: dmNotes, ...gallery.patch() });
+    else intents.createHandout(title.trim(), body, assetId, gallery.patch().imageAssetIds);
     onClose();
   }
 
@@ -108,7 +200,7 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
           <span className="spacer" />
           <button className="link" onClick={onClose}>close</button>
         </div>
-        {handout.imageUrl && <img className="handout-img" src={handout.imageUrl} alt={handout.title} />}
+        <HandoutImages handout={handout} />
         {handout.bodyMd && <p className="handout-body">{handout.bodyMd}</p>}
       </div>
     );
@@ -142,11 +234,14 @@ export function HandoutWindow({ handout, onClose }: { handout: Handout | null; o
           />
         </SecretField>
         <label className="upload-label">
-          Image
-          <input type="file" accept="image/*" onChange={onUpload} disabled={uploading} />
+          {gallery.urls.length === 0 ? 'Image' : `Images (${gallery.urls.length} of ${MAX_HANDOUT_IMAGES})`}
+          <input type="file" accept="image/*" onChange={onUpload} disabled={uploading || gallery.full} />
           <UploadProgressBar progress={progress} />
+          {gallery.full && <span className="dim" style={{ fontSize: 11 }}>Four is the limit — remove one to add another.</span>}
         </label>
-        {handout?.imageUrl && !assetId && <img className="handout-img" src={handout.imageUrl} alt={handout.title} />}
+        {/* The order players will see them stacked in. The x removes an image
+            from the handout; the file stays in the asset library. */}
+        <GalleryEditor g={gallery} />
 
         <div className="row" style={{ marginTop: 4 }}>
           <button className="primary" style={{ width: 'auto' }} onClick={save}>Save</button>
@@ -258,7 +353,7 @@ export function HandoutsSection() {
           <h3>{open.title}</h3>
           <button className="link" onClick={() => setOpenId(null)}>back</button>
         </div>
-        {open.imageUrl && <img className="handout-img" src={open.imageUrl} alt={open.title} />}
+        <HandoutImages handout={open} />
         <p className="handout-body">{open.bodyMd}</p>
         {isDm && (
           <>

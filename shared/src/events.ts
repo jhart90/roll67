@@ -710,8 +710,14 @@ export interface AudioControlPayload {
   volume?: number;
 }
 
-export interface CreateHandoutPayload { title: string; bodyMd?: string; assetId?: string | null }
-export interface UpdateHandoutPayload { handoutId: string; title?: string; bodyMd?: string; dmNotesMd?: string; assetId?: string | null; parentId?: string | null }
+/** `imageAssetIds` lets a handout be born with its whole gallery — the
+ *  editor can upload four before the handout exists to attach them to. */
+export interface CreateHandoutPayload { title: string; bodyMd?: string; assetId?: string | null; imageAssetIds?: string[] }
+/** `imageAssetIds` replaces the handout's whole gallery, first image first. */
+export interface UpdateHandoutPayload {
+  handoutId: string; title?: string; bodyMd?: string; dmNotesMd?: string;
+  assetId?: string | null; parentId?: string | null; imageAssetIds?: string[];
+}
 export interface DeleteHandoutPayload { handoutId: string }
 export interface ShareHandoutPayload { handoutId: string; to: string[] | 'all' | 'none' }
 

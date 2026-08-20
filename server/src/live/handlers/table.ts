@@ -1,12 +1,12 @@
 import type { Server, Socket } from 'socket.io';
-import {
+import { MAX_HANDOUT_IMAGES,
   C2S, S2C,
   type AoePreviewPayload, type ClearDrawingsPayload, type CreateHandoutPayload, type CreateTablePayload,
   type DeleteHandoutPayload, type DeleteTablePayload, type DrawPayload,
   type EraseDrawingPayload, type MeasurePayload, type PingPayload, type RollTablePayload,
   type ShareHandoutPayload, type TargetPreviewPayload, type UpdateHandoutPayload, type UpdateTablePayload,
 } from 'shared';
-import { campaigns, chat, drawings, handouts, maps, rollableTables, tokens } from '../../db/repos.js';
+import { assets,campaigns, chat, drawings, handouts, maps, rollableTables, tokens } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, viewerFor } from '../hub.js';
 import { socketsSeeingToken } from '../visionService.js';
 import { rollGate } from '../locks.js';
@@ -44,6 +44,22 @@ export function broadcastHandouts(io: Server, campaignId: string): void {
       : all.filter((h) => h.sharedAll || h.sharedWith.includes(v.userId)).map((h) => ({ ...h, sharedWith: [], dmNotesMd: '' }));
     socket.emit(S2C.HANDOUTS, { handouts: list });
   }
+}
+
+/**
+ * The ids from a client that are real assets of THIS campaign, capped.
+ *
+ * These become <img> srcs on every player's screen, and a handout is a thing
+ * the DM shares deliberately — not a way to point one campaign at another's
+ * uploads. Returns undefined when the caller sent no list at all, which is
+ * what "leave the gallery alone" looks like.
+ */
+function ownedAssetIds(ids: unknown, campaignId: string): string[] | undefined {
+  if (!Array.isArray(ids)) return undefined;
+  return ids
+    .filter((id): id is string => typeof id === 'string')
+    .filter((id) => assets.byId(id)?.campaign_id === campaignId)
+    .slice(0, MAX_HANDOUT_IMAGES);
 }
 
 export function registerTableHandlers(io: Server, socket: Socket): void {
@@ -136,22 +152,27 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
 
   // ----- handouts -----
 
-  socket.on(C2S.CREATE_HANDOUT, safe(socket, ({ title, bodyMd, assetId }: CreateHandoutPayload) => {
+  socket.on(C2S.CREATE_HANDOUT, safe(socket, ({ title, bodyMd, assetId, imageAssetIds }: CreateHandoutPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') {
       emitError(socket, 'Only the DM creates handouts.');
       return;
     }
-    handouts.create(d.campaignId, title?.trim() || 'Untitled', bodyMd ?? '', assetId ?? null);
+    const gallery = ownedAssetIds(imageAssetIds, d.campaignId);
+    const made = handouts.create(d.campaignId, title?.trim() || 'Untitled', bodyMd ?? '', gallery?.[0] ?? assetId ?? null);
+    // A handout can be uploaded to before it exists, so the rest of the
+    // gallery is attached the moment it does.
+    if (gallery && gallery.length > 1) handouts.update(made.id, { imageAssetIds: gallery });
     broadcastHandouts(io, d.campaignId);
   }, 'CREATE_HANDOUT'));
 
-  socket.on(C2S.UPDATE_HANDOUT, safe(socket, ({ handoutId, title, bodyMd, dmNotesMd, assetId, parentId }: UpdateHandoutPayload) => {
+  socket.on(C2S.UPDATE_HANDOUT, safe(socket, ({ handoutId, title, bodyMd, dmNotesMd, assetId, parentId, imageAssetIds }: UpdateHandoutPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const h = handouts.byId(handoutId);
     if (!h) return;
-    handouts.update(handoutId, { title, bodyMd, dmNotesMd, assetId, parentId });
+    const gallery = ownedAssetIds(imageAssetIds, d.campaignId);
+    handouts.update(handoutId, { title, bodyMd, dmNotesMd, assetId, parentId, ...(gallery ? { imageAssetIds: gallery } : {}) });
     broadcastHandouts(io, d.campaignId);
   }, 'UPDATE_HANDOUT'));
 

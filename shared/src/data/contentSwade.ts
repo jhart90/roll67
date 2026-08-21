@@ -568,6 +568,16 @@ const GEAR: G[] = [
   ['GPS', 'Tells you exactly where you are', 250, 1],
   ['Hand Held Computer', 'Pocket machine', 250, 1],
   ['Laptop', 'Portable workstation', 1200, 5],
+  // Weird Science, not electronics — but it lives here because a DM looking
+  // for it will look under the machines. No price: it is not for sale in any
+  // century the party can shop in.
+  ['Holo-Projector',
+    'Weird Science gear, one-off use. Palm-sized projector throwing a convincing full-colour image or a silent loop. '
+    + 'Range 12/24/48. Fills up to a 20-metre cube — big enough for something Large (Size 6–8). '
+    + 'One action to activate, one to shut down or reprogram. A battery holds an hour of projection; '
+    + 'the loop runs 15 seconds and repeats for as long as it is lit. Convinces the eye, and nothing else: '
+    + 'it makes no sound, casts no shadow, moves no air, and anything that touches it passes through.',
+    undefined, 2],
   // ---- Firearms accessories ----
   ['Bipod/Tripod', 'An action to deploy; then negates Recoil and minimum Strength penalties', 100, 2],
   ['Laser/Red Dot Sight', '+1 Shooting at Short and Medium range', 150, 1, { trait: 'Shooting', amount: 1 }],

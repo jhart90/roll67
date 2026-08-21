@@ -15,6 +15,10 @@ import { inkOnDark } from '../util/playerColor';
 type Kind = WorldDragKind | 'token';
 
 interface TreeNode {
+  /** SWADE: three Wounds and a Wild Die, or an Extra. Drives the silhouette. */
+  wildCard?: boolean;
+  /** A marker colour the DM chose for this row, overriding the rule. */
+  markerColor?: string;
   kind: Kind;
   id: string;
   name: string;
@@ -45,6 +49,20 @@ interface TreeNode {
   /** For map nodes: a scene, and whether a details preview exists. */
   isScene?: boolean;
   hasPreview?: boolean;
+}
+
+/**
+ * The colour of a row's silhouette: the DM's choice if they made one, and
+ * otherwise nothing — the class carries the Wild Card / Extra default, so a
+ * theme can restyle both without this file being touched.
+ */
+/** A short, high-contrast palette for marker colours — enough to tell six
+ *  factions apart at a glance without opening a colour wheel. */
+const MARKER_COLORS = ['#4ea8ff', '#8a93a6', '#5cc98a', '#e8c86a', '#e06a6a', '#c07ae0', '#e08a4a', '#f0f0f0'];
+
+function markerStyle(node: { kind: string; markerColor?: string }): { color: string } | undefined {
+  if (node.markerColor) return { color: inkOnDark(node.markerColor) };
+  return undefined;
 }
 
 const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦', counter: '▮', token: '⬢' } as Record<string, string>;
@@ -125,6 +143,16 @@ function buildNodes(
       playerRun: c.ownerUserId != null,
       tokenMapId: tokenHome.get(c.id)?.mapId,
       tokenCharacterId: c.id,
+      // Wild Card or Extra decides the silhouette, because that is the thing
+      // a DM scanning this list actually wants to know: which of these can
+      // take three Wounds and act like a person. SWADE marks it on the sheet
+      // (PCs default to true). Other systems have no such split, so they keep
+      // the older question that means the same thing there — is this someone's
+      // character, or one of the DM's — rather than painting a whole tree one
+      // colour and saying nothing.
+      wildCard: c.system === 'swade' ? c.sheet.wildCard !== false : c.ownerUserId != null,
+      // A colour the DM picked for this row. Blank means "follow the rule".
+      markerColor: str(c.sheet, 'markerColor', '') || undefined,
       // The sheet's own color field is the fallback when no piece of theirs
       // is on the table yet; it is blank for most PCs, hence the `undefined`.
       color: colorOfCharacter.get(c.id) ?? (str(c.sheet, 'color', '') || undefined),
@@ -144,6 +172,9 @@ function buildNodes(
       sub: c.ownerUserId ? (c.owner ?? '') : 'NPC',
       notMine: true,
       playerRun: c.ownerUserId != null,
+      // No sheet reaches this viewer, so Wild Card cannot be read off one.
+      // Someone else's PC is the overwhelmingly common case here.
+      wildCard: c.ownerUserId != null,
       tokenMapId: tokenHome.get(c.id)?.mapId,
       tokenCharacterId: c.id,
       // No sheet reaches this viewer, so the token is the only source.
@@ -247,6 +278,8 @@ export function WorldTreePanel() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [reading, setReading] = useState<TreeNode | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
+  /** Right-clicked character row: where the marker-colour menu hangs. */
+  const [markerMenu, setMarkerMenu] = useState<{ x: number; y: number; characterId: string } | null>(null);
   const [folderEdit, setFolderEdit] = useState<string | null>(null);
   const [chestEdit, setChestEdit] = useState<string | null>(null);
   // The dragged item lives in a module-level ref (not state) so `drop` reads
@@ -653,7 +686,9 @@ export function WorldTreePanel() {
           onContextMenu={(e) => {
             e.preventDefault();
             if (isDm && node.kind === 'folder' && !node.virtual) setCtxMenu({ x: e.clientX, y: e.clientY, folderId: node.id });
-            else open(node);
+            else if (isDm && node.kind === 'character' && !node.notMine) {
+              setMarkerMenu({ x: e.clientX, y: e.clientY, characterId: node.id });
+            } else open(node);
             selectNode(node);
           }}
           title={node.kind === 'map' ? 'Click to open in the viewer · double/right-click to edit · drag to re-parent or re-order' : 'Click to expand · double/right-click to open · drag onto a row to nest, onto its top edge to re-order'}
@@ -665,13 +700,15 @@ export function WorldTreePanel() {
             {kids.length ? (isOpen ? '▾' : '▸') : ''}
           </span>
           <span
-            className={`wt-icon${node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? ' wt-tok-player' : ' wt-tok-dm') : ''}`}
-            // The silhouette wears the piece's own color, so scanning the tree
-            // and scanning the map are the same act. Lifted off pure black
-            // first: a color picked to read as a filled shape on a lit map can
-            // be invisible as a glyph on dark chrome. Without one the class
-            // above still says party-blue or DM-grey.
-            style={node.color ? { color: inkOnDark(node.color) } : undefined}
+            className={`wt-icon${node.kind === 'token' || node.kind === 'character' ? (node.wildCard ? ' wt-wild' : ' wt-extra') : ''}`}
+            // What the silhouette SAYS is what a DM scanning the list wants to
+            // know: bright blue for a Wild Card, grey for an Extra. It used to
+            // wear the piece's own token colour, which made a whole tree one
+            // shade of whatever the party had picked and told nobody anything.
+            // A colour chosen deliberately still wins — lifted off pure black
+            // first, since a fill that reads on a lit map can vanish as a
+            // glyph on dark chrome.
+            style={markerStyle(node)}
             title={node.kind === 'token' || node.kind === 'character' ? (node.playerRun ? 'Run by a player' : 'Run by the DM') : undefined}
           >
             {/* A folder shows what it HOLDS when that is the whole point of
@@ -740,6 +777,44 @@ export function WorldTreePanel() {
       {folderEdit && <FolderDetailsModal folderId={folderEdit} onClose={() => setFolderEdit(null)} />}
       {chestEdit && <ChestFolderEditor folderId={chestEdit} onClose={() => setChestEdit(null)} />}
 
+      {markerMenu && (
+        <div className="wt-ctx-backdrop" onClick={() => setMarkerMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMarkerMenu(null); }}>
+          <AnchoredMenu x={markerMenu.x} y={markerMenu.y} className="wt-ctx-menu" onClick={(e) => e.stopPropagation()}>
+            <span className="wt-ctx-head">Marker colour</span>
+            <div className="wt-marker-swatches">
+              {MARKER_COLORS.map((c) => (
+                <button
+                  key={c}
+                  className="wt-marker-swatch"
+                  style={{ background: c }}
+                  title={c}
+                  onClick={() => {
+                    intents.updateCharacter(markerMenu.characterId, { markerColor: c });
+                    setMarkerMenu(null);
+                  }}
+                />
+              ))}
+              <label className="wt-marker-swatch wt-marker-custom" title="Any colour at all">
+                🎨
+                <input
+                  type="color"
+                  onChange={(e) => {
+                    intents.updateCharacter(markerMenu.characterId, { markerColor: e.target.value });
+                    setMarkerMenu(null);
+                  }}
+                />
+              </label>
+            </div>
+            <button onClick={() => {
+              // Back to the rule: blue for a Wild Card, grey for an Extra.
+              intents.updateCharacter(markerMenu.characterId, { markerColor: '' });
+              setMarkerMenu(null);
+            }}>Reset to default</button>
+            <hr />
+            <button onClick={() => { const n = byId.get(markerMenu.characterId); if (n) open(n); setMarkerMenu(null); }}>Open sheet</button>
+          </AnchoredMenu>
+        </div>
+      )}
       {ctxMenu && (
         <div className="wt-ctx-backdrop" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }}>
           <AnchoredMenu x={ctxMenu.x} y={ctxMenu.y} className="wt-ctx-menu" onClick={(e) => e.stopPropagation()}>

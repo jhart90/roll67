@@ -977,8 +977,11 @@ button.link:hover { text-decoration: underline; }
 .sc-notes { font-size: 11px; color: var(--text-dim); line-height: 1.45; }
 
 /* World-tab token silhouettes: the party reads light blue, the DM's cast grey. */
-.wt-icon.wt-tok-player { color: #7fc4ff; }
-.wt-icon.wt-tok-dm { color: #8a93a6; }
+/* What a silhouette in the world tree MEANS: bright blue is a Wild Card —
+   three Wounds, a Wild Die, a name worth remembering — and grey is an Extra.
+   A colour the DM picks for a row arrives inline and wins over both. */
+.wt-icon.wt-wild { color: #4ea8ff; }
+.wt-icon.wt-extra { color: #8a93a6; }
 
 /* Map / Scene details window. */
 /* A docked window body supplies its own panel surface — the frame around it
@@ -4066,3 +4069,17 @@ th > .term { border-bottom-style: dotted; }
   border: 1px solid var(--border); border-radius: 50%; cursor: pointer;
 }
 .handout-gallery-x:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/* The marker-colour swatches in the world tree's right-click menu. */
+.wt-ctx-head { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); padding: 2px 4px; }
+.wt-marker-swatches { display: flex; flex-wrap: wrap; gap: 5px; padding: 4px; max-width: 168px; }
+.wt-marker-swatch {
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 2px solid var(--border); cursor: pointer;
+}
+.wt-marker-swatch:hover { border-color: var(--text); }
+.wt-marker-custom {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; background: var(--panel-2); position: relative; overflow: hidden;
+}
+.wt-marker-custom input[type="color"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

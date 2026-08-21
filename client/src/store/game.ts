@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import {
+import { type UpdateMapObjectPayload,
   C2S, S2C, aoeCentredOnSelf, castableLevels, combatActions, systemFor,
   type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type CustomItem, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
@@ -2427,7 +2427,10 @@ export const intents = {
     pendingInspectPlacement = true;
     socket.emit(C2S.PLACE_MAP_OBJECT, { mapId, kind, name, description, q, r });
   },
-  updateMapObject: (objectId: string, patch: { name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: LootItem[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }) =>
+  // The patch shape comes from the protocol rather than being restated here:
+  // a hand-copied duplicate is how `layer` existed on the wire for a while
+  // and still could not be passed from this side.
+  updateMapObject: (objectId: string, patch: UpdateMapObjectPayload['patch']) =>
     socket.emit(C2S.UPDATE_MAP_OBJECT, { objectId, patch }),
   deleteMapObject: (objectId: string) => socket.emit(C2S.DELETE_MAP_OBJECT, { objectId }),
   takeMapItem: (objectId: string) => socket.emit(C2S.TAKE_MAP_ITEM, { objectId }),

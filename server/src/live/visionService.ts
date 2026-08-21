@@ -621,6 +621,11 @@ export function mapObjectsVisibleTo(
   userId: string, isDm: boolean, mapId: string, objs: MapObject[], seen?: Set<number>,
 ): MapObject[] {
   if (isDm) return objs;
+  // A cache on the GM layer is not on the table yet, however well lit the hex
+  // is. Filtered here rather than at each call site, so every path that shows
+  // a player a map object — join, map switch, vision update, the world tree —
+  // hides it by the same rule a hidden token is hidden by.
+  objs = objs.filter((o) => o.layer !== 'gm');
   // Prefer an explicitly supplied set (a view computed moments ago), then the
   // live cache, then the fog persisted from earlier sessions — a join happens
   // before any FOV pass has run, and a returning player still knows the

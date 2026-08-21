@@ -778,6 +778,14 @@ export interface MapObject {
   locked?: boolean;
   /** Inventory item name that unlocks it — "Key" is the generic. */
   keyName?: string | null;
+  /**
+   * Which layer it sits on, exactly as a token does: 'map' is on the table
+   * for anyone who can see the hex, 'gm' is the DM's alone. A cache under a
+   * flagstone is placed on 'gm' and moved to 'map' the moment somebody's
+   * Notice roll earns it. Absent means 'map' — every chest placed before
+   * this existed was visible, and stays visible.
+   */
+  layer?: 'map' | 'gm';
 }
 
 export interface PlaceMapObjectPayload {
@@ -792,11 +800,13 @@ export interface PlaceMapObjectPayload {
   interactRange?: number;
   locked?: boolean;
   keyName?: string | null;
+  layer?: 'map' | 'gm';
 }
 
 export interface UpdateMapObjectPayload {
   objectId: string;
   patch: {
+    layer?: 'map' | 'gm';
     name?: string;
     description?: string;
     artAssetId?: string;

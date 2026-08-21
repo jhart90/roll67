@@ -1,7 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, acquirePatch, conditionCombat, conditionsOf, hexDistance, firstFreeHex, packHex, systemFor,
-  type Character, type DeleteMapObjectPayload, type GameSystem, type OpenChestPayload, type PlaceMapObjectPayload,
+  type Character, type DeleteMapObjectPayload, type GameSystem, type MapObject, type OpenChestPayload, type PlaceMapObjectPayload,
   type SheetData, type TakeAllChestPayload, type TakeChestItemPayload,
   type TakeMapItemPayload, type UpdateMapObjectPayload,
 } from 'shared';
@@ -136,14 +136,34 @@ function lockBlocks(
   return `It's locked. You need ${/^a |^an |^the /i.test(key) ? key : `a ${key}`} to open it.`;
 }
 
+/**
+ * Tell the table about a map object — or untell them.
+ *
+ * A chest on the GM layer is the DM's alone, so the players who can see its
+ * hex are sent a REMOVAL rather than an update: hiding a chest that is
+ * already on their screen has to take it off, and an upsert they were simply
+ * not sent would leave it sitting there until they reloaded. Revealing is the
+ * same call in reverse, which is why both live here rather than at each site.
+ */
+function sendMapObject(io: Server, campaignId: string, obj: MapObject): void {
+  const hidden = obj.layer === 'gm';
+  for (const s of socketsSeeingHex(io, campaignId, obj.mapId, obj.q, obj.r)) {
+    const viewer = sdata(s);
+    if (hidden && viewer.role !== 'dm') s.emit(S2C.MAP_OBJECT_REMOVED, { objectId: obj.id });
+    else s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+  }
+}
+
 export function registerMapObjectHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.PLACE_MAP_OBJECT, safe(socket, (payload: PlaceMapObjectPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') { emitError(socket, 'Only the DM can place map objects.'); return; }
     const map = maps.byId(payload.mapId);
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map.');
-    const obj = mapObjects.create(payload.mapId, payload.kind, payload.name, payload.description ?? '', payload.q, payload.r);
-    for (const s of socketsSeeingHex(io, d.campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
+    const made = mapObjects.create(payload.mapId, payload.kind, payload.name, payload.description ?? '', payload.q, payload.r);
+    if (payload.layer === 'gm') mapObjects.update(made.id, { layer: 'gm' });
+    const obj = mapObjects.byId(made.id)!;
+    sendMapObject(io, d.campaignId, obj);
   }, 'PLACE_MAP_OBJECT'));
 
   socket.on(C2S.UPDATE_MAP_OBJECT, safe(socket, ({ objectId, patch }: UpdateMapObjectPayload) => {
@@ -155,7 +175,7 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     if (!map || map.campaignId !== d.campaignId) throw new Error('Unknown map object.');
     mapObjects.update(objectId, patch);
     const updated = mapObjects.byId(objectId)!;
-    for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    sendMapObject(io, d.campaignId, updated);
     // A chest is one thing wearing two records — the folder in the world tree
     // that holds its contents, and this box that stands on the ground. The
     // tree row reads the folder's name, so a rename here that stopped at the

@@ -1941,11 +1941,13 @@ interface MapObjectRow {
   detail_asset_id?: string | null;
   locked?: number;
   key_name?: string | null;
+  layer?: string | null;
   linked_character_id?: string | null;
   created_at: number;
 }
 
 function toMapObject(row: MapObjectRow) {
+  // Older rows have no layer column value of their own; they were visible.
   return {
     id: row.id,
     mapId: row.map_id,
@@ -1965,6 +1967,7 @@ function toMapObject(row: MapObjectRow) {
     worldFolderId: row.world_folder_id,
     shopId: row.shop_id,
     interactRange: row.interact_range ?? 1,
+    layer: (row.layer === 'gm' ? 'gm' : 'map') as 'map' | 'gm',
     locked: row.locked === 1,
     keyName: row.key_name ?? null,
     linkedCharacterId: row.linked_character_id ?? null,
@@ -1995,7 +1998,7 @@ export const mapObjects = {
       .run(id, mapId, name, description, kind, q, r, '[]', wfId, sId, range, now());
     return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, detail_asset_id: null, items_json: '[]', world_folder_id: wfId, shop_id: sId, interact_range: range, created_at: now() });
   },
-  update(id: string, patch: { mapId?: string; name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null }): void {
+  update(id: string, patch: { mapId?: string; name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null; layer?: 'map' | 'gm' }): void {
     const sets: string[] = [];
     const vals: unknown[] = [];
     // A chest can be carried to another map — one box, moved, rather than a
@@ -2012,6 +2015,7 @@ export const mapObjects = {
     if (patch.locked !== undefined) { sets.push('locked = ?'); vals.push(patch.locked ? 1 : 0); }
     if (patch.keyName !== undefined) { sets.push('key_name = ?'); vals.push(patch.keyName ?? null); }
     if (patch.linkedCharacterId !== undefined) { sets.push('linked_character_id = ?'); vals.push(patch.linkedCharacterId ?? null); }
+    if (patch.layer !== undefined) { sets.push('layer = ?'); vals.push(patch.layer === 'gm' ? 'gm' : 'map'); }
     if (sets.length === 0) return;
     vals.push(id);
     stmt(`UPDATE map_objects SET ${sets.join(', ')} WHERE id = ?`).run(...vals);

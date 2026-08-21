@@ -112,6 +112,10 @@ ensureColumn('campaigns', 'roll_locked', 'roll_locked INTEGER NOT NULL DEFAULT 0
 // the table's OR your own.
 ensureColumn('campaign_members', 'move_locked', 'move_locked INTEGER NOT NULL DEFAULT 0');
 ensureColumn('campaign_members', 'roll_locked', 'roll_locked INTEGER NOT NULL DEFAULT 0');
+// Chests and loose items get a layer, the same one tokens have had: 'gm'
+// hides a cache from the table until a Notice roll earns it. Default 'map',
+// because everything placed before this was on the table and must stay there.
+ensureColumn('map_objects', 'layer', "layer TEXT NOT NULL DEFAULT 'map'");
 ensureColumn('macros', 'color', 'color TEXT');
 ensureColumn('macros', 'character_id', 'character_id TEXT');
 ensureColumn('macros', 'rollable_id', 'rollable_id TEXT');

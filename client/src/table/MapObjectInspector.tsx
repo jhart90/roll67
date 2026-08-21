@@ -143,6 +143,19 @@ export function MapObjectInspector() {
         </label>
       )}
 
+      {/* Hidden or on the table, exactly as a token is. A cache goes down on
+          the GM layer during prep and is revealed the moment somebody's
+          Notice roll earns it — one click, no re-placing, and the chest keeps
+          its contents, its lock and its position. Applies to loose items too:
+          a single dropped ring can be hidden the same way. */}
+      <label className="mo-lock">
+        <input
+          type="checkbox"
+          checked={obj.layer === 'gm'}
+          onChange={(e) => intents.updateMapObject(obj.id, { layer: e.target.checked ? 'gm' : 'map' })}
+        />
+        <span>{obj.layer === 'gm' ? '🙈 Hidden — only you can see it' : '👁 Visible to players'}</span>
+      </label>
       {obj.kind === 'chest' && (
         <>
           {/* Locks work exactly like a door's: holding the named item is

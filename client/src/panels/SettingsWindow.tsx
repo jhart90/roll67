@@ -244,6 +244,14 @@ function ColorRow({ label, color, opacity, onColor, onOpacity }: {
   );
 }
 
+/** Bytes as the DM reads them: MB to one decimal, GB once that gets silly. */
+function mb(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 ** 3)).toFixed(2)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 ** 2)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+}
+
 /** The speeds, and what each is FOR — the tooltip is the whole explanation. */
 const DICE_SPEEDS: Array<{ id: DiceSpeed; label: string; hint: string }> = [
   { id: 'cinematic', label: 'Cinematic', hint: 'Full throw, with a long beat between rolls to read each result. Best for a small table.' },
@@ -267,6 +275,7 @@ function DmSection({ closed, onToggle }: { closed: Set<string>; onToggle: (t: st
   const [armWipe, setArmWipe] = useState(false);
   // null = not editing; a string = the draft in the rename box.
   const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const storage = useGameStore((s) => s.storageReport);
   // The delete flow, three states: closed, armed (asking for the name), and
   // typing. Kept separate from the rename draft so one can never submit the
   // other.
@@ -384,6 +393,63 @@ function DmSection({ closed, onToggle }: { closed: Set<string>; onToggle: (t: st
           >
             {busy ? 'packing it up…' : 'download this campaign'}
           </button>
+        </span>
+      </div>
+
+      {/* The volume is one bill for the whole server, so this reads across
+          every campaign rather than just this one. Asked for, never polled:
+          it walks the uploads directory and hashes same-sized files, which is
+          cheap on demand and rude on a timer. */}
+      <div className="settings-row settings-danger-row">
+        <span className="settings-label">Server disk</span>
+        <span className="settings-value settings-storage">
+          {!storage ? (
+            <button className="link" onClick={() => intents.storageGet()}>measure what is on disk</button>
+          ) : (
+            <>
+              <span className="storage-total">{mb(storage.totalBytes)} used</span>
+              <span className="storage-lines">
+                <span>Uploads <b>{mb(storage.uploadsBytes)}</b> in {storage.uploadsCount} files</span>
+                <span>Database <b>{mb(storage.dbBytes)}</b>{storage.walBytes > 0 ? ` (+${mb(storage.walBytes)} journal)` : ''}</span>
+                <span className={storage.orphanBytes > 0 ? 'storage-waste' : ''}>
+                  Orphaned <b>{mb(storage.orphanBytes)}</b> in {storage.orphanCount} files — nothing points at these
+                </span>
+                <span className={storage.duplicateBytes > 0 ? 'storage-waste' : ''}>
+                  Duplicated <b>{mb(storage.duplicateBytes)}</b> across {storage.duplicateGroups} group(s) — the same bytes stored twice
+                </span>
+                {storage.missingCount > 0 && (
+                  <span className="storage-waste">{storage.missingCount} record(s) whose file is gone — broken images, not wasted space</span>
+                )}
+              </span>
+              {storage.byCampaign.length > 0 && (
+                <span className="storage-lines">
+                  <b>Biggest campaigns</b>
+                  {storage.byCampaign.slice(0, 5).map((c) => (
+                    <span key={c.campaignId}>{c.name} — {mb(c.bytes)} in {c.count} files</span>
+                  ))}
+                </span>
+              )}
+              {storage.largest.length > 0 && (
+                <span className="storage-lines">
+                  <b>Biggest files</b>
+                  {storage.largest.slice(0, 5).map((f, i) => (
+                    <span key={i}>{f.name} — {mb(f.bytes)} · {f.campaign}</span>
+                  ))}
+                </span>
+              )}
+              <span className="storage-actions">
+                <button className="link" onClick={() => intents.storageGet()}>re-measure</button>
+                <button
+                  className="link danger"
+                  disabled={storage.orphanCount === 0}
+                  title={storage.orphanCount === 0
+                    ? 'Every upload on disk is still claimed by something.'
+                    : 'Delete uploads that no record points at. Anything still referenced is left alone.'}
+                  onClick={() => intents.storageSweep()}
+                >reclaim {mb(storage.orphanBytes)}</button>
+              </span>
+            </>
+          )}
         </span>
       </div>
 

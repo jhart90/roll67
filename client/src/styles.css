@@ -4083,3 +4083,11 @@ th > .term { border-bottom-style: dotted; }
   font-size: 11px; background: var(--panel-2); position: relative; overflow: hidden;
 }
 .wt-marker-custom input[type="color"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* The DM's disk readout: a total, then the lines that explain it. */
+.settings-storage { flex-direction: column; align-items: flex-start; gap: 6px; }
+.storage-total { font-weight: 700; font-size: 13px; }
+.storage-lines { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+.storage-lines b { color: var(--text); font-weight: 600; }
+.storage-waste { color: #e0a86a; }
+.storage-actions { display: flex; gap: 10px; align-items: center; }

@@ -17,6 +17,7 @@ import {
 } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom, viewerFor } from '../hub.js';
 import { buildMapState, dropVisionCache, mapObjectsVisibleTo } from '../visionService.js';
+import { storageReport, sweepOrphans } from '../../storage.js';
 import { emitCustomNpcs } from './characters.js';
 import { initiativeViewFor } from './combat.js';
 import { broadcastCounters } from './counters.js';
@@ -439,6 +440,29 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
     campaigns.setMemberLock(d.campaignId, userId, which, locked === true);
     broadcastPresence(io, d.campaignId);
   }, 'SET_PLAYER_LOCK'));
+
+  /**
+   * What is on the disk, and the one safe way to reclaim some of it.
+   *
+   * DM only, and campaign-agnostic on purpose: a volume is one bill for the
+   * whole server, so the honest answer names every campaign's share rather
+   * than only the one the asker happens to be sitting in.
+   */
+  socket.on(C2S.STORAGE_GET, safe(socket, () => {
+    const d = sdata(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can read the server’s storage.'); return; }
+    socket.emit(S2C.STORAGE_REPORT, storageReport());
+  }, 'STORAGE_GET'));
+
+  socket.on(C2S.STORAGE_SWEEP, safe(socket, () => {
+    const d = sdata(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM can sweep the server’s storage.'); return; }
+    sweepOrphans();
+    // The fresh report IS the answer: the client held the previous one and
+    // says what changed, rather than the server pushing a sentence down a
+    // channel that only knows how to show errors.
+    socket.emit(S2C.STORAGE_REPORT, storageReport());
+  }, 'STORAGE_SWEEP'));
 
   socket.on(C2S.SET_DICE_ACE_STYLE, safe(socket, ({ style }: SetDiceAceStylePayload) => {
     const d = sdata(socket);

@@ -204,6 +204,8 @@ export const C2S = {
   REPAIR_ROLL: 'repairRoll',
   /** Fetch lifetime roll statistics (account-wide, or one character's). */
   ROLL_STATS_GET: 'rollStatsGet',
+  STORAGE_GET: 'storageGet',
+  STORAGE_SWEEP: 'storageSweep',
   /** Fetch the public-facing sheet of a character you don't control. */
   PUBLIC_SHEET_GET: 'publicSheetGet',
   /** DM-only: force-reveal / force-hide a world-tab entry for all players. */
@@ -950,6 +952,7 @@ export const S2C = {
   MAP_ZONES: 'mapZones',
   /** Lifetime roll statistics for the requested scope. */
   ROLL_STATS: 'rollStats',
+  STORAGE_REPORT: 'storageReport',
   /** IronDice public state: active commitment + revealed seeds. */
   IRON_DICE: 'ironDice',
   /** The public-facing sheet for one character. */
@@ -1286,6 +1289,17 @@ export interface DeleteCampaignPayload { confirmName: string }
 /** Hand a token back some of the Pace it spent this turn (+), or take some
  *  away (−). The DM's correction for a misstep; see adjustSpentMovement. */
 export interface AdjustPacePayload { tokenId: string; delta: number }
+/** What the server's disk actually holds — DM only; see server/src/storage.ts. */
+export interface StorageReportPayload {
+  dbBytes: number; walBytes: number;
+  uploadsBytes: number; uploadsCount: number;
+  orphanBytes: number; orphanCount: number;
+  duplicateBytes: number; duplicateGroups: number;
+  missingCount: number;
+  byCampaign: Array<{ campaignId: string; name: string; bytes: number; count: number }>;
+  largest: Array<{ name: string; bytes: number; campaign: string }>;
+  totalBytes: number;
+}
 /** Light a Holo-Projector: a 20-foot square of illusion centred where the
  *  player put it, drawn for the whole table. Costs the actor an action. */
 export interface HoloProjectPayload { characterId: string; mapId: string; x: number; y: number }

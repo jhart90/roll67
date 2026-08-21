@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { type UpdateMapObjectPayload,
+import { type StorageReportPayload, type UpdateMapObjectPayload,
   C2S, S2C, aoeCentredOnSelf, castableLevels, combatActions, systemFor,
   type AoeBurstPayload, type AoePreviewShownPayload, type AoeShape, type CampaignInfo, type CampaignStatePayload, type Character, type ChatMessage,
   type CombatAction, type CustomItem, type CustomNpcView, type DieRoll, type DirectoryPayload, type HpFloatPayload, type ImpactKind,
@@ -323,6 +323,8 @@ interface GameState {
    * the map is the picker, because "where do you want it" is a question only
    * the map can ask.
    */
+  /** The server's disk report, once the DM has asked for one. */
+  storageReport: StorageReportPayload | null;
   holoPlacing: string | null;
   setHoloPlacing(characterId: string | null): void;
   /** SWADE: a live grenade landed on one of yours — throw it back, or on it. */
@@ -642,6 +644,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceAnimEnding: false,
   soakOffer: null,
   testPrompt: null,
+  storageReport: null,
   holoPlacing: null,
   setHoloPlacing(holoPlacing) { set({ holoPlacing }); },
   blastOffer: null,
@@ -1624,6 +1627,20 @@ export function wireSocket(): void {
     useGameStore.setState({ ironDice: p });
   });
 
+  socket.on(S2C.STORAGE_REPORT, (p: StorageReportPayload) => {
+    // A sweep is just a report that arrives smaller, so the delta is worked
+    // out here rather than sent — the server has no channel for good news.
+    const prev = useGameStore.getState().storageReport;
+    useGameStore.setState({ storageReport: p });
+    if (prev && p.orphanCount < prev.orphanCount) {
+      const freed = (prev.orphanBytes - p.orphanBytes) / 1048576;
+      const n = prev.orphanCount - p.orphanCount;
+      useGameStore.getState().toast(`Removed ${n} orphaned file${n === 1 ? '' : 's'} — ${freed.toFixed(1)} MB reclaimed.`, 'info');
+    } else if (prev && prev.orphanCount === 0 && p.orphanCount === 0) {
+      useGameStore.getState().toast('Nothing to reclaim — every upload on disk is still in use.', 'info');
+    }
+  });
+
   socket.on(S2C.ROLL_STATS, (p: RollStatsPayload) => {
     useGameStore.setState((s) => ({
       rollStatsData: { ...s.rollStatsData, [p.characterId ?? 'account']: p },
@@ -2114,6 +2131,8 @@ export const intents = {
     useGameStore.setState({ holoPlacing: null });
   },
   holoStop: (characterId: string) => socket.emit(C2S.HOLO_STOP, { characterId }),
+  storageGet: () => socket.emit(C2S.STORAGE_GET, {}),
+  storageSweep: () => socket.emit(C2S.STORAGE_SWEEP, {}),
   setMoveLock: (locked: boolean) => socket.emit(C2S.SET_MOVE_LOCK, { locked }),
   setRollLock: (locked: boolean) => socket.emit(C2S.SET_ROLL_LOCK, { locked }),
   setPlayerLock: (userId: string, which: 'move' | 'roll', locked: boolean) =>

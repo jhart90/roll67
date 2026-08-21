@@ -317,6 +317,14 @@ interface GameState {
   soakOffer: SoakOfferPayload | null;
   /** A won Test awaiting the DM's ruling. Only DM screens ever receive it. */
   testPrompt: TestPromptPayload | null;
+  /**
+   * Placing a Holo-Projector's image: the character whose device it is, or
+   * null. While set, the next click on the map puts the projection there —
+   * the map is the picker, because "where do you want it" is a question only
+   * the map can ask.
+   */
+  holoPlacing: string | null;
+  setHoloPlacing(characterId: string | null): void;
   /** SWADE: a live grenade landed on one of yours — throw it back, or on it. */
   blastOffer: BlastOfferPayload | null;
   /** SWADE: your Shaken character may roll Spirit to recover. */
@@ -634,6 +642,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   diceAnimEnding: false,
   soakOffer: null,
   testPrompt: null,
+  holoPlacing: null,
+  setHoloPlacing(holoPlacing) { set({ holoPlacing }); },
   blastOffer: null,
   bennyState: {},
   gmBennies: 0,
@@ -2099,6 +2109,11 @@ export const intents = {
   deleteCampaign: (confirmName: string) => socket.emit(C2S.DELETE_CAMPAIGN, { confirmName }),
   chatWipe: () => socket.emit(C2S.CHAT_WIPE, {}),
   adjustPace: (tokenId: string, delta: number) => socket.emit(C2S.ADJUST_PACE, { tokenId, delta }),
+  holoProject: (characterId: string, mapId: string, x: number, y: number) => {
+    socket.emit(C2S.HOLO_PROJECT, { characterId, mapId, x, y });
+    useGameStore.setState({ holoPlacing: null });
+  },
+  holoStop: (characterId: string) => socket.emit(C2S.HOLO_STOP, { characterId }),
   setMoveLock: (locked: boolean) => socket.emit(C2S.SET_MOVE_LOCK, { locked }),
   setRollLock: (locked: boolean) => socket.emit(C2S.SET_ROLL_LOCK, { locked }),
   setPlayerLock: (userId: string, which: 'move' | 'roll', locked: boolean) =>
@@ -2213,8 +2228,8 @@ export const intents = {
   ping: (x: number, y: number) => socket.emit(C2S.PING, { x, y }),
   measure: (from: Hex, to: Hex, active: boolean) => socket.emit(C2S.MEASURE, { from, to, active }),
 
-  createHandout: (title: string, bodyMd?: string, assetId?: string | null) =>
-    socket.emit(C2S.CREATE_HANDOUT, { title, bodyMd, assetId }),
+  createHandout: (title: string, bodyMd?: string, assetId?: string | null, imageAssetIds?: string[]) =>
+    socket.emit(C2S.CREATE_HANDOUT, { title, bodyMd, assetId, imageAssetIds }),
   updateHandout: (handoutId: string, fields: { title?: string; bodyMd?: string; dmNotesMd?: string; assetId?: string | null }) =>
     socket.emit(C2S.UPDATE_HANDOUT, { handoutId, ...fields }),
   deleteHandout: (handoutId: string) => socket.emit(C2S.DELETE_HANDOUT, { handoutId }),

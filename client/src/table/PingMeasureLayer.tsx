@@ -13,6 +13,11 @@ export function PingMeasureLayer() {
   const measures = useGameStore((s) => s.measures);
   const you = useGameStore((s) => s.you);
 
+  // Holo-Projector placement rides here rather than in the DM's geometry
+  // layer: this is the one full-map surface a PLAYER is allowed to click.
+  const holoPlacing = useGameStore((s) => s.holoPlacing);
+  const [holoAt, setHoloAt] = useState<{ x: number; y: number } | null>(null);
+
   const [measureFrom, setMeasureFrom] = useState<Hex | null>(null);
   const [measureTo, setMeasureTo] = useState<Hex | null>(null);
 
@@ -23,6 +28,11 @@ export function PingMeasureLayer() {
     if (e.button !== 0) return;
     e.stopPropagation();
     const p = stage.toMap(e.clientX, e.clientY);
+    if (holoPlacing) {
+      intents.holoProject(holoPlacing, map.id, p.x, p.y);
+      setHoloAt(null);
+      return;
+    }
     if (tool === 'ping') {
       intents.ping(p.x, p.y);
       return;
@@ -36,6 +46,7 @@ export function PingMeasureLayer() {
   }
 
   function onPointerMove(e: React.PointerEvent<SVGRectElement>) {
+    if (holoPlacing) { setHoloAt(stage.toMap(e.clientX, e.clientY)); return; }
     if (tool !== 'measure' || !measureFrom) return;
     const hex = pixelToHex(stage.toMap(e.clientX, e.clientY), grid);
     if (!measureTo || hex.q !== measureTo.q || hex.r !== measureTo.r) {
@@ -52,7 +63,17 @@ export function PingMeasureLayer() {
     }
   }
 
-  const capturing = tool === 'ping' || tool === 'measure';
+  const capturing = tool === 'ping' || tool === 'measure' || !!holoPlacing;
+
+  // The square that is about to be committed, so nobody places twenty feet of
+  // illusion by guessing where the click will land.
+  const feetPerHex = grid.feetPerHex > 0 ? grid.feetPerHex : 5;
+  const stepPx = (() => {
+    const o = hexToPixel({ q: 0, r: 0 }, grid);
+    const n = hexToPixel({ q: 1, r: 0 }, grid);
+    return Math.hypot(n.x - o.x, n.y - o.y);
+  })();
+  const holoHalf = ((20 * (stepPx / feetPerHex)) / 2);
 
   // Rulers to draw: my local one + everyone else's shared ones.
   const rulers: Array<{ key: string; from: Hex; to: Hex; color: string; label: string }> = [];
@@ -123,6 +144,15 @@ export function PingMeasureLayer() {
           </text>
         </g>
       ))}
+    {holoPlacing && holoAt && (
+      <rect
+        x={holoAt.x - holoHalf} y={holoAt.y - holoHalf}
+        width={holoHalf * 2} height={holoHalf * 2}
+        fill="rgba(90, 208, 255, 0.22)" stroke="#5ad0ff" strokeWidth={2} strokeDasharray="6 4"
+        pointerEvents="none"
+      />
+    )}
+
     </svg>
   );
 }

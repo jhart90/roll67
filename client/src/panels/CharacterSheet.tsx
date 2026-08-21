@@ -915,6 +915,12 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
   const schema = systemFor(character.system);
   const rollables = useMemo(() => schema.rollables(character.sheet), [schema, character.sheet]);
   const actions = useMemo(() => combatActions(character), [character]);
+  // Gear that is its own pair of actions rather than an attack. Matched by
+  // name, which is what the compendium entry puts in the inventory row.
+  const holoProjector = useMemo(
+    () => rows(character.sheet, 'inventory').some((it) => /holo-?projector/i.test(str(it, 'name', ''))),
+    [character.sheet],
+  );
   // SWN weapons with a magazine size get a self-only Reload action here —
   // it has no target, so it doesn't belong in combatActions()'s targeted list.
   const reloadable = useMemo(() => {
@@ -1135,6 +1141,33 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             </div>
           )}
           {!myToken && <span className="dim action-hint">Place this token on the map to use actions.</span>}
+        </div>
+      )}
+      {holoProjector && (
+        <div className="roll-group">
+          <h5>Holo-Projector</h5>
+          <div className="roll-row">
+            <button
+              className="roll-btn"
+              disabled={!canRoll}
+              title="Costs an action. Then click the map to place a 20-foot image everyone can see."
+              onClick={() => useGameStore.getState().setHoloPlacing(character.id)}
+            >
+              <span>📽 Project an image…</span>
+              <span className="roll-btn-expr">20 ft</span>
+            </button>
+          </div>
+          <div className="roll-row">
+            <button
+              className="roll-btn"
+              disabled={!canRoll}
+              title="Costs an action. Shuts the projection down."
+              onClick={() => intents.holoStop(character.id)}
+            >
+              <span>⏹ Shut it down</span>
+              <span className="roll-btn-expr">action</span>
+            </button>
+          </div>
         </div>
       )}
       {reloadable.length > 0 && (

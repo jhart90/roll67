@@ -438,6 +438,18 @@ export function actionsTakenThisTurn(campaignId: string, characterId: string): n
   return swadeActionCounts.get(campaignId)?.get(characterId) ?? 0;
 }
 
+/**
+ * Spend an action on something that is not an attack — working a device,
+ * mostly. Same ledger the Multi-Action penalty counts from, so a player who
+ * lights a projector and then swings pays the −2 they should.
+ */
+export function spendAction(campaignId: string, characterId: string): void {
+  if (!initiative.get(campaignId).active) return;
+  const per = swadeActionCounts.get(campaignId) ?? new Map<string, number>();
+  swadeActionCounts.set(campaignId, per);
+  per.set(characterId, (per.get(characterId) ?? 0) + 1);
+}
+
 /** Count an action for Multi-Action purposes; returns the penalty it takes. */
 function multiActionPenalty(campaignId: string, characterId: string): number {
   if (!initiative.get(campaignId).active) return 0;

@@ -1,15 +1,19 @@
 import type { Server, Socket } from 'socket.io';
 import { MAX_HANDOUT_IMAGES,
-  C2S, S2C,
+  C2S, S2C, hexToPixel, rows, str,
+  type Character, type HoloProjectPayload, type HoloStopPayload,
   type AoePreviewPayload, type ClearDrawingsPayload, type CreateHandoutPayload, type CreateTablePayload,
   type DeleteHandoutPayload, type DeleteTablePayload, type DrawPayload,
   type EraseDrawingPayload, type MeasurePayload, type PingPayload, type RollTablePayload,
   type ShareHandoutPayload, type TargetPreviewPayload, type UpdateHandoutPayload, type UpdateTablePayload,
 } from 'shared';
-import { assets,campaigns, chat, drawings, handouts, maps, rollableTables, tokens } from '../../db/repos.js';
+import { assets, campaigns, characters, chat, drawings, handouts, maps, rollableTables, tokens } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, viewerFor } from '../hub.js';
 import { socketsSeeingToken } from '../visionService.js';
 import { rollGate } from '../locks.js';
+import { spendAction } from './combat.js';
+import { emitMoveBudget } from './tokens.js';
+import { postStatusLine } from '../hp.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -62,6 +66,47 @@ function ownedAssetIds(ids: unknown, campaignId: string): string[] | undefined {
     .slice(0, MAX_HANDOUT_IMAGES);
 }
 
+/** The projection is twenty feet on a side, per the device. */
+const HOLO_FEET = 20;
+/** Hologram blue — readable on stone, obviously not ink. */
+const HOLO_COLOR = '#5ad0ff';
+
+/** Which drawing is which character's live projection, by campaign. */
+const holoByCharacter = new Map<string, string>();
+const holoKey = (campaignId: string, characterId: string) => `${campaignId}:${characterId}`;
+
+/** Does this sheet actually carry the device? */
+function hasHoloProjector(ch: Character): boolean {
+  return rows(ch.sheet, 'inventory').some((it) => /holo-?projector/i.test(str(it, 'name', '')));
+}
+
+/**
+ * Spend an action AND tell the table.
+ *
+ * spendAction only moves the server's ledger, which is what the Multi-Action
+ * penalty counts from; the turn coach and the Pace readout learn about it
+ * from the move budget, so a device that costs an action has to push one or
+ * the player's screen still shows the action unspent.
+ */
+function spendActionVisibly(io: Server, campaignId: string, ch: Character): void {
+  spendAction(campaignId, ch.id);
+  // Their token wherever it stands — the projection may have been lit on a
+  // map they have since walked off.
+  const tok = tokens.forCharacter(ch.id)[0];
+  if (tok) emitMoveBudget(io, campaignId, tok.id);
+}
+
+/** Put out whatever this character is projecting. True if there was one. */
+function clearHolo(io: Server, campaignId: string, characterId: string): boolean {
+  const key = holoKey(campaignId, characterId);
+  const id = holoByCharacter.get(key);
+  if (!id) return false;
+  holoByCharacter.delete(key);
+  drawings.delete(id);
+  io.to(campaignRoom(campaignId)).emit(S2C.DRAWING_REMOVED, { drawingId: id });
+  return true;
+}
+
 export function registerTableHandlers(io: Server, socket: Socket): void {
   // ----- drawings -----
 
@@ -77,6 +122,75 @@ export function registerTableHandlers(io: Server, socket: Socket): void {
     if (layer === 'gm') io.to(dmRoom(d.campaignId)).emit(S2C.DRAWING_ADDED, { drawing });
     else io.to(campaignRoom(d.campaignId)).emit(S2C.DRAWING_ADDED, { drawing });
   }, 'DRAW'));
+
+  /**
+   * A Holo-Projector, lit.
+   *
+   * The illusion is drawn as an ordinary map drawing — a filled square on the
+   * shared layer — because that is exactly what it is to everyone looking at
+   * the table: a thing you can see and cannot touch. Using the drawing layer
+   * rather than inventing a new overlay means it renders, persists, exports
+   * and erases through machinery that already works, and a player who loses
+   * the device can still rub the square out with the eraser.
+   *
+   * The square is TWENTY FEET on the map's own scale, so it covers the same
+   * ground whatever the grid is set to.
+   */
+  socket.on(C2S.HOLO_PROJECT, safe(socket, ({ characterId, mapId, x, y }: HoloProjectPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) {
+      emitError(socket, 'That is not your character.');
+      return;
+    }
+    if (!hasHoloProjector(ch)) {
+      emitError(socket, 'No Holo-Projector in that inventory.');
+      return;
+    }
+    const map = maps.byId(mapId);
+    if (!map || map.campaignId !== d.campaignId) return;
+    const cx = Number(x); const cy = Number(y);
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+
+    // One projector, one projection: lighting it again moves the image
+    // rather than littering the map with squares nobody can account for.
+    clearHolo(io, d.campaignId, characterId);
+
+    const feetPerHex = map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
+    const origin = hexToPixel({ q: 0, r: 0 }, map.grid);
+    const step = hexToPixel({ q: 1, r: 0 }, map.grid);
+    const pxPerFoot = Math.hypot(step.x - origin.x, step.y - origin.y) / feetPerHex;
+    const half = (HOLO_FEET * pxPerFoot) / 2;
+    const shape = {
+      kind: 'poly' as const,
+      points: [
+        { x: cx - half, y: cy - half }, { x: cx + half, y: cy - half },
+        { x: cx + half, y: cy + half }, { x: cx - half, y: cy + half },
+      ],
+      color: HOLO_COLOR,
+      width: 2,
+      fill: true,
+    };
+    const drawing = drawings.add(mapId, d.userId, 'map', shape);
+    holoByCharacter.set(holoKey(d.campaignId, characterId), drawing.id);
+    io.to(campaignRoom(d.campaignId)).emit(S2C.DRAWING_ADDED, { drawing });
+    spendActionVisibly(io, d.campaignId, ch);
+    postStatusLine(io, d.campaignId, `${ch.name} lights a Holo-Projector — a 20-foot image flickers into being.`);
+  }, 'HOLO_PROJECT'));
+
+  socket.on(C2S.HOLO_STOP, safe(socket, ({ characterId }: HoloStopPayload) => {
+    const d = requireCampaign(socket);
+    const ch = characters.byId(characterId);
+    if (!ch || ch.campaignId !== d.campaignId) return;
+    if (d.role !== 'dm' && ch.ownerUserId !== d.userId) return;
+    if (!clearHolo(io, d.campaignId, characterId)) {
+      emitError(socket, 'Nothing is being projected.');
+      return;
+    }
+    spendActionVisibly(io, d.campaignId, ch);
+    postStatusLine(io, d.campaignId, `${ch.name} kills the projection.`);
+  }, 'HOLO_STOP'));
 
   socket.on(C2S.ERASE_DRAWING, safe(socket, ({ drawingId }: EraseDrawingPayload) => {
     const d = requireCampaign(socket);

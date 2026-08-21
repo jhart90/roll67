@@ -112,6 +112,8 @@ export const C2S = {
   /** DM: freeze every player's tokens in place (and thaw them again). */
   SET_MOVE_LOCK: 'setMoveLock',
   ADJUST_PACE: 'adjustPace',
+  HOLO_PROJECT: 'holoProject',
+  HOLO_STOP: 'holoStop',
   SET_ROLL_LOCK: 'setRollLock',
   SET_PLAYER_LOCK: 'setPlayerLock',
   SET_PLAYER_COLOR: 'setPlayerColor',
@@ -1274,6 +1276,11 @@ export interface DeleteCampaignPayload { confirmName: string }
 /** Hand a token back some of the Pace it spent this turn (+), or take some
  *  away (−). The DM's correction for a misstep; see adjustSpentMovement. */
 export interface AdjustPacePayload { tokenId: string; delta: number }
+/** Light a Holo-Projector: a 20-foot square of illusion centred where the
+ *  player put it, drawn for the whole table. Costs the actor an action. */
+export interface HoloProjectPayload { characterId: string; mapId: string; x: number; y: number }
+/** Shut one down. Also an action, per the device. */
+export interface HoloStopPayload { characterId: string }
 export interface SetMoveLockPayload { locked: boolean }
 export interface SetRollLockPayload { locked: boolean }
 /** One player's own lock. `which` names which of the two is being aimed. */

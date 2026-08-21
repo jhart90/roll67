@@ -3,3 +3,9 @@ dist/
 /data/
 *.log
 .DS_Store
+
+# Source art lives here while it is being made, and gets into the game by
+# being UPLOADED through the app — nothing in client/, server/ or shared/
+# reads this folder. Tracking it put 357 MB into every clone and every build
+# image to ship files the application never opens.
+/assets/

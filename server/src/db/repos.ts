@@ -440,6 +440,8 @@ export interface AssetRow {
   height: number;
   folder_id?: string | null;
   title?: string | null;
+  /** SHA-256 of the stored bytes; null for uploads that predate deduping. */
+  content_hash?: string | null;
 }
 
 function assetToInfo(r: AssetRow): AssetInfo {
@@ -459,9 +461,9 @@ export const assets = {
   create(a: Omit<AssetRow, 'id'> & { uploaderId: string; title?: string | null; folderId?: string | null }): AssetRow {
     const id = newId();
     stmt(
-      `INSERT INTO assets (id, campaign_id, uploader_id, kind, filename, ext, mime, bytes, width, height, folder_id, title, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, a.campaign_id, a.uploaderId, a.kind, a.filename, a.ext, a.mime, a.bytes, a.width, a.height, a.folderId ?? null, a.title ?? null, now());
+      `INSERT INTO assets (id, campaign_id, uploader_id, kind, filename, ext, mime, bytes, width, height, folder_id, title, created_at, content_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, a.campaign_id, a.uploaderId, a.kind, a.filename, a.ext, a.mime, a.bytes, a.width, a.height, a.folderId ?? null, a.title ?? null, now(), a.content_hash ?? null);
     return { id, ...a };
   },
   byId(id: string): AssetRow | undefined {

@@ -6,6 +6,7 @@ import { imageSize } from 'image-size';
 import { UPLOADS_DIR } from '../config.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { assets, campaigns, maps } from '../db/repos.js';
+import { hashBytes, storeAsset } from '../storage.js';
 import { S2C } from 'shared';
 import type { Server } from 'socket.io';
 import { dmRoom } from '../live/hub.js';
@@ -144,6 +145,10 @@ mapPackRouter.post('/maps/import', requireAuth, upload.single('file'), (req, res
       const m = imageSize(buf);
       dims = { width: m.width ?? 0, height: m.height ?? 0 };
     } catch { /* unreadable image: fall through with zeros, as before */ }
+    // Not re-encoded: a pack's image was already processed on its way in, and
+    // a second lossy pass would only cost quality. It still dedupes, because
+    // importing the same pack twice is exactly how you end up with two copies.
+    const hash = hashBytes(buf);
     const asset = assets.create({
       campaign_id: campaignId,
       uploaderId: areq.user!.id,
@@ -155,8 +160,9 @@ mapPackRouter.post('/maps/import', requireAuth, upload.single('file'), (req, res
       width: dims.width,
       height: dims.height,
       title: map.name,
+      content_hash: hash,
     });
-    fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${asset.ext}`), buf);
+    storeAsset(buf, `${asset.id}.${asset.ext}`, hash, asset.id);
     maps.update(map.id, { bgAssetId: asset.id });
   }
 

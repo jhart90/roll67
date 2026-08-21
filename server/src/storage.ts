@@ -32,6 +32,8 @@ export interface StorageReport {
   orphanCount: number;
   duplicateBytes: number;
   duplicateGroups: number;
+  /** Bytes NOT spent because identical uploads already share one file. */
+  sharedBytes: number;
   missingCount: number;
   /** Biggest consumers, largest first. */
   byCampaign: Array<{ campaignId: string; name: string; bytes: number; count: number }>;
@@ -42,6 +44,54 @@ export interface StorageReport {
 const sizeOf = (p: string): number => {
   try { return fs.statSync(p).size; } catch { return 0; }
 };
+
+/** Size plus the identity that tells two names for one file apart. `shareable`
+ *  is false when the platform gives no usable inode, in which case every name
+ *  is treated as its own file — an overcount, never an undercount. */
+function statOf(p: string): { size: number; dev: number; ino: number; shareable: boolean } {
+  try {
+    const st = fs.statSync(p);
+    return { size: st.size, dev: st.dev, ino: st.ino, shareable: st.nlink > 1 && st.ino > 0 };
+  } catch {
+    return { size: 0, dev: 0, ino: 0, shareable: false };
+  }
+}
+
+/** SHA-256 of a buffer — the identity an upload is deduped by. */
+export function hashBytes(buf: Buffer): string {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+/**
+ * Store an upload's bytes at `filename`, sharing the file if the server
+ * already holds these exact bytes.
+ *
+ * The sharing is a hard link, which is what lets this be a two-line change
+ * rather than a schema migration: every asset keeps its own `<id>.<ext>` name,
+ * so nothing that builds a URL, serves a file, or exports a backup needs to
+ * know. The filesystem counts the references, so deleting an asset stays a
+ * plain unlink — the bytes survive until the last name for them is gone, and
+ * no bookkeeping of ours can get that wrong.
+ *
+ * Falls back to a full copy whenever linking is refused, which costs exactly
+ * what today costs.
+ */
+export function storeAsset(buffer: Buffer, filename: string, hash: string, excludeId?: string): { deduped: boolean } {
+  const dest = path.join(UPLOADS_DIR, filename);
+  const twins = db.prepare(
+    'SELECT id, ext FROM assets WHERE content_hash = ? AND id != ? LIMIT 16',
+  ).all(hash, excludeId ?? '') as Array<{ id: string; ext: string }>;
+  for (const t of twins) {
+    const src = path.join(UPLOADS_DIR, `${t.id}.${t.ext}`);
+    if (!fs.existsSync(src)) continue;
+    try {
+      fs.linkSync(src, dest);
+      return { deduped: true };
+    } catch { /* cross-device, or a filesystem without links: copy instead */ }
+  }
+  fs.writeFileSync(dest, buffer);
+  return { deduped: false };
+}
 
 /** SHA-1 of a file's contents, streamed so a 15 MB upload never lands in RAM
  *  twice. Only used to prove two files are the same, never for security. */
@@ -76,12 +126,28 @@ export function storageReport(): StorageReport {
   let uploadsBytes = 0;
   let orphanBytes = 0;
   let orphanCount = 0;
+  let sharedBytes = 0;
   const perCampaign = new Map<string, { name: string; bytes: number; count: number }>();
   const bySize = new Map<number, string[]>();
   const largest: Array<{ name: string; bytes: number; campaign: string }> = [];
 
+  // Files that share bytes share one inode, so the volume is charged for them
+  // once and this walk must count them once too. The first name for an inode
+  // is the one that carries its size — including for the per-campaign figures,
+  // which is arbitrary between two campaigns sharing art but keeps every
+  // number on the panel adding up to the total.
+  const seenInode = new Set<string>();
   for (const f of files) {
-    const bytes = sizeOf(path.join(UPLOADS_DIR, f));
+    const st = statOf(path.join(UPLOADS_DIR, f));
+    const bytes = st.size;
+    if (st.shareable) {
+      const key = `${st.dev}:${st.ino}`;
+      if (seenInode.has(key)) {
+        sharedBytes += bytes;
+        continue;
+      }
+      seenInode.add(key);
+    }
     uploadsBytes += bytes;
     const row = byFileName.get(f);
     if (!row) {
@@ -130,6 +196,7 @@ export function storageReport(): StorageReport {
     orphanCount,
     duplicateBytes,
     duplicateGroups,
+    sharedBytes,
     missingCount,
     byCampaign: [...perCampaign.entries()]
       .map(([campaignId, v]) => ({ campaignId, ...v }))

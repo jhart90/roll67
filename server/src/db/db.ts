@@ -122,6 +122,12 @@ ensureColumn('macros', 'rollable_id', 'rollable_id TEXT');
 ensureColumn('macros', 'action_id', 'action_id TEXT');
 ensureColumn('assets', 'folder_id', 'folder_id TEXT');
 ensureColumn('assets', 'title', 'title TEXT');
+// The SHA-256 of an upload's stored bytes, so a re-upload of art the server
+// already holds can share the file instead of writing a second copy. Null on
+// every row that predates this, which simply means "never hashed" -- those
+// files stay exactly where they are and dedupe against nothing.
+ensureColumn('assets', 'content_hash', 'content_hash TEXT');
+db.exec('CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(content_hash)');
 ensureColumn('handouts', 'folder_id', 'folder_id TEXT');
 ensureColumn('tokens', 'shape', "shape TEXT NOT NULL DEFAULT 'circle'");
 ensureColumn('tokens', 'light_json', 'light_json TEXT');

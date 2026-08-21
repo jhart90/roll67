@@ -417,6 +417,11 @@ function DmSection({ closed, onToggle }: { closed: Set<string>; onToggle: (t: st
                 <span className={storage.duplicateBytes > 0 ? 'storage-waste' : ''}>
                   Duplicated <b>{mb(storage.duplicateBytes)}</b> across {storage.duplicateGroups} group(s) — the same bytes stored twice
                 </span>
+                {storage.sharedBytes > 0 && (
+                  <span className="storage-saved">
+                    Saved <b>{mb(storage.sharedBytes)}</b> by sharing identical uploads instead of storing them again
+                  </span>
+                )}
                 {storage.missingCount > 0 && (
                   <span className="storage-waste">{storage.missingCount} record(s) whose file is gone — broken images, not wasted space</span>
                 )}

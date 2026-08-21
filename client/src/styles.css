@@ -4089,5 +4089,6 @@ th > .term { border-bottom-style: dotted; }
 .storage-total { font-weight: 700; font-size: 13px; }
 .storage-lines { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
 .storage-lines b { color: var(--text); font-weight: 600; }
+.storage-saved { color: #6ee7a8; }
 .storage-waste { color: #e0a86a; }
 .storage-actions { display: flex; gap: 10px; align-items: center; }

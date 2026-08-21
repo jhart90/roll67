@@ -1,12 +1,10 @@
 import { Router } from 'express';
 import multer from 'multer';
-import fs from 'node:fs';
-import path from 'node:path';
-import sharp from 'sharp';
-import { imageSize } from 'image-size';
-import { UPLOADS_DIR, UPLOAD_LIMIT_BYTES } from '../config.js';
+import { UPLOAD_LIMIT_BYTES } from '../config.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { assets, campaigns } from '../db/repos.js';
+import { processAudio, processImage } from '../media.js';
+import { hashBytes, storeAsset } from '../storage.js';
 
 const IMAGE_EXT: Record<string, string> = {
   'image/png': 'png',
@@ -33,37 +31,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: Math.max(UPLOAD_LIMIT_BYTES, AUDIO_LIMIT_BYTES) },
 });
-
-// Longest-side cap per use, in pixels -- backgrounds are viewed zoomed-in so
-// get the most headroom, tokens are small on-screen so need far less.
-const MAX_DIMENSION: Record<string, number> = { map: 4096, handout: 2560, token: 1024 };
-
-/**
- * Re-encode an uploaded image to cut upload/transfer size and load time,
- * without visibly softening it: downscale only if it exceeds the kind's cap,
- * and recompress at a quality/setting that's effectively indistinguishable
- * from the source (PNG stays lossless; JPEG/WebP quality is kept high).
- * Animated GIFs are passed through untouched -- sharp would flatten them to
- * a single frame.
- */
-async function processImage(buffer: Buffer, mimetype: string, kind: string): Promise<{ buffer: Buffer; width: number; height: number }> {
-  if (mimetype === 'image/gif') {
-    const dims = imageSize(buffer);
-    return { buffer, width: dims.width ?? 0, height: dims.height ?? 0 };
-  }
-  const maxSide = MAX_DIMENSION[kind] ?? MAX_DIMENSION.handout;
-  let pipeline = sharp(buffer).rotate().resize({
-    width: maxSide,
-    height: maxSide,
-    fit: 'inside',
-    withoutEnlargement: true,
-  });
-  if (mimetype === 'image/jpeg') pipeline = pipeline.jpeg({ quality: 88, mozjpeg: true });
-  else if (mimetype === 'image/webp') pipeline = pipeline.webp({ quality: 88 });
-  else pipeline = pipeline.png({ compressionLevel: 9 });
-  const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
-  return { buffer: data, width: info.width, height: info.height };
-}
 
 export const uploadRouter = Router();
 
@@ -103,13 +70,27 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: Aut
     return;
   }
 
+  // Shrink before storing, never after: the volume should only ever see the
+  // bytes we intend to keep. Both paths can decide the original was already
+  // the best answer, and either may settle on a different container than the
+  // one that arrived (a PNG map becomes WebP, a WAV becomes MP3), so the
+  // extension and mime type are taken from the result rather than the request.
   let width = 0;
   let height = 0;
   let outBuffer = file.buffer;
-  if (!isAudio) {
+  let outExt = ext;
+  let outMime = file.mimetype;
+  if (isAudio) {
+    const processed = processAudio(file.buffer, ext);
+    outBuffer = processed.buffer;
+    outExt = processed.ext;
+    outMime = processed.mime;
+  } else {
     try {
       const processed = await processImage(file.buffer, file.mimetype, kind);
       outBuffer = processed.buffer;
+      outExt = processed.ext;
+      outMime = processed.mime;
       width = processed.width;
       height = processed.height;
     } catch {
@@ -117,6 +98,7 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: Aut
       return;
     }
   }
+  const hash = hashBytes(outBuffer);
 
   let assetId: string | null = null;
   try {
@@ -125,17 +107,26 @@ uploadRouter.post('/upload', requireAuth, upload.single('file'), async (req: Aut
       uploaderId: req.user!.id,
       kind,
       filename: file.originalname,
-      ext,
-      mime: file.mimetype,
+      ext: outExt,
+      mime: outMime,
       bytes: outBuffer.length,
+      content_hash: hash,
       width,
       height,
       title: typeof title === 'string' && title.trim() ? title.trim() : null,
       folderId: typeof folderId === 'string' && folderId ? folderId : null,
     });
     assetId = asset.id;
-    fs.writeFileSync(path.join(UPLOADS_DIR, `${asset.id}.${ext}`), outBuffer);
-    res.json({ assetId: asset.id, url: `/uploads/${asset.id}.${ext}`, width, height });
+    const { deduped } = storeAsset(outBuffer, `${asset.id}.${outExt}`, hash, asset.id);
+    if (deduped || outBuffer.length !== file.size) {
+      const saved = deduped ? file.size : file.size - outBuffer.length;
+      console.log(
+        `upload ${file.originalname}: ${(file.size / 1048576).toFixed(2)} MB -> ` +
+        `${(outBuffer.length / 1048576).toFixed(2)} MB${deduped ? ' (shared with an identical upload)' : ''}` +
+        `, saved ${(saved / 1048576).toFixed(2)} MB`,
+      );
+    }
+    res.json({ assetId: asset.id, url: `/uploads/${asset.id}.${outExt}`, width, height });
   } catch (err) {
     console.error('Upload failed:', err);
     // A failed disk write must not leave a row pointing at a file that never

@@ -1295,6 +1295,7 @@ export interface StorageReportPayload {
   uploadsBytes: number; uploadsCount: number;
   orphanBytes: number; orphanCount: number;
   duplicateBytes: number; duplicateGroups: number;
+  sharedBytes: number;
   missingCount: number;
   byCampaign: Array<{ campaignId: string; name: string; bytes: number; count: number }>;
   largest: Array<{ name: string; bytes: number; campaign: string }>;

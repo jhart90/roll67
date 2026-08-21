@@ -22,7 +22,8 @@
     "backup-check": "node scripts/backup-check.mjs",
     "reset-check": "node scripts/reset-check.mjs",
     "check:hooks": "node scripts/check-hooks.mjs",
-    "typecheck": "npm -w shared run typecheck && npm -w server run typecheck && npm -w client run typecheck && node scripts/check-hooks.mjs"
+    "typecheck": "npm -w shared run typecheck && npm -w server run typecheck && npm -w client run typecheck && node scripts/check-hooks.mjs",
+    "check:uploads": "tsx scripts/check-upload-pipeline.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

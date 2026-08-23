@@ -65,6 +65,36 @@ function markerStyle(node: { kind: string; markerColor?: string }): { color: str
   return undefined;
 }
 
+/**
+ * The character marker, drawn rather than typed.
+ *
+ * It used to be the 👤 emoji, and that quietly defeated every colour on this
+ * row. A colour emoji is painted by the font in the font's own colours -- a
+ * purple bust, on Windows -- and CSS `color` cannot reach inside it. So the
+ * Wild Card blue, the Extra grey and the DM's own pick were all computed
+ * correctly and then thrown away at the last step, which is why choosing a
+ * colour appeared to do nothing at all.
+ *
+ * An inline SVG filled with currentColor obeys all three. Sized in `em` so it
+ * still follows .wt-icon's font-size, and the neighbouring rows -- ⬢, ✦, ▮ --
+ * are ordinary glyphs that were always colourable and are left alone.
+ */
+function PersonMarker() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="1em"
+      height="1em"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: 'block', fill: 'currentColor' }}
+    >
+      <circle cx="8" cy="5" r="3.15" />
+      <path d="M8 9.3c-3.15 0-5.3 1.95-5.3 4.15 0 .38.3.68.68.68h9.24c.38 0 .68-.3.68-.68C13.3 11.25 11.15 9.3 8 9.3z" />
+    </svg>
+  );
+}
+
 const ICON: Record<Kind, string> = { location: '📍', character: '👤', shop: '🏪', table: '🎲', handout: '📄', map: '🗺️', folder: '📁', chest: '📦', light: '💡', mapobject: '✦', counter: '▮', token: '⬢' } as Record<string, string>;
 
 // Players have no dmGeometry; the selector must return this SAME array every
@@ -715,7 +745,8 @@ export function WorldTreePanel() {
                 it: a chest of loot, a map's drawer of lights. */}
             {(node.kind === 'folder' && node.displayKind === 'chest') || node.mapObjectKind === 'chest' ? '📦'
               : node.kind === 'folder' && node.virtual ? '💡'
-                : ICON[node.kind]}
+                : node.kind === 'character' ? <PersonMarker />
+                  : ICON[node.kind]}
           </span>
           <span className="wt-name">{node.name}</span>
           {node.sub && <span className="wt-sub">{node.sub}</span>}

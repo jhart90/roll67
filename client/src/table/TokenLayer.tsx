@@ -326,6 +326,13 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   // over is exactly the thing they can see for themselves.
   const bodyIsDown = conditionIds.includes('dead') || conditionIds.includes('unconscious')
     || conditionIds.includes('incapacitated');
+  // A corpse reads as scenery, not as someone still in the fight. Same fade
+  // the GM layer uses, and for the same reason: still there, no longer
+  // something you act with. Everyone sees it -- a body on the table is not
+  // secret information -- and the token does not move layers to get it, so a
+  // hidden corpse stays hidden and a visible one stays visible. Only 'dead',
+  // not the rest of bodyIsDown: a downed ally is very much still in play.
+  const ghosted = token.layer === 'gm' || conditionIds.includes('dead');
   const conditionIcons = conditionIds.map((id) => getCondition(id)?.icon).filter(Boolean) as string[];
   if (character && typeof character.sheet.concentration === 'string' && character.sheet.concentration) {
     conditionIcons.push('🌀');
@@ -347,7 +354,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       onContextMenu={onContextMenu}
       style={{
         cursor: targetState === 'valid' ? 'crosshair' : movable ? 'grab' : 'default',
-        opacity: (token.layer === 'gm' ? 0.55 : 1) * (targetState === 'invalid' ? 0.4 : 1) * revealOpacity,
+        opacity: (ghosted ? 0.55 : 1) * (targetState === 'invalid' ? 0.4 : 1) * revealOpacity,
         // The layer's svg root is pointer-events:none so draw/measure tools
         // beneath still work; tokens themselves stay interactive.
         pointerEvents: 'auto',

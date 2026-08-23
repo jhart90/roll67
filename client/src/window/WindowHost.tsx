@@ -91,7 +91,7 @@ export function WindowHost() {
             content = <NpcLibrary onClose={onClose} />;
             break;
           case 'randomizeNpc':
-            content = <RandomizeNpcModal onClose={onClose} />;
+            content = <RandomizeNpcModal />;
             break;
           case 'assetLibrary':
             content = <AssetLibrary onClose={onClose} />;

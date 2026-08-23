@@ -49,12 +49,21 @@ function isWildCard(character: { system: string; sheet: Record<string, unknown> 
   return character.system === 'swade' && character.sheet.wildCard === true;
 }
 
+/** Hex footprint a token gets when nobody has said otherwise. Slightly over a
+ *  single hex so the art inside it is legible without spilling into the
+ *  neighbours. */
+const DEFAULT_TOKEN_SIZE = 1.5;
+
 /**
- * How a character's token should look. Player-run characters and Wild Cards
- * are the table's protagonists, so they get the bigger hexagon by default;
- * rank-and-file Extras stay 1-hex circles. An explicit choice recorded on the
- * sheet (the creator wizard's Appearance step, or a DM resize on the map)
- * always wins — the default only fills the gap.
+ * How a character's token should look. Everything starts at 1.5 hexes: art
+ * shrunk into a single hex is too small to read at the zoom people actually
+ * play at, and that was true of the rank-and-file just as much as of the
+ * protagonists. Shape still tells them apart — player-run characters and Wild
+ * Cards get the hexagon, Extras the circle.
+ *
+ * An explicit choice recorded on the sheet (the creator wizard's Appearance
+ * step, or a DM resize on the map) always wins — the default only fills the
+ * gap, so nothing already placed or deliberately sized moves.
  */
 export function tokenLookFor(
   character: { system: string; ownerUserId: string | null; sheet: Record<string, unknown> },
@@ -63,7 +72,7 @@ export function tokenLookFor(
   const sh = character.sheet;
   const size = Number(sh.tokenSize) > 0
     ? Math.max(0.5, Math.min(4, Number(sh.tokenSize)))
-    : (featured ? 1.5 : 1);
+    : DEFAULT_TOKEN_SIZE;
   const shape = typeof sh.tokenShape === 'string'
     ? (sh.tokenShape as TokenShape)
     : (featured ? 'hexagon' : 'circle');
@@ -211,7 +220,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       r: payload.r,
       layer: payload.layer ?? 'token',
       ...(() => {
-        const look = character ? tokenLookFor(character) : { size: 1, shape: 'circle' as TokenShape };
+        const look = character ? tokenLookFor(character) : { size: DEFAULT_TOKEN_SIZE, shape: 'circle' as TokenShape };
         return { size: payload.size ?? look.size, shape: payload.shape ?? look.shape };
       })(),
       // A token starts in the color its SHEET asks for; failing that, the

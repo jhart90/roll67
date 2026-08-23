@@ -450,14 +450,21 @@ export function spendAction(campaignId: string, characterId: string): void {
   per.set(characterId, (per.get(characterId) ?? 0) + 1);
 }
 
-/** Count an action for Multi-Action purposes; returns the penalty it takes. */
-function multiActionPenalty(campaignId: string, characterId: string): number {
+/**
+ * What the NEXT action this turn would be penalised by: -2 per action already
+ * taken, -4 at worst.
+ *
+ * Strictly a question, never an answer that changes the ledger. It used to
+ * count the action as a side effect of being asked, which was fine for the one
+ * caller that only asked when committing -- and then the attack preview
+ * started asking on hover. Merely considering a shot spent an action, so the
+ * shot that followed paid a Multi-Action penalty for itself, and Aiming (which
+ * demands an untouched turn) refused to start. Spending is `spendAction`'s
+ * job, at the point of no return; asking is free.
+ */
+function multiActionPenaltyFor(campaignId: string, characterId: string): number {
   if (!initiative.get(campaignId).active) return 0;
-  const per = swadeActionCounts.get(campaignId) ?? new Map<string, number>();
-  swadeActionCounts.set(campaignId, per);
-  const prior = per.get(characterId) ?? 0;
-  per.set(characterId, prior + 1);
-  return Math.min(2, prior) * -2;
+  return Math.min(2, actionsTakenThisTurn(campaignId, characterId)) * -2;
 }
 
 /** Does this creature's Immunity list cover the damage type of an attack? */
@@ -496,7 +503,8 @@ function resolveSwadeManeuver(
     });
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
   };
-  const mapMod = multiActionPenalty(campaignId, actor.id);
+  const mapMod = multiActionPenaltyFor(campaignId, actor.id);
+  spendAction(campaignId, actor.id);
 
   if (kind === 'touch') {
     const br = roll(traitExpr(actor.sheet, skillDie(actor.sheet, 'Fighting'), 2 + mapMod));
@@ -2558,7 +2566,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       const myEntry = initState.active ? initState.entries.find((e) => (e.tokenId ? tokens.byId(e.tokenId)?.characterId : undefined) === actor.id) : undefined;
       if (myEntry?.card?.rank === 15) { mod += 2; dmgBonus += 2; tags.push('+2 Joker'); }
       // Multi-Action: −2 per extra action this turn (−4 max).
-      const map2 = multiActionPenalty(campaignId, actor.id);
+      const map2 = multiActionPenaltyFor(campaignId, actor.id);
       if (map2) { mod += map2; tags.push(`${map2} Multi-Action`); }
       // The turn coach counts actions off this, so it has to hear about one
       // the moment it is spent rather than at the next move.
@@ -3075,6 +3083,10 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           aimBonusActive, effRof, chaseCtx, chaseSelf,
         });
         if (shot.blocked) { emitError(socket, shot.blocked); return; }
+        // Past the last thing that can call this shot off, so it costs an
+        // action now. Deliberately here and not inside the modifier maths
+        // above, which the hover preview shares and must leave no trace.
+        spendAction(d.campaignId, actor.id);
         const mod = shot.mod;
         const tags = shot.tags;
         dmgBonus += shot.dmgBonus;
@@ -3749,7 +3761,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         actor = persistSheet(io, d.campaignId, actor, { attacks: atks });
       }
       // Firing the template is an action like any other.
-      multiActionPenalty(d.campaignId, actor.id);
+      spendAction(d.campaignId, actor.id);
     }
 
     const src = tokens.byId(p.sourceTokenId);
@@ -4201,7 +4213,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       }
       atks[attackIndex] = { ...row, ammo: ammo + loaded };
       const updated = persistSheet(io, d.campaignId, actor, { attacks: atks, ...(caliber ? { inventory: inv } : {}) });
-      multiActionPenalty(d.campaignId, actor.id);
+      spendAction(d.campaignId, actor.id);
       const msg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, kind: 'system',
         text: `🔄 ${updated.name} reloads ${str(row, 'name', 'their weapon')} (${ammo + loaded}/${maxAmmo}${fromInv} — an action).`,

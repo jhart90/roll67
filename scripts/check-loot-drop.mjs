@@ -38,6 +38,8 @@ const mapId = (await st).campaign.activeMapId;
 let nextOrigin = 5;
 const objects = new Map();
 sock.on('mapObjectUpserted', (p) => objects.set(p.object.id, p.object));
+const removed = new Set();
+sock.on('mapObjectRemoved', (p) => { removed.add(p.objectId); objects.delete(p.objectId); });
 
 /** Build an unowned NPC with a body chest holding `n` items, then kill it. */
 async function scenario(label, n, ownerUserId, how = 'sheet') {
@@ -131,6 +133,44 @@ console.log('killed by the DM calling it, not by a sheet edit:');
   const s = await scenario('Wildcard', 2, undefined, 'incap');
   ok(s.dropped.length === 2, 'the other death route drops loot too', `${s.dropped.length} object(s)`);
   ok(s.dropped.every((o) => adj(o, s.bodyHex)), 'both land adjacent to the body');
+}
+
+console.log('picking loot up off the ground:')
+{
+  const s = await scenario('Fallen', 1);
+  const pile = s.dropped[0];
+  ok(!!pile, 'a pile is on the ground to pick up');
+  removed.clear();
+  sock.emit('takeChestItem', { objectId: pile.id, itemId: pile.items[0].id });
+  await sleep(600);
+  ok(removed.has(pile.id), 'taking the last item removes the object entirely');
+  ok(!objects.has(pile.id), 'no empty chest is left standing where the item was');
+}
+
+console.log('a real chest is not dissolved by being emptied:')
+{
+  const s = await scenario('Hoarder', 4);
+  const chest = s.dropped[0];
+  ok(!!chest && chest.items.length === 4, 'a four-item chest is on the ground');
+  removed.clear();
+  objects.clear();
+  sock.emit('takeAllChest', { objectId: chest.id });
+  await sleep(900);
+  ok(!removed.has(chest.id), 'emptying a genuine chest leaves the chest');
+  const after = objects.get(chest.id);
+  ok(!!after && after.items.length === 0, 'and it is now empty rather than gone', after ? `${after.items.length} items` : 'missing');
+}
+
+console.log("a body's pack survives being emptied:")
+{
+  const s = await scenario('Pocketed', 2);
+  // The pack itself stays linked to the corpse; only what fell is on the floor.
+  const pile = s.dropped[0];
+  removed.clear();
+  sock.emit('takeChestItem', { objectId: pile.id, itemId: pile.items[0].id });
+  await sleep(600);
+  ok(removed.has(pile.id), 'the dropped pile still vanishes when taken');
+  ok(!removed.has(s.chest.id), "the corpse's own pack is never removed", s.chest.id);
 }
 
 sock.close();

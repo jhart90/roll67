@@ -248,6 +248,36 @@ export function dropCarriedLootOnDeath(io: Server, campaignId: string, character
   else io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
+/**
+ * A loose item picked up leaves nothing behind.
+ *
+ * On the map a chest holding exactly one thing IS that thing: a sword lying on
+ * the flagstones, not a crate you open to find a sword. Take the sword and an
+ * empty crate should not appear where there was never a crate — which is
+ * precisely what emptying-in-place used to leave, and what bodies dropping
+ * their kit made routine.
+ *
+ * A chest that held SEVERAL is a container and stays. It was drawn as one, the
+ * DM may have given it art, a lock or a world-tree folder, and an empty box on
+ * the floor is a reasonable thing to find.
+ *
+ * Anything that is more than its contents is left alone regardless: a chest a
+ * body is carrying (emptying a corpse's pockets should not delete the corpse's
+ * pockets), one standing in for a world folder, and a shop.
+ *
+ * Returns whether it removed the object, so the caller knows not to broadcast
+ * an update for something that is gone.
+ */
+function vanishIfLooseItem(io: Server, campaignId: string, objectId: string, heldBefore: number): boolean {
+  if (heldBefore !== 1) return false;
+  const now = mapObjects.byId(objectId);
+  if (!now || now.items.length > 0) return false;
+  if (now.linkedCharacterId || now.worldFolderId || now.shopId) return false;
+  mapObjects.delete(objectId);
+  io.to(campaignRoom(campaignId)).emit(S2C.MAP_OBJECT_REMOVED, { objectId });
+  return true;
+}
+
 export function registerMapObjectHandlers(io: Server, socket: Socket): void {
   socket.on(C2S.PLACE_MAP_OBJECT, safe(socket, (payload: PlaceMapObjectPayload) => {
     const d = requireCampaign(socket);
@@ -339,9 +369,12 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
     const remaining = left > 0
       ? obj.items.map((i) => (i.id === itemId ? { ...i, qty: left } : i))
       : obj.items.filter((i: { id: string }) => i.id !== itemId);
+    const heldBefore = obj.items.length;
     mapObjects.update(objectId, { items: remaining });
-    const updated = mapObjects.byId(objectId)!;
-    for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    if (!vanishIfLooseItem(io, d.campaignId, objectId, heldBefore)) {
+      const updated = mapObjects.byId(objectId)!;
+      for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    }
     postTake(io, d.campaignId, d.username, item.name, grantLoot(io, d.campaignId, taker, item));
   }, 'TAKE_CHEST_ITEM'));
 
@@ -376,9 +409,12 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
         postTake(io, d.campaignId, d.username, item.name, into);
       }
     }
+    const heldBefore = obj.items.length;
     mapObjects.update(objectId, { items: [] });
-    const updated = mapObjects.byId(objectId)!;
-    for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    if (!vanishIfLooseItem(io, d.campaignId, objectId, heldBefore)) {
+      const updated = mapObjects.byId(objectId)!;
+      for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
+    }
   }, 'TAKE_ALL_CHEST'));
 
   socket.on(C2S.OPEN_CHEST, safe(socket, ({ objectId }: OpenChestPayload) => {

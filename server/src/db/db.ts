@@ -463,6 +463,16 @@ ensureColumn('counters', 'shared_with', 'shared_with TEXT');
 // A briefing image shown to players above a chest's or a shop's contents —
 // the handout half of "here is what you are looking at".
 ensureColumn('map_objects', 'detail_asset_id', 'detail_asset_id TEXT');
+// Markers left pointing at shops that were deleted before deleting a shop
+// took its marker with it. A shop marker holds nothing of its own -- its
+// stock lives on the shop row that is already gone -- so there is nothing
+// here to preserve, only a storefront that opens onto nothing.
+{
+  const orphans = db.prepare(
+    "DELETE FROM map_objects WHERE kind = 'shop' AND shop_id IS NOT NULL AND shop_id NOT IN (SELECT id FROM shops)",
+  ).run();
+  if (orphans.changes > 0) console.log(`cleaned up ${orphans.changes} map marker(s) for deleted shops`);
+}
 // Jukebox playlists: which of the three tabs a track sits on.
 ensureColumn('audio_tracks', 'playlist', 'playlist INTEGER NOT NULL DEFAULT 0');
 ensureColumn('shops', 'detail_asset_id', 'detail_asset_id TEXT');

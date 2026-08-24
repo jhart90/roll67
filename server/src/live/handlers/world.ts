@@ -194,6 +194,14 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     const s = shops.byId(shopId);
     if (!s || s.campaignId !== d.campaignId) return;
     shops.delete(shopId);
+    // The marker on the map is not the shop -- it POINTS at one, across a
+    // plain text column with no foreign key to drag it along. Left standing it
+    // is a storefront that opens onto nothing.
+    for (const o of mapObjects.forCampaign(d.campaignId)) {
+      if (o.shopId !== shopId) continue;
+      mapObjects.delete(o.id);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_REMOVED, { objectId: o.id });
+    }
     // Stop presenting a deleted shop.
     if (presentations.get(d.campaignId)?.shopId === shopId) {
       presentations.delete(d.campaignId);

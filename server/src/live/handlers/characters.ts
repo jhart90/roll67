@@ -7,7 +7,7 @@ import {
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PrivateNotesGetPayload, PrivateNotesSetPayload, PublicSheetGetPayload, PublicSheetPayload, WorldOverridePayload } from 'shared';
 import { generateNpc, generateNpcFromModel, nameplateFor, npcById, remapMacro, reorderMapsFor } from 'shared';
-import { campaigns, characters, chat, customNpcs, dmNotes, macros, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
+import { campaigns, characters, chat, customNpcs, dmNotes, macros, mapObjects, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
 import { dropCarriedLootOnDeath } from './mapObjects.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
@@ -273,6 +273,15 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       tokens.delete(t.id);
       io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_REMOVED, { tokenId: t.id });
       touchedMaps.add(t.mapId);
+    }
+    // Anything they were CARRYING goes with them, for the same reason their
+    // tokens just did. It hangs off a plain text column with no foreign key,
+    // so left behind it is a chest riding a token that no longer exists --
+    // off the map, and reachable by nobody.
+    for (const o of mapObjects.forCampaign(d.campaignId)) {
+      if (o.linkedCharacterId !== characterId) continue;
+      mapObjects.delete(o.id);
+      io.to(campaignRoom(d.campaignId)).emit(S2C.MAP_OBJECT_REMOVED, { objectId: o.id });
     }
     characters.delete(characterId);
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHARACTER_REMOVED, { characterId });

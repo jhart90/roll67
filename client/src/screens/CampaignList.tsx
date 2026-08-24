@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameSystem } from 'shared';
 import { api, authHeaders } from '../api';
 import { useAuthStore, type CampaignListItem } from '../store/auth';
@@ -70,44 +70,89 @@ function runLenRef(text: string, face: SpineFace): number {
   return measureCtx.measureText(t).width + t.length * spineTracking(face) * REF;
 }
 
-/** Greedy wrap at one font size; null if a single word cannot fit the run. */
-function wrapAt(words: string[], face: SpineFace, fontSize: number, maxLen: number): string[] | null {
-  const allowRef = (maxLen * REF) / fontSize;
-  const lines: string[] = [];
-  let cur = '';
-  for (const w of words) {
-    if (runLenRef(w, face) > allowRef) return null;
-    const trial = cur ? `${cur} ${w}` : w;
-    if (runLenRef(trial, face) <= allowRef) cur = trial;
-    else { lines.push(cur); cur = w; }
+/** Split words into exactly `n` lines, keeping the measured lines even. */
+function splitInto(words: string[], n: number, face: SpineFace): string[][] {
+  if (n <= 1) return [words];
+  const widths = words.map((w) => runLenRef(w, face));
+  const total = widths.reduce((a, b) => a + b, 0);
+  const target = total / n;
+  const lines: string[][] = [];
+  let cur: string[] = [];
+  let run = 0;
+  for (let i = 0; i < words.length; i++) {
+    const left = words.length - i;
+    const roomLeft = n - lines.length;
+    // Never strand a line: once the words left exactly equal the lines left,
+    // every one of them has to start its own.
+    const mustBreak = left === roomLeft && cur.length > 0;
+    if (cur.length > 0 && roomLeft > 1 && (mustBreak || run + widths[i] / 2 > target)) {
+      lines.push(cur);
+      cur = [];
+      run = 0;
+    }
+    cur.push(words[i]);
+    run += widths[i];
   }
-  if (cur) lines.push(cur);
+  if (cur.length) lines.push(cur);
+  while (lines.length < n && lines.some((l) => l.length > 1)) {
+    const idx = lines.findIndex((l) => l.length > 1);
+    lines.splice(idx + 1, 0, [lines[idx].pop()!]);
+  }
   return lines;
 }
 
 /** Line box as a multiple of the font size — tight, since these are caps. */
 const SPINE_LINE_HEIGHT = 1.06;
+/** Nothing is set larger than this, however short the word. */
+const SPINE_MAX = 92;
 
-function spineLayout(name: string, slotIdx: number): { lines: string[]; fontSize: number; spacing: number } {
+export interface SpineLine { text: string; fontSize: number }
+
+/**
+ * Letter a spine so every line spans the panel between its gold rules.
+ *
+ * One size for the whole title wastes the spine: it has to be small enough for
+ * the LONGEST line, so a title of one long word and one short one sets the
+ * short one at the long one's size and leaves a gap either side of it. Sizing
+ * each line to the width it actually has to fill lets "CHRONO", "STABILITY"
+ * and "BUREAU" all reach both rules, at three different sizes.
+ *
+ * Which leaves how many lines to break into. Every arrangement fills the
+ * WIDTH by construction, so the one to want is whichever fills the most
+ * HEIGHT without overflowing — more lines means shorter lines means bigger
+ * type, up until the stack runs past the panel.
+ */
+function spineLayout(name: string, slotIdx: number): { lines: SpineLine[]; spacing: number } {
   const slot = BOOK_SLOTS[slotIdx];
   const face = SPINE_FACES[slotIdx];
-  // The zone as it stands: lines run ACROSS the book, and stack DOWN it.
-  // Across means between the spine's own vertical gold rules — each book's
-  // measured panel, not its full leather.
+  // Lines run ACROSS the book and stack DOWN it. Across means between the
+  // spine's own vertical gold rules — its measured panel, not its full leather.
   const maxLen = (slot.width / 100) * SHELF_W * slot.textW * 0.97;
   const maxStack = ((slot.textBottom - slot.textTop) / 100) * SHELF_H * 0.97;
+  const spacing = spineTracking(face);
   const words = name.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return { lines: [name], fontSize: 10, spacing: spineTracking(face) };
+  if (words.length === 0) return { lines: [{ text: name, fontSize: 10 }], spacing };
 
-  for (let fs = 92; fs >= 5; fs -= 0.5) {
-    const lines = wrapAt(words, face, fs, maxLen);
-    if (!lines) continue;
-    if (lines.length * fs * SPINE_LINE_HEIGHT <= maxStack) {
-      return { lines, fontSize: fs, spacing: spineTracking(face) };
-    }
+  const sizeFor = (text: string) => Math.min(SPINE_MAX, (maxLen * REF) / runLenRef(text, face));
+
+  let best: { lines: SpineLine[]; total: number } | null = null;
+  for (let n = 1; n <= Math.min(words.length, 6); n++) {
+    const grouped = splitInto(words, n, face).map((g) => g.join(' '));
+    if (grouped.length !== n) continue;
+    const lines = grouped.map((text) => ({ text, fontSize: sizeFor(text) }));
+    const total = lines.reduce((a, l) => a + l.fontSize, 0) * SPINE_LINE_HEIGHT;
+    if (total > maxStack) continue;
+    if (!best || total > best.total) best = { lines, total };
   }
-  // Nothing fits even at 5px — set it there rather than show nothing at all.
-  return { lines: wrapAt(words, face, 5, maxLen) ?? [name], fontSize: 5, spacing: spineTracking(face) };
+  if (best) return { lines: best.lines, spacing };
+
+  // Even one line per word overflows: shrink the whole stack to fit rather
+  // than show a title running off the end of the book.
+  const grouped = splitInto(words, Math.min(words.length, 6), face).map((g) => g.join(' '));
+  const raw = grouped.map((text) => ({ text, fontSize: sizeFor(text) }));
+  const total = raw.reduce((a, l) => a + l.fontSize, 0) * SPINE_LINE_HEIGHT;
+  const k = total > 0 ? maxStack / total : 1;
+  return { lines: raw.map((l) => ({ ...l, fontSize: Math.max(5, l.fontSize * k) })), spacing };
 }
 
 /**
@@ -366,6 +411,19 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
     }
   }
 
+  // The shelf opens with one book already lit, and the last book the cursor
+  // touched stays lit after it leaves. A plaque that empties the moment the
+  // mouse moves means the shelf answers questions only while being pointed
+  // at, and the first thing anyone wants — which campaign is this? — has to
+  // be asked before it can be read.
+  useEffect(() => {
+    setHover((h) => {
+      if (h !== null && seats.byBook[h]) return h;
+      const first = seats.byBook.findIndex(Boolean);
+      return first >= 0 ? first : null;
+    });
+  }, [seats]);
+
   const hovered = hover !== null ? seats.byBook[hover] : null;
 
   return (
@@ -511,7 +569,6 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
             onDragOver={(e) => { if (dragFrom.current !== null) e.preventDefault(); }}
             onDrop={(e) => { e.preventDefault(); dropOn(i); }}
             onPointerEnter={() => setHover(i)}
-            onPointerLeave={() => setHover((h) => (h === i ? null : h))}
             onClick={() => campaign && onOpen(campaign.id)}
           >
             {campaign && fit && (
@@ -531,11 +588,16 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
                   fontStyle: face.style ?? 'normal',
                   textTransform: face.caps ? 'uppercase' : 'none',
                   letterSpacing: `${fit.spacing}em`,
-                  fontSize: `calc(var(--su) * ${fit.fontSize.toFixed(1)}px)`,
                   lineHeight: SPINE_LINE_HEIGHT,
                 }}
               >
-                {fit.lines.map((line, li) => <span key={li}>{line}</span>)}
+                {/* Each line carries its own size: they fill the same width,
+                    so the shorter the words the larger they are set. */}
+                {fit.lines.map((line, li) => (
+                  <span key={li} style={{ fontSize: `calc(var(--su) * ${line.fontSize.toFixed(1)}px)` }}>
+                    {line.text}
+                  </span>
+                ))}
               </span>
             )}
           </div>

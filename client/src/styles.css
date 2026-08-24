@@ -3811,9 +3811,14 @@ th > .term { border-bottom-style: dotted; }
 }
 .shelf-book.occupied.lit {
   background: linear-gradient(105deg, rgba(255, 236, 180, 0.12), rgba(255, 236, 180, 0.02) 55%);
+  /* The box itself matches the book: measured against the art, it starts below
+     the leather at the top and lands on the shelf line at the bottom. What
+     read as "too tall" was the outer glow — a 42px blur off a tall narrow box
+     is a column of light standing well above the book and spilling onto the
+     shelf under it. Halved, so the halo hugs what it is lighting. */
   box-shadow:
     0 0 calc(var(--su) * 10px) rgba(140, 190, 255, 0.55),
-    0 0 calc(var(--su) * 42px) rgba(120, 170, 255, 0.35),
+    0 0 calc(var(--su) * 20px) rgba(120, 170, 255, 0.3),
     inset 0 0 calc(var(--su) * 22px) rgba(255, 240, 200, 0.10);
 }
 /* The only campaign on the shelf: this book IS the screen, so its edge

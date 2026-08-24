@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, SPEAKING_RANGE_HEXES, acquirePatch, firstFreeHex, hexDistance, normalizeCurrency, packHex, systemFor,
+  C2S, S2C, SPEAKING_RANGE_HEXES, acquirePatch, firstFreeHex, hexDistance, normalizeCurrency, packHex, shopBelongsTo, systemFor,
   type BuyItemPayload, type CreateCustomItemPayload, type CreateLocationPayload, type CreateShopPayload,
   type CreateWorldFolderPayload, type DeleteCustomItemPayload, type DeleteLocationPayload, type DeleteShopPayload,
   type DeleteWorldFolderPayload, type DropFolderOnCharacterPayload, type DropFolderOnMapPayload, type DropShopOnMapPayload, type GameSystem,
@@ -569,7 +569,7 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     // answered with the same silence as no shop, since the difference is not
     // theirs to learn.
     const shop = shopsForUser(d.campaignId, d.userId, d.role === 'dm')
-      .find((sh) => sh.linkedCharacterId === token.characterId);
+      .find((sh) => shopBelongsTo(sh, token.characterId));
     if (!shop) return;
 
     if (d.role !== 'dm') {

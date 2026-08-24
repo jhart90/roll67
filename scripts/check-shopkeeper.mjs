@@ -61,7 +61,9 @@ const pcTok = (await t2).token;
 const shopReady = waitFor(dms, 'shops', 6000, (p) => p.shops.some((s) => s.name === "Tiaa's Food Stall"));
 dms.emit('createShop', { name: "Tiaa's Food Stall" });
 const shop = (await shopReady).shops.find((s) => s.name === "Tiaa's Food Stall");
-dms.emit('updateShop', { shopId: shop.id, playersCanBuy: true, linkedCharacterId: npc.id });
+// Nested under its owner in the world tree, which is how the tree already
+// shows a merchant and their stall and so what a DM reaches for first.
+dms.emit('updateShop', { shopId: shop.id, playersCanBuy: true, parentId: npc.id });
 await sleep(400);
 
 console.log('within speaking range (2 hexes):');
@@ -117,6 +119,38 @@ console.log('a plain NPC with nothing to sell:');
   pls.emit('shopAtToken', { tokenId: byTok.id });
   const [o, r] = await Promise.all([opened, refused]);
   ok(o === null && r === null, 'clicking them is silent, not an error');
+}
+
+console.log('the other way of attaching a shop still works:');
+{
+  // Dragged onto the token on the map, which sets linkedCharacterId instead.
+  const n2 = waitFor(dms, 'characterUpserted', 6000, (p) => p.character.name === 'Nebamun');
+  dms.emit('createCharacter', { name: 'Nebamun', system: 'swade' });
+  const npc2 = (await n2).character;
+  const t3 = waitFor(dms, 'tokenUpserted', 6000, (p) => p.token.name === 'Nebamun tok');
+  dms.emit('createToken', { mapId, name: 'Nebamun tok', q: 20, r: 12, layer: 'token', characterId: npc2.id });
+  const npc2Tok = (await t3).token;
+  const s2 = waitFor(dms, 'shops', 6000, (p) => p.shops.some((x) => x.name === "Nebamun's Cloth"));
+  dms.emit('createShop', { name: "Nebamun's Cloth" });
+  const shop2 = (await s2).shops.find((x) => x.name === "Nebamun's Cloth");
+  dms.emit('updateShop', { shopId: shop2.id, playersCanBuy: true, linkedCharacterId: npc2.id });
+  dms.emit('moveToken', { tokenId: pcTok.id, q: 20, r: 13, drag: true });
+  await sleep(600);
+  const opened = waitFor(pls, 'openShop', 3000).catch(() => null);
+  pls.emit('shopAtToken', { tokenId: npc2Tok.id });
+  ok((await opened)?.shopId === shop2.id, 'a shop dragged onto a token opens too');
+}
+
+console.log('a shop the DM has not opened to players:');
+{
+  dms.emit('updateShop', { shopId: shop.id, playersCanBuy: false });
+  dms.emit('moveToken', { tokenId: pcTok.id, q: 12, r: 10, drag: true });
+  await sleep(600);
+  const opened = waitFor(pls, 'openShop', 2000).catch(() => null);
+  const refused = waitFor(pls, 'errorMsg', 2000).catch(() => null);
+  pls.emit('shopAtToken', { tokenId: npcTok.id });
+  const [o, r] = await Promise.all([opened, refused]);
+  ok(o === null && r === null, 'stays shut, and silent about why');
 }
 
 dms.close(); pls.close();

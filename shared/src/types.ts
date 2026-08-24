@@ -896,6 +896,27 @@ export interface Shop {
   detailUrl?: string | null;
 }
 
+/**
+ * Does this shop belong to this character — is it their stall to stand behind?
+ *
+ * Two ways to say so, because the app offers two and a DM has no reason to
+ * think they differ. `linkedCharacterId` is set by dragging the shop onto
+ * their token on the map. `parentId` is set by nesting it under them in the
+ * world tree, which is the obvious move when the tree already lists the
+ * merchant and their stall together and is what a DM reaches for first.
+ *
+ * Only the first used to count, so a stall filed neatly under its owner was
+ * attached to nobody as far as the map was concerned: clicking the merchant
+ * did nothing, and there was no way to tell from looking that the two links
+ * were not the same link.
+ */
+export function shopBelongsTo(
+  shop: Pick<Shop, 'linkedCharacterId' | 'parentId'>, characterId: string | null | undefined,
+): boolean {
+  if (!characterId) return false;
+  return shop.linkedCharacterId === characterId || shop.parentId === characterId;
+}
+
 // ---------- Locations ----------
 
 export type LocationKind = 'region' | 'settlement' | 'district' | 'building' | 'poi';

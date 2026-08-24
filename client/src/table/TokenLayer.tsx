@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { SVGProps } from 'react';
 import type { TokenShape, TokenView } from 'shared';
-import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, rayBlocked, sightSegments, tokensCaughtInAoe } from 'shared';
+import { canMoveToken, conditionsOf, getCondition, hexDistance, hexToPixel, pixelToHex, rayBlocked, shopBelongsTo, sightSegments, tokensCaughtInAoe } from 'shared';
 import { clampToKnownWalls, intents, sightGeometry, useGameStore } from '../store/game';
 import { openWindow } from '../store/windowManager';
 import { mapPixelSize, useStage } from '../util/stage';
@@ -187,7 +187,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     // drags tokens constantly, so neither can afford to have the plain click
     // mean something else. Range is the server's call.
     if (!isDm && e.button === 0 && token.characterId && !movable
-      && useGameStore.getState().shopList.some((sh) => sh.linkedCharacterId === token.characterId)) {
+      && useGameStore.getState().shopList.some((sh) => shopBelongsTo(sh, token.characterId))) {
       intents.shopAtToken(token.id);
     }
     if (!movable || e.button !== 0) return;
@@ -291,7 +291,7 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       useGameStore.getState().openInspector(token.id);
     } else if (token.characterId) {
       const st = useGameStore.getState();
-      const linkedShop = st.shopList.find((s) => s.linkedCharacterId === token.characterId);
+      const linkedShop = st.shopList.find((s) => shopBelongsTo(s, token.characterId));
       if (linkedShop) {
         // Asked for rather than opened outright: this used to hand over the
         // storefront from anywhere on the map, including across a wall from

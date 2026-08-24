@@ -1480,7 +1480,11 @@ button.link:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
+  /* Above a nameplate card (60), which is a floating label and has no business
+     sitting on top of a dialog that has dimmed the whole screen behind it.
+     Nothing else occupies 51-60, so this reorders that one pair and nothing
+     else -- the bottom-bar menus at 69 still win, as they did before. */
+  z-index: 61;
 }
 .sheet-window {
   width: min(980px, 94vw);

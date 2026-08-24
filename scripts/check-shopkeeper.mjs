@@ -58,9 +58,15 @@ const t2 = waitFor(dms, 'tokenUpserted', 6000, (p) => p.token.name === 'Buyer to
 dms.emit('createToken', { mapId, name: 'Buyer tok', q: 12, r: 10, layer: 'token', characterId: pc.id });
 const pcTok = (await t2).token;
 
+// A brand new shop, with nothing switched on afterwards: players should be
+// able to buy from it already.
+const playerSees = waitFor(pls, 'shops', 6000, (p) => p.shops.some((s) => s.name === "Tiaa's Food Stall")).catch(() => null);
 const shopReady = waitFor(dms, 'shops', 6000, (p) => p.shops.some((s) => s.name === "Tiaa's Food Stall"));
 dms.emit('createShop', { name: "Tiaa's Food Stall" });
 const shop = (await shopReady).shops.find((s) => s.name === "Tiaa's Food Stall");
+console.log('a shop the DM just made:');
+ok(!!(await playerSees), 'reaches players without the DM ticking anything');
+ok(shop.playersCanBuy === true, 'and says it is open to them', `playersCanBuy=${shop.playersCanBuy}`);
 // Nested under its owner in the world tree, which is how the tree already
 // shows a merchant and their stall and so what a DM reaches for first.
 dms.emit('updateShop', { shopId: shop.id, playersCanBuy: true, parentId: npc.id });

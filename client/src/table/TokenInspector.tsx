@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import type { TokenShape } from 'shared';
-import { hexDistance, num, systemFor } from 'shared';
-import { armBodyLoot, intents, useGameStore } from '../store/game';
+import { hexDistance, num, shopBelongsTo, systemFor, SPEAKING_RANGE_HEXES } from 'shared';
+import { armBodyLoot, armShopFor, intents, useGameStore } from '../store/game';
 import { OwnerSelect } from '../util/OwnerSelect';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 import { ConfirmButton } from '../util/ConfirmButton';
+import { openWindow } from '../store/windowManager';
 
 const SHAPES: Array<{ id: TokenShape; label: string }> = [
   { id: 'circle', label: 'Circle' },
@@ -53,6 +54,10 @@ export function TokenInspector() {
   const bodyChest = useGameStore((s) => (token?.characterId
     ? Object.values(s.mapObjects).find((o) => o.kind === 'chest' && o.linkedCharacterId === token.characterId)
     : undefined));
+  // Shops this character keeps. Same test the map uses to decide whether
+  // clicking them opens a storefront, so what is listed here is exactly what a
+  // player standing next to them would find.
+  const shopList = useGameStore((s) => s.shopList);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { progress, upload } = useUploadProgress();
@@ -88,6 +93,7 @@ export function TokenInspector() {
   }
 
   const lootItems = bodyChest?.items ?? [];
+  const shops = character ? shopList.filter((sh) => shopBelongsTo(sh, character.id)) : [];
   // A DM-run body spills its pockets onto the floor when it dies; a player's
   // does not. Worth saying out loud here, because it changes what adding loot
   // to this token actually means.
@@ -217,6 +223,45 @@ export function TokenInspector() {
               {dmRun
                 ? 'Drops to the ground the moment this token dies.'
                 : 'A player can take these off the body once it is down.'}
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* What this character SELLS, as opposed to what they are carrying.
+          Worth its own section because a merchant's stock lives in a window the
+          map gives no route to: the shop is filed in the world tree, and
+          finding it meant leaving the token you were already looking at. */}
+      {character && (
+        <>
+          <h4>Associated shop{shops.length === 1 ? '' : 's'}{shops.length > 0 ? ` (${shops.length})` : ''}</h4>
+          <div className="inspector-shops">
+            {shops.length === 0 ? (
+              <p className="dim inspector-loot-empty">Sells nothing.</p>
+            ) : shops.map((sh) => (
+              <button
+                key={sh.id}
+                className="btn btn-sm"
+                title={`Open ${sh.name} — stock, prices, and who may buy`}
+                onClick={() => openWindow('shop', sh.id, {}, sh.name || 'Shop')}
+              >
+                🏪 {sh.name || 'Shop'}{sh.playersCanBuy ? '' : ' (closed to players)'}
+              </button>
+            ))}
+            <button
+              className="btn btn-sm"
+              title={`Create a shop filed under ${character.name}`}
+              onClick={() => {
+                armShopFor(character.id);
+                intents.createShop(`${character.name}'s Shop`);
+              }}
+            >
+              + New shop
+            </button>
+            <span className="dim inspector-loot-note">
+              {shops.length > 0
+                ? `Players within ${SPEAKING_RANGE_HEXES} hexes can click this token to trade.`
+                : 'A shop made here is filed under this character, so players can click the token to trade.'}
             </span>
           </div>
         </>

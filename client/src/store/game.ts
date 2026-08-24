@@ -160,7 +160,28 @@ function resetChatQueue(): void {
 let pendingInspectPlacement = false;
 /** …and, when that placement was "give this body some loot", who is to carry
  *  it. Tied on arrival for the same reason: the chest has no id until then. */
+/**
+ * Everything that draws into the lower-left inspector slot.
+ *
+ * They all render into the same corner, so two of them open at once is two
+ * panels stacked in one place with only the top one readable. Opening any of
+ * them clears the rest by spreading this first, which also makes closing one
+ * (passing null) close the slot rather than uncovering whatever was buried
+ * under it.
+ */
+const INSPECTOR_SLOT = {
+  inspectorTokenId: null as string | null,
+  inspectedObjectId: null as string | null,
+  selectedDoorId: null as string | null,
+  selectedLightId: null as string | null,
+  selectedWallId: null as string | null,
+};
+
 let pendingBodyLootFor: string | null = null;
+/** A shop just created FOR a character, waiting for the server to hand it back
+ *  so it can be filed under them. */
+let pendingShopFor: string | null = null;
+export function armShopFor(characterId: string): void { pendingShopFor = characterId; }
 export function armBodyLoot(characterId: string): void { pendingBodyLootFor = characterId; }
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain' | 'text';
@@ -622,7 +643,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   mapObjects: {},
   lootPopupId: null,
   inspectedObjectId: null,
-  openObjectInspector(inspectedObjectId) { set({ inspectedObjectId }); },
+  openObjectInspector(inspectedObjectId) { set({ ...INSPECTOR_SLOT, inspectedObjectId }); },
   cardDrawFlash: null,
   clearCardFlash() { set({ cardDrawFlash: null }); },
   dockTab: 'world',
@@ -804,7 +825,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   selectedObjectId: null,
   worldHover: null,
   inspectorTokenId: null,
-  openInspector(inspectorTokenId) { set({ inspectorTokenId }); },
+  openInspector(inspectorTokenId) { set({ ...INSPECTOR_SLOT, inspectorTokenId }); },
   selectedLightId: null,
   selectedWallId: null,
   selectedDoorId: null,
@@ -944,9 +965,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       worldSelectedKey: selectedObjectId ? `mapobject:${selectedObjectId}` : null,
     });
   },
-  selectLight(selectedLightId) { set({ selectedLightId }); },
-  selectWall(selectedWallId) { set({ selectedWallId, selectedDoorId: null, selectedLightId: null }); },
-  selectDoor(selectedDoorId) { set({ selectedDoorId, selectedWallId: null, selectedLightId: null }); },
+  selectLight(selectedLightId) { set({ ...INSPECTOR_SLOT, selectedLightId }); },
+  selectWall(selectedWallId) { set({ ...INSPECTOR_SLOT, selectedWallId }); },
+  selectDoor(selectedDoorId) { set({ ...INSPECTOR_SLOT, selectedDoorId }); },
   openSheet(characterId) {
     if (!characterId) return; // legacy "close" signal — each sheet window now closes itself
     const char = get().characters.find((c) => c.id === characterId);
@@ -1670,7 +1691,20 @@ export function wireSocket(): void {
   });
 
   socket.on(S2C.SHOPS, ({ shops }: { shops: Shop[] }) => {
+    const known = new Set(useGameStore.getState().shopList.map((sh) => sh.id));
     useGameStore.setState({ shopList: shops });
+    // A shop made from a character's token: the create call carries only a
+    // name, so the link is tied on once the server hands the shop back. The
+    // new one is whichever we had not seen a moment ago.
+    if (pendingShopFor) {
+      const fresh = shops.find((sh) => !known.has(sh.id));
+      if (fresh) {
+        intents.updateShop(fresh.id, { parentId: pendingShopFor });
+        pendingShopFor = null;
+        // Straight into the stock editor, which is the reason for making one.
+        openWindow('shop', fresh.id, {}, fresh.name || 'Shop');
+      }
+    }
   });
 
   // A player clicked a shopkeeper and the server agreed they are close

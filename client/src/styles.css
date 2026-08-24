@@ -556,6 +556,10 @@ button.link:hover { text-decoration: underline; }
 .inspector-loot-list li + li { border-top: 1px solid rgba(255, 255, 255, 0.06); }
 .inspector-loot-list b { color: var(--text-dim); font-weight: 600; }
 .inspector-loot-note { font-size: 11px; line-height: 1.4; }
+/* Shops a character keeps: a stack of routes into windows the map otherwise
+   gives no way to reach. */
+.inspector-shops { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.inspector-shops .btn { text-align: left; }
 
 /* The one destructive control, fenced off at the bottom so it is never the
    thing you hit reaching for Close. */

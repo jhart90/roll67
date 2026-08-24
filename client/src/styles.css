@@ -597,6 +597,15 @@ button.link:hover { text-decoration: underline; }
   font-size: 13px; color: var(--text); cursor: pointer; user-select: none;
 }
 .mo-lock:hover { border-color: var(--accent); }
+
+/* The chest inspector's contents list. Bounded so a well-stocked chest cannot
+   push Visibility, the lock and Delete off the bottom of the panel — the
+   "+ From compendium" header and the column titles sit outside this box and
+   stay put while the rows scroll. */
+.token-inspector .stock-list { max-height: 220px; overflow-y: auto; }
+.token-inspector .stock-head { margin-top: 2px; }
+/* One line of explanation under a control, in the panel's quiet voice. */
+.mo-hint { font-size: 11px; line-height: 1.4; margin: 2px 0 10px; }
 .mo-lock > span { flex: 1; }
 
 /* Toggle switch — replaces checkboxes for binary on/off controls */

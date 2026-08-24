@@ -5,6 +5,7 @@ import { useCampaignKeyNames } from '../util/campaignKeys';
 import { StockList, type KeyedStock } from '../panels/StockEditor';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
+import { ConfirmButton } from '../util/ConfirmButton';
 
 export function MapObjectInspector() {
   const keyNames = useCampaignKeyNames();
@@ -77,12 +78,14 @@ export function MapObjectInspector() {
     }
   }
 
+  const noun = obj.kind === 'chest' ? 'chest' : obj.kind === 'shop' ? 'shop' : 'item';
+
   return (
     <div className="token-inspector">
       <div className="dock-header">
         <strong>{obj.kind === 'chest' ? '📦 Chest' : obj.kind === 'shop' ? '🏪 Shop' : '✦ Item'}</strong>
         <span className="spacer" />
-        <button className="link" onClick={() => useGameStore.getState().openObjectInspector(null)}>✕</button>
+        <button className="link" title="Close" aria-label="Close" onClick={() => useGameStore.getState().openObjectInspector(null)}>✕</button>
       </div>
 
       <label>
@@ -93,43 +96,45 @@ export function MapObjectInspector() {
         />
       </label>
 
+      {/* The contents come FIRST. They are what this window is for, and they
+          used to sit below the name, the description, two file pickers and
+          four switches — far enough down that adding an item meant scrolling
+          to find the button that adds one. The same stock surface a shop's
+          shelves use; a chest is a container whose contents are free, so the
+          price column is off. */}
+      {obj.kind === 'chest' && (
+        <StockList
+          items={stock}
+          onChange={saveStock}
+          system={campaign.system}
+          title="Items in chest"
+          showPrice={false}
+          unlimited={false}
+          emptyText="Empty — add an item below, or pull one from the compendium."
+        />
+      )}
+
+      <h4>Who can reach it</h4>
+      {/* This was a checkbox whose caption reported the CURRENT state instead
+          of what ticking it would do, so "👁 Visible to players" sat beside an
+          empty box — and ticking it hid the chest. A two-option list cannot
+          say one thing and mean the other: you pick the state you want, the
+          same way a token's layer is chosen. */}
       <label>
-        Description
-        <textarea
-          value={obj.description}
-          onChange={(e) => intents.updateMapObject(obj.id, { description: e.target.value })}
-          rows={2}
-        />
+        Visibility
+        <select
+          value={obj.layer === 'gm' ? 'gm' : 'map'}
+          onChange={(e) => intents.updateMapObject(obj.id, { layer: e.target.value === 'gm' ? 'gm' : 'map' })}
+        >
+          <option value="map">👁 Visible to players</option>
+          <option value="gm">🙈 Hidden — only you can see it</option>
+        </select>
       </label>
-
-      <h4>Art</h4>
-      {obj.artAssetId && (
-        <img
-          src={obj.artUrl ?? ''}
-          alt=""
-          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, marginBottom: 6 }}
-        />
-      )}
-      <input type="file" accept="image/*" ref={fileRef} onChange={onArt} style={{ fontSize: 12 }} />
-      {uploading && <UploadProgressBar progress={progress} />}
-      {obj.artAssetId && (
-        <button className="small" style={{ marginTop: 4 }} onClick={() => intents.updateMapObject(obj.id, { artAssetId: '' })}>
-          Remove art
-        </button>
-      )}
-
-      {/* Separate from the map art above: that is the piece on the board, this
-          is what players READ when they open it. */}
-      <h4>Briefing image <span className="dim" style={{ fontWeight: 400, fontSize: 11 }}>— players see this above the contents</span></h4>
-      {obj.detailUrl && (
-        <img src={obj.detailUrl} alt="" className="detail-preview" />
-      )}
-      <input type="file" accept="image/*" ref={detailRef} onChange={onDetail} style={{ fontSize: 12 }} />
-      {obj.detailAssetId && (
-        <button className="small" style={{ marginTop: 4 }} onClick={() => intents.updateMapObject(obj.id, { detailAssetId: '' })}>
-          Remove briefing image
-        </button>
-      )}
+      <p className="dim mo-hint">
+        {obj.layer === 'gm'
+          ? 'On the GM layer. Reveal it the moment a Notice roll earns it — it keeps its contents, its lock and its position.'
+          : 'On the table, where players can see it and reach it.'}
+      </p>
 
       {obj.kind === 'shop' && (
         <label>
@@ -143,19 +148,6 @@ export function MapObjectInspector() {
         </label>
       )}
 
-      {/* Hidden or on the table, exactly as a token is. A cache goes down on
-          the GM layer during prep and is revealed the moment somebody's
-          Notice roll earns it — one click, no re-placing, and the chest keeps
-          its contents, its lock and its position. Applies to loose items too:
-          a single dropped ring can be hidden the same way. */}
-      <label className="mo-lock">
-        <input
-          type="checkbox"
-          checked={obj.layer === 'gm'}
-          onChange={(e) => intents.updateMapObject(obj.id, { layer: e.target.checked ? 'gm' : 'map' })}
-        />
-        <span>{obj.layer === 'gm' ? '🙈 Hidden — only you can see it' : '👁 Visible to players'}</span>
-      </label>
       {obj.kind === 'chest' && (
         <>
           {/* Locks work exactly like a door's: holding the named item is
@@ -169,7 +161,7 @@ export function MapObjectInspector() {
                 ...(e.target.checked && !obj.keyName ? { keyName: 'Key' } : {}),
               })}
             />
-            <span>🔒 Locked</span>
+            <span>🔒 Locked — needs a key to open</span>
           </label>
           {obj.locked && (
             <label>
@@ -199,36 +191,74 @@ export function MapObjectInspector() {
             <select
               value={obj.linkedCharacterId ?? ''}
               onChange={(e) => intents.updateMapObject(obj.id, { linkedCharacterId: e.target.value || null })}
-              title="Whose token IS this container. A carried chest leaves the ground and travels with them — and players can only go through it once they are incapacitated or dead."
+              title="Whose token IS this container. A carried chest leaves the ground and travels with them."
             >
               <option value="">— on the ground —</option>
               {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
           {obj.linkedCharacterId && (
-            <p className="dim" style={{ fontSize: 11, margin: '2px 0 6px' }}>
+            <p className="dim mo-hint">
               🫱 Carried, so it is off the map — players reach it through that token,
               and only once they are incapacitated or dead.
             </p>
           )}
-          {/* The same stock surface a shop's shelves use — a chest is just a
-              container whose contents are free, so the price column is off. */}
-          <StockList
-            items={stock}
-            onChange={saveStock}
-            system={campaign.system}
-            title="Items in Chest"
-            showPrice={false}
-            unlimited={false}
-            emptyText="Empty — add items below or from the compendium."
-          />
         </>
       )}
 
-      <div style={{ marginTop: 12, display: 'flex', gap: 6 }}>
-        <button className="small danger" onClick={() => { intents.deleteMapObject(obj.id); useGameStore.getState().openObjectInspector(null); }}>
-          Delete
+      <h4>What players read</h4>
+      <label>
+        Description
+        <textarea
+          value={obj.description}
+          onChange={(e) => intents.updateMapObject(obj.id, { description: e.target.value })}
+          rows={2}
+        />
+      </label>
+      {/* Separate from the map art below: that is the piece on the board, this
+          is what players READ when they open it. */}
+      <p className="dim mo-hint">A briefing image is shown above the contents when they open it.</p>
+      {obj.detailUrl && (
+        <img src={obj.detailUrl} alt="" className="detail-preview" />
+      )}
+      <input type="file" accept="image/*" ref={detailRef} onChange={onDetail} style={{ fontSize: 12 }} />
+      {obj.detailAssetId && (
+        <button className="small" style={{ marginTop: 4 }} onClick={() => intents.updateMapObject(obj.id, { detailAssetId: '' })}>
+          Remove briefing image
         </button>
+      )}
+
+      <h4>Map art</h4>
+      {obj.artAssetId && (
+        <img
+          src={obj.artUrl ?? ''}
+          alt=""
+          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, marginBottom: 6 }}
+        />
+      )}
+      <input type="file" accept="image/*" ref={fileRef} onChange={onArt} style={{ fontSize: 12 }} />
+      {uploading && <UploadProgressBar progress={progress} />}
+      {obj.artAssetId && (
+        <button className="small" style={{ marginTop: 4 }} onClick={() => intents.updateMapObject(obj.id, { artAssetId: '' })}>
+          Remove art
+        </button>
+      )}
+
+      {/* One click used to delete a stocked chest outright — no question
+          asked, and no word about what went with it. */}
+      <div className="inspector-danger">
+        <ConfirmButton
+          title={`Delete this ${noun} and everything in it`}
+          confirmLabel={`Really delete this ${noun}?`}
+          onConfirm={() => { intents.deleteMapObject(obj.id); useGameStore.getState().openObjectInspector(null); }}
+        >
+          {`Delete this ${noun}`}
+        </ConfirmButton>
+        <span className="dim">
+          {obj.kind === 'chest' && obj.items.length > 0
+            ? <>Takes it off the map along with the <b>{obj.items.length} item{obj.items.length === 1 ? '' : 's'}</b> still inside. Anything players already took stays on their sheets.</>
+            : <>Takes it off the map for good. Anything players already took stays on their sheets.</>}
+        </span>
       </div>
     </div>
   );

@@ -1,10 +1,10 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, acquirePatch, firstFreeHex, normalizeCurrency, packHex, systemFor,
+  C2S, S2C, SPEAKING_RANGE_HEXES, acquirePatch, firstFreeHex, hexDistance, normalizeCurrency, packHex, systemFor,
   type BuyItemPayload, type CreateCustomItemPayload, type CreateLocationPayload, type CreateShopPayload,
   type CreateWorldFolderPayload, type DeleteCustomItemPayload, type DeleteLocationPayload, type DeleteShopPayload,
   type DeleteWorldFolderPayload, type DropFolderOnCharacterPayload, type DropFolderOnMapPayload, type DropShopOnMapPayload, type GameSystem,
-  type PresentShopPayload,
+  type PresentShopPayload, type ShopAtTokenPayload,
   type SheetData, type Shop, type ShopItem, type UpdateCustomItemPayload, type UpdateLocationPayload, type UpdateShopPayload,
   type UpdateWorldFolderPayload, type WorldReorderPayload,
 } from 'shared';
@@ -538,6 +538,53 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
       for (const s of socketsSeeingHex(io, d.campaignId, obj.mapId, obj.q, obj.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
     }
   }, 'DROP_SHOP_ON_MAP'));
+
+  /**
+   * A player clicked a token and wants to trade with whoever it is.
+   *
+   * Answered here rather than in the browser because the client genuinely
+   * cannot know: a carried shop is filtered out of what players are sent (it
+   * is pinned to whatever hex it was linked at, which may be somewhere they
+   * have never been), so the token is the only handle they have on it.
+   *
+   * Silent when there is nothing to sell. Clicking an NPC is an ordinary
+   * thing to do and "no shop here" on every one of them would be noise; the
+   * only refusal worth voicing is the one a player can act on, which is
+   * standing too far away.
+   */
+  socket.on(C2S.SHOP_AT_TOKEN, safe(socket, ({ tokenId }: ShopAtTokenPayload) => {
+    const d = requireCampaign(socket);
+    const token = tokens.byId(tokenId);
+    if (!token || !token.characterId) return;
+    const map = maps.byId(token.mapId);
+    if (!map || map.campaignId !== d.campaignId) return;
+
+    // Read off the SHOP rather than off a marker: a walking merchant is linked
+    // to their character whether or not anybody ever dropped a storefront on
+    // the map, and it is the link the world tree already shows.
+    //
+    // shopsForUser, not shops.forCampaign, so the existing rule about which
+    // shops a player may walk into at all carries over untouched: open to
+    // players, or being shown to them by the DM. A shop they cannot see is
+    // answered with the same silence as no shop, since the difference is not
+    // theirs to learn.
+    const shop = shopsForUser(d.campaignId, d.userId, d.role === 'dm')
+      .find((sh) => sh.linkedCharacterId === token.characterId);
+    if (!shop) return;
+
+    if (d.role !== 'dm') {
+      const mine = characters.forCampaign(d.campaignId)
+        .filter((c) => c.ownerUserId === d.userId).map((c) => c.id);
+      const near = tokens.forMap(token.mapId).some((t) => t.characterId
+        && mine.includes(t.characterId)
+        && hexDistance({ q: t.q, r: t.r }, { q: token.q, r: token.r }) <= SPEAKING_RANGE_HEXES);
+      if (!near) {
+        emitError(socket, `You are too far away to talk to ${token.name}.`);
+        return;
+      }
+    }
+    socket.emit(S2C.OPEN_SHOP, { shopId: shop.id });
+  }, 'SHOP_AT_TOKEN'));
 
   // ---------- custom compendium items ----------
 

@@ -182,6 +182,14 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
     e.stopPropagation();
     useGameStore.getState().selectToken(token.id, e.shiftKey);
     useGameStore.getState().openInspector(null);
+    // Clicking a shopkeeper is how you talk to one. Only for a token this
+    // player does not run — their own tokens are for moving, and the DM
+    // drags tokens constantly, so neither can afford to have the plain click
+    // mean something else. Range is the server's call.
+    if (!isDm && e.button === 0 && token.characterId && !movable
+      && useGameStore.getState().shopList.some((sh) => sh.linkedCharacterId === token.characterId)) {
+      intents.shopAtToken(token.id);
+    }
     if (!movable || e.button !== 0) return;
     dragOrigin.current = stage.toMap(e.clientX, e.clientY);
     try {
@@ -285,7 +293,11 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
       const st = useGameStore.getState();
       const linkedShop = st.shopList.find((s) => s.linkedCharacterId === token.characterId);
       if (linkedShop) {
-        useGameStore.setState({ presentedShopId: linkedShop.id });
+        // Asked for rather than opened outright: this used to hand over the
+        // storefront from anywhere on the map, including across a wall from
+        // the other end of it. The server decides whether they are close
+        // enough to be talking to anyone.
+        intents.shopAtToken(token.id);
         return;
       }
       // Going through the pockets. Offered only once they are down — the

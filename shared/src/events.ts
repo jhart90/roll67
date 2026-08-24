@@ -272,6 +272,10 @@ export const C2S = {
   // folder batch operations
   DROP_FOLDER_ON_MAP: 'dropFolderOnMap',
   DROP_SHOP_ON_MAP: 'dropShopOnMap',
+  /** Player clicked a token: are they close enough to trade with whoever it
+   *  is? The server answers, because a carried shop is not something the
+   *  client can be trusted to know about. */
+  SHOP_AT_TOKEN: 'shopAtToken',
   DROP_FOLDER_ON_CHARACTER: 'dropFolderOnCharacter',
   // light management
   MOVE_LIGHT_TO_MAP: 'moveLightToMap',
@@ -389,6 +393,17 @@ export interface CreateRandomNpcPayload {
 }
 export interface DeleteCharacterPayload { characterId: string }
 
+/**
+ * How far a shopkeeper's voice carries, in hexes.
+ *
+ * Twenty feet at five feet to the hex: close enough to be talking to someone,
+ * far enough that you need not stand on their toes to buy bread. Deliberately
+ * more generous than the one hex a chest allows, because reaching into a box
+ * and speaking to its owner are not the same act.
+ */
+export const SPEAKING_RANGE_HEXES = 4;
+export interface ShopAtTokenPayload { tokenId: string }
+export interface OpenShopPayload { shopId: string }
 export interface CreateShopPayload { name: string }
 export interface UpdateShopPayload {
   shopId: string;
@@ -896,6 +911,8 @@ export const S2C = {
   CHAT_WIPED: 'chatWiped',
   SHOPS: 'shops',
   SHOP_PRESENTATION: 'shopPresentation',
+  /** Open this storefront for the one player who asked for it. */
+  OPEN_SHOP: 'openShop',
   LOCATIONS: 'locations',
   WORLD_FOLDERS: 'worldFolders',
   ASSETS: 'assets',

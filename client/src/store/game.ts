@@ -1673,6 +1673,13 @@ export function wireSocket(): void {
     useGameStore.setState({ shopList: shops });
   });
 
+  // A player clicked a shopkeeper and the server agreed they are close
+  // enough. Separate from SHOP_PRESENTATION, which is the DM showing a
+  // storefront TO people: this one is a player walking into one, and it
+  // arrives for that player alone.
+  socket.on(S2C.OPEN_SHOP, ({ shopId }: { shopId: string }) => {
+    useGameStore.setState({ presentedShopId: shopId });
+  });
   socket.on(S2C.SHOP_PRESENTATION, ({ shopId }: { shopId: string | null }) => {
     useGameStore.setState({ presentedShopId: shopId });
   });
@@ -2453,6 +2460,9 @@ export const intents = {
     socket.emit(C2S.UPDATE_MAP_OBJECT, { objectId, patch }),
   deleteMapObject: (objectId: string) => socket.emit(C2S.DELETE_MAP_OBJECT, { objectId }),
   takeMapItem: (objectId: string) => socket.emit(C2S.TAKE_MAP_ITEM, { objectId }),
+  /** Ask whether the person this token represents will trade with you. The
+   *  server stays quiet when they have nothing to sell. */
+  shopAtToken: (tokenId: string) => socket.emit(C2S.SHOP_AT_TOKEN, { tokenId }),
   takeChestItem: (objectId: string, itemId: string) => socket.emit(C2S.TAKE_CHEST_ITEM, { objectId, itemId }),
   takeAllChest: (objectId: string) => socket.emit(C2S.TAKE_ALL_CHEST, { objectId }),
   openChest: (objectId: string) => socket.emit(C2S.OPEN_CHEST, { objectId }),

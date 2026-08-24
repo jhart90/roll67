@@ -26,7 +26,8 @@
     "check:uploads": "tsx scripts/check-upload-pipeline.ts",
     "check:multiaction": "node scripts/check-multi-action.mjs",
     "check:loot": "node scripts/check-loot-drop.mjs",
-    "check:orphans": "node scripts/check-orphans.mjs"
+    "check:orphans": "node scripts/check-orphans.mjs",
+    "check:shopkeeper": "node scripts/check-shopkeeper.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

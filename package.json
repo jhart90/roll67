@@ -27,7 +27,8 @@
     "check:multiaction": "node scripts/check-multi-action.mjs",
     "check:loot": "node scripts/check-loot-drop.mjs",
     "check:orphans": "node scripts/check-orphans.mjs",
-    "check:shopkeeper": "node scripts/check-shopkeeper.mjs"
+    "check:shopkeeper": "node scripts/check-shopkeeper.mjs",
+    "measure:shelf": "node scripts/measure-shelf.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

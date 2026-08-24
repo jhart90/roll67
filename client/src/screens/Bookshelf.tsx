@@ -49,18 +49,22 @@ export interface BookSlot {
   textW: number;
 }
 export const BOOK_SLOTS: BookSlot[] = [
-  { left: 6.6, width: 7.9, top: 20.8, sigil: '⚔️', textTop: 30.6, textBottom: 49.3 , textW: 0.72 },
-  { left: 14.9, width: 7.3, top: 25.0, sigil: '🤠', textTop: 30.0, textBottom: 51.8 , textW: 0.72 },
-  { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍', textTop: 29.0, textBottom: 50.5 , textW: 0.68 },
-  { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️', textTop: 28.8, textBottom: 50.0 , textW: 0.7 },
-  { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉', textTop: 30.3, textBottom: 50.0 , textW: 0.72 },
-  { left: 47.8, width: 7.1, top: 25.0, sigil: '🪐', textTop: 31.0, textBottom: 50.8 , textW: 0.66 },
-  { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐', textTop: 29.5, textBottom: 50.3 , textW: 0.7 },
-  { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙', textTop: 31.3, textBottom: 50.0 , textW: 0.72 },
-  { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌', textTop: 29.8, textBottom: 50.0 , textW: 0.62 },
-  { left: 79.4, width: 7.1, top: 27.2, sigil: '☣️', textTop: 39.0, textBottom: 50.2 , textW: 0.7 },
-  { left: 86.8, width: 7.3, top: 24.9, sigil: '🔫', textTop: 30.3, textBottom: 51.5 , textW: 0.7 },
+  { left: 6.6, width: 7.9, top: 21.0, sigil: '⚔️', textTop: 30.6, textBottom: 49.3 , textW: 0.72 },
+  { left: 14.9, width: 7.3, top: 24.3, sigil: '🤠', textTop: 30.0, textBottom: 51.8 , textW: 0.72 },
+  { left: 22.9, width: 8.7, top: 21.8, sigil: '🔍', textTop: 29.0, textBottom: 50.5 , textW: 0.68 },
+  { left: 32.2, width: 8.4, top: 21.1, sigil: '🏛️', textTop: 28.8, textBottom: 50.0 , textW: 0.7 },
+  { left: 41.0, width: 6.7, top: 24.3, sigil: '🐉', textTop: 30.3, textBottom: 50.0 , textW: 0.72 },
+  { left: 47.8, width: 7.1, top: 24.8, sigil: '🪐', textTop: 31.0, textBottom: 50.8 , textW: 0.66 },
+  { left: 55.3, width: 7.4, top: 22.7, sigil: '⭐', textTop: 29.5, textBottom: 50.3 , textW: 0.7 },
+  { left: 63.1, width: 8.2, top: 25.6, sigil: '🐙', textTop: 31.3, textBottom: 50.0 , textW: 0.72 },
+  { left: 71.9, width: 7.0, top: 21.1, sigil: '🔌', textTop: 29.8, textBottom: 50.0 , textW: 0.62 },
+  { left: 79.4, width: 7.1, top: 27.6, sigil: '☣️', textTop: 39.0, textBottom: 50.2 , textW: 0.7 },
+  { left: 86.8, width: 7.3, top: 25.2, sigil: '🔫', textTop: 30.3, textBottom: 51.5 , textW: 0.7 },
 ];
+/**
+ * Where the books END. Measured, like the tops: the dark gaps between books
+ * stay dark down to here and the shelf board brightens immediately below.
+ */
 export const BOOK_BOTTOM = 60.5;
 
 /**

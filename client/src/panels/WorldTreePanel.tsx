@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { HandoutImages } from './HandoutsPanel';
 import type { Character, Counter, DirectoryPayload, Handout, Light, LocationNode, MapMeta, MapObject, RollableTable, Shop, Token, WorldFolder } from 'shared';
 import { str } from 'shared';
@@ -928,6 +928,10 @@ function FolderDetailsModal({ folderId, onClose }: { folderId: string; onClose: 
 
 /** Read-only view a player gets when opening a non-character world item. */
 function ReadModal({ node, onClose }: { node: TreeNode; onClose: () => void }) {
+  // Where the reader has dragged it. Null means "wherever the backdrop centres
+  // it", which is where it opens and where most of them stay.
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const locations = useGameStore((s) => s.locationList);
   const shops = useGameStore((s) => s.shopList);
   const tables = useGameStore((s) => s.tableList);
@@ -938,10 +942,50 @@ function ReadModal({ node, onClose }: { node: TreeNode; onClose: () => void }) {
   const table = node.kind === 'table' ? tables.find((t) => t.id === node.id) : undefined;
   const handout = node.kind === 'handout' ? handouts.find((h) => h.id === node.id) : undefined;
 
+  /**
+   * Drag it by the title bar.
+   *
+   * A centred window has no stored x/y to pick up from, so the first grab
+   * reads where it actually sits and pins it there — the same trick the
+   * floating windows use. Listeners go on the window rather than the header so
+   * a fast drag that outruns the pointer does not drop the window mid-move.
+   */
+  function startDrag(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).closest('.panel')?.getBoundingClientRect();
+    const width = rect?.width ?? 320;
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      originX: pos ? pos.x : (rect?.left ?? 0), originY: pos ? pos.y : (rect?.top ?? 0),
+    };
+    const onMove = (ev: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      // Always leave a grabbable strip on screen: a window dragged off the
+      // edge cannot be dragged back.
+      const EDGE = 60;
+      setPos({
+        x: Math.min(window.innerWidth - EDGE, Math.max(EDGE - width, d.originX + ev.clientX - d.startX)),
+        y: Math.min(window.innerHeight - EDGE, Math.max(0, d.originY + ev.clientY - d.startY)),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
   return (
     <div className="sheet-backdrop" style={{ zIndex: 60 }} onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="panel levelup">
-        <div className="dock-header">
+      <div
+        className="panel levelup"
+        style={pos ? { position: 'fixed', left: pos.x, top: pos.y, margin: 0 } : undefined}
+      >
+        <div className="dock-header world-read-grip" onPointerDown={startDrag}>
           <h3>{node.kind === 'folder' && node.virtual ? '💡' : ICON[node.kind]} {node.name}</h3>
           <button className="link" onClick={onClose}>close</button>
         </div>
@@ -961,11 +1005,18 @@ function ReadModal({ node, onClose }: { node: TreeNode; onClose: () => void }) {
         {shop && (
           <>
             {shop.description && <p className="dim">{shop.description}</p>}
-            <table className="sheet-list"><tbody>
-              {shop.items.map((it, i) => (
-                <tr key={i}><td>{it.name}</td><td>{it.price} {shop.currency}</td><td>{it.qty < 0 ? '∞' : it.qty}</td></tr>
-              ))}
-            </tbody></table>
+            {/* Three bare columns of numbers said nothing about what they
+                were. The same three words the storefront uses, so a price
+                reads as a price in both places. */}
+            <table className="sheet-list">
+              <thead><tr><th>Item</th><th>{shop.currency}</th><th>stock</th></tr></thead>
+              <tbody>
+                {shop.items.map((it, i) => (
+                  <tr key={i}><td>{it.name}</td><td>{it.price} {shop.currency}</td><td>{it.qty < 0 ? '∞' : it.qty}</td></tr>
+                ))}
+                {shop.items.length === 0 && <tr><td colSpan={3} className="dim">The shelves are bare.</td></tr>}
+              </tbody>
+            </table>
             {!shop.playersCanBuy && <p className="dim" style={{ fontSize: 11 }}>The DM presents this shop when it’s open for business.</p>}
           </>
         )}

@@ -54,7 +54,7 @@ export const BOOK_SLOTS: BookSlot[] = [
   { left: 22.9, width: 8.7, top: 22.8, sigil: '🔍', textTop: 29.0, textBottom: 50.5 , textW: 0.68 },
   { left: 32.2, width: 8.4, top: 18.8, sigil: '🏛️', textTop: 28.8, textBottom: 50.0 , textW: 0.7 },
   { left: 41.0, width: 6.7, top: 25.4, sigil: '🐉', textTop: 30.3, textBottom: 50.0 , textW: 0.72 },
-  { left: 47.8, width: 7.1, top: 24.0, sigil: '🪐', textTop: 31.0, textBottom: 50.8 , textW: 0.66 },
+  { left: 47.8, width: 7.1, top: 25.0, sigil: '🪐', textTop: 31.0, textBottom: 50.8 , textW: 0.66 },
   { left: 55.3, width: 7.4, top: 22.9, sigil: '⭐', textTop: 29.5, textBottom: 50.3 , textW: 0.7 },
   { left: 63.1, width: 8.2, top: 25.4, sigil: '🐙', textTop: 31.3, textBottom: 50.0 , textW: 0.72 },
   { left: 71.9, width: 7.0, top: 21.2, sigil: '🔌', textTop: 29.8, textBottom: 50.0 , textW: 0.62 },

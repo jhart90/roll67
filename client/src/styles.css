@@ -539,6 +539,32 @@ button.link:hover { text-decoration: underline; }
 .inspector-grid label { margin: 0; font-size: 12px; }
 .inspector-grid input[type='color'] { padding: 2px; height: 34px; }
 
+/* Loot carried by a token. A section rather than a field: "what do I get for
+   killing this" deserves an answer you can read without opening anything. */
+.inspector-loot { display: flex; flex-direction: column; gap: 6px; }
+.inspector-loot-empty { margin: 0; font-size: 12px; font-style: italic; }
+/* Scrolls instead of growing — a well-stocked body would otherwise push
+   Wounds, Vision and Light off the bottom of the panel. */
+.inspector-loot-list {
+  list-style: none; margin: 0; padding: 4px 6px; max-height: 132px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px; background: rgba(0, 0, 0, 0.18);
+}
+.inspector-loot-list li {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 12px; padding: 3px 2px; line-height: 1.35;
+}
+.inspector-loot-list li + li { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.inspector-loot-list b { color: var(--text-dim); font-weight: 600; }
+.inspector-loot-note { font-size: 11px; line-height: 1.4; }
+
+/* The one destructive control, fenced off at the bottom so it is never the
+   thing you hit reaching for Close. */
+.inspector-danger {
+  margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 5px; align-items: flex-start;
+}
+.inspector-danger .dim { font-size: 11px; line-height: 1.4; }
+
 /* Loot popup */
 .loot-popup-backdrop {
   position: fixed; inset: 0; z-index: 200;

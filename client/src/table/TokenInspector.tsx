@@ -72,7 +72,8 @@ export function TokenInspector() {
       <div className="token-inspector">
         <div className="dock-header">
           <h3>{token.name}</h3>
-          <button className="link" onClick={() => useGameStore.getState().openInspector(null)}>close</button>
+          <button className="link" title="Close" aria-label="Close"
+            onClick={() => useGameStore.getState().openInspector(null)}>✕</button>
         </div>
         <label>
           Token Color
@@ -85,6 +86,12 @@ export function TokenInspector() {
       </div>
     );
   }
+
+  const lootItems = bodyChest?.items ?? [];
+  // A DM-run body spills its pockets onto the floor when it dies; a player's
+  // does not. Worth saying out loud here, because it changes what adding loot
+  // to this token actually means.
+  const dmRun = !character || character.ownerUserId === null;
 
   const vision = token.vision;
   // A token linked to a character reads/writes its vision straight from the
@@ -111,14 +118,8 @@ export function TokenInspector() {
       <div className="dock-header">
         <h3>{token.name}</h3>
         <span className="spacer" />
-        <ConfirmButton
-          title={`Remove token "${token.name}" from the map`}
-          confirmLabel="really remove?"
-          onConfirm={() => intents.deleteToken(token.id)}
-        >
-          remove
-        </ConfirmButton>
-        <button className="link" onClick={() => useGameStore.getState().openInspector(null)}>close</button>
+        <button className="link" title="Close" aria-label="Close"
+            onClick={() => useGameStore.getState().openInspector(null)}>✕</button>
       </div>
       <div className="inspector-grid">
         <label>
@@ -144,23 +145,6 @@ export function TokenInspector() {
             <option value="gm">GM only (hidden)</option>
           </select>
         </label>
-        {/* What is in their pockets. A body's loot is an ordinary chest that
-            this character CARRIES: it travels with them, is invisible on the
-            ground, and opens to a player only once they are down. Reusing the
-            chest means the lock, the compendium, the range check and the
-            take-and-grant all come for free. */}
-        {token.characterId && (
-          <label>
-            Loot
-            <button
-              className="btn btn-sm"
-              title="Items a player can take off this body once it is incapacitated or dead"
-              onClick={() => openBodyLoot(token.characterId!, token.mapId, token.q, token.r, token.name)}
-            >
-              {bodyChest ? `${bodyChest.items.length} item${bodyChest.items.length === 1 ? '' : 's'} — edit…` : '+ Add loot…'}
-            </button>
-          </label>
-        )}
         {character && (
           <OwnerSelect characterId={character.id} ownerUserId={character.ownerUserId} />
         )}
@@ -198,6 +182,45 @@ export function TokenInspector() {
           <UploadProgressBar progress={progress} />
         </label>
       </div>
+
+      {/* What is in their pockets, listed rather than counted. A body's loot is
+          an ordinary chest this character CARRIES: it travels with them, is
+          invisible on the ground, and reusing the chest means the lock, the
+          compendium, the range check and the take-and-grant all come free.
+          It gets a section because "what do I get for killing this" is a
+          question worth answering without opening anything. */}
+      {token.characterId && (
+        <>
+          <h4>Loot carried{lootItems.length > 0 ? ` (${lootItems.length})` : ''}</h4>
+          <div className="inspector-loot">
+            {lootItems.length === 0 ? (
+              <p className="dim inspector-loot-empty">Carrying nothing.</p>
+            ) : (
+              // Scrolls rather than growing: a well-stocked merchant would
+              // otherwise push every section below it off the panel.
+              <ul className="inspector-loot-list">
+                {lootItems.map((it, i) => (
+                  <li key={it.id || i}>
+                    <span>{it.name}</span>
+                    {(it.qty ?? 1) > 1 && <b>&times;{it.qty}</b>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              className="btn btn-sm"
+              onClick={() => openBodyLoot(token.characterId!, token.mapId, token.q, token.r, token.name)}
+            >
+              {lootItems.length > 0 ? 'Edit loot…' : '+ Add loot…'}
+            </button>
+            <span className="dim inspector-loot-note">
+              {dmRun
+                ? 'Drops to the ground the moment this token dies.'
+                : 'A player can take these off the body once it is down.'}
+            </span>
+          </div>
+        </>
+      )}
 
       {character && character.system === 'swade' ? (
         // SWADE has no hit points — the sheet tracks Wounds (Wild Cards carry
@@ -468,6 +491,25 @@ export function TokenInspector() {
             </button>
           </>
         )}
+      </div>
+
+      {/* Last, and fenced off. It used to sit in the header beside Close,
+          where the destructive control was the easiest thing to hit and its
+          label — "remove" — did not say remove WHAT. This one names its
+          object, and says what survives it. */}
+      <div className="inspector-danger">
+        <ConfirmButton
+          title={`Take the token "${token.name}" off this map`}
+          confirmLabel="Really remove it?"
+          onConfirm={() => intents.deleteToken(token.id)}
+        >
+          Remove token from map
+        </ConfirmButton>
+        <span className="dim">
+          {character
+            ? <>Takes this token off the map only. <b>{character.name}</b> stays in the campaign &mdash; delete the character from their sheet.</>
+            : <>Takes this token off the map. Nothing else refers to it.</>}
+        </span>
       </div>
     </div>
   );

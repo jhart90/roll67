@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, acquirePatch, conditionCombat, conditionsOf, hexDistance, firstFreeHex, packHex, systemFor,
+  C2S, S2C, acquirePatch, conditionCombat, conditionsOf, hexDistance, hexNeighbors, firstFreeHex, inBounds, packHex, systemFor,
+  type Hex, type LootItem,
   type Character, type DeleteMapObjectPayload, type GameSystem, type MapObject, type OpenChestPayload, type PlaceMapObjectPayload,
   type SheetData, type TakeAllChestPayload, type TakeChestItemPayload,
   type TakeMapItemPayload, type UpdateMapObjectPayload,
@@ -145,13 +146,106 @@ function lockBlocks(
  * not sent would leave it sitting there until they reloaded. Revealing is the
  * same call in reverse, which is why both live here rather than at each site.
  */
-function sendMapObject(io: Server, campaignId: string, obj: MapObject): void {
+export function sendMapObject(io: Server, campaignId: string, obj: MapObject): void {
   const hidden = obj.layer === 'gm';
   for (const s of socketsSeeingHex(io, campaignId, obj.mapId, obj.q, obj.r)) {
     const viewer = sdata(s);
     if (hidden && viewer.role !== 'dm') s.emit(S2C.MAP_OBJECT_REMOVED, { objectId: obj.id });
     else s.emit(S2C.MAP_OBJECT_UPSERTED, { object: obj });
   }
+}
+
+/** How many things fall as separate piles before it is tidier to leave a box. */
+const LOOSE_DROP_MAX = 3;
+
+/**
+ * A DM-run body drops what it was carrying, the moment it dies.
+ *
+ * Loot used to stay on the corpse: findable, but only if a player thought to
+ * click the body, and invisible to anyone who did not. Putting it on the
+ * ground makes the reward a thing you can SEE, which is rather the point of
+ * having killed the guard.
+ *
+ * Everything dropped is a chest, the single items included. A chest holding
+ * exactly one thing already draws as that thing lying on the flagstones, and
+ * going through the same object means the lock, the range check and the
+ * take-and-grant keep working; a separate 'item' kind would have to re-earn
+ * every one of those.
+ *
+ * Up to three things get a hex each, because scattered loot reads instantly.
+ * Past that the adjacent hexes run out and a spray of markers stops being
+ * legible, so the body's own chest is unlinked and set down whole: one box
+ * moved, not a second box minted.
+ *
+ * Player characters are left alone. A PC's pack is theirs, and a party that
+ * revives its fallen should not have to pick the floor up first.
+ */
+export function dropCarriedLootOnDeath(io: Server, campaignId: string, character: Character): void {
+  if (character.ownerUserId !== null) return;
+  const carried = mapObjects.forCampaign(campaignId)
+    .filter((o) => o.kind === 'chest' && o.linkedCharacterId === character.id);
+  if (carried.length === 0) return;
+  const items: LootItem[] = carried.flatMap((o) => o.items);
+  if (items.length === 0) return;
+
+  const token = tokens.forCharacter(character.id)
+    .find((t) => maps.byId(t.mapId)?.campaignId === campaignId);
+  if (!token) return;
+  const map = maps.byId(token.mapId);
+  if (!map) return;
+
+  // What the loot may not land on. Carried containers are skipped: they ride a
+  // token rather than stand on the floor, so their hex is not theirs to hold.
+  const occupied = new Set<number>();
+  for (const t of tokens.forMap(token.mapId)) occupied.add(packHex({ q: t.q, r: t.r }));
+  for (const o of mapObjects.forMap(token.mapId)) {
+    if (!o.linkedCharacterId) occupied.add(packHex({ q: o.q, r: o.r }));
+  }
+  const body: Hex = { q: token.q, r: token.r };
+  const free = hexNeighbors(body).filter((h) => inBounds(h, map.grid) && !occupied.has(packHex(h)));
+
+  const source = carried[0];
+  // A body hidden on the GM layer drops hidden loot. Revealing the corpse and
+  // revealing what it carried should be one decision, not two.
+  const layer = source.layer === 'gm' ? 'gm' as const : 'map' as const;
+  const scattered = items.length <= LOOSE_DROP_MAX && free.length >= items.length;
+  const touched: MapObject[] = [];
+  const keep = (id: string) => { const fresh = mapObjects.byId(id); if (fresh) touched.push(fresh); };
+  const empty = (o: MapObject) => { mapObjects.update(o.id, { items: [] }); keep(o.id); };
+
+  if (scattered) {
+    items.forEach((it, i) => {
+      const made = mapObjects.create(token.mapId, 'chest', it.name, it.description ?? '', free[i].q, free[i].r);
+      // The lock travels with the loot. Scattering a locked chest's contents
+      // across the floor would otherwise be a way to walk through the lock.
+      mapObjects.update(made.id, { items: [it], layer, locked: source.locked, keyName: source.keyName ?? null });
+      keep(made.id);
+    });
+    for (const o of carried) empty(o);
+  } else {
+    // No adjacent room at all is still a drop: spiral outward rather than let
+    // the loot evaporate because the body fell in a doorway.
+    const spot = free[0] ?? firstFreeHex(body, occupied, map.grid);
+    mapObjects.update(source.id, {
+      mapId: token.mapId, q: spot.q, r: spot.r, items, linkedCharacterId: null, layer,
+    });
+    keep(source.id);
+    for (const o of carried.slice(1)) empty(o);
+  }
+
+  for (const o of touched) sendMapObject(io, campaignId, o);
+
+  const what = scattered
+    ? `${items.length} item${items.length === 1 ? '' : 's'}`
+    : `a chest holding ${items.length} items`;
+  const msg = chat.add(campaignId, {
+    userId: null, fromName: 'System', kind: 'system',
+    text: `💰 ${character.name} drops ${what}.`, roll: null, recipients: null,
+  });
+  // Hidden loot is not an announcement. The DM still hears it, being the one
+  // who has to remember it is lying there.
+  if (layer === 'gm') io.to(dmRoom(campaignId)).emit(S2C.CHAT, { msg });
+  else io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
 }
 
 export function registerMapObjectHandlers(io: Server, socket: Socket): void {

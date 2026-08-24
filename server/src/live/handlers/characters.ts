@@ -9,6 +9,7 @@ import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPay
 import { generateNpc, generateNpcFromModel, nameplateFor, npcById, remapMacro, reorderMapsFor } from 'shared';
 import { campaigns, characters, chat, customNpcs, dmNotes, macros, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
 import { placeCharacterToken } from './tokens.js';
+import { dropCarriedLootOnDeath } from './mapObjects.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
 import { syncMapVision } from '../visionService.js';
@@ -448,6 +449,12 @@ function applyCharacterPatch(
   characters.update(character.id, name, sheet);
   const updated = characters.byId(character.id)!;
   emitCharacter(io, campaignId, updated);
+  // Sheet edits do not go through persistSheet, so the same alive-to-dead edge
+  // has to be watched here too — otherwise ticking Dead by hand leaves the
+  // loot on the body while every other route drops it.
+  if (!beforeConditions.includes('dead') && conditionsOf(updated.sheet).includes('dead')) {
+    dropCarriedLootOnDeath(io, campaignId, updated);
+  }
   if (Object.keys(reorders).length > 0) followReorder(io, campaignId, character.id, reorders);
 
   if (Array.isArray(patch.conditions) && actorName) {

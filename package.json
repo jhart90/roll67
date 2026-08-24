@@ -24,7 +24,8 @@
     "check:hooks": "node scripts/check-hooks.mjs",
     "typecheck": "npm -w shared run typecheck && npm -w server run typecheck && npm -w client run typecheck && node scripts/check-hooks.mjs",
     "check:uploads": "tsx scripts/check-upload-pipeline.ts",
-    "check:multiaction": "node scripts/check-multi-action.mjs"
+    "check:multiaction": "node scripts/check-multi-action.mjs",
+    "check:loot": "node scripts/check-loot-drop.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

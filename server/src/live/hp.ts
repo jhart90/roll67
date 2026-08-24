@@ -4,6 +4,7 @@ import { campaigns, characters, chat, mapObjects, maps, tokens, worldFolders } f
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
 import { broadcastWorldFolders } from './handlers/world.js';
+import { dropCarriedLootOnDeath } from './handlers/mapObjects.js';
 import { applyAdv } from './handlers/chat.js';
 
 /** A condition a concentration spell inflicted, recorded on the CASTER's
@@ -202,6 +203,13 @@ export function persistSheet(io: Server, campaignId: string, character: Characte
     touched.add(t.mapId);
   }
   for (const mapId of touched) syncMapVision(io, campaignId, mapId);
+  // The edge from alive to dead, caught here because every sheet write lands
+  // here: damage that kills, the DM calling it outright, a condition ticked by
+  // hand. Guarded on the transition rather than the state so a later write to
+  // an already-dead sheet does not drop the body's kit a second time.
+  if (!conditionsOf(character.sheet).includes('dead') && conds.includes('dead')) {
+    dropCarriedLootOnDeath(io, campaignId, updated);
+  }
   return updated;
 }
 

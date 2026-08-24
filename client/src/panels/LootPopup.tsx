@@ -38,13 +38,20 @@ export function LootPopup() {
             <ul className="chest-items">
               {obj.items.map((item) => (
                 <li key={item.id}>
-                  <span className="chest-item-name">{item.name}</span>
+                  {/* How many are in the pile. Without this a stack of fifteen
+                      looked exactly like a single sheet, so Take appeared to do
+                      nothing and Take All appeared to invent things. */}
+                  <span className="chest-item-name">
+                    {item.name}
+                    {(item.qty ?? 1) > 1 && <b className="chest-item-qty">&times;{item.qty}</b>}
+                  </span>
                   {item.description && <span className="chest-item-desc">{item.description}</span>}
                   <button
                     className="small"
+                    title={(item.qty ?? 1) > 1 ? 'Take one of these — Take All empties the chest' : undefined}
                     onClick={() => intents.takeChestItem(obj.id, item.id)}
                   >
-                    Take
+                    {(item.qty ?? 1) > 1 ? 'Take one' : 'Take'}
                   </button>
                 </li>
               ))}

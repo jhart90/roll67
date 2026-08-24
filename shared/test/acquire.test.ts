@@ -59,3 +59,58 @@ describe('acquirePatch', () => {
     expect(Object.keys(bought)).toEqual(Object.keys(looted));
   });
 });
+
+describe('acquirePatch stacking', () => {
+  it('takes a pile as ONE row carrying the count, not a row per unit', () => {
+    const patch = acquirePatch({}, 'dnd5e', { name: 'Papyrus', qty: 15 });
+    expect(rows(patch, 'inventory')).toHaveLength(1);
+    expect(rows(patch, 'inventory')[0]).toMatchObject({ name: 'Papyrus', qty: 15 });
+  });
+
+  it('adds to a stack already in the pack rather than starting a second one', () => {
+    const sheet: SheetData = { inventory: [{ name: 'Bullets, Medium', qty: 29, weight: 0 }] };
+    const patch = acquirePatch(sheet, 'dnd5e', { name: 'Bullets, Medium', qty: 50 });
+    expect(rows(patch, 'inventory')).toHaveLength(1);
+    expect(rows(patch, 'inventory')[0].qty).toBe(79);
+    // Still a patch, not a mutation of what it was handed.
+    expect((sheet.inventory as SheetData[])[0].qty).toBe(29);
+  });
+
+  it('merges single items too, so picking one up twice is a stack of two', () => {
+    const sheet: SheetData = { inventory: [{ name: 'Torch', qty: 1, weight: 0 }] };
+    expect(rows(acquirePatch(sheet, 'dnd5e', { name: 'Torch' }), 'inventory')[0].qty).toBe(2);
+  });
+
+  it('does not care about case or stray spacing in the name', () => {
+    const sheet: SheetData = { inventory: [{ name: 'Papyrus', qty: 3, weight: 0 }] };
+    const patch = acquirePatch(sheet, 'dnd5e', { name: '  papyrus ', qty: 2 });
+    expect(rows(patch, 'inventory')).toHaveLength(1);
+    expect(rows(patch, 'inventory')[0]).toMatchObject({ name: 'Papyrus', qty: 5 });
+  });
+
+  it('keeps the fields the existing stack already had', () => {
+    const sheet: SheetData = { inventory: [{ name: 'Arrow', qty: 10, weight: 0.05, notes: 'fletched myself' }] };
+    expect(rows(acquirePatch(sheet, 'dnd5e', { name: 'Arrow', qty: 5 }), 'inventory')[0])
+      .toMatchObject({ qty: 15, weight: 0.05, notes: 'fletched myself' });
+  });
+
+  it('never stacks weapons: two swords are two attacks, not one with a 2 on it', () => {
+    const sword = contentForSystem('swade').find((e) => e.kind === 'weapon' && e.name === 'Long Sword');
+    expect(sword).toBeDefined();
+    const first = acquirePatch({ strength: 'd8' }, 'swade', { name: sword!.name, contentId: sword!.id });
+    const second = acquirePatch({ strength: 'd8', ...first }, 'swade', { name: sword!.name, contentId: sword!.id });
+    expect(rows(second, 'attacks')).toHaveLength(2);
+  });
+
+  it('leaves a row that does not count itself alone', () => {
+    // No qty means it is not a stack — a named, one-off thing.
+    const sheet: SheetData = { inventory: [{ name: 'Locket', notes: 'her mother\u2019s' }] };
+    const patch = acquirePatch(sheet, 'dnd5e', { name: 'Locket' });
+    expect(rows(patch, 'inventory')).toHaveLength(2);
+  });
+
+  it('changes nothing for a plain single purchase', () => {
+    expect(rows(acquirePatch({}, 'dnd5e', { name: 'Rope', notes: 'purchased' }), 'inventory')[0])
+      .toMatchObject({ name: 'Rope', qty: 1, weight: 0, notes: 'purchased' });
+  });
+});

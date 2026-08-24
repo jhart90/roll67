@@ -39,6 +39,8 @@ let nextOrigin = 5;
 const objects = new Map();
 sock.on('mapObjectUpserted', (p) => objects.set(p.object.id, p.object));
 const removed = new Set();
+const chars = new Map();
+sock.on('characterUpserted', (p) => chars.set(p.character.id, p.character));
 sock.on('mapObjectRemoved', (p) => { removed.add(p.objectId); objects.delete(p.objectId); });
 
 /** Build an unowned NPC with a body chest holding `n` items, then kill it. */
@@ -171,6 +173,35 @@ console.log("a body's pack survives being emptied:")
   await sleep(600);
   ok(removed.has(pile.id), 'the dropped pile still vanishes when taken');
   ok(!removed.has(s.chest.id), "the corpse's own pack is never removed", s.chest.id);
+}
+
+console.log('a stack is picked up as a stack:')
+{
+  // One loot row carrying fifteen -- the shape a body's pile of papyrus has.
+  const s = await scenario('Scribe', 1);
+  const pile = s.dropped[0];
+  sock.emit('updateMapObject', { objectId: pile.id, patch: { items: [{ id: 'pap', name: 'Papyrus', description: 'found', qty: 15 }] } });
+  await sleep(300);
+  chars.clear();
+  sock.emit('takeAllChest', { objectId: pile.id });
+  await sleep(900);
+  const holder = [...chars.values()].find((c) => (c.sheet.inventory ?? []).some((r) => r.name === 'Papyrus'));
+  ok(!!holder, 'somebody ended up holding the papyrus');
+  const stacks = (holder?.sheet.inventory ?? []).filter((r) => r.name === 'Papyrus');
+  ok(stacks.length === 1, 'it is ONE row, not fifteen', `${stacks.length} row(s)`);
+  ok(stacks[0]?.qty === 15, 'and it carries the whole count', `qty ${stacks[0]?.qty}`);
+
+  // Now pick up more of the same and watch the stacks join.
+  const again = await scenario('Scribe2', 1);
+  const pile2 = again.dropped[0];
+  sock.emit('updateMapObject', { objectId: pile2.id, patch: { items: [{ id: 'pap2', name: 'Papyrus', description: 'found', qty: 4 }] } });
+  await sleep(300);
+  chars.clear();
+  sock.emit('takeAllChest', { objectId: pile2.id });
+  await sleep(900);
+  const after = [...chars.values()].find((c) => (c.sheet.inventory ?? []).some((r) => r.name === 'Papyrus'));
+  const rows2 = (after?.sheet.inventory ?? []).filter((r) => r.name === 'Papyrus');
+  ok(rows2.length === 1, 'a second pile joins the stack rather than starting another row', `${rows2.length} row(s)`);
 }
 
 sock.close();

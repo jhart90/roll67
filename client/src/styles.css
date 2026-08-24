@@ -586,6 +586,7 @@ button.link:hover { text-decoration: underline; }
   padding: 6px 0; border-bottom: 1px solid var(--border);
 }
 .chest-items li:last-child { border-bottom: none; }
+.chest-item-qty { margin-left: 6px; color: var(--text-dim); font-weight: 600; }
 .chest-item-name { flex: 1; font-size: 13px; font-weight: 500; }
 .chest-item-desc { font-size: 11px; color: var(--text-dim); }
 /* The lock toggle on a chest or door: its own row, boxed like the fields

@@ -67,10 +67,15 @@ function carriedBlocks(role: string, obj: { linkedCharacterId?: string | null; m
   return `${carrier.character.name} is still on their feet — you cannot go through their pockets.`;
 }
 
-function postTake(io: Server, campaignId: string, playerName: string, itemName: string, intoName?: string): void {
+function postTake(
+  io: Server, campaignId: string, playerName: string, itemName: string, intoName?: string, qty = 1,
+): void {
+  // One line for the stack. Fifteen identical lines said nothing the first one
+  // had not, and buried whatever else was in the chest.
+  const what = qty > 1 ? `${itemName} ×${qty}` : itemName;
   const msg = chat.add(campaignId, {
     userId: null, fromName: 'System', kind: 'system',
-    text: intoName ? `${playerName} has taken ${itemName} (added to ${intoName})` : `${playerName} has taken ${itemName}`,
+    text: intoName ? `${playerName} has taken ${what} (added to ${intoName})` : `${playerName} has taken ${what}`,
     roll: null, recipients: null,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
@@ -104,10 +109,11 @@ function takerFor(
  * does. Returns the name of who took it, or null if nobody could.
  */
 function grantLoot(
-  io: Server, campaignId: string, taker: Character, item: { name: string; contentId?: string; description?: string },
+  io: Server, campaignId: string, taker: Character,
+  item: { name: string; contentId?: string; description?: string; qty?: number },
 ): string {
   const patch = acquirePatch(taker.sheet as SheetData, taker.system as GameSystem, {
-    name: item.name, contentId: item.contentId, notes: item.description || 'found',
+    name: item.name, contentId: item.contentId, notes: item.description || 'found', qty: item.qty,
   });
   characters.update(taker.id, undefined, { ...taker.sheet, ...patch });
   const updated = characters.byId(taker.id)!;
@@ -404,10 +410,11 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
       // stacking patches onto a stale copy would drop all but the last item.
       const fresh = characters.byId(taker.id);
       if (!fresh) break;
-      for (let n = item.qty ?? 1; n > 0; n--) {
-        const into = grantLoot(io, d.campaignId, characters.byId(taker.id) ?? fresh, item);
-        postTake(io, d.campaignId, d.username, item.name, into);
-      }
+      // The whole pile in one grant. Handing it over a unit at a time is what
+      // turned a stack of fifteen into fifteen separate rows on the sheet.
+      const n = Math.max(1, Math.floor(Number(item.qty) || 1));
+      const into = grantLoot(io, d.campaignId, characters.byId(taker.id) ?? fresh, { ...item, qty: n });
+      postTake(io, d.campaignId, d.username, item.name, into, n);
     }
     const heldBefore = obj.items.length;
     mapObjects.update(objectId, { items: [] });

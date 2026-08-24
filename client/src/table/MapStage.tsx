@@ -9,7 +9,7 @@ import { BackgroundCanvas } from './BackgroundCanvas';
 import { CombatTextLayer } from './CombatTextLayer';
 import { DrawingLayer } from './DrawingLayer';
 import { FogCanvas } from './FogCanvas';
-import { GeometryLayer } from './GeometryLayer';
+import { DoorHitLayer, GeometryLayer } from './GeometryLayer';
 import { MapObjectLayer } from './MapObjectLayer';
 import { LightColorOverlay } from './LightColorOverlay';
 import { PingMeasureLayer } from './PingMeasureLayer';
@@ -404,6 +404,9 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <MoveRangeCanvas grid={map.grid} />
           <LightColorOverlay map={map} visibleLitMask={visibleLitMask} fadePolygons={fadePolygons} />
           <DrawingLayer />
+          {/* Below the tokens and the loot on purpose: the widened door
+              hit area must lose every tie to something standing on it. */}
+          <DoorHitLayer />
           <MapObjectLayer />
           <TokenLayer />
           <FogCanvas

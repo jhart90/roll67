@@ -29,7 +29,7 @@ import { flushAllVisionMemory } from './live/visionService.js';
 /** Stamped at commit time so a running server can say which build it is —
  *  and so a deploy that claims to watch only part of this repo has something
  *  in the server tree to notice. */
-const BUILD_REF = 'stacked-loot';
+const BUILD_REF = 'door-hit-band';
 
 import { audioShrinkAvailable } from './media.js';
 

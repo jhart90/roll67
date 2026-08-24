@@ -157,6 +157,76 @@ const WallPiece = memo(function WallPiece({ wall, selected, interactive }: { wal
   );
 });
 
+/** How far either side of a door's line a click still counts, in map pixels.
+ *  Wide enough to forgive a shaky click, narrow enough that it stays clearly
+ *  a click on THAT door rather than a vague gesture at the wall. */
+const DOOR_HIT_WIDTH = 22;
+
+/**
+ * The clickable band along every door — rendered as its own layer, deliberately
+ * BELOW tokens and loot.
+ *
+ * Only the little centre dot used to take clicks, so opening a door meant
+ * hitting a 9px target on a line that might be a hundred pixels long. The
+ * obvious fix is to widen the line's own hit area, and it is wrong: doors
+ * paint ABOVE the tokens, so a wide band up there would swallow clicks meant
+ * for anyone standing in the doorway — which is precisely where people stand.
+ *
+ * So the band lives underneath everything clickable instead. Paint order
+ * decides ties, and this loses every one of them: a token, a chest or a loose
+ * item over the line keeps its click, and the band catches only the gap
+ * between them. The visible door and its centre dot stay on top in
+ * GeometryLayer, so a door completely covered by a token can still be worked
+ * through the dot, exactly as before.
+ */
+export function DoorHitLayer() {
+  const map = useGameStore((s) => s.map);
+  const isDm = useGameStore((s) => s.isDm());
+  const dmGeometry = useGameStore((s) => s.dmGeometry);
+  const knownDoors = useGameStore((s) => s.knownDoors);
+  const tool = useGameStore((s) => s.tool);
+  // Same rule the marker follows: the DM sees every door, a player sees only
+  // the ones they have found.
+  const doors = isDm ? dmGeometry?.doors ?? [] : knownDoors;
+  // Silent unless the select tool is active, so the wall, door and erase tools
+  // still get their own clicks.
+  if (!map || tool !== 'select' || doors.length === 0) return null;
+  const { width, height } = mapPixelSize(map);
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}
+    >
+      {doors.map((d) => (
+        <line
+          key={d.id}
+          x1={d.a.x} y1={d.a.y} x2={d.b.x} y2={d.b.y}
+          stroke="transparent"
+          strokeWidth={DOOR_HIT_WIDTH}
+          strokeLinecap="round"
+          // 'stroke' rather than 'auto': an invisible stroke is not painted,
+          // and visiblePainted would refuse to hear it.
+          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            intents.toggleDoor(map.id, d.id);
+          }}
+          onContextMenu={(e) => {
+            if (!isDm) return;
+            e.preventDefault();
+            e.stopPropagation();
+            useGameStore.getState().selectDoor(d.id);
+          }}
+        >
+          <title>{`${d.open ? 'Close' : 'Open'}${d.type === 'gate' ? ' gate' : ' door'}${isDm ? ' · right-click to edit' : ''}`}</title>
+        </line>
+      ))}
+    </svg>
+  );
+}
+
 /** One door marker + toggle hotspot. Memoized per finding above; only
  *  re-renders when this specific door, the map, or the active tool changes.
  *  Left-click keeps its existing open/close behavior (players rely on this

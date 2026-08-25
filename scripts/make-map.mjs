@@ -2,9 +2,11 @@
 //
 //   node scripts/make-map.mjs assets/csb_thebes.png 4096
 //
-// The ceiling is not arbitrary: uploads resize maps to 4096 on the longest
-// side (MAX_DIMENSION.map in server/src/media.ts), so anything bigger is work
-// the server throws away. The output is WebP at quality 95 for the same
+// The ceiling is not arbitrary, and it is on the LONGEST side: uploads resize
+// maps to 4096 that way (MAX_DIMENSION.map in server/src/media.ts), so
+// anything bigger is work the server throws away. A portrait map matters here
+// — capping its width instead would make it 6800px tall and the upload would
+// shrink it straight back, spending the enlargement to gain nothing. The output is WebP at quality 95 for the same
 // reason — maps are stored as WebP regardless, and leaving headroom above the
 // pipeline's own q90 keeps that the only pass anyone could ever see.
 //
@@ -29,7 +31,7 @@ import sharp from 'sharp';
 
 const [, , src, targetArg = '4096', sigmaArg = '0.8'] = process.argv;
 if (!src) {
-  console.error('usage: node scripts/make-map.mjs <source-image> [target-width] [sharpen-sigma]');
+  console.error('usage: node scripts/make-map.mjs <source-image> [longest-side] [sharpen-sigma]');
   process.exit(1);
 }
 const target = Number(targetArg);
@@ -37,13 +39,18 @@ const sigma = Number(sigmaArg);
 const mb = (n) => `${(n / 1048576).toFixed(2)} MB`;
 
 const meta = await sharp(src).metadata();
-const targetH = Math.round(target * (meta.height / meta.width));
+// The cap is on the LONGEST side, because that is the side the upload resizes
+// against. Targeting width regardless would hand a portrait map back 6800px
+// tall, and the server would undo the whole enlargement on the way in.
+const scale = target / Math.max(meta.width, meta.height);
+const outW = Math.round(meta.width * scale);
+const outH = Math.round(meta.height * scale);
 console.log(`source: ${meta.width}x${meta.height} ${meta.format}, ${mb(fs.statSync(src).size)}`);
-console.log(`output: ${target}x${targetH} (${(target / meta.width).toFixed(2)}x), lanczos3 + sharpen ${sigma}`);
+console.log(`output: ${outW}x${outH} (${scale.toFixed(2)}x), lanczos3 + sharpen ${sigma}`);
 
 const stem = path.join(path.dirname(src), `${path.basename(src, path.extname(src))}_map${target}`);
 const out = `${stem}.webp`;
-let pipeline = sharp(src).resize({ width: target, height: targetH, kernel: sharp.kernel.lanczos3 });
+let pipeline = sharp(src).resize({ width: outW, height: outH, kernel: sharp.kernel.lanczos3 });
 if (sigma > 0) pipeline = pipeline.sharpen({ sigma });
 await pipeline.webp({ quality: 95, effort: 6 }).toFile(out);
 console.log(`wrote ${out}  ${mb(fs.statSync(out).size)}`);

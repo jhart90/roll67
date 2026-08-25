@@ -781,6 +781,9 @@ export interface MapObject {
   items: LootItem[];
   /** Links this map object to a world folder (chest-folder unification). */
   worldFolderId: string | null;
+  /** Where it FILES in the world tree. Null means it hangs under the map it
+   *  stands on, which is where everything starts and most things stay. */
+  parentId?: string | null;
   /** Links this map object to a shop placed on the map. */
   shopId: string | null;
   /** A character who IS this container — the token carries the chest (or is
@@ -824,6 +827,8 @@ export interface UpdateMapObjectPayload {
   objectId: string;
   patch: {
     layer?: 'map' | 'gm';
+    /** Re-file it in the world tree; null puts it back under its map. */
+    parentId?: string | null;
     name?: string;
     description?: string;
     artAssetId?: string;

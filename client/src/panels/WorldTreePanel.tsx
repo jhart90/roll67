@@ -268,10 +268,18 @@ function buildNodes(
     const bearer = obj.linkedCharacterId && charIds.has(obj.linkedCharacterId)
       ? obj.linkedCharacterId
       : null;
+    // Filed by hand, if it still has somewhere to be filed. A folder that has
+    // since been deleted would otherwise take the chest out of the tree with
+    // it — so a dangling parent falls back to the map, where it can be seen
+    // and re-filed rather than silently lost.
+    const filed = obj.parentId && !bearer
+      && (folderIds.has(obj.parentId) || charIds.has(obj.parentId) || mapIds.has(obj.parentId))
+      ? obj.parentId
+      : null;
     out.push({
       kind: 'mapobject', id: obj.id,
       name: obj.name || (obj.kind === 'chest' ? 'Chest' : 'Loot'),
-      parentId: bearer ?? obj.mapId, sub, mapObjectKind: obj.kind,
+      parentId: bearer ?? filed ?? obj.mapId, sub, mapObjectKind: obj.kind,
     });
   }
   // Token-carried lights appear under their character
@@ -590,9 +598,9 @@ export function WorldTreePanel() {
       if (parentKey && isAncestor(drag.id, parentKey)) return;
       const dragParent = dragNode.parentId && byId.has(dragNode.parentId) ? dragNode.parentId : null;
       if (dragParent !== parentKey) {
-        // Counters and placed loot only live on maps — an above-drop can't
-        // re-home them, only sort them where they already are.
-        if (drag.kind === 'counter' || drag.kind === 'mapobject') return;
+        // Counters live on maps and nowhere else, so an above-drop can only
+        // sort them where they already are. Placed loot now files freely.
+        if (drag.kind === 'counter') return;
         intents.setParent(drag.kind, drag.id, parentKey);
       }
       const sibs = (childrenOf.get(parentKey) ?? []).filter((n) => n.id !== drag.id);
@@ -650,11 +658,11 @@ export function WorldTreePanel() {
       placeFolderOnMap(drag.id, targetId);
       return;
     }
-    // Placed loot belongs to the map it stands on: it sorts among its
-    // siblings and goes no further. Dropping one INTO something would be
-    // asking to re-home it, which there is no such thing as — move the piece
-    // on the map instead.
-    if (drag.kind === 'mapobject') return;
+    // Placed loot files like anything else. It still STANDS where it stands —
+    // filing it changes the tree, never the map — but a temple with thirty
+    // chests loose under it is a list nobody can read, and the folders were
+    // right there. Dropping it on a map re-homes nothing; that is what
+    // dragging the piece across the map is for.
     intents.setParent(drag.kind, drag.id, targetId);
     // Dragging a character onto a map relocates its token there server-side;
     // switch the DM's view to that map so the new token is immediately

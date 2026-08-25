@@ -28,7 +28,8 @@
     "check:loot": "node scripts/check-loot-drop.mjs",
     "check:orphans": "node scripts/check-orphans.mjs",
     "check:shopkeeper": "node scripts/check-shopkeeper.mjs",
-    "measure:shelf": "node scripts/measure-shelf.mjs"
+    "measure:shelf": "node scripts/measure-shelf.mjs",
+    "check:nesting": "node scripts/check-tree-nesting.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

@@ -1967,6 +1967,7 @@ function toMapObject(row: MapObjectRow) {
     artUrl: assets.urlFor(row.art_asset_id),
     detailAssetId: row.detail_asset_id ?? null,
     detailUrl: assets.urlFor(row.detail_asset_id ?? null),
+    parentId: (row as { parent_id?: string | null }).parent_id ?? null,
     items: safeParse<LootItem[]>(row.items_json, []),
     worldFolderId: row.world_folder_id,
     shopId: row.shop_id,
@@ -2002,7 +2003,7 @@ export const mapObjects = {
       .run(id, mapId, name, description, kind, q, r, '[]', wfId, sId, range, now());
     return toMapObject({ id, map_id: mapId, name, description, kind, q, r, art_asset_id: null, detail_asset_id: null, items_json: '[]', world_folder_id: wfId, shop_id: sId, interact_range: range, created_at: now() });
   },
-  update(id: string, patch: { mapId?: string; name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null; layer?: 'map' | 'gm' }): void {
+  update(id: string, patch: { mapId?: string; name?: string; description?: string; artAssetId?: string; detailAssetId?: string; q?: number; r?: number; items?: unknown[]; interactRange?: number; locked?: boolean; keyName?: string | null; linkedCharacterId?: string | null; layer?: 'map' | 'gm'; parentId?: string | null }): void {
     const sets: string[] = [];
     const vals: unknown[] = [];
     // A chest can be carried to another map — one box, moved, rather than a
@@ -2020,6 +2021,7 @@ export const mapObjects = {
     if (patch.keyName !== undefined) { sets.push('key_name = ?'); vals.push(patch.keyName ?? null); }
     if (patch.linkedCharacterId !== undefined) { sets.push('linked_character_id = ?'); vals.push(patch.linkedCharacterId ?? null); }
     if (patch.layer !== undefined) { sets.push('layer = ?'); vals.push(patch.layer === 'gm' ? 'gm' : 'map'); }
+    if (patch.parentId !== undefined) { sets.push('parent_id = ?'); vals.push(patch.parentId ?? null); }
     if (sets.length === 0) return;
     vals.push(id);
     stmt(`UPDATE map_objects SET ${sets.join(', ')} WHERE id = ?`).run(...vals);

@@ -162,6 +162,10 @@ ensureColumn('map_objects', 'locked', 'locked INTEGER NOT NULL DEFAULT 0');
 ensureColumn('map_objects', 'key_name', 'key_name TEXT');
 // A container can BE a character: the token carries the chest / is the shop.
 ensureColumn('map_objects', 'linked_character_id', 'linked_character_id TEXT');
+// Where a placed chest or item FILES in the world tree, as opposed to where it
+// stands on the map. Distinct from world_folder_id, which means something else
+// entirely -- that the chest and a folder are one thing -- and hides the row.
+ensureColumn('map_objects', 'parent_id', 'parent_id TEXT');
 ensureColumn('users', 'dice_color', 'dice_color TEXT');
 // Which book on the lobby shelf holds which campaign, per account.
 ensureColumn('users', 'shelf_json', 'shelf_json TEXT');

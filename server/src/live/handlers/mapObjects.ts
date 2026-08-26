@@ -381,7 +381,9 @@ export function registerMapObjectHandlers(io: Server, socket: Socket): void {
       const updated = mapObjects.byId(objectId)!;
       for (const s of socketsSeeingHex(io, d.campaignId, updated.mapId, updated.q, updated.r)) s.emit(S2C.MAP_OBJECT_UPSERTED, { object: updated });
     }
-    postTake(io, d.campaignId, d.username, item.name, grantLoot(io, d.campaignId, taker, item));
+    // One unit, matching the decrement above — granting `item` whole handed
+    // over the entire pile while the chest kept the rest, duplicating loot.
+    postTake(io, d.campaignId, d.username, item.name, grantLoot(io, d.campaignId, taker, { ...item, qty: 1 }));
   }, 'TAKE_CHEST_ITEM'));
 
   socket.on(C2S.TAKE_ALL_CHEST, safe(socket, ({ objectId }: TakeAllChestPayload) => {

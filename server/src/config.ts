@@ -11,6 +11,11 @@ export const DATA_DIR = process.env.DATA_DIR
 export const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 export const DB_PATH = path.join(DATA_DIR, 'roll67.db');
 
+/** Derived-file caches and safety copies, all living beside the data they
+ *  serve so a Railway volume carries everything the server needs. */
+export const THUMBS_DIR = path.join(DATA_DIR, 'thumbs');
+export const SNAPSHOT_DIR = path.join(DATA_DIR, 'backups');
+
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const UPLOAD_LIMIT_BYTES = 15 * 1024 * 1024; // 15 MB
 export const CHAT_TAIL = 200;
@@ -39,4 +44,6 @@ export const MAIL_FROM = process.env.MAIL_FROM ?? 'Roll67 <onboarding@resend.dev
 
 export function ensureDataDirs(): void {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  fs.mkdirSync(THUMBS_DIR, { recursive: true });
+  fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
 }

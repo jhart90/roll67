@@ -74,13 +74,24 @@ async function main() {
 
   console.log('combat:');
 
-  // 1) Attack in range -> chat card + HP float + NPC hp drops.
-  const chatP = waitFor(s, 'chatMsg', 5000, (p) => p.msg.text.includes('Longsword'));
-  const floatP = waitFor(s, 'hpFloat', 5000, (p) => p.tokenId === npcTok.id);
-  const npcHpP = waitFor(s, 'characterUpserted', 5000, (p) => p.character.id === npc.id && p.character.sheet.hp < 10);
-  s.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcTok.id, targetTokenId: npcTok.id });
-  const chat = await chatP;
-  ok(/HIT|MISS/.test(chat.msg.text), `attack posts a combat card ("${chat.msg.text}")`);
+  // 1) Attack in range -> to-hit card, then damage + HP float + NPC hp drop.
+  //    The engine posts the to-hit as its OWN card (the weapon name rides in
+  //    `actionName`, the verdict in `outcomeNote` -- neither is in `text`),
+  //    and paces the damage half until the dice visibly settle (~3s a card),
+  //    so the waits here are generous. A natural 1 always misses whatever the
+  //    bonus, so a MISS just swings again rather than flaking 1 run in 20.
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let hitCard = null;
+  for (let attempt = 0; attempt < 3 && !hitCard; attempt++) {
+    const cardP = waitFor(s, 'chatMsg', 10000, (p) => p.msg.actionName === 'Longsword' && /HIT|MISS/.test(p.msg.outcomeNote ?? ''));
+    s.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcTok.id, targetTokenId: npcTok.id });
+    const card = (await cardP).msg;
+    if (/HIT/.test(card.outcomeNote)) hitCard = card;
+    else await sleep(4000); // let the miss finish resolving before swinging again
+  }
+  ok(!!hitCard, `attack posts a to-hit card and lands ("${hitCard?.outcomeNote ?? 'no HIT in 3 swings'}")`);
+  const floatP = waitFor(s, 'hpFloat', 15000, (p) => p.tokenId === npcTok.id && p.delta < 0);
+  const npcHpP = waitFor(s, 'characterUpserted', 15000, (p) => p.character.id === npc.id && p.character.sheet.hp < 10);
   const flt = await floatP;
   ok(flt.delta < 0, `damage floats a negative number over the target (${flt.delta})`);
   const npcHp = (await npcHpP).character.sheet.hp;
@@ -94,16 +105,20 @@ async function main() {
   ok(!!(await errP).message, 'out-of-range attack is rejected');
 
   // 3) Heal potion on self -> positive float, PC healed, potion consumed.
-  //    Wait for the final (post-consume) upsert so we confirm the heal isn't
-  //    reverted by the item-consume write.
-  const healFloat = waitFor(s, 'hpFloat', 5000, (p) => p.tokenId === pcTok.id && p.delta > 0);
-  const pcConsumed = waitFor(s, 'characterUpserted', 5000, (p) => p.character.id === pc.id && p.character.sheet.inventory[0].qty === 1);
+  //    The consume is written up front (so its refund rides the card's undo)
+  //    and the heal lands only after the dice settle, so the sheet passes
+  //    through a consumed-but-not-yet-healed state on the way. Wait for the
+  //    FINAL state -- potion spent AND the heal standing -- which is exactly
+  //    the "not reverted by the consume write" claim.
+  const healFloat = waitFor(s, 'hpFloat', 15000, (p) => p.tokenId === pcTok.id && p.delta > 0);
+  const pcHealed = waitFor(s, 'characterUpserted', 15000, (p) => p.character.id === pc.id
+    && p.character.sheet.inventory[0].qty === 1 && p.character.sheet.hp > 5).catch(() => null);
   s.emit('combatAction', { characterId: pc.id, actionId: 'item:0', sourceTokenId: pcTok.id, targetTokenId: pcTok.id });
   const hf = await healFloat;
   ok(hf.delta > 0, `heal floats a positive number (+${hf.delta})`);
-  const healedChar = (await pcConsumed).character;
-  ok(healedChar.sheet.hp > 5, `PC HP auto-increased and not reverted by consume (${healedChar.sheet.hp}/20)`);
-  ok(healedChar.sheet.inventory[0].qty === 1, `potion consumed (qty ${healedChar.sheet.inventory[0].qty})`);
+  const healedChar = (await pcHealed)?.character;
+  ok(!!healedChar && healedChar.sheet.hp > 5, `PC HP auto-increased and not reverted by consume (${healedChar ? `${healedChar.sheet.hp}/20` : 'no healed upsert arrived'})`);
+  ok(!!healedChar && healedChar.sheet.inventory[0].qty === 1, `potion consumed (qty ${healedChar?.sheet.inventory[0].qty ?? '?'})`);
 
   // cleanup
   s.emit('deleteToken', { tokenId: pcTok.id });
@@ -117,6 +132,9 @@ async function main() {
 
   console.log(failures ? `\n${failures} FAILED` : '\nALL COMBAT CHECKS PASSED');
   s.close();
+  // Let closed sockets finish tearing down before exiting -- process.exit
+  // mid-close trips a libuv assert (UV_HANDLE_CLOSING) on Windows Node.
+  await new Promise((r) => setTimeout(r, 300));
   process.exit(failures ? 1 : 0);
 }
 function waitForMapState(s, mapId, trigger) {

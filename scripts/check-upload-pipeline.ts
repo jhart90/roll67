@@ -25,8 +25,14 @@ process.env.DATA_DIR = tmp;
 const { UPLOADS_DIR } = await import('../server/src/config.js');
 const { users, campaigns, assets } = await import('../server/src/db/repos.js');
 const { processImage, processAudio, audioShrinkAvailable } = await import('../server/src/media.js');
-const { hashBytes, storeAsset, storageReport } = await import('../server/src/storage.js');
+const { hashBytes, storeAsset, storageReport, sweepOrphans } = await import('../server/src/storage.js');
+const { thumbFor } = await import('../server/src/thumbs.js');
 const sharp = (await import('sharp')).default;
+// libvips caches open input files; on Windows that makes every later
+// unlink of a file this script has passed through sharp fail silently
+// (EBUSY), which reads as "the sweep didn't work" when it did. Linux —
+// production — unlinks open files fine, so only the check needs this.
+sharp.cache(false);
 
 const mb = (n: number) => `${(n / 1048576).toFixed(2)} MB`;
 
@@ -117,6 +123,41 @@ check('the report charges shared files once',
   rep.sharedBytes > 0 && rep.uploadsBytes < rep.uploadsBytes + rep.sharedBytes,
   `${mb(rep.uploadsBytes)} real, ${mb(rep.sharedBytes)} saved by sharing (a naive walk would say ${mb(rep.uploadsBytes + rep.sharedBytes)})`);
 check('sharing leaves no duplicate waste behind', rep.duplicateBytes === 0, `${mb(rep.duplicateBytes)}`);
+
+console.log('--- thumbnails ---');
+// An asset the way an upload records one: real dimensions, real file.
+const bigDims = await sharp(art).metadata();
+const bigAsset = assets.create({
+  campaign_id: c.id, uploaderId: u.id, kind: 'map', filename: 'big-map.webp', ext: 'webp', mime: 'image/webp',
+  bytes: art.length, width: bigDims.width ?? 0, height: bigDims.height ?? 0, content_hash: hashBytes(art),
+});
+fs.writeFileSync(path.join(UPLOADS_DIR, `${bigAsset.id}.webp`), art);
+
+const t1 = await thumbFor(bigAsset.id);
+check('a large map gets a real thumbnail file', !!t1 && 'path' in t1 && fs.existsSync(t1.path));
+if (t1 && 'path' in t1) {
+  const bytes = fs.statSync(t1.path).size;
+  check('the thumbnail is a fraction of the original', bytes < art.length / 5, `${mb(art.length)} -> ${mb(bytes)}`);
+  const meta = await sharp(t1.path).metadata();
+  check('it fits inside 320px', (meta.width ?? 9999) <= 320 && (meta.height ?? 9999) <= 320, `${meta.width}x${meta.height} ${meta.format}`);
+  const t1again = await thumbFor(bigAsset.id);
+  check('a second ask serves the cached file', !!t1again && 'path' in t1again && t1again.path === t1.path);
+}
+
+// An image already smaller than a thumbnail is served as itself.
+const tinyAsset = assets.create({
+  campaign_id: c.id, uploaderId: u.id, kind: 'token', filename: 'tiny.png', ext: 'png', mime: 'image/png',
+  bytes: tinyPng.length, width: 32, height: 32, content_hash: hashBytes(tinyPng),
+});
+fs.writeFileSync(path.join(UPLOADS_DIR, `${tinyAsset.id}.png`), tinyPng);
+const t2 = await thumbFor(tinyAsset.id);
+check('a tiny image redirects to the original instead of storing a copy', !!t2 && 'redirect' in t2 && t2.redirect.includes(tinyAsset.id));
+check('an unknown asset id yields nothing', (await thumbFor('no-such-asset')) === null);
+
+// A deleted asset's thumbnail is cleared by the same sweep that clears its file.
+assets.delete(bigAsset.id);
+sweepOrphans();
+check('the orphan sweep also removes the dead thumbnail', !(t1 && 'path' in t1 && fs.existsSync(t1.path)));
 
 // SQLite keeps the file open on Windows, so this is best-effort housekeeping.
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* temp dir */ }

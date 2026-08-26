@@ -207,4 +207,7 @@ console.log('a stack is picked up as a stack:')
 sock.close();
 console.log('');
 console.log(failures === 0 ? 'loot drop: all checks passed' : `loot drop: ${failures} check(s) FAILED`);
+// Let closed sockets finish tearing down before exiting -- process.exit
+// mid-close trips a libuv assert (UV_HANDLE_CLOSING) on Windows Node.
+await new Promise((r) => setTimeout(r, 300));
 process.exit(failures ? 1 : 0);

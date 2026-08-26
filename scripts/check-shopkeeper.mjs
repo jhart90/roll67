@@ -162,4 +162,7 @@ console.log('a shop the DM has not opened to players:');
 dms.close(); pls.close();
 console.log('');
 console.log(failures === 0 ? 'shopkeeper clicks: all checks passed' : `shopkeeper clicks: ${failures} check(s) FAILED`);
+// Let closed sockets finish tearing down before exiting -- process.exit
+// mid-close trips a libuv assert (UV_HANDLE_CLOSING) on Windows Node.
+await new Promise((r) => setTimeout(r, 300));
 process.exit(failures ? 1 : 0);

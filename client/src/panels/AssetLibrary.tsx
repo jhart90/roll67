@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetInfo } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { ThumbImg } from '../util/ThumbImg';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 import { ConfirmButton } from '../util/ConfirmButton';
@@ -79,7 +80,7 @@ export function AssetLibrary({ onClose }: { onClose: () => void }) {
             <div className="asset-grid">
               {assets.map((a) => (
                 <div key={a.id} className="asset-card">
-                  <img src={a.url} alt={a.title} />
+                  <ThumbImg id={a.id} url={a.url} alt={a.title} />
                   <div className="asset-title" title={a.title}>{a.title}</div>
                   <div className="asset-actions">
                     {map && <button className="link" onClick={() => useAsBackground(a)}>bg</button>}

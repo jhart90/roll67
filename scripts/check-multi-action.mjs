@@ -108,4 +108,7 @@ ok(/[-−]4 Multi-Action/.test(third), `a third action takes -4 (${(third.match(
 sock.close();
 console.log('');
 console.log(failures === 0 ? 'multi-action: all checks passed' : `multi-action: ${failures} check(s) FAILED`);
+// Let closed sockets finish tearing down before exiting -- process.exit
+// mid-close trips a libuv assert (UV_HANDLE_CLOSING) on Windows Node.
+await new Promise((r) => setTimeout(r, 300));
 process.exit(failures ? 1 : 0);

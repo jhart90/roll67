@@ -12,6 +12,8 @@ import { uploadRouter } from './routes/uploadRoutes.js';
 import { mapPreviewRouter } from './routes/mapPreviewRoutes.js';
 import { attachMapPackIo, mapPackRouter } from './routes/mapPackRoutes.js';
 import { backupRouter } from './routes/backupRoutes.js';
+import { thumbRouter } from './routes/thumbRoutes.js';
+import { startSnapshotSchedule } from './db/snapshots.js';
 import { registerSessionHandlers } from './live/handlers/session.js';
 import { initIronDice } from './live/ironDice.js';
 import { registerMapEditHandlers } from './live/handlers/mapEdit.js';
@@ -29,7 +31,7 @@ import { flushAllVisionMemory } from './live/visionService.js';
 /** Stamped at commit time so a running server can say which build it is —
  *  and so a deploy that claims to watch only part of this repo has something
  *  in the server tree to notice. */
-const BUILD_REF = 'nest-map-objects';
+const BUILD_REF = 'snapshots-thumbs-gate';
 
 import { audioShrinkAvailable } from './media.js';
 
@@ -37,6 +39,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 ensureDataDirs();
 initIronDice();
+startSnapshotSchedule();
 
 const app = express();
 // One hop: Railway's edge. Without this every request arrives wearing the
@@ -55,6 +58,7 @@ app.use('/api', uploadRouter);
 app.use('/api', mapPreviewRouter);
 app.use('/api', mapPackRouter);
 app.use('/api', backupRouter);
+app.use('/api', thumbRouter);
 
 // Uploaded assets (map backgrounds, token art, handout images).
 app.use('/uploads', express.static(UPLOADS_DIR, { immutable: true, maxAge: '365d' }));

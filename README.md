@@ -58,10 +58,18 @@ npm run dev
 Tests:
 
 ```bash
+npm run gate    # THE pre-push command: every check below, one throwaway server, fail-fast
 npm test        # unit tests (hex math, FOV, dice, sheets)
 npm run itest   # integration smoke test (needs the dev server running)
 npm run typecheck
 ```
+
+`npm run gate` is the regression gate to run before any push (a push to main is
+a production deploy): typecheck → unit tests → upload/thumbnail pipeline → all
+live socket suites against a throwaway server (fresh temp DATA_DIR, the dev
+database is never touched) → password-reset / campaign-backup / snapshot
+round-trips → the production client build. `npm run gate -- --quick` skips the
+build.
 
 ## Deploying to Railway (~$5/mo)
 
@@ -72,6 +80,23 @@ npm run typecheck
 5. **Settings → Networking → Generate Domain** to get your public URL.
 
 The database and all uploads live on the volume, so they survive redeploys.
+
+### Automatic database snapshots
+
+The server keeps its own daily safety copies of the database at
+`<DATA_DIR>/backups/roll67-<timestamp>.db.gz` — taken at boot when the newest
+one is over a day old (and re-checked hourly), rotated so only the newest 14
+remain (`SNAPSHOT_KEEP` overrides). Uploads are not in the snapshot; they are
+plain files already sitting on the same volume.
+
+To restore one: stop the server, gunzip the chosen snapshot over
+`<DATA_DIR>/roll67.db` (delete any leftover `roll67.db-wal` / `roll67.db-shm`),
+and start the server again.
+
+Snapshots protect against a bad migration or an accidental delete — they live
+on the same volume, so they are not an off-site backup. The off-site copy is
+the campaign backup the DM can download from Settings (`.r67campaign`), which
+carries a whole campaign including its images and restores onto any server.
 
 ### Playing together
 

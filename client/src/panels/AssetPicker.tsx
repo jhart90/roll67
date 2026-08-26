@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AssetInfo } from 'shared';
 import { intents, useGameStore } from '../store/game';
+import { ThumbImg } from '../util/ThumbImg';
 import { UploadProgressBar } from '../util/UploadProgressBar';
 import { useUploadProgress } from '../util/useUploadProgress';
 
@@ -57,7 +58,7 @@ export function AssetPicker({ title = 'Choose an image', onPick, onClose }: {
         <div className="asset-picker-grid">
           {assets.map((a) => (
             <button key={a.id} className="asset-pick" title={a.title} onClick={() => onPick(a)}>
-              <img src={a.url} alt={a.title} />
+              <ThumbImg id={a.id} url={a.url} alt={a.title} />
               <span className="asset-pick-name">{a.title}</span>
             </button>
           ))}

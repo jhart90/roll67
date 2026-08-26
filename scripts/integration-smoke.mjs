@@ -633,8 +633,12 @@ async function main() {
   ok(true, 'opening the door reveals the monster');
 
   // Same attack, same range, only the door state changed -> now resolves
-  // (chat roll posted) instead of an "out of sight" error.
-  const losOpenRoll = waitFor(playerSock, 'chatMsg', 3000, (p) => p.msg?.text?.includes('Sniper Bow')).catch(() => null);
+  // (chat roll posted) instead of an "out of sight" error. The to-hit card
+  // is the one to wait for: it posts immediately, hit or miss, and carries
+  // the weapon in `actionName` (the card TEXT is just "X attacks Y with" --
+  // the damage card is the only one whose text names the weapon, it lands
+  // only on a hit, and only after the ~3s dice-settle pause).
+  const losOpenRoll = waitFor(playerSock, 'chatMsg', 8000, (p) => p.msg?.actionName === 'Sniper Bow' && /HIT|MISS/.test(p.msg?.outcomeNote ?? '')).catch(() => null);
   const losOpenErr = waitFor(playerSock, 'errorMsg', 1500).catch(() => null);
   playerSock.emit('combatAction', { characterId: pc.id, actionId: 'attack:0', sourceTokenId: pcToken.id, targetTokenId: beast.id, adv: null });
   const [openRoll, openErr] = await Promise.all([losOpenRoll, losOpenErr]);
@@ -1306,18 +1310,27 @@ async function main() {
     && p.object.items.some((i) => i.id === 'smoke-loot-1' && i.qty === 1));
   playerSock.emit('takeChestItem', { objectId: chest.id, itemId: 'smoke-loot-1' });
   const afterTake = (await tookOne).character;
-  ok(afterTake.sheet.inventory.some((r) => r.name === 'Bandage'), 'taking from a chest puts the item on the sheet');
+  const bandRow = afterTake.sheet.inventory.find((r) => r.name === 'Bandage');
+  ok(!!bandRow, 'taking from a chest puts the item on the sheet');
+  ok(Number(bandRow?.qty ?? 1) === 1, 'taking one from a pile grants exactly one, not the pile');
   await chestAfterOne;
   ok(true, 'a pile of two leaves one behind rather than emptying');
 
-  // Take All sweeps the rest onto the sheet — including the second Bandage.
+  // Take All sweeps the rest onto the sheet — the second Bandage stacks onto
+  // the row already held (acquirePatch merges same-name inventory into one
+  // qty-carrying row), and the Lantern arrives as its own row. The filter
+  // demands BOTH, because Take All emits one upsert per granted row and the
+  // Lantern-bearing one is not guaranteed to be the last.
+  const bandagesHeld = (inv) => inv.filter((r) => r.name === 'Bandage').reduce((n, r) => n + (Number(r.qty) || 1), 0);
   const tookAll = waitFor(playerSock, 'characterUpserted', 5000, (p) => p.character.id === pc.id
-    && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Lantern'));
+    && Array.isArray(p.character.sheet.inventory) && p.character.sheet.inventory.some((r) => r.name === 'Lantern')
+    && bandagesHeld(p.character.sheet.inventory) === 2);
   const chestEmpty = waitFor(dmSock, 'mapObjectUpserted', 5000, (p) => p.object.id === chest.id && p.object.items.length === 0);
   playerSock.emit('takeAllChest', { objectId: chest.id });
   const afterAll = (await tookAll).character;
   await chestEmpty;
-  ok(afterAll.sheet.inventory.filter((r) => r.name === 'Bandage').length === 2, 'Take All grants every one of a stacked pile');
+  const bandRows = afterAll.sheet.inventory.filter((r) => r.name === 'Bandage');
+  ok(bandRows.length === 1 && Number(bandRows[0].qty) === 2, 'Take All stacks the rest of the pile onto the row already held');
   ok(afterAll.sheet.inventory.some((r) => r.name === 'Lantern'), 'Take All grants the remaining rows too');
 
   // Out of reach is refused — the range gate still guards the free path.
@@ -1501,6 +1514,9 @@ async function main() {
   playerSock.close();
 
   console.log(failures === 0 ? '\nALL CHECKS PASSED' : `\n${failures} CHECKS FAILED`);
+  // Let closed sockets finish tearing down before exiting -- process.exit
+  // mid-close trips a libuv assert (UV_HANDLE_CLOSING) on Windows Node.
+  await new Promise((r) => setTimeout(r, 300));
   process.exit(failures === 0 ? 0 : 1);
 }
 

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, DB_PATH, UPLOADS_DIR } from './config.js';
 import { db } from './db/db.js';
+import { sweepThumbs } from './thumbs.js';
 
 /**
  * What is actually on the disk this server is paying for.
@@ -219,6 +220,9 @@ export function storageReport(): StorageReport {
 export function sweepOrphans(): { freedBytes: number; freedCount: number } {
   const rows = db.prepare('SELECT id, ext FROM assets').all() as Array<{ id: string; ext: string }>;
   const claimed = new Set(rows.map((r) => `${r.id}.${r.ext}`));
+  // Cached thumbnails are derived files: one whose asset row is gone is pure
+  // leftovers, and one that survives costs a regeneration at worst.
+  sweepThumbs(new Set(rows.map((r) => r.id)));
   let freedBytes = 0;
   let freedCount = 0;
   let files: string[] = [];

@@ -72,4 +72,7 @@ ok(removed.has(pack.id), 'the carried chest goes with them instead of being stra
 sock.close();
 console.log('');
 console.log(failures === 0 ? 'shop/character cleanup: all checks passed' : `shop/character cleanup: ${failures} check(s) FAILED`);
+// Let closed sockets finish tearing down before exiting -- process.exit
+// mid-close trips a libuv assert (UV_HANDLE_CLOSING) on Windows Node.
+await new Promise((r) => setTimeout(r, 300));
 process.exit(failures ? 1 : 0);

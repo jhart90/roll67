@@ -259,6 +259,9 @@ async function main() {
   }
 
   console.log(failures === 0 ? '\nall good.' : `\n${failures} failure(s).`);
+  // Let closed sockets finish tearing down before exiting -- process.exit
+  // mid-close trips a libuv assert (UV_HANDLE_CLOSING) on Windows Node.
+  await new Promise((r) => setTimeout(r, 300));
   process.exit(failures === 0 ? 0 : 1);
 }
 

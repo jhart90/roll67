@@ -52,8 +52,13 @@ export function DrawingLayer() {
   function onPointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (!draft) return;
     const p = stage.toMap(e.clientX, e.clientY);
-    const last = draft[draft.length - 1];
-    if (Math.hypot(p.x - last.x, p.y - last.y) > 3) setDraft([...draft, p]);
+    // Functional update: a fast sweep fires several moves per render, and
+    // appending to the closure's copy dropped every point but the last.
+    setDraft((cur) => {
+      if (!cur) return cur;
+      const last = cur[cur.length - 1];
+      return Math.hypot(p.x - last.x, p.y - last.y) > 3 ? [...cur, p] : cur;
+    });
   }
 
   function onPointerUp() {
@@ -110,6 +115,27 @@ export function DrawingLayer() {
           }}
         />
       ))}
+      {/* The stroke under the pointer, drawn as it goes. Until this was
+          here nothing appeared until the button came up, which made the
+          pencil feel broken. Same look as the finished line, and a
+          single point still shows as a dot thanks to the round cap. */}
+      {draft && draft.length > 0 && (
+        <path
+          d={draft.length === 1
+            // A bare moveto paints nothing; a zero-length lineto with a round
+            // cap paints the dot.
+            ? `M ${draft[0].x} ${draft[0].y} L ${draft[0].x} ${draft[0].y}`
+            : pathFor({ kind: 'free', points: draft, color: drawColor, width: 3 })}
+          fill="none"
+          stroke={drawColor}
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity={isDm && drawLayer === 'gm' ? 0.6 : 0.9}
+          strokeDasharray={isDm && drawLayer === 'gm' ? '8 5' : undefined}
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
     </svg>
   );
 }

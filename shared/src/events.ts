@@ -1098,6 +1098,9 @@ export interface MapEditedPayload {
   spawn?: import('./types.js').Hex | null;
   terrain?: number[];
   blocked?: number[];
+  /** Map labels. Sent to the whole table, not just the DM room: there is
+   *  nothing secret in a label, and players read them too. */
+  texts?: MapText[];
 }
 
 export interface VisionUpdatePayload {

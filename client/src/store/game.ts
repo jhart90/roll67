@@ -1222,6 +1222,7 @@ export function wireSocket(): void {
       // dead for real, since the brush diffs against the map's own blocked
       // set and it never stopped being stale.
       ...(p.blocked !== undefined ? { blocked: p.blocked } : {}),
+      ...(p.texts !== undefined ? { texts: p.texts } : {}),
     };
     const dmGeometry = s.dmGeometry
       ? {

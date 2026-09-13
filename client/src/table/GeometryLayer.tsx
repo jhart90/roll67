@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Door, Light, Point, Wall } from 'shared';
+import type { Door, Light, MapText, Point, Wall } from 'shared';
 import { hexCorners, hexToPixel, pixelToHex } from 'shared';
 import { intents, useGameStore } from '../store/game';
 import { mapPixelSize, useStage } from '../util/stage';
@@ -306,14 +306,21 @@ export function GeometryLayer() {
   const tool = useGameStore((s) => s.tool);
   const textStyle = useGameStore((s) => s.textStyle);
   const selectedTextId = useGameStore((s) => s.selectedTextId);
-  /** Where the DM is typing a brand-new label, before it is committed. */
-  const [textDraft, setTextDraft] = useState<{ x: number; y: number; sx: number; sy: number; value: string } | null>(null);
+  /** A label being typed — brand new, or (with `id`) an existing one being
+   *  reworded. Previewed in place on the map; committed on Enter or blur. */
+  const [textDraft, setTextDraft] = useState<{ id?: string; x: number; y: number; sx: number; sy: number; value: string } | null>(null);
+  // The blur handler is bound at render time and would otherwise see the
+  // draft as it WAS: clicking the map to start a second label fires
+  // pointerdown (new draft set) and then blur (old handler), which used to
+  // wipe the new draft along with the old. The ref is always current.
+  const textDraftRef = useRef(textDraft);
+  textDraftRef.current = textDraft;
   /** A label being dragged: its id and the live position under the cursor. */
   const [textDrag, setTextDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const draftRef = useRef<HTMLInputElement>(null);
   // autoFocus is unreliable on an input inside a foreignObject, so focus it
   // once it has actually mounted.
-  useEffect(() => { if (textDraft) draftRef.current?.focus(); }, [textDraft?.x, textDraft?.y]);
+  useEffect(() => { if (textDraft) draftRef.current?.focus(); }, [textDraft?.x, textDraft?.y, textDraft?.id]);
   const selectedLightId = useGameStore((s) => s.selectedLightId);
   const selectedWallId = useGameStore((s) => s.selectedWallId);
   const selectedDoorId = useGameStore((s) => s.selectedDoorId);
@@ -495,6 +502,8 @@ export function GeometryLayer() {
     } else if (tool === 'text') {
       // Type where you clicked. A browser prompt would take the DM's eyes off
       // the map at exactly the moment they are choosing where the words go.
+      // Anything half-typed is placed first, not lost.
+      commitDraft();
       setTextDraft({ x: raw.x, y: raw.y, sx: e.clientX, sy: e.clientY, value: '' });
       useGameStore.getState().setSelectedTextId(null);
     } else if (tool === 'light') {
@@ -549,18 +558,44 @@ export function GeometryLayer() {
     }
   }
 
-  /** Save what's typed and dismiss the field. Empty input just dismisses. */
+  /**
+   * Save what's typed and dismiss the field. Empty input just dismisses —
+   * for a reworded label that means it is left as it was, not deleted.
+   *
+   * The id is minted here rather than by the server so the new label can be
+   * SELECTED at once: the toolbar then edits it in place, instead of the
+   * next font or size change landing on nothing.
+   */
   function commitDraft() {
-    if (!textDraft) return;
-    if (textDraft.value.trim()) {
+    const d = textDraftRef.current;
+    if (!d) return;
+    textDraftRef.current = null;
+    if (d.value.trim()) {
+      const id = d.id ?? crypto.randomUUID();
       intents.upsertMapText(map.id, {
-        x: textDraft.x, y: textDraft.y, text: textDraft.value.trim(),
+        id, x: d.x, y: d.y, text: d.value.trim(),
         size: textStyle.size, color: textStyle.color, font: textStyle.font,
         bold: textStyle.bold, italic: textStyle.italic,
       });
+      useGameStore.getState().setSelectedTextId(id);
     }
-    setTextDraft(null);
+    // Only clear the draft this commit was for — a newer one may already
+    // have replaced it (see textDraftRef).
+    setTextDraft((cur) => (cur === d ? null : cur));
   }
+
+  /** Reword an existing label in place: same field, pre-filled, same spot. */
+  function editLabel(t: MapText, e: React.MouseEvent) {
+    commitDraft();
+    useGameStore.getState().setSelectedTextId(t.id);
+    useGameStore.getState().setTextStyle({ size: t.size, color: t.color, font: t.font, bold: !!t.bold, italic: !!t.italic });
+    setTextDraft({ id: t.id, x: t.x, y: t.y, sx: e.clientX, sy: e.clientY, value: t.text });
+  }
+
+  // Labels answer the pointer in the text tool and the plain cursor alike:
+  // moving one or restyling it later should not mean going back to the tool
+  // that made it.
+  const labelsLive = isDm && (tool === 'text' || tool === 'select');
 
   return (
     <>
@@ -585,12 +620,14 @@ export function GeometryLayer() {
       )}
 
       {/* Map labels. Unlike walls and lights these are meant to be read, so
-          they render for players too. Right-click removes one (DM only). */}
-      {(map.texts ?? []).map((t) => (
+          they render for players too. DM: drag to move, double-click to
+          reword, right-click to remove. A label being reworded is drawn by
+          the preview below instead, so it is not seen twice. */}
+      {(map.texts ?? []).filter((t) => t.id !== textDraft?.id).map((t) => (
         <text
           key={t.id}
-          x={t.x}
-          y={t.y}
+          x={textDrag?.id === t.id ? textDrag.x : t.x}
+          y={textDrag?.id === t.id ? textDrag.y : t.y}
           textAnchor="middle"
           dominantBaseline="middle"
           fill={t.color}
@@ -606,17 +643,22 @@ export function GeometryLayer() {
             strokeWidth: Math.max(2, t.size * 0.12),
             strokeLinejoin: 'round',
             userSelect: 'none',
-            cursor: isDm && tool === 'text' ? 'move' : 'default',
-            pointerEvents: isDm && tool === 'text' ? 'auto' : 'none',
+            cursor: labelsLive ? 'move' : 'default',
+            pointerEvents: labelsLive ? 'auto' : 'none',
           }}
           onContextMenu={(e) => {
-            if (!isDm || tool !== 'text') return;
+            if (!labelsLive) return;
             e.preventDefault();
             e.stopPropagation();
             intents.deleteMapText(map.id, t.id);
           }}
+          onDoubleClick={(e) => {
+            if (!labelsLive) return;
+            e.stopPropagation();
+            editLabel(t, e);
+          }}
           onPointerDown={(e) => {
-            if (!isDm || tool !== 'text' || e.button !== 0) return;
+            if (!labelsLive || e.button !== 0) return;
             e.stopPropagation();
             useGameStore.getState().setSelectedTextId(t.id);
             // Adopt the label's own style so the toolbar edits it in place
@@ -646,9 +688,37 @@ export function GeometryLayer() {
         </text>
       ))}
 
+      {/* The label being typed, where it will land, at its real size and in
+          its real style — the field that takes the keys is invisible (see
+          the portal below). The caret blinks so the spot reads as a cursor,
+          not as a label that says nothing yet. */}
+      {isDm && textDraft && (
+        <text
+          x={textDraft.x}
+          y={textDraft.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill={textStyle.color}
+          fontSize={textStyle.size}
+          fontFamily={textStyle.font}
+          fontWeight={textStyle.bold ? 700 : 400}
+          fontStyle={textStyle.italic ? 'italic' : 'normal'}
+          style={{
+            paintOrder: 'stroke',
+            stroke: 'rgba(0,0,0,0.65)',
+            strokeWidth: Math.max(2, textStyle.size * 0.12),
+            strokeLinejoin: 'round',
+            userSelect: 'none',
+            pointerEvents: 'none',
+          }}
+        >
+          {textDraft.value}<tspan className="map-text-caret" fontWeight={300}>|</tspan>
+        </text>
+      )}
+
       {/* Selection ring on the label being edited, so the toolbar's size and
           color controls have a visible subject. */}
-      {isDm && tool === 'text' && (() => {
+      {labelsLive && !textDraft && (() => {
         const sel = (map.texts ?? []).find((t) => t.id === selectedTextId);
         if (!sel) return null;
         const pos = textDrag?.id === sel.id ? textDrag : sel;
@@ -745,37 +815,36 @@ export function GeometryLayer() {
       point that was clicked. It does not pan with the map while open, which
       is a fair trade for a field that lives for one sentence.
     */}
-    {isDm && tool === 'text' && textDraft && createPortal(
+    {/* It is now invisible as well: the keys land here, the letters show up
+        on the map itself (the preview above). Kept a real input rather than
+        a keydown listener so IME composition, paste and the caret keys all
+        behave. Sits under the click point so a screen reader's focus ring,
+        if any, is at least in the right place. */}
+    {isDm && textDraft && createPortal(
       <input
         ref={draftRef}
         autoFocus
         value={textDraft.value}
-        placeholder="Type a label, Enter to place…"
-        onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
+        aria-label="Map label text"
+        onChange={(e) => setTextDraft((cur) => (cur ? { ...cur, value: e.target.value } : cur))}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === 'Escape') { setTextDraft(null); return; }
+          if (e.key === 'Escape') { textDraftRef.current = null; setTextDraft(null); return; }
           if (e.key !== 'Enter') return;
           commitDraft();
         }}
         onBlur={commitDraft}
         style={{
           position: 'fixed',
-          left: Math.max(8, textDraft.sx - 150),
-          top: Math.max(8, textDraft.sy - 20),
-          width: 300,
+          left: textDraft.sx,
+          top: textDraft.sy,
+          width: 1,
+          height: 1,
+          opacity: 0,
           zIndex: 9999,
-          textAlign: 'center',
-          background: 'rgba(16,19,26,0.92)',
-          border: '1px dashed #e8d27b',
-          borderRadius: 4,
           margin: 0,
-          padding: '4px 8px',
-          color: textStyle.color,
-          fontFamily: textStyle.font,
-          fontSize: Math.min(28, textStyle.size),
-          fontWeight: textStyle.bold ? 700 : 400,
-          fontStyle: textStyle.italic ? 'italic' : 'normal',
+          padding: 0,
+          border: 'none',
         }}
       />,
       document.body,

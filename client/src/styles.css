@@ -1467,6 +1467,11 @@ button.link:hover { text-decoration: underline; }
   max-width: none;
   cursor: default;
 }
+/* The text tool's caret on the map: a label being typed in place. */
+@keyframes map-text-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.map-text-caret { animation: map-text-caret-blink 1s step-end infinite; }
+@media (prefers-reduced-motion: reduce) { .map-text-caret { animation: none; opacity: 0.7; } }
+
 /* Minimized: the bar is the whole window, so it closes its own bottom edge. */
 .win-frame-bar-min {
   border-bottom: 1px solid var(--border);

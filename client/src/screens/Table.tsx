@@ -351,7 +351,9 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           </div>
         )}
 
-        {tool === 'text' && map && isDm && (
+        {/* Also while a label is selected under the plain cursor: restyling
+            one later should not mean picking the text tool up again. */}
+        {(tool === 'text' || (tool === 'select' && selectedTextId)) && map && isDm && (
           <div className="draw-options">
             <span className="dim" style={{ fontSize: 12 }}>Font:</span>
             <select
@@ -401,7 +403,19 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
               title="Custom color"
               onChange={(e) => applyTextStyle({ color: e.target.value })}
             />
-            <span className="dim" style={{ fontSize: 11 }}>click map to place · right-click a label to remove</span>
+            {selectedTextId && map.texts?.some((t) => t.id === selectedTextId) && (
+              <button
+                className="link danger"
+                style={{ fontSize: 12 }}
+                title="Remove the selected label"
+                onClick={() => { intents.deleteMapText(map.id, selectedTextId); useGameStore.getState().setSelectedTextId(null); }}
+              >
+                🗑
+              </button>
+            )}
+            <span className="dim" style={{ fontSize: 11 }}>
+              {tool === 'text' ? 'click to type · drag to move · double-click to reword · right-click to remove' : 'editing the selected label'}
+            </span>
           </div>
         )}
 

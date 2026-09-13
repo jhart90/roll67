@@ -303,9 +303,14 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
     syncMapVision(io, d.campaignId!, mapId);
   }, 'DELETE_LIGHT'));
 
-  // Map labels. Unlike walls and lights these are meant to be read, so the
-  // whole map is re-sent rather than whispered to the DM room — syncMapVision
-  // pushes the new MapView to everyone looking at this map.
+  // Map labels. Unlike walls and lights these are meant to be read, so they
+  // go to the whole campaign room rather than being whispered to the DM.
+  //
+  // This used to lean on syncMapVision alone, which never worked for anyone:
+  // the DM is skipped by it outright (god mode gets raw edit events, not
+  // vision packets) and a player's VISION_UPDATE does not carry texts. The
+  // only thing that ever delivered a label was the full MAP_STATE on join —
+  // so the tool looked dead until a refresh.
   socket.on(C2S.UPSERT_MAP_TEXT, safe(socket, ({ mapId, text }: UpsertMapTextPayload) => {
     const { d, map } = requireDmMap(socket, mapId);
     const body = String(text?.text ?? '').slice(0, 200);
@@ -326,13 +331,14 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
       ? existing.map((t) => (t.id === next.id ? next : t))
       : [...existing, next];
     maps.setTexts(mapId, texts);
-    syncMapVision(io, d.campaignId!, mapId);
+    io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, texts });
   }, 'UPSERT_MAP_TEXT'));
 
   socket.on(C2S.DELETE_MAP_TEXT, safe(socket, ({ mapId, textId }: DeleteMapTextPayload) => {
     const { d, map } = requireDmMap(socket, mapId);
-    maps.setTexts(mapId, (map.texts ?? []).filter((t) => t.id !== textId));
-    syncMapVision(io, d.campaignId!, mapId);
+    const texts = (map.texts ?? []).filter((t) => t.id !== textId);
+    maps.setTexts(mapId, texts);
+    io.to(campaignRoom(d.campaignId!)).emit(S2C.MAP_EDITED, { mapId, texts });
   }, 'DELETE_MAP_TEXT'));
 
   socket.on(C2S.RENAME_LIGHT, safe(socket, ({ lightId, mapId, name }: RenameLightPayload) => {

@@ -236,6 +236,26 @@ console.log('granted Advances:');
   ok(!!(await quiet(revoked)), 'revoking clears it on the owner\'s screen');
 }
 
+// ---------- 5. map labels arrive live, for the DM and for players ----------
+console.log('map labels:');
+{
+  // Placing a label used to reach nobody until they refreshed: the DM was
+  // skipped by vision sync and a player's vision packet has no texts.
+  const dmSees = waitFor(dmSock, 'mapEdited', 6000, (p) => p.mapId === mapId && (p.texts ?? []).some((t) => t.text === 'Old Mill'));
+  const bSees = waitFor(bSock, 'mapEdited', 6000, (p) => p.mapId === mapId && (p.texts ?? []).some((t) => t.text === 'Old Mill'));
+  dmSock.emit('upsertMapText', { mapId, text: { id: 'lbl-mill', x: 100, y: 100, text: 'Old Mill', size: 28, color: '#ffffff', font: 'serif' } });
+  const [dmL, bL] = await Promise.all([quiet(dmSees), quiet(bSees)]);
+  ok(!!dmL, 'the DM sees the label the moment it is placed');
+  ok(!!bL, 'a player sees it too, without a refresh');
+  ok(dmL?.texts.find((t) => t.id === 'lbl-mill')?.id === 'lbl-mill', 'the client-minted id is kept (so the toolbar can select it at once)');
+  const moved = waitFor(bSock, 'mapEdited', 6000, (p) => p.mapId === mapId && (p.texts ?? []).some((t) => t.id === 'lbl-mill' && t.x === 250 && t.size === 40));
+  dmSock.emit('upsertMapText', { mapId, text: { id: 'lbl-mill', x: 250, y: 100, text: 'Old Mill', size: 40, color: '#ffffff', font: 'serif', bold: true } });
+  ok(!!(await quiet(moved)), 'moving and restyling it updates in place rather than adding a second label');
+  const gone = waitFor(bSock, 'mapEdited', 6000, (p) => p.mapId === mapId && !(p.texts ?? []).some((t) => t.id === 'lbl-mill'));
+  dmSock.emit('deleteMapText', { mapId, textId: 'lbl-mill' });
+  ok(!!(await quiet(gone)), 'removing it reaches players live');
+}
+
 for (const s of [dmSock, aSock, bSock]) s.close();
 console.log('');
 console.log(failures === 0 ? 'turn-control: all checks passed' : `turn-control: ${failures} check(s) FAILED`);

@@ -52,6 +52,7 @@ import { Jukebox } from '../panels/Jukebox';
 import { WindowHost } from '../window/WindowHost';
 import { TurnBanner, useTurnTint } from '../panels/TurnBanner';
 import { CommitMoveChip } from '../table/CommitMoveChip';
+import { TargetChoicePopup } from '../table/TargetChoicePopup';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -537,6 +538,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <StunPrompt />
         <IncapPrompt />
         <RunPrompt />
+        <TargetChoicePopup />
         <CrawlPrompt />
         <AftermathPrompt />
         <HealingPrompt />

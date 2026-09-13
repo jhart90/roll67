@@ -11,6 +11,40 @@ import { FlashHalo } from './FlashHalo';
 /** How much larger a token with custom art renders than a plain color disc. */
 const ART_SCALE = 1.2;
 
+/**
+ * Which tokens a click is "on", judged by each token's own footprint rather
+ * than by whatever the browser painted on top.
+ *
+ * A very large piece standing next to a small one covers it, and the DOM
+ * hands every click in that area to the big one — so the small token could
+ * not be selected or shot at all. Instead every token whose circle contains
+ * the point is a candidate, nearest centre FIRST measured in units of its
+ * own radius: a click an inch from a goblin's middle is a click on the
+ * goblin, however much of a dragon is behind it. Riders are judged at
+ * their mount's hex, which is where they are.
+ */
+function tokensUnder(point: { x: number; y: number }): TokenView[] {
+  const s = useGameStore.getState();
+  const map = s.map;
+  if (!map) return [];
+  const hits: Array<{ t: TokenView; d: number }> = [];
+  for (const t of Object.values(s.tokens)) {
+    const home = s.predictedMoves[t.id] ?? { q: t.q, r: t.r };
+    const c = hexToPixel(home, map.grid);
+    const r = map.grid.hexSize * 0.72 * t.size * (t.mountedOn ? 0.55 : 1) * (t.artUrl ? ART_SCALE : 1);
+    const d = Math.hypot(point.x - c.x, point.y - c.y) / Math.max(1, r);
+    if (d <= 1) hits.push({ t, d });
+  }
+  return hits.sort((a, b) => a.d - b.d).map((h) => h.t);
+}
+
+/**
+ * The layer's answer to "may this token be targeted right now", kept where
+ * a token's own click handler can read it for the OTHER tokens under the
+ * same click. Written by TokenLayer on every render.
+ */
+const targetStates = new Map<string, TargetState>();
+
 /** How long a piece takes to fade in after the DM reveals it on a scene. */
 export const REVEAL_FADE_MS = 5000;
 
@@ -125,6 +159,9 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const lastSent = useRef(0);
   const dragOrigin = useRef<{ x: number; y: number } | null>(null);
+  /** Set at pointerdown when a pure click (no drag) should cycle the
+   *  selection through the pieces stacked under it on pointerup. */
+  const cycleStack = useRef<TokenView[] | null>(null);
   const isDm = useGameStore((s) => s.isDm());
   // Subscribed (not just read) so a token goes quiet the moment the DM locks
   // the board, rather than at its next unrelated re-render.
@@ -172,16 +209,48 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   const revealOpacity = useRevealFade(isDm ? undefined : token.revealedAt);
 
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
+    const s = useGameStore.getState();
+    const point = stage.toMap(e.clientX, e.clientY);
     if (targetState !== 'off') {
       e.stopPropagation();
-      if (targetState === 'valid' && e.button === 0) useGameStore.getState().resolveTarget(token.id);
+      if (e.button !== 0) return;
+      // Single-target aiming judges the click by footprint, not by paint:
+      // every valid target under the point is a candidate. One resolves;
+      // several ask. (An AoE click places the template and a Called Shot
+      // already has its victim — both keep the plain behaviour.)
+      if (s.targeting && !s.aoeTargeting && !s.calledShotPending) {
+        const stack = tokensUnder(point).filter((t) => targetStates.get(t.id) === 'valid');
+        if (stack.length === 0) return;
+        if (stack.length === 1) { s.resolveTarget(stack[0].id); return; }
+        useGameStore.setState({ targetChoice: { tokenIds: stack.map((t) => t.id), x: e.clientX, y: e.clientY } });
+        return;
+      }
+      if (targetState === 'valid') s.resolveTarget(token.id);
       return;
     }
     if (tool !== 'select') return;
     if (e.button === 2) return;
     e.stopPropagation();
-    useGameStore.getState().selectToken(token.id, e.shiftKey);
-    useGameStore.getState().openInspector(null);
+    cycleStack.current = null;
+    // Which piece was MEANT. The browser gives the click to whatever it
+    // painted on top; the nearest centre (in units of each token's own
+    // radius) is the better guess for a stack, and selecting it also brings
+    // it to the top (the layer draws the selection last). If that is not
+    // the piece the DOM handed us, the click ends here — the next one lands
+    // on the right token and drags it. A pure click on a piece that was
+    // ALREADY selected cycles to the next in the stack (see onPointerUp),
+    // so every buried token is reachable by clicking again.
+    let pick = token.id;
+    if (!e.shiftKey) {
+      const stack = tokensUnder(point);
+      if (stack.length > 1) {
+        if (selected) cycleStack.current = stack;
+        else pick = stack[0].id;
+      }
+    }
+    s.selectToken(pick, e.shiftKey);
+    s.openInspector(null);
+    if (pick !== token.id) return;
     // Clicking a shopkeeper is how you talk to one. Only for a token this
     // player does not run — their own tokens are for moving, and the DM
     // drags tokens constantly, so neither can afford to have the plain click
@@ -230,6 +299,16 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
   function onPointerUp(e: React.PointerEvent<SVGGElement>) {
     const origin = dragOrigin.current;
     dragOrigin.current = null;
+    // A pure click (no drag) on an already-selected piece in a stack: hand
+    // the selection to the next piece under the pointer, which the layer
+    // then draws on top. Round and round, one per click.
+    const stack = cycleStack.current;
+    cycleStack.current = null;
+    if (stack && !dragPos && e.button === 0) {
+      const idx = stack.findIndex((t) => t.id === token.id);
+      const next = stack[(idx + 1) % stack.length];
+      if (next && next.id !== token.id) useGameStore.getState().selectToken(next.id, false);
+    }
     if (!movable || !dragPos || !origin) {
       setDragPos(null);
       return;
@@ -575,6 +654,10 @@ export function TokenLayer() {
     const wcBlocked = targeting.action.wildCardOnly === true && t.nameplate?.wildCard !== true;
     return inRange && !selfBlocked && !wcBlocked ? 'valid' : 'invalid';
   }
+  // Published for the click handlers, which need the answer for every token
+  // under a click and not only their own.
+  targetStates.clear();
+  for (const t of Object.values(tokens)) targetStates.set(t.id, stateFor(t));
 
   return (
     <svg

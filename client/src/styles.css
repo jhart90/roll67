@@ -3068,6 +3068,17 @@ th > .term { border-bottom-style: dotted; }
 .map-actions .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; margin: 0; cursor: pointer; }
 
 /* SWADE Soak offer: your Wild Card took wounds and may Benny them away. */
+/* "Which token?" — the chooser for a targeting click that hit a stack. */
+.target-choice-scrim { position: fixed; inset: 0; z-index: 71; }
+.target-choice {
+  position: fixed; z-index: 72; display: flex; flex-direction: column; gap: 4px;
+  min-width: 180px; max-width: 240px; padding: 8px 10px; border-radius: 10px;
+  background: var(--panel); border: 2px solid #d26c6c;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+.target-choice button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font-size: 13px; }
+.target-choice-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid rgba(255, 255, 255, 0.4); }
+
 .soak-prompt {
   position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
   z-index: 70; display: flex; flex-direction: column; gap: 8px;

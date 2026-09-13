@@ -439,6 +439,10 @@ interface GameState {
   selectedTokenId: string | null;
   /** All selected token IDs (multi-select via shift-click). First entry = primary. */
   selectedTokenIds: string[];
+  /** A targeting click that landed on several valid tokens at once (a big
+   *  piece overlapping a small one): the candidates, and where the click
+   *  was, for the chooser that asks which was meant. */
+  targetChoice: { tokenIds: string[]; x: number; y: number } | null;
   /** Token whose inspector panel is open (right-click), separate from selection. */
   inspectorTokenId: string | null;
   openInspector(id: string | null): void;
@@ -702,7 +706,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   beginTargeting(characterId, sourceTokenId, action, adv, rof, calledShot) {
     // Character sheets are movable windows now (not a full-screen modal), so
     // the map stays clickable underneath them — no need to force one closed.
-    set({ targeting: { characterId, sourceTokenId, action, adv, rof, calledShot: calledShot ?? null }, tool: 'select', selectedTokenId: null, selectedTokenIds: [], attackPreview: null });
+    set({ targeting: { characterId, sourceTokenId, action, adv, rof, calledShot: calledShot ?? null }, tool: 'select', selectedTokenId: null, selectedTokenIds: [], attackPreview: null, targetChoice: null });
     // Live-broadcast the range highlight so the DM + other players see the
     // same in-range/out-of-range tokens the caster sees, before they click.
     socket.emit(C2S.TARGET_PREVIEW, {
@@ -711,7 +715,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   cancelTargeting() {
     const t = get().targeting;
-    set({ targeting: null, attackPreview: null });
+    set({ targeting: null, attackPreview: null, targetChoice: null });
     if (t) {
       socket.emit(C2S.TARGET_PREVIEW, {
         sourceTokenId: t.sourceTokenId, rangeFt: t.action.rangeFt, effect: t.action.effect, label: t.action.label, active: false,
@@ -721,6 +725,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   resolveTarget(targetTokenId) {
     const t = get().targeting;
     if (!t) return;
+    set({ targetChoice: null });
     // A Called Shot cannot be priced until the victim is known: the part's
     // Scale is read off THEIR Size. Hold the attack and ask now.
     if (t.calledShot === CALLED_SHOT_PENDING) {
@@ -819,6 +824,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   camera: { x: 0, y: 0, scale: 1 },
   tool: 'select',
+  targetChoice: null,
   selectedTokenId: null,
   selectedTokenIds: [],
   worldSelectedKey: null,
@@ -897,7 +903,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [], knownWalls: [],
       viewingAs: null, dragGhosts: {}, predictedMoves: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
       worldSelectedKey: null, selectedObjectId: null, worldHover: null,
-      targeting: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
+      targeting: null, targetChoice: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
       // Transient slices that used to leak into the NEXT campaign: a live
       // ruler from campaign A rendering over campaign B's map, a stale error
       // toast, a presented shop, last session's initiative order.

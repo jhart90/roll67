@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Character, CombatAction, GameSystem, SheetData } from 'shared';
 import {
-  AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rows, spellSlots, str, swadeAmmoLeft, swadeStowedRollable, swnReloadCheck, systemFor,
+  AMMO_BY_ROF, applyArcaneBackground, canEditCharacter, castableLevels, combatActions, conditionsOf, num, playerColorFor, rangeFigure, rows, spellSlots, str, swadeAmmoLeft, swadeStowedRollable, swnReloadCheck, systemFor,
   type DerivedSection, type FieldDef, type ListSection, type Rollable, type SectionDef, type SheetCard,
 } from 'shared';
 import { COVER_LABEL, COVER_OPTIONS, COVER_PENALTY, type CoverGrade } from 'shared';
@@ -382,11 +382,21 @@ const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
  * ticked, and anything still at its default stays silent — except the
  * ALWAYS_SHOW facts that define the row.
  */
-function cardChips(section: ListSection, row: SheetData): { chips: Chip[]; notes: string[] } {
+function cardChips(section: ListSection, row: SheetData, system: GameSystem): { chips: Chip[]; notes: string[] } {
   const chips: Chip[] = [];
   const notes: string[] = [];
   const push = (text: string, tone: ChipTone) => chips.push({ text, tone });
   for (const col of section.columns) {
+    // A SWADE range is three numbers, not one: Short/Medium/Long, the way
+    // the book writes it. A weapon fought with (Fighting) has no bands; a
+    // power or a thrown/shot weapon does, unless it is a hard-range device.
+    if (col.id === 'range' && system === 'swade') {
+      const n = Number(row[col.id]);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      const melee = section.id === 'attacks' && (str(row, 'skill', 'Fighting') === 'Fighting' || n <= 5);
+      push(`${chipLabel(col.label)} ${rangeFigure(system, n, { ranged: !melee, hardRange: row.hardRange === true })}`, 'range');
+      continue;
+    }
     if (col.id === 'name' || PAIRED.has(col.id) || (section.id === 'attacks' && ATTACK_DETAIL_COLS.has(col.id))) continue;
     const v = row[col.id];
     if (NOTE_COLS.has(col.id)) {
@@ -686,7 +696,7 @@ function ListEditor({
       <div className="card-grid">
         {rows.map((row, i) => {
           const editing = editIdx === i;
-          const { chips, notes } = cardChips(section, row);
+          const { chips, notes } = cardChips(section, row, system);
           const rider = hasDetail ? riderSummary(row) : '';
           const equipId = EQUIP_COL[section.id];
           const equipCol = equipId ? mainCols.find((c) => c.id === equipId) : undefined;
@@ -1054,7 +1064,7 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                   : dry ? `Needs ${minNeeded} round${minNeeded === 1 ? '' : 's'} — only ${ammoLeft} left. Reload!`
                     : maxRof >= 2 && !a.suppressive ? 'Choose a rate of fire, then pick a target'
                       : a.effect === 'heal' ? `${a.label} — choose who to treat`
-                      : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${a.rangeFt} ft — pick a target`)}
+                      : (a.aoe ? `${a.aoe.shape} ${a.aoe.sizeFt}ft — aim it on the map` : `Range ${rangeFigure(character.system, a.rangeFt, a)} ft — pick a target`)}
                 onClick={() => {
                   if (!myToken) return;
                   // Aim first, then pick the victim: the part decides the

@@ -8,7 +8,7 @@ import {
   isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILLS_SWADE, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type CardBackSpec, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
-  swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, tokensCaughtInAoe, usableAmount,
+  swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, rangeFigure, tokensCaughtInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitSetTurnPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RequestTestPayload, type TestOutcomePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
@@ -1516,7 +1516,7 @@ function postCastCard(
   }
   if (usableAmount(action.amountExpr)) chips.push({ text: action.amountExpr, tone: 'damage' });
   if (action.damageType) chips.push({ text: action.damageType, tone: 'plain' });
-  if (action.rangeFt > 0) chips.push({ text: `Range ${action.rangeFt} ft`, tone: 'range' });
+  if (action.rangeFt > 0) chips.push({ text: `Range ${rangeFigure(actor.system, action.rangeFt, action)} ft`, tone: 'range' });
   if (ppSpent > 0) chips.push({ text: `${ppSpent} PP`, tone: 'use' });
   if (action.saveId) chips.push({ text: `resisted by ${action.saveId}`, tone: 'skill' });
   if (action.appliesCondition) chips.push({ text: getCondition(action.appliesCondition)?.label ?? action.appliesCondition, tone: 'severity' });

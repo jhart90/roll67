@@ -25,6 +25,23 @@ export interface RangeReading {
 export const SWADE_BAND_MULTIPLIER = { short: 1, medium: 2, long: 4, extreme: 16 } as const;
 
 /**
+ * The book's way of writing a range: Short/Medium/Long, "12/24/48". A bare
+ * "60 ft" on a rifle card reads as its limit, when it is only where the −2
+ * begins — so wherever a SWADE ranged weapon or power shows its range, it
+ * shows all three bands. A hard-range item (a device with a maximum and no
+ * ladder) keeps the single figure.
+ */
+export function swadeRangeLadder(shortFt: number): string {
+  const s = Math.max(0, Math.round(shortFt));
+  return `${s}/${s * SWADE_BAND_MULTIPLIER.medium}/${s * SWADE_BAND_MULTIPLIER.long}`;
+}
+
+/** "60/120/240" for a banded SWADE range, plain "60" otherwise. */
+export function rangeFigure(system: string, rangeFt: number, opts: { ranged: boolean; hardRange?: boolean }): string {
+  return system === 'swade' && opts.ranged && !opts.hardRange ? swadeRangeLadder(rangeFt) : String(rangeFt);
+}
+
+/**
  * Which band a shot falls in.
  *
  * `shortHexes` is the weapon's listed range in hexes. `aiming` opens the

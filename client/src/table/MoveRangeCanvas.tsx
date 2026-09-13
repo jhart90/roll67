@@ -27,6 +27,8 @@ export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
   const map = useGameStore((s) => s.map)!;
   const budgets = useGameStore((s) => s.moveBudgets);
   const tokens = useGameStore((s) => s.tokens);
+  const characters = useGameStore((s) => s.characters);
+  const isDm = useGameStore((s) => s.isDm());
   const active = useGameStore((s) => s.initiativeState.active);
   const turnEntry = useGameStore((s) => s.initiativeState.entries[s.initiativeState.turnIdx]);
   // Subscribed to so the reach redraws when a door opens or a wall is moved,
@@ -38,7 +40,13 @@ export function MoveRangeCanvas({ grid }: { grid: GridConfig }) {
   // Whoever is up, and their own budget — not whichever arrived last.
   const budget = turnEntry?.tokenId ? budgets[turnEntry.tokenId] : undefined;
   const token = budget ? tokens[budget.tokenId] : undefined;
-  const live = !!budget && !!token && active && token.mapId === map.id;
+  // The reach is for whoever CONTROLS the token, decided by the sheets this
+  // client holds (a player only ever has their own). A budget can outlive
+  // control — the DM hands the character to someone else mid-turn and the
+  // old controller's copy is still sitting in the store — so the budget
+  // alone is not the answer to "should this be drawn here".
+  const controls = isDm || (!!token?.characterId && characters.some((c) => c.id === token.characterId));
+  const live = !!budget && !!token && active && token.mapId === map.id && controls;
 
   const bands = useMemo(() => {
     if (!live || !budget) return null;

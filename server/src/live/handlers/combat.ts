@@ -10,7 +10,7 @@ import {
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, tokensCaughtInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
-  type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitUpdatePayload, type InitiativeState,
+  type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitSetTurnPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RequestTestPayload, type TestOutcomePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, normalizeCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type AttackPreviewPayload, type AttackPreviewResultPayload, type CoverGrade, type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
@@ -4509,11 +4509,58 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     const state = initiative.get(d.campaignId);
     const idx = state.entries.findIndex((e) => e.id === entryId);
     if (idx < 0) return;
+    // The turn belongs to a COMBATANT, not to a slot. Taking someone out from
+    // above the current turn shifts every later row up one, so the index has
+    // to follow — left alone it landed on whoever came next and their turn
+    // was skipped without anyone pressing "next".
+    const wasCurrent = idx === state.turnIdx;
+    const prevChar = wasCurrent ? combatantChar(state, idx) : undefined;
     state.entries.splice(idx, 1);
-    if (state.turnIdx >= state.entries.length) state.turnIdx = 0;
+    if (idx < state.turnIdx) {
+      state.turnIdx--;
+    } else if (wasCurrent && state.turnIdx >= state.entries.length) {
+      // The one acting was also the last in the order: the round is over,
+      // exactly as if they had ended their turn.
+      state.turnIdx = 0;
+      if (state.entries.length > 0) {
+        state.round++;
+        redealRoundCards(io, d.campaignId, state);
+      }
+    }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
+    // Removing whoever was up hands the turn to the next combatant, and a
+    // handover is a handover: fresh Pace, start-of-turn recovery, the lot.
+    if (wasCurrent && state.active && state.entries.length > 0) finishTurnTransition(io, d.campaignId, state, prevChar);
   }, 'INIT_REMOVE'));
+
+  /**
+   * The DM makes it ANY combatant's turn — most often a rewind, for a player
+   * who hit "end turn" before they were done. Their turn starts over: a fresh
+   * Pace budget and the usual start-of-turn checks, the same as if the order
+   * had reached them naturally. The round counter is untouched; jumping
+   * around inside a round is not a new round.
+   */
+  socket.on(C2S.INIT_SET_TURN, safe(socket, ({ entryId }: InitSetTurnPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const state = initiative.get(d.campaignId);
+    if (!state.active) return;
+    const idx = state.entries.findIndex((e) => e.id === entryId);
+    if (idx < 0 || idx === state.turnIdx) return;
+    const prevChar = combatantChar(state, state.turnIdx);
+    const entry = state.entries[idx];
+    state.turnIdx = idx;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    finishTurnTransition(io, d.campaignId, state, prevChar);
+    const msg = chat.add(d.campaignId, {
+      userId: null, fromName: 'System', kind: 'system',
+      text: `↩ The DM hands the turn to ${entry.name} (Round ${state.round}).`,
+      roll: null, recipients: null,
+    });
+    io.to(entry.hidden ? dmRoom(d.campaignId) : campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+  }, 'INIT_SET_TURN'));
 
   socket.on(C2S.INIT_UPDATE, safe(socket, (payload: InitUpdatePayload) => {
     const d = requireCampaign(socket);
@@ -5127,6 +5174,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
     if (state.entries.length === 0) return;
+    const prevChar = combatantChar(state, state.turnIdx);
     state.turnIdx--;
     if (state.turnIdx < 0) {
       state.turnIdx = state.entries.length - 1;
@@ -5134,6 +5182,10 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
+    // Stepping back is a handover too. Without this the combatant given
+    // their turn back kept last turn's spent Pace on the server and a stale
+    // budget on their screen — a rewind that offered no ground to walk on.
+    if (state.active) finishTurnTransition(io, d.campaignId, state, prevChar);
   }, 'INIT_PREV'));
 
   socket.on(C2S.INIT_SORT, safe(socket, () => {

@@ -7,8 +7,9 @@ import {
 } from 'shared';
 import type { Character, CreateNpcPayload, CreateRandomNpcPayload, DmNotesGetPayload, DmNotesSetPayload, GameSystem, PrivateNotesGetPayload, PrivateNotesSetPayload, PublicSheetGetPayload, PublicSheetPayload, WorldOverridePayload } from 'shared';
 import { generateNpc, generateNpcFromModel, nameplateFor, npcById, remapMacro, reorderMapsFor } from 'shared';
-import { campaigns, characters, chat, customNpcs, dmNotes, macros, mapObjects, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
-import { placeCharacterToken } from './tokens.js';
+import { campaigns, characters, chat, customNpcs, dmNotes, initiative, macros, mapObjects, maps, privateNotes, tokens, worldVis } from '../../db/repos.js';
+import { emitMoveBudget, placeCharacterToken } from './tokens.js';
+import { broadcastInitiative } from './combat.js';
 import { dropCarriedLootOnDeath } from './mapObjects.js';
 import { clearConcentrationEffects, postConditionDiff } from '../hp.js';
 import { campaignRoom, dmRoom, emitError, safe, scrubNonFinite, sdata, userRoom } from '../hub.js';
@@ -316,9 +317,31 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
       if (previousOwner && previousOwner !== ownerUserId) {
         io.to(userRoom(previousOwner)).emit(S2C.CHARACTER_REMOVED, { characterId });
       }
-      const touchedMaps = new Set(tokens.forCharacter(characterId).map((t) => t.mapId));
+      const charTokens = tokens.forCharacter(characterId);
+      // A token on the GM layer is invisible to every player, the new owner
+      // included — handing them a character they cannot see on the map is no
+      // handover at all. Giving control to a player surfaces its tokens; the
+      // reverse (back to NPC) leaves them where they stand.
+      if (ownerUserId) {
+        for (const t of charTokens) {
+          if (t.layer !== 'gm') continue;
+          tokens.update(t.id, { layer: 'token' });
+          io.to(dmRoom(d.campaignId)).emit(S2C.TOKEN_UPSERTED, { token: tokens.byId(t.id)! });
+        }
+      }
+      const touchedMaps = new Set(charTokens.map((t) => t.mapId));
       for (const mapId of touchedMaps) syncMapVision(io, d.campaignId, mapId);
       broadcastDirectory(io, d.campaignId);
+      // The rest of what "who controls this" touches, so nobody has to
+      // refresh to find out: the initiative tracker stamps every entry with
+      // its controller (that is how a player's "end turn" and turn banner
+      // know it is theirs), and if it is this character's turn RIGHT NOW the
+      // new controller needs the Pace budget the old one was sent when the
+      // turn began — the map shades reachable ground from it.
+      broadcastInitiative(io, d.campaignId);
+      const init = initiative.get(d.campaignId);
+      const upNow = init.active ? init.entries[init.turnIdx]?.tokenId : undefined;
+      if (upNow && charTokens.some((t) => t.id === upNow)) emitMoveBudget(io, d.campaignId, upNow);
     }
     // Keys are DM-issued and a player must not be able to mint or re-label
     // one: renaming a pebble to "Patch's Lab Key" would open Patch's lab. Any

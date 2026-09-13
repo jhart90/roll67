@@ -19,7 +19,7 @@ import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sd
 import { buildMapState, dropVisionCache, mapObjectsVisibleTo } from '../visionService.js';
 import { storageReport, sweepOrphans } from '../../storage.js';
 import { emitCustomNpcs } from './characters.js';
-import { initiativeViewFor } from './combat.js';
+import { broadcastInitiative, initiativeViewFor } from './combat.js';
 import { broadcastCounters } from './counters.js';
 import { buildDirectory, broadcastDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
@@ -541,6 +541,9 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       io.to(dmRoom(campaignId)).emit(S2C.CHARACTER_UPSERTED, { character: updated });
     }
     campaigns.removeMember(campaignId, userId);
+    // Their entries in a running fight now answer to the DM; the tracker
+    // stamps every row with its controller, so it needs telling.
+    broadcastInitiative(io, campaignId);
     for (const s of campaignSockets(io, campaignId)) {
       const sd = sdata(s);
       if (sd.userId !== userId) continue;

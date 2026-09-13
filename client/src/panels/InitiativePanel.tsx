@@ -81,6 +81,16 @@ export function InitiativePanel() {
             <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}</span>
             {isDm && (
               <span className="init-actions">
+                {/* The rewind. A player who ends their turn a beat early has
+                    no way back on their own; this makes it anyone's turn
+                    again — fresh Pace, start-of-turn checks — without
+                    touching the order or the round. */}
+                {state.active && i !== state.turnIdx && (
+                  <button className="link" title={`Make it ${e.name}'s turn now (their turn starts over; the order and round stay as they are)`}
+                    onClick={() => intents.initSetTurn(e.id)}>
+                    ⏵
+                  </button>
+                )}
                 {!cardMode && (
                   <button className="link" title="Re-roll this entry's initiative" onClick={() => intents.initUpdate(e.id, { reroll: true })}>
                     🎲

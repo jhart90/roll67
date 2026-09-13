@@ -131,6 +131,9 @@ export const C2S = {
   INIT_UPDATE: 'initUpdate',
   INIT_NEXT: 'initNext',
   INIT_PREV: 'initPrev',
+  /** DM hands the turn to any combatant in the order — a rewind for a turn
+   *  ended by mistake, or a skip straight to whoever the fight is waiting on. */
+  INIT_SET_TURN: 'initSetTurn',
   INIT_SORT: 'initSort',
   INIT_CLEAR: 'initClear',
   /** SWADE: start a chase — lay out the Chase Card track. */
@@ -645,6 +648,7 @@ export interface InitAddPayload {
 /** Roll initiative for every token on a map at once (DM). */
 export interface InitRollMapPayload { mapId: string; includeGm?: boolean }
 export interface InitRemovePayload { entryId: string }
+export interface InitSetTurnPayload { entryId: string }
 export interface InitUpdatePayload {
   entryId: string;
   value?: number;

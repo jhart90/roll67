@@ -2267,6 +2267,7 @@ export const intents = {
   },
   initNext: () => socket.emit(C2S.INIT_NEXT),
   initPrev: () => socket.emit(C2S.INIT_PREV),
+  initSetTurn: (entryId: string) => socket.emit(C2S.INIT_SET_TURN, { entryId }),
   initSort: () => socket.emit(C2S.INIT_SORT),
   initClear: () => socket.emit(C2S.INIT_CLEAR),
   initSetActive: (active: boolean) => socket.emit(C2S.INIT_SET_ACTIVE, { active }),

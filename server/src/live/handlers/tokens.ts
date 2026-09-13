@@ -1,9 +1,9 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
-  dieSides, playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
-  type Character, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type AdjustPacePayload, type GridConfig, type Hex, type JumpRollPayload, type MountTokenPayload, type MoveBudgetPayload, type MoveTokenPayload, type ProneMovePayload, type RunRollPayload, type Token, type TokenShape, type UpdateTokenPayload,
+  dieSides, pathCost, playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
+  type Character, type CommitMovePayload, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
+  type AdjustPacePayload, type GridConfig, type Hex, type JumpRollPayload, type MapDef, type MountTokenPayload, type MoveBudgetPayload, type MoveTokenPayload, type ProneMovePayload, type ReachOpts, type RunRollPayload, type Token, type TokenShape, type UpdateTokenPayload,
 } from 'shared';
 import { assets, campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
@@ -34,11 +34,90 @@ const proneIntent = new Map<string, 'stand' | 'crawl'>();
 const JUMP_BASE = 1;
 const JUMP_WITH_RUN_UP = 2;
 
-/** `paceAdj` is the DM's thumb on the scale for this one turn: inches added
- *  to (or taken from) the allowance itself. Lives here so it lapses with the
- *  rest of the turn's movement. */
-interface TurnMoveRec { moved: number; runBonus: number | null; jump?: number; paceAdj?: number }
+/**
+ * One token's movement this turn.
+ *
+ * `moved` is what has been COMMITTED — spent for good. Everything since the
+ * last commit is provisional: the token may stand anywhere the reach from
+ * `anchor` allows and walk back for free, because a player who steps three
+ * hexes east and then sees the archer has not yet spent those three inches.
+ * Committing (the player's own click, or any action they take) turns the
+ * cost of where they stand into `moved` and moves the anchor under them.
+ *
+ * `walked` is the cheapest cost known for the token's CURRENT hex from the
+ * anchor — the straight-line reading when one exists, otherwise the route
+ * actually taken, step by step. It is the fallback for ground the straight
+ * line cannot reach (round a wall) so a legal walk is never refused for
+ * failing to be a straight one.
+ *
+ * `paceAdj` is the DM's thumb on the scale for this one turn: inches added
+ * to (or taken from) the allowance itself. All of it lapses with the turn.
+ */
+interface TurnMoveRec {
+  moved: number;
+  runBonus: number | null;
+  jump?: number;
+  paceAdj?: number;
+  anchor?: Hex;
+  walked?: number;
+}
 const swadeTurnMoves = new Map<string, Map<string, TurnMoveRec>>();
+
+/** The io handle, for the places that spend movement without a socket in
+ *  hand (an action committing the walk that preceded it). */
+let liveIo: Server | null = null;
+
+/** The movement rule's view of a map. */
+function reachOptsFor(map: MapDef, crawling: boolean): ReachOpts {
+  return {
+    grid: map.grid, terrain: map.terrain ?? [], blocked: map.blocked ?? [], crawling,
+    sight: { walls: map.walls ?? [], doors: map.doors ?? [] },
+  };
+}
+
+/** Inches the token's current hex would cost from the anchor if committed now. */
+function provisionalSpent(rec: TurnMoveRec | undefined, token: Token, map: MapDef, crawling: boolean): number {
+  if (!rec?.anchor) return 0;
+  const straight = pathCost(rec.anchor, { q: token.q, r: token.r }, reachOptsFor(map, crawling));
+  const walked = rec.walked ?? 0;
+  return straight === null ? walked : Math.min(straight, walked);
+}
+
+/**
+ * Make the turn's wandering permanent: what standing here costs is spent,
+ * and the reach is measured from here from now on. Idempotent — a token
+ * that has not left its anchor commits nothing.
+ */
+export function commitMovement(campaignId: string, tokenId: string): void {
+  const rec = swadeTurnMoves.get(campaignId)?.get(tokenId);
+  const token = tokens.byId(tokenId);
+  if (!rec?.anchor || !token) return;
+  const map = maps.byId(token.mapId);
+  const ch = token.characterId ? characters.byId(token.characterId) : undefined;
+  if (!map || !ch) return;
+  const prone = conditionsOf(ch.sheet).includes('prone');
+  const crawling = prone && proneIntent.get(tokenId) === 'crawl';
+  const spent = provisionalSpent(rec, token, map, crawling);
+  if (spent === 0 && rec.anchor.q === token.q && rec.anchor.r === token.r) return;
+  rec.moved += spent;
+  rec.anchor = { q: token.q, r: token.r };
+  rec.walked = 0;
+  if (liveIo) emitMoveBudget(liveIo, campaignId, tokenId);
+}
+
+/**
+ * An action is the point of no return for the walk that led up to it: you
+ * cannot swing, then decide you had stood somewhere else. Called from the
+ * action ledger, for the token whose turn it is.
+ */
+export function commitMovementForCharacter(campaignId: string, characterId: string): void {
+  const init = initiative.get(campaignId);
+  if (!init.active) return;
+  const up = init.entries[init.turnIdx]?.tokenId;
+  if (!up) return;
+  if (tokens.byId(up)?.characterId !== characterId) return;
+  commitMovement(campaignId, up);
+}
 
 /** The most the DM can add on top of a character's own Pace in one turn. */
 const MAX_PACE_BONUS = 20;
@@ -128,11 +207,13 @@ function buildMoveBudget(campaignId: string, token: Token, ch: Character): MoveB
   const prone = conds.includes('prone');
   const crawling = prone && proneIntent.get(tokenId) === 'crawl';
   const rec = swadeTurnMoves.get(campaignId)?.get(tokenId);
+  const map = maps.byId(token.mapId);
   const payload: MoveBudgetPayload = {
     tokenId,
-    from: { q: token.q, r: token.r },
+    from: rec?.anchor ?? { q: token.q, r: token.r },
     pace: paceFor(campaignId, tokenId, ch.sheet, prone, crawling),
     moved: rec?.moved ?? 0,
+    provisional: map ? provisionalSpent(rec, token, map, crawling) : 0,
     runBonus: rec?.runBonus ?? null,
     // What a run could still buy: the running die's best face. Spent already,
     // or crawling on the floor, and there is nothing left to promise.
@@ -186,9 +267,15 @@ export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, 
   if (ch.ownerUserId) io.to(userRoom(ch.ownerUserId)).emit(S2C.MOVE_BUDGET, payload);
 }
 
-/** Has this token spent any Pace this turn? (Aiming demands standing still.) */
+/** Has this token left where its turn began? (Aiming demands standing
+ *  still — and standing still means the hex, not the ledger: a walk out and
+ *  back is still a walk.) */
 export function movedThisTurn(campaignId: string, tokenId: string): boolean {
-  return (swadeTurnMoves.get(campaignId)?.get(tokenId)?.moved ?? 0) > 0;
+  const rec = swadeTurnMoves.get(campaignId)?.get(tokenId);
+  if (!rec) return false;
+  if (rec.moved > 0) return true;
+  const token = tokens.byId(tokenId);
+  return !!rec.anchor && !!token && (rec.anchor.q !== token.q || rec.anchor.r !== token.r);
 }
 import { hasSeenHex, socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { broadcastDirectory } from '../directory.js';
@@ -220,6 +307,7 @@ function requireCampaign(socket: Socket) {
 }
 
 export function registerTokenHandlers(io: Server, socket: Socket): void {
+  liveIo = io;
   socket.on(C2S.CREATE_TOKEN, safe(socket, (payload: CreateTokenPayload) => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') {
@@ -526,15 +614,26 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
           return a + (isRough ? 2 : 1);
         }, 0);
         rec.jump = airborne;
-        if (rec.moved + stepDist > pace + (rec.runBonus ?? 0)) {
+        // Movement is measured from the turn's anchor, not step by step: the
+        // question is what standing at `dest` costs from there. The straight
+        // reading when the ground allows one, else the route taken (cheapest
+        // known cost to the current hex, plus this step) — so a walk round a
+        // wall is charged for the walk and never refused for not being
+        // straight.
+        if (!rec.anchor) { rec.anchor = { q: token.q, r: token.r }; rec.walked = 0; }
+        const straight = pathCost(rec.anchor, dest, reachOptsFor(map, crawling));
+        const byRoute = (rec.walked ?? 0) + stepDist;
+        const provisionalNext = straight === null ? byRoute : Math.min(straight, byRoute);
+        const spentSoFar = rec.moved + provisionalSpent(rec, token, map, crawling);
+        if (rec.moved + provisionalNext > pace + (rec.runBonus ?? 0)) {
           // Beyond what a run could buy even on the die's best face: there is
           // no offer worth making. Asking "do you want to run?" about ground
           // that running cannot reach spends the die on a move that will then
           // be refused anyway.
           const bestRun = dieSides(str(character.sheet, 'runningDie', 'd6')) || 6;
-          if (rec.runBonus === null && rec.moved + stepDist > pace + bestRun) {
+          if (rec.runBonus === null && rec.moved + provisionalNext > pace + bestRun) {
             socket.emit(S2C.TOKEN_UPSERTED, { token });
-            emitError(socket, `Too far — ${rec.moved + stepDist} tiles, and ${pace + bestRun} is everything this turn has,`
+            emitError(socket, `Too far — ${rec.moved + provisionalNext} tiles, and ${pace + bestRun} is everything this turn has,`
               + ' running and rolling the best face on the die.');
             return;
           }
@@ -545,13 +644,13 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
             // the token back where it really is while the player decides,
             // rather than leaving it standing at a hex it may not reach.
             socket.emit(S2C.TOKEN_UPSERTED, { token });
-            socket.emit(S2C.RUN_PROMPT, { tokenId, name: character.name, pace, moved: rec.moved });
+            socket.emit(S2C.RUN_PROMPT, { tokenId, name: character.name, pace, moved: spentSoFar });
             return;
           }
-          emitError(socket, `Not enough movement: Pace ${pace} +${rec.runBonus} run, already moved ${rec.moved}.`);
+          emitError(socket, `Not enough movement: Pace ${pace} +${rec.runBonus} run, already moved ${spentSoFar}.`);
           return;
         }
-        rec.moved += stepDist;
+        rec.walked = provisionalNext;
         per.set(tokenId, rec);
       }
       if (prone && !crawling) {
@@ -766,6 +865,19 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     adjustPace(d.campaignId, tokenId, step, base);
     emitMoveBudget(io, d.campaignId, tokenId);
   }, 'ADJUST_PACE'));
+
+  /** The player's own "I'm staying here": the walk so far is spent and the
+   *  reach re-measured from where they stand. Same right as moving it. */
+  socket.on(C2S.COMMIT_MOVE, safe(socket, ({ tokenId }: CommitMovePayload) => {
+    const d = requireCampaign(socket);
+    const token = tokens.byId(tokenId);
+    if (!token) return;
+    const character = token.characterId ? characters.byId(token.characterId) : undefined;
+    if (!character || character.system !== 'swade') return;
+    if (!canMoveToken(d.role, d.userId, token, character, moveLockedFor(d.campaignId, d.userId))) return;
+    if (!initiative.get(d.campaignId).active) return;
+    commitMovement(d.campaignId, tokenId);
+  }, 'COMMIT_MOVE'));
 
   socket.on(C2S.RUN_ROLL, safe(socket, ({ tokenId }: RunRollPayload) => {
     if (!rollGate(socket)) return;

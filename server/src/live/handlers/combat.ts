@@ -28,7 +28,7 @@ import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny,
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { rollGate } from '../locks.js';
 import { applyAdv } from './chat.js';
-import { emitMoveBudget, hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
+import { commitMovementForCharacter, emitMoveBudget, hasRunThisTurn, movedThisTurn, resetSwadeTurnMoves } from './tokens.js';
 
 function requireCampaign(socket: Socket) {
   const d = sdata(socket);
@@ -448,6 +448,8 @@ export function spendAction(campaignId: string, characterId: string): void {
   const per = swadeActionCounts.get(campaignId) ?? new Map<string, number>();
   swadeActionCounts.set(campaignId, per);
   per.set(characterId, (per.get(characterId) ?? 0) + 1);
+  // Acting from a hex is choosing it: whatever walk led here is now spent.
+  commitMovementForCharacter(campaignId, characterId);
 }
 
 /**

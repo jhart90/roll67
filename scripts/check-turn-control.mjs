@@ -173,13 +173,59 @@ console.log('DM adjusts Pace:');
   dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: -1 });
   ok(!!(await quiet(dmSees)), 'the DM\'s own screen receives the adjusted budget too');
   // A move is measured against the adjusted figure: with Pace now base+1,
-  // a step of base+1 hexes must be allowed.
+  // a step of base+1 hexes must be allowed. The PLAYER walks it — a DM
+  // moving someone else's token is refereeing and spends no Pace at all.
   const target = { q: heroTok.q + (grown?.pace ?? 0) - 1, r: heroTok.r };
   const moved = waitFor(dmSock, 'tokenMoved', 6000, (p) => p.tokenId === heroTok.id);
-  const refused = waitFor(dmSock, 'errorMsg', 1500).then(() => true, () => false);
-  dmSock.emit('moveToken', { tokenId: heroTok.id, q: target.q, r: target.r });
+  const refused = waitFor(bSock, 'errorMsg', 1500).then(() => true, () => false);
+  bSock.emit('moveToken', { tokenId: heroTok.id, q: target.q, r: target.r });
   const [mv, err] = await Promise.all([quiet(moved), refused]);
   ok(!!mv && !err, `a ${(grown?.pace ?? 0) - 1}-hex step is allowed against the raised allowance (moved ${!!mv}, refused ${err})`);
+}
+
+// ---------- 2c. movement is provisional until committed or acted on ----------
+console.log('provisional movement:');
+{
+  // Hero (B's) is up and, from the Pace block above, stands 7 hexes east of
+  // where the turn began with a raised allowance of 7. Nothing is spent yet.
+  const now = waitFor(bSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id);
+  dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: 1 });
+  dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: -1 });
+  const b0 = await quiet(now);
+  ok(!!b0 && b0.moved === 0 && b0.provisional === 7, `after walking 7 hexes nothing is committed: moved ${b0?.moved}, provisional ${b0?.provisional}`);
+  ok(b0?.from.q === heroTok.q && b0?.from.r === heroTok.r, 'the reach is still measured from where the turn began');
+  // Think again: walk 4 back toward the start. The provisional cost falls.
+  const back = waitFor(bSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id && p.provisional === 3);
+  bSock.emit('moveToken', { tokenId: heroTok.id, q: heroTok.q + 3, r: heroTok.r });
+  ok(!!(await quiet(back)), 'walking back toward the start costs nothing — provisional drops to 3');
+  // Commit: the 3 are spent and the anchor moves under the token.
+  const committed = waitFor(bSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id && p.moved === 3 && p.provisional === 0);
+  bSock.emit('commitMove', { tokenId: heroTok.id });
+  const b1 = await quiet(committed);
+  ok(!!b1, `committing spends exactly what the spot costs (moved ${b1?.moved}, provisional ${b1?.provisional})`);
+  ok(b1?.from.q === heroTok.q + 3, 'the reach is now measured from the committed hex');
+  // Walk 2 more, then ACT: the action commits the walk on its own.
+  const two = waitFor(bSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id && p.provisional === 2);
+  bSock.emit('moveToken', { tokenId: heroTok.id, q: heroTok.q + 5, r: heroTok.r });
+  ok(!!(await quiet(two)), 'two more hexes sit provisional (2)');
+  const armed = waitFor(bSock, 'characterUpserted', 6000, (p) => p.character.id === hero.id && (p.character.sheet.attacks ?? []).some((a) => a.name === 'Long Rifle'));
+  bSock.emit('updateCharacter', { characterId: hero.id, patch: {
+    shooting: 'd8', agility: 'd8', skills: [{ name: 'Shooting', die: 'd8' }],
+    attacks: [{ name: 'Long Rifle', skill: 'Shooting', damage: '2d8', range: 200, ranged: true }],
+  } });
+  await quiet(armed);
+  const acted = waitFor(bSock, 'moveBudget', 8000, (p) => p.tokenId === heroTok.id && p.moved === 5 && p.provisional === 0);
+  bSock.emit('combatAction', { characterId: hero.id, actionId: 'attack:0', sourceTokenId: heroTok.id, targetTokenId: dumTok.id, adv: null });
+  const b2 = await quiet(acted);
+  ok(!!b2, `taking an action commits the walk that led to it (moved ${b2?.moved ?? '?'})`);
+  // The running die, once per turn, adds to this turn's Pace.
+  const ran = waitFor(bSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id && p.runBonus !== null);
+  bSock.emit('runRoll', { tokenId: heroTok.id });
+  const b3 = await quiet(ran);
+  ok(!!b3 && b3.runBonus > 0 && b3.runMax === 0, `the running die adds +${b3?.runBonus} for the turn and cannot be rolled again (runMax ${b3?.runMax})`);
+  const again = waitFor(bSock, 'moveBudget', 1200, (p) => p.tokenId === heroTok.id).then(() => true, () => false);
+  bSock.emit('runRoll', { tokenId: heroTok.id });
+  ok(!(await again), 'a second run roll this turn is refused silently');
 }
 
 // ---------- 3. removing a combatant keeps the turn where it was ----------

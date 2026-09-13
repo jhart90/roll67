@@ -2405,6 +2405,7 @@ export const intents = {
     useGameStore.setState({ incapPrompt: null });
   },
   /** Accept the run: roll the running die to extend this turn's Pace. */
+  commitMove: (tokenId: string) => socket.emit(C2S.COMMIT_MOVE, { tokenId }),
   runRoll: (tokenId: string) => {
     socket.emit(C2S.RUN_ROLL, { tokenId });
     useGameStore.setState({ runPrompt: null });

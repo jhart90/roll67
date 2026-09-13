@@ -2958,6 +2958,18 @@ th > .term { border-bottom-style: dotted; }
 }
 .turn-banner strong { font-size: 14px; }
 .turn-banner-sub { font-size: 10px; opacity: 0.8; }
+/* The "commit movement" offer hangs just under the bar, centred like the
+   banner it belongs to. Its own fill, because it must read on any player
+   colour the bar happens to be wearing. */
+.commit-move-chip,
+.topbar.in-combat .commit-move-chip {
+  position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);
+  width: auto; margin: 0; padding: 3px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  background: #2f6f4a; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); z-index: 62; cursor: pointer;
+}
+.commit-move-chip:hover, .topbar.in-combat .commit-move-chip:hover { background: #3a8a5c; }
 /* While someone is up the whole bar wears their color, so EVERY piece of text
    in it has to inherit the readable ink rather than keep its own — a dim grey
    or an accent tan is legible on the panel it was chosen for and on nothing

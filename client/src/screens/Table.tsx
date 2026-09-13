@@ -51,6 +51,7 @@ import { AudioPlayer } from '../table/AudioPlayer';
 import { Jukebox } from '../panels/Jukebox';
 import { WindowHost } from '../window/WindowHost';
 import { TurnBanner, useTurnTint } from '../panels/TurnBanner';
+import { CommitMoveChip } from '../table/CommitMoveChip';
 
 const PLAYER_TOOLS: Array<{ id: Tool; icon: string; label: string }> = [
   { id: 'select', icon: '➤', label: 'Select / move (pan with drag)' },
@@ -223,6 +224,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           </>
         )}
         <TurnBanner />
+        <CommitMoveChip />
         <button onClick={() => setShowAudio((v) => !v)} title="Jukebox">🎵</button>
         <button
           onClick={() => openWindow('settings', 'me', {}, 'Settings')}

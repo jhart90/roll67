@@ -191,6 +191,9 @@ export const C2S = {
   INCAP_DEATH: 'incapDeath',
   /** SWADE: roll the running die to move past Pace this turn. */
   RUN_ROLL: 'runRoll',
+  /** Make this turn's wandering permanent: the Pace it cost is spent and the
+   *  reach is re-measured from where the token now stands. */
+  COMMIT_MOVE: 'commitMove',
   /** SWADE: jump — clears rough ground, and Athletics can extend it. */
   JUMP_ROLL: 'jumpRoll',
   /** SWADE: answer the crawl prompt — stand up, or stay down. */
@@ -1463,6 +1466,7 @@ export interface IncapPromptPayload {
   canSoak: boolean;
 }
 export interface RunRollPayload { tokenId: string }
+export interface CommitMovePayload { tokenId: string }
 export interface RunPromptPayload { tokenId: string; name: string; pace: number; moved: number }
 /** SWADE: a prone character asked to move. Standing costs 2″ of this turn's
  *  Pace; crawling keeps them down, is capped at 2″, and ignores rough ground. */
@@ -1522,15 +1526,20 @@ export interface GmBenniesPayload { count: number }
  */
 export interface MoveBudgetPayload {
   tokenId: string;
-  /** Where the token stood when this was measured. The client predicts moves
-   *  optimistically, so drawing the reach around the PREDICTED hex slid the
-   *  whole area a step ahead and then snapped it back when the real budget
-   *  arrived. Anchored here, it simply waits and redraws once. */
+  /** Where this turn's movement is measured FROM: the hex the token stood on
+   *  when the turn began, or where it last committed. The reach is drawn
+   *  around this, not around the token — a token may wander anywhere inside
+   *  the band and come back, and the band does not move with it. */
   from: { q: number; r: number };
   /** The turn's allowance in inches, already adjusted for standing/crawling. */
   pace: number;
-  /** Inches spent so far this turn. */
+  /** Inches COMMITTED so far this turn — spent for good. */
   moved: number;
+  /** Inches the token's current position would cost from `from` if it
+   *  committed now. Movement inside the reach is provisional until the
+   *  player commits it or takes an action; until then they may think again
+   *  and walk somewhere else for the same Pace. */
+  provisional: number;
   /** The running die's bonus, once it has been rolled; null if it has not. */
   runBonus: number | null;
   /** The most that die could possibly add, for the "if you ran" band drawn

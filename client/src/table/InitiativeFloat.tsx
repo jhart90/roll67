@@ -44,7 +44,7 @@ export function InitiativeFloat() {
   // The same signal the turn coach lights up on: the rules' one demand is
   // dealt with and the turn has been used for something.
   const budget = upTokenId ? budgets[upTokenId] : undefined;
-  const turnSpent = !!budget && !budget.shaken && (budget.actions > 0 || budget.moved > 0);
+  const turnSpent = !!budget && !budget.shaken && (budget.actions > 0 || budget.moved + budget.provisional > 0);
   const myTurn = isMine || you.role === 'dm';
   // Rotate so whoever is up leads the list. Only the DISPLAY rotates — the
   // stored order and turnIdx stay put, which keeps round counting and the DM's

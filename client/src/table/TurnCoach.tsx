@@ -58,7 +58,10 @@ export function TurnCoach() {
   // — the range on every weapon is in feet, so the two numbers a player is
   // holding at once should be in the same unit.
   const feetPerHex = map && map.grid.feetPerHex > 0 ? map.grid.feetPerHex : 5;
-  const moveLeft = Math.max(0, budget.pace + (budget.runBonus ?? 0) - budget.moved);
+  // What would be left if they stayed where they are now — provisional
+  // ground counts, since the coach is telling them what a step from HERE
+  // would leave.
+  const moveLeft = Math.max(0, budget.pace + (budget.runBonus ?? 0) - budget.moved - budget.provisional);
   const ft = (hexes: number) => `${hexes * feetPerHex} ft`;
   const acted = budget.actions;
   const shaken = budget.shaken;
@@ -112,7 +115,7 @@ export function TurnCoach() {
 
   // Ready to hand over: the one thing the rules demand is dealt with, and the
   // turn has been used for something.
-  const ready = !shaken && (acted > 0 || budget.moved > 0) && !openBenny;
+  const ready = !shaken && (acted > 0 || budget.moved + budget.provisional > 0) && !openBenny;
 
   return (
     <div className="turn-coach" style={{ top }}>

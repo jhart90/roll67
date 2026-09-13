@@ -840,7 +840,7 @@ function DerivedBlocks({
     <div className="derived-row">
       {section.items.map((item) => {
         const spendable = item.key === 'pace' && budget
-          ? { left: Math.max(0, budget.pace - budget.moved), total: budget.pace }
+          ? { left: Math.max(0, budget.pace - budget.moved - budget.provisional), total: budget.pace }
           : null;
         return (
           <div key={item.key} className={`stat-block${spendable ? ' stat-spendable' : ''}`}>
@@ -962,6 +962,14 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
     () => Object.values(tokens).find((t) => t.characterId === character.id && t.mapId === mapId),
     [tokens, character.id, mapId],
   );
+  // The running die is a real run when it is this token's turn in a fight:
+  // it goes through the same path as the map's "run?" prompt, so it adds to
+  // this turn's Pace, takes the −2, and can only happen once — the button
+  // greys out after. Out of combat it is just a die like any other.
+  const upTokenId = useGameStore((s) => (s.initiativeState.active ? s.initiativeState.entries[s.initiativeState.turnIdx]?.tokenId ?? null : null));
+  const budgets = useGameStore((s) => s.moveBudgets);
+  const runsForReal = character.system === 'swade' && !!myToken && upTokenId === myToken.id;
+  const runSpent = runsForReal && budgets[myToken.id]?.runBonus != null;
 
   const groups = useMemo(() => {
     const out = new Map<string, Rollable[]>();
@@ -1204,16 +1212,21 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
             // so a weapon that isn't in hand greys out in both or the two lists
             // disagree about what you can do with it.
             const stowed = character.system === 'swade' && swadeStowedRollable(character.sheet, r.id);
+            const isRun = r.id === 'running' && runsForReal;
             return (
               <div key={r.id} className="roll-row">
                 <button
                   className={`roll-btn${stowed ? ' action-stowed' : ''}`}
-                  disabled={!canRoll || noSlots || stowed}
+                  disabled={!canRoll || noSlots || stowed || (isRun && runSpent)}
                   title={stowed ? `${r.label} isn't in hand — tick Wielded on its card to use it`
-                    : noSlots ? `No level-${r.slotLevel}+ spell slot available` : r.expr}
+                    : noSlots ? `No level-${r.slotLevel}+ spell slot available`
+                      : isRun && runSpent ? 'Already run this turn — once per turn'
+                        : isRun ? `Run: add ${r.expr} to this turn's Pace, −2 to other actions` : r.expr}
                   onClick={() => r.slotLevel
                     ? useGameStore.getState().beginCast(character.id, r.id, r.slotLevel, r.label)
-                    : intents.sheetRoll(character.id, r.id, r.d20 ? wireAdv(adv) : null)}
+                    : isRun && myToken
+                      ? intents.runRoll(myToken.id)
+                      : intents.sheetRoll(character.id, r.id, r.d20 ? wireAdv(adv) : null)}
                 >
                   <span>{r.label}{r.slotLevel ? <span className="slot-tag">L{r.slotLevel}</span> : null}</span>
                   <span className="roll-btn-expr">{r.expr}</span>

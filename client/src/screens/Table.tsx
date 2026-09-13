@@ -610,10 +610,13 @@ function RollCallout() {
   const announced = useGameStore((s) => s.rollCallout);
   const members = useGameStore((s) => s.members);
   const top = useTopChrome(['.turn-coach']);
+  // The announcement that precedes a roll shares the roll's id, so the
+  // banner is ONE element from "X rolls Y" through the dice landing rather
+  // than two that pop in one after the other.
   const shown = anim
     ? { key: `anim-${anim.id}`, name: anim.who, what: anim.what, tone: anim.tone, byUserId: anim.byUserId }
     : announced
-      ? { key: `evt-${announced.id}`, name: announced.name, what: announced.what, tone: 'neutral' as const, byUserId: null }
+      ? { key: `anim-${announced.id}`, name: announced.name, what: announced.what, tone: announced.tone ?? 'neutral' as const, byUserId: announced.byUserId ?? null }
       : null;
   if (!shown) return null;
   // The roller's own color, the one their pill and their tokens already wear,

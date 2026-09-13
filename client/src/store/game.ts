@@ -119,12 +119,34 @@ function pumpChatQueue(): void {
     return;
   }
   activeRoll = next;
-  useGameStore.setState({ diceAnim: next.roll.anim, diceAnimEnding: false });
-  // The overlay reports the true finish via diceAnimationFinished(); this only
-  // covers the case where no overlay is mounted to report back.
-  const animMs = estimateDiceAnimMs(next.roll.dice);
-  fallbackTimer = setTimeout(() => finishRoll(next.roll!.id), animMs + 500);
+  const anim = next.roll.anim;
+  const { id: rollId, dice } = next.roll;
+  // Say who is rolling what BEFORE the dice fly, for everyone, every time.
+  // A T-Rex's bite and the Strength roll to shrug it off land seconds apart
+  // in the same corner of the screen, and a table that only sees "Failure"
+  // cannot tell whose. The banner names the roller and the roll, holds for
+  // ANNOUNCE_MS, and only then do the dice go up — the same beat on every
+  // client, because every client runs this same queue in the server's
+  // order. Where the server has already put up its own announcement for
+  // this roller (a group save names each one in turn) there is nothing to
+  // add, and the dice follow at once.
+  const already = useGameStore.getState().rollCallout;
+  const announceMs = already && already.name === anim.who ? 0 : ANNOUNCE_MS;
+  useGameStore.setState({ rollCallout: { id: rollId, name: anim.who, what: anim.what, tone: anim.tone, byUserId: anim.byUserId } });
+  announceTimer = setTimeout(() => {
+    announceTimer = null;
+    if (activeRoll !== next) return;
+    useGameStore.setState({ diceAnim: anim, diceAnimEnding: false, rollCallout: null });
+    // The overlay reports the true finish via diceAnimationFinished(); this
+    // only covers the case where no overlay is mounted to report back.
+    const animMs = estimateDiceAnimMs(dice);
+    fallbackTimer = setTimeout(() => finishRoll(rollId), animMs + 500);
+  }, announceMs);
 }
+
+/** How long "X rolls Y" holds on every screen before X's dice are thrown. */
+const ANNOUNCE_MS = 2000;
+let announceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function finishRoll(id: number): void {
   if (activeRoll?.roll?.id !== id) return; // already finished, or not the active one
@@ -150,6 +172,7 @@ export function diceAnimationFinished(id: number): void {
 function resetChatQueue(): void {
   if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
   if (gapTimer) { clearTimeout(gapTimer); gapTimer = null; }
+  if (announceTimer) { clearTimeout(announceTimer); announceTimer = null; }
   chatQueue.length = 0;
   activeRoll = null;
   lastRollEndedAt = 0;
@@ -500,7 +523,7 @@ interface GameState {
   localMusicVolume: number;
   /** This device's own sound-effects volume (soundboard hits, dice rattles). */
   /** Whose roll is about to land, shown across the map. */
-  rollCallout: { id: number; name: string; what: string } | null;
+  rollCallout: { id: number; name: string; what: string; tone?: RollCalloutTone; byUserId?: string | null } | null;
   /** A Benny being spent — the coin flip everyone at the table watches. */
   bennyFlip: { id: number; name: string; reason: string; face: 'benny' | 'csb' } | null;
   localSfxVolume: number;

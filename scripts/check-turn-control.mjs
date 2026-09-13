@@ -209,6 +209,33 @@ console.log('removing combatants:');
   ok(state.round === 2, `...and the round rolls over (${state.round})`);
 }
 
+// ---------- 4. a granted Advance lives on the sheet and is spent by taking one ----------
+console.log('granted Advances:');
+{
+  // Hero is B's now. The DM grants twice; B takes one; one is left.
+  const one = waitFor(bSock, 'characterUpserted', 6000, (p) => p.character.id === hero.id && p.character.sheet.grantedAdvances === 1);
+  dmSock.emit('updateCharacter', { characterId: hero.id, patch: { grantedAdvances: 1 } });
+  ok(!!(await quiet(one)), 'the owner\'s client receives the sheet with one Advance waiting');
+  const two = waitFor(bSock, 'characterUpserted', 6000, (p) => p.character.id === hero.id && p.character.sheet.grantedAdvances === 2);
+  dmSock.emit('updateCharacter', { characterId: hero.id, patch: { grantedAdvances: 2 } });
+  ok(!!(await quiet(two)), 'a second grant stacks (2 waiting)');
+  // B takes an Advance: the same sheet write that raises `advances` spends a
+  // grant, so there is no moment in which the wizard would re-open.
+  const spent = waitFor(bSock, 'characterUpserted', 6000, (p) => p.character.id === hero.id && p.character.sheet.advances === 1);
+  bSock.emit('updateCharacter', { characterId: hero.id, patch: { advances: 1, rank: 'Novice' } });
+  const after = await quiet(spent);
+  ok(after?.character.sheet.grantedAdvances === 1, `taking an Advance spends one grant in the same write (${after?.character.sheet.grantedAdvances} left)`);
+  // An ordinary sheet edit leaves the grant alone.
+  const edit = waitFor(bSock, 'characterUpserted', 6000, (p) => p.character.id === hero.id && p.character.sheet.notesX === 'hi');
+  bSock.emit('updateCharacter', { characterId: hero.id, patch: { notesX: 'hi' } });
+  const plain = await quiet(edit);
+  ok(plain?.character.sheet.grantedAdvances === 1, 'an unrelated sheet edit does not spend a grant');
+  // The DM takes the offer back.
+  const revoked = waitFor(bSock, 'characterUpserted', 6000, (p) => p.character.id === hero.id && p.character.sheet.grantedAdvances === 0);
+  dmSock.emit('updateCharacter', { characterId: hero.id, patch: { grantedAdvances: 0 } });
+  ok(!!(await quiet(revoked)), 'revoking clears it on the owner\'s screen');
+}
+
 for (const s of [dmSock, aSock, bSock]) s.close();
 console.log('');
 console.log(failures === 0 ? 'turn-control: all checks passed' : `turn-control: ${failures} check(s) FAILED`);

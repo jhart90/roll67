@@ -101,10 +101,24 @@ export function WindowFrame({ win, children }: { win: WindowInstance; children: 
     window.addEventListener('pointerup', onUp);
   }
 
+  // Popped out, the browser window is the frame and minimizing is its job.
+  const minimized = !!win.minimized && !win.poppedOut;
   const bar = (
-    <div className={`win-frame-bar ${win.poppedOut ? 'win-frame-bar-popped' : ''}`} onPointerDown={win.poppedOut ? undefined : startDrag}>
+    <div
+      className={`win-frame-bar ${win.poppedOut ? 'win-frame-bar-popped' : ''} ${minimized ? 'win-frame-bar-min' : ''}`}
+      onPointerDown={win.poppedOut ? undefined : startDrag}
+    >
       <span className="win-frame-title">{win.title}</span>
       <span className="spacer" />
+      {!win.poppedOut && (
+        <button
+          className="link"
+          title={minimized ? 'Open back up' : 'Minimize to its title bar (keeps your place)'}
+          onClick={() => useWindowManager.getState().toggleMinimize(win.id)}
+        >
+          {minimized ? '▢' : '—'}
+        </button>
+      )}
       <button
         className="link"
         title={win.poppedOut ? 'Bring back into the main window' : 'Pop out to its own window'}
@@ -112,7 +126,11 @@ export function WindowFrame({ win, children }: { win: WindowInstance; children: 
       >
         {win.poppedOut ? '⧉ pop in' : '⧉ pop out'}
       </button>
-      <button className="link" onClick={() => useWindowManager.getState().closeWindow(win.id)}>✕</button>
+      {/* A locked window has no ✕: whatever is inside decides when it is
+          done. It can still be moved, minimized and popped out. */}
+      {!win.locked && (
+        <button className="link" onClick={() => useWindowManager.getState().closeWindow(win.id)}>✕</button>
+      )}
     </div>
   );
 
@@ -141,7 +159,9 @@ export function WindowFrame({ win, children }: { win: WindowInstance; children: 
       onPointerDownCapture={() => useWindowManager.getState().focusWindow(win.id)}
     >
       {bar}
-      <div className="win-frame-body">{children}</div>
+      {/* Hidden, not unmounted: minimizing a wizard must not lose the
+          choices made in it so far. */}
+      <div className="win-frame-body" hidden={minimized}>{children}</div>
     </div>
   );
 }

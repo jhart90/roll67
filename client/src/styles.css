@@ -1467,6 +1467,11 @@ button.link:hover { text-decoration: underline; }
   max-width: none;
   cursor: default;
 }
+/* Minimized: the bar is the whole window, so it closes its own bottom edge. */
+.win-frame-bar-min {
+  border-bottom: 1px solid var(--border);
+  border-radius: 10px;
+}
 .win-frame-title {
   font-weight: 600;
   font-size: 13px;

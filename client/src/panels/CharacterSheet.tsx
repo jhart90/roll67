@@ -1373,6 +1373,12 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
     intents.chat(`${character.name} ${verb} ${itemName}.`);
   }
 
+  // The DM looking at a character somebody ELSE runs: advancement is that
+  // player's decision, so the button here grants rather than opens.
+  const grantable = you.role === 'dm' && !!character.ownerUserId && character.ownerUserId !== you.userId;
+  const grantedPending = Math.max(0, Math.floor(Number(character.sheet.grantedAdvances ?? 0)) || 0);
+  const advanceWord = character.system === 'swade' ? 'Advance' : 'Level Up';
+
   return (
     <>
       <div className="sheet-window">
@@ -1392,7 +1398,7 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
           <span className="spacer" />
           {/* Both open as their own windows rather than modals over this one:
               picking an Advance means reading the sheet underneath it. */}
-          {editable && (
+          {editable && !grantable && (
             <button
               className="link"
               onClick={() => openWindow('levelUp', character.id,
@@ -1400,6 +1406,33 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
             >
               {character.system === 'swade' ? '⬆ Advance' : '⬆ Level Up'}
             </button>
+          )}
+          {/* Someone else's character: the DM does not pick their Advance for
+              them. Granting one puts the wizard on THAT player's screen —
+              locked open until they have taken it — and the grant lives on
+              the sheet, so it keeps if they are offline or refresh. */}
+          {grantable && (
+            <>
+              <button
+                className="link"
+                title={`Open the ${advanceWord} wizard on ${character.name}'s player's screen; they make the choices.`}
+                onClick={() => {
+                  intents.updateCharacter(character.id, { grantedAdvances: grantedPending + 1 });
+                  intents.chat(`⬆ ${character.name} is granted ${character.system === 'swade' ? 'an Advance' : 'a level'} — their player chooses.`);
+                }}
+              >
+                ⬆ Grant {advanceWord}
+              </button>
+              {grantedPending > 0 && (
+                <span className="dim" style={{ fontSize: 12 }}>
+                  {grantedPending} waiting ·{' '}
+                  <button className="link" title="Take the offer back; the wizard closes on their screen"
+                    onClick={() => intents.updateCharacter(character.id, { grantedAdvances: 0 })}>
+                    revoke
+                  </button>
+                </span>
+              )}
+            </>
           )}
           {/* Handing out gear is the DM's call — players don't shop the
               compendium straight onto their own sheets. */}

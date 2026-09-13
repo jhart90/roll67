@@ -478,6 +478,17 @@ function applyCharacterPatch(
   // sheet as it stands, before the patch lands.
   const reorders = reorderMapsFor(character.sheet, patch);
   const sheet = { ...character.sheet, ...scrubNonFinite(patch) };
+  // Taking an Advance (or a level) spends one the DM granted. Done here, in
+  // the same write as the advancement itself, so the player's client sees
+  // ONE sheet in which both have happened — a separate follow-up patch left
+  // a window in which the grant still read as waiting and the wizard
+  // re-opened for a beat before closing again.
+  const granted = num(character.sheet, 'grantedAdvances', 0);
+  if (granted > 0) {
+    const took = num(patch, 'advances', -1) > num(character.sheet, 'advances', 0)
+      || num(patch, 'level', -1) > num(character.sheet, 'level', 0);
+    if (took) sheet.grantedAdvances = granted - 1;
+  }
   characters.update(character.id, name, sheet);
   const updated = characters.byId(character.id)!;
   emitCharacter(io, campaignId, updated);

@@ -1396,6 +1396,9 @@ export function wireSocket(): void {
     const s = useGameStore.getState();
     useGameStore.setState({ characters: s.characters.filter((c) => c.id !== characterId) });
     closeWindow(`characterSheet:${characterId}`);
+    // A locked Advance wizard for a character that is no longer mine has
+    // nothing to lock over; it would sit there rendering nothing.
+    closeWindow(`levelUp:${characterId}`);
   });
 
   socket.on(S2C.CHAT, ({ msg }: { msg: ChatMessage }) => {

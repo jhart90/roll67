@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { intents, useGameStore, wireSocket, type DockTab, type Tool, type TerrainBrush } from '../store/game';
-import { openWindow } from '../store/windowManager';
+import { closeWindow, openWindow, useWindowManager } from '../store/windowManager';
 import { inkOnDark, playerColorFor } from '../util/playerColor';
 import { TurnCoach } from '../table/TurnCoach';
 import { useTopChrome } from '../util/topChrome';
@@ -133,6 +133,28 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
     openWindow('characterCreator', 'new', {}, 'Create a Character');
     useGameStore.getState().setShowCharacterCreator(false);
   }, [showCharacterCreator]);
+
+  // A granted Advance is a fact on the sheet, not a message that can be
+  // missed: whenever a character of mine has one waiting, its wizard is
+  // open and locked (no ✕ — movable and minimizable, so the sheet is still
+  // readable under it). Taking the Advance spends the grant server-side and
+  // closes it; the DM revoking it closes it too. Driven off the sheet so a
+  // refresh, a reconnect, or being offline when it was granted all land in
+  // the same place.
+  useEffect(() => {
+    if (you?.role !== 'player') return;
+    for (const c of characters) {
+      if (c.ownerUserId !== you.userId) continue;
+      const id = `levelUp:${c.id}`;
+      const open = useWindowManager.getState().windows.find((w) => w.id === id);
+      const pending = Math.floor(Number(c.sheet.grantedAdvances ?? 0)) > 0;
+      if (pending && (!open || !open.locked)) {
+        openWindow('levelUp', c.id, { granted: true }, `${c.system === 'swade' ? 'Advance' : 'Level Up'} — ${c.name}`, { locked: true });
+      } else if (!pending && open?.locked) {
+        closeWindow(id);
+      }
+    }
+  }, [characters, you]);
 
   // Changing a style control restyles the selected label as you go; with
   // nothing selected it just arms the next label you place.

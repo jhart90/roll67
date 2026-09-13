@@ -44,17 +44,27 @@ export interface WindowInstance {
   /** Centered in the map pane (DM-pushed handouts) until the user drags it —
    *  x/y are ignored while set. */
   centered?: boolean;
+  /** No ✕: the content decides when it is finished (a granted Advance the
+   *  player has to take). Still movable and minimizable — a window you
+   *  cannot get past is a window you cannot read your sheet under. */
+  locked?: boolean;
+  /** Collapsed to its title bar. The content stays mounted so a half-done
+   *  wizard keeps its place. */
+  minimized?: boolean;
 }
+
+export interface OpenWindowOpts { centered?: boolean; locked?: boolean }
 
 interface WindowManagerState {
   windows: WindowInstance[];
   topZ: number;
-  openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string, opts?: { centered?: boolean }): void;
+  openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string, opts?: OpenWindowOpts): void;
   closeWindow(id: string): void;
   focusWindow(id: string): void;
   moveWindow(id: string, x: number, y: number): void;
   popOut(id: string): void;
   popIn(id: string): void;
+  toggleMinimize(id: string): void;
 }
 
 const CASCADE_STEP = 28;
@@ -69,9 +79,12 @@ export const useWindowManager = create<WindowManagerState>((set, get) => ({
     const existing = get().windows.find((w) => w.id === id);
     const z = get().topZ + 1;
     if (existing) {
+      // Opening again means "show me": a minimized one comes back up.
       set((s) => ({
         topZ: z,
-        windows: s.windows.map((w) => (w.id === id ? { ...w, props, title, z, ...(opts?.centered ? { centered: true } : {}) } : w)),
+        windows: s.windows.map((w) => (w.id === id
+          ? { ...w, props, title, z, minimized: false, ...(opts?.centered ? { centered: true } : {}), ...(opts?.locked ? { locked: true } : {}) }
+          : w)),
       }));
       return;
     }
@@ -84,8 +97,13 @@ export const useWindowManager = create<WindowManagerState>((set, get) => ({
         y: 48 + slot * CASCADE_STEP,
         poppedOut: false,
         ...(opts?.centered ? { centered: true } : {}),
+        ...(opts?.locked ? { locked: true } : {}),
       }],
     }));
+  },
+
+  toggleMinimize(id) {
+    set((s) => ({ windows: s.windows.map((w) => (w.id === id ? { ...w, minimized: !w.minimized } : w)) }));
   },
 
   closeWindow(id) {
@@ -111,7 +129,7 @@ export const useWindowManager = create<WindowManagerState>((set, get) => ({
   },
 }));
 
-export function openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string, opts?: { centered?: boolean }): void {
+export function openWindow(kind: WindowKind, key: string, props: Record<string, unknown>, title: string, opts?: OpenWindowOpts): void {
   useWindowManager.getState().openWindow(kind, key, props, title, opts);
 }
 

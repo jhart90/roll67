@@ -91,7 +91,7 @@ function killTree(proc) {
 
 async function main() {
   // Cheap and static first: most breakage dies here in under a minute.
-  await stage('typecheck (all workspaces + hook guard)', 'npm', ['run', 'typecheck']);
+  await stage('typecheck (all workspaces + hook/listener guards)', 'npm', ['run', 'typecheck']);
   await stage('unit tests (shared)', 'npm', ['test']);
   await stage('upload pipeline + thumbnails', 'npm', ['run', 'check:uploads']);
 

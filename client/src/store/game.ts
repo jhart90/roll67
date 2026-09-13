@@ -1596,10 +1596,15 @@ export function wireSocket(): void {
 
   socket.on(S2C.MOVE_LOCK, (p: MoveLockPayload) => {
     useGameStore.setState({ moveLocked: p.locked === true });
+  });
 
+  // Sibling of the above, not a child: this used to sit INSIDE the
+  // move-lock handler, so the client only began listening for dice-lock
+  // changes once movement had been locked at least once — and the DM's
+  // padlock stayed "held" after freeing the dice, while chat and the
+  // players said otherwise.
   socket.on(S2C.ROLL_LOCK, (p: RollLockPayload) => {
     useGameStore.setState({ rollLocked: p.locked === true });
-  });
   });
 
   socket.on(S2C.DICE_SPEED, (p: DiceSpeedPayload) => {

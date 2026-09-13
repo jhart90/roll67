@@ -152,6 +152,36 @@ console.log('DM sets the turn:');
   ok(state.entries.map((e) => e.tokenId).join() === [heroTok, gobTok, dumTok].map((t) => t.id).join(), 'the order itself is untouched');
 }
 
+// ---------- 2b. the DM's Pace dial works before the first step, both ways ----------
+console.log('DM adjusts Pace:');
+{
+  // Hero is up and has not moved. "-" used to be a silent no-op here (no
+  // movement record to edit yet) and "+" could never exceed the sheet.
+  const base = (await (async () => {
+    const w = waitFor(bSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id && p.pace !== undefined);
+    dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: -1 });
+    return quiet(w);
+  })());
+  ok(!!base, 'taking an inch away before any movement produces a new budget');
+  const w2 = waitFor(bSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id && p.pace === (base?.pace ?? -9) + 3);
+  dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: 1 });
+  dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: 1 });
+  dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: 1 });
+  const grown = await quiet(w2);
+  ok(!!grown, `three "+" nudges raise the allowance past the sheet's own Pace (${base?.pace} -> ${grown?.pace})`);
+  const dmSees = waitFor(dmSock, 'moveBudget', 6000, (p) => p.tokenId === heroTok.id && p.pace === (grown?.pace ?? -9) - 1);
+  dmSock.emit('adjustPace', { tokenId: heroTok.id, delta: -1 });
+  ok(!!(await quiet(dmSees)), 'the DM\'s own screen receives the adjusted budget too');
+  // A move is measured against the adjusted figure: with Pace now base+1,
+  // a step of base+1 hexes must be allowed.
+  const target = { q: heroTok.q + (grown?.pace ?? 0) - 1, r: heroTok.r };
+  const moved = waitFor(dmSock, 'tokenMoved', 6000, (p) => p.tokenId === heroTok.id);
+  const refused = waitFor(dmSock, 'errorMsg', 1500).then(() => true, () => false);
+  dmSock.emit('moveToken', { tokenId: heroTok.id, q: target.q, r: target.r });
+  const [mv, err] = await Promise.all([quiet(moved), refused]);
+  ok(!!mv && !err, `a ${(grown?.pace ?? 0) - 1}-hex step is allowed against the raised allowance (moved ${!!mv}, refused ${err})`);
+}
+
 // ---------- 3. removing a combatant keeps the turn where it was ----------
 console.log('removing combatants:');
 {

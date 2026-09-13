@@ -821,16 +821,20 @@ function DerivedBlocks({
   // Mid-turn, Pace is not a constant — it is an allowance being spent. The
   // budget the map draws its reach from is the same one shown here, so the
   // sheet and the board can never disagree about how far is left.
-  const budget = useGameStore((st) => {
-    if (!characterId) return undefined;
-    const tok = Object.values(st.tokens).find((t) => t.characterId === characterId);
-    return tok ? st.moveBudgets[tok.id] : undefined;
+  //
+  // Only while it is this character's TURN. Budgets linger in the store for
+  // every token that has had one this fight, so without the gate the sheet
+  // showed last turn's leftover ("2/6") over a character who will have a
+  // full six the moment their turn comes round — and the DM's nudges aimed
+  // at whichever of the character's tokens happened to be found first,
+  // which was not always the one in the fight.
+  const paceTokenId = useGameStore((st) => {
+    if (!characterId || !st.initiativeState.active) return null;
+    const up = st.initiativeState.entries[st.initiativeState.turnIdx]?.tokenId;
+    return up && st.tokens[up]?.characterId === characterId ? up : null;
   });
-  // The token the budget belongs to, so the DM's nudges have something to aim
-  // at, and whether this viewer is the DM — only they may hand Pace back.
-  const paceTokenId = useGameStore((st) => (characterId
-    ? Object.values(st.tokens).find((t) => t.characterId === characterId)?.id ?? null
-    : null));
+  const budget = useGameStore((st) => (paceTokenId ? st.moveBudgets[paceTokenId] : undefined));
+  // Whether this viewer is the DM — only they may turn the Pace dial.
   const isDm = useGameStore((st) => st.isDm());
   return (
     <div className="derived-row">
@@ -847,18 +851,19 @@ function DerivedBlocks({
                 : derived[item.key] ?? '—'}
             </span>
             <span className="stat-label"><SheetTerm system={system} label={item.label} /></span>
-            {/* The DM's undo for a misspent step. Only they see it, and only
-                while there is a turn's budget to correct. */}
+            {/* The DM's Pace dial for this turn: an inch more, an inch less.
+                Only they see it, and only while it is this character's turn.
+                Neither button greys out at "full" — the whole point is that
+                the DM may hand out more than the sheet says. */}
             {spendable && isDm && paceTokenId && (
               <span className="pace-nudge">
                 <button
-                  title="Give back 1″ of Pace this turn"
-                  disabled={spendable.left >= spendable.total}
+                  title="Add 1″ of Pace this turn"
                   onClick={() => intents.adjustPace(paceTokenId, 1)}
                 >+</button>
                 <button
                   title="Take away 1″ of Pace this turn"
-                  disabled={spendable.left <= 0}
+                  disabled={spendable.total <= 0}
                   onClick={() => intents.adjustPace(paceTokenId, -1)}
                 >−</button>
               </span>

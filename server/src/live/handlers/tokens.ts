@@ -34,8 +34,26 @@ const proneIntent = new Map<string, 'stand' | 'crawl'>();
 const JUMP_BASE = 1;
 const JUMP_WITH_RUN_UP = 2;
 
-interface TurnMoveRec { moved: number; runBonus: number | null; jump?: number }
+/** `paceAdj` is the DM's thumb on the scale for this one turn: inches added
+ *  to (or taken from) the allowance itself. Lives here so it lapses with the
+ *  rest of the turn's movement. */
+interface TurnMoveRec { moved: number; runBonus: number | null; jump?: number; paceAdj?: number }
 const swadeTurnMoves = new Map<string, Map<string, TurnMoveRec>>();
+
+/** The most the DM can add on top of a character's own Pace in one turn. */
+const MAX_PACE_BONUS = 20;
+
+/**
+ * This turn's Pace allowance for a token — the ONE place it is worked out.
+ * The budget the map draws, the check a move is measured against and the
+ * sheet's spendable figure all used to compute it separately, which held
+ * only as long as nothing could change it mid-turn. Now the DM can.
+ */
+function paceFor(campaignId: string, tokenId: string, sheet: Record<string, unknown>, prone: boolean, crawling: boolean): number {
+  const base = crawling ? CRAWL_PACE : Math.max(1, swadePace(sheet) - (prone ? 2 : 0));
+  const adj = swadeTurnMoves.get(campaignId)?.get(tokenId)?.paceAdj ?? 0;
+  return Math.max(0, base + adj);
+}
 
 /** New turn (or combat over): everyone's movement budget refills. */
 export function resetSwadeTurnMoves(campaignId: string): void {
@@ -113,7 +131,7 @@ function buildMoveBudget(campaignId: string, token: Token, ch: Character): MoveB
   const payload: MoveBudgetPayload = {
     tokenId,
     from: { q: token.q, r: token.r },
-    pace: crawling ? CRAWL_PACE : Math.max(1, swadePace(ch.sheet) - (prone ? 2 : 0)),
+    pace: paceFor(campaignId, tokenId, ch.sheet, prone, crawling),
     moved: rec?.moved ?? 0,
     runBonus: rec?.runBonus ?? null,
     // What a run could still buy: the running die's best face. Spent already,
@@ -132,22 +150,27 @@ function buildMoveBudget(campaignId: string, token: Token, ch: Character): MoveB
 }
 
 /**
- * Give a token back some of the movement it has already spent — or take some.
+ * Add to, or take from, a token's Pace for this turn — the DM's judgement
+ * call, in whole inches.
  *
- * The turn's record only ever counted UP, so a misstep was permanent until the
- * turn ended: the DM could drag the token back, but the drag spent more Pace
- * doing it. This edits the record itself, which is the only thing that can
- * actually undo a step.
+ * This used to hand back only movement already SPENT, clamped at zero: an
+ * undo for a misstep and nothing more. Two things were wrong with that. A
+ * token that had not moved yet had no record to edit, so taking Pace away
+ * before its first step was a silent no-op; and a DM who wanted to grant an
+ * extra inch or two (a situational bonus, a ruling, a mistake on the sheet)
+ * could not, because the button greyed out at full. The adjustment now sits
+ * on the allowance itself, so both directions work from the moment the turn
+ * begins, and everything that measures Pace reads it through paceFor.
  *
- * Clamped at nothing-spent. Handing back more than was ever spent would be
- * granting extra Pace rather than undoing a mistake, and that is what the
- * running die and the DM's own judgement are for.
+ * Bounded so a stuck key cannot hand out a hundred inches: at most
+ * MAX_PACE_BONUS over the sheet, and never below nothing.
  */
-export function adjustSpentMovement(campaignId: string, tokenId: string, delta: number): void {
-  const per = swadeTurnMoves.get(campaignId);
-  const rec = per?.get(tokenId);
-  if (!rec) return;
-  rec.moved = Math.max(0, rec.moved - delta);
+export function adjustPace(campaignId: string, tokenId: string, delta: number, basePace: number): void {
+  const per = swadeTurnMoves.get(campaignId) ?? new Map<string, TurnMoveRec>();
+  swadeTurnMoves.set(campaignId, per);
+  const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
+  rec.paceAdj = Math.max(-basePace, Math.min(MAX_PACE_BONUS, (rec.paceAdj ?? 0) + delta));
+  per.set(tokenId, rec);
 }
 
 export function emitMoveBudget(io: Server, campaignId: string, tokenId: string, only?: Socket): void {
@@ -487,7 +510,7 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
         swadeTurnMoves.set(d.campaignId, per);
         const rec = per.get(tokenId) ?? { moved: 0, runBonus: null };
         // Crawling is its own tiny budget; standing spends 2″ of a normal one.
-        const pace = crawling ? CRAWL_PACE : Math.max(1, swadePace(character.sheet) - (prone ? 2 : 0));
+        const pace = paceFor(d.campaignId, tokenId, character.sheet, prone, crawling);
         // Difficult Ground: each hex of rough terrain entered costs 2" of
         // Pace instead of 1 — walk the hexes the move crosses, not just the
         // straight-line distance. A crawler is already down in it and pays
@@ -718,19 +741,29 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
   }, 'JUMP_ROLL'));
 
-  /** The DM's Pace correction: only they may hand it back, and only in whole
-   *  inches, one nudge at a time. */
+  /** The DM's Pace dial: only they may turn it, only in whole inches, one
+   *  nudge at a time, and only while a fight is on — outside combat there is
+   *  no turn for the adjustment to belong to. */
   socket.on(C2S.ADJUST_PACE, safe(socket, ({ tokenId, delta }: AdjustPacePayload) => {
     const d = sdata(socket);
     if (!d.campaignId) return;
     if (d.role !== 'dm') { emitError(socket, 'Only the DM adjusts Pace.'); return; }
     const step = Math.trunc(Number(delta));
-    if (!Number.isFinite(step) || step === 0 || Math.abs(step) > 20) return;
+    if (!Number.isFinite(step) || step === 0 || Math.abs(step) > MAX_PACE_BONUS) return;
     const token = tokens.byId(tokenId);
     if (!token) return;
     const map = maps.byId(token.mapId);
     if (!map || map.campaignId !== d.campaignId) return;
-    adjustSpentMovement(d.campaignId, tokenId, step);
+    const ch = token.characterId ? characters.byId(token.characterId) : undefined;
+    if (!ch || ch.system !== 'swade') return;
+    if (!initiative.get(d.campaignId).active) { emitError(socket, 'Pace is adjusted during a fight — there is no turn to adjust outside one.'); return; }
+    const conds = conditionsOf(ch.sheet);
+    const prone = conds.includes('prone');
+    const crawling = prone && proneIntent.get(tokenId) === 'crawl';
+    // The floor is the character's own figure for this turn, so "−" can take
+    // it all the way to nothing but no further.
+    const base = crawling ? CRAWL_PACE : Math.max(1, swadePace(ch.sheet) - (prone ? 2 : 0));
+    adjustPace(d.campaignId, tokenId, step, base);
     emitMoveBudget(io, d.campaignId, tokenId);
   }, 'ADJUST_PACE'));
 

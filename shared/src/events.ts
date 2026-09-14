@@ -5,7 +5,7 @@ import type {
   AoePreviewInfo, AoeShape, AssetFolder, AssetInfo, AudioState, AudioTrack,
   CampaignInfo, Character, ChatMessage, DiceSpeed, Door, DoorType, Drawing, DrawingLayerName,
   GameSystem, GridConfig, Handout, Hex, ImpactKind, InitiativeState, LocationNode, Light, LootItem, Macro,
-  MapDef, MapMeta, MapText, MapView, MapZone, MeasureInfo, MemberInfo, PingInfo, Point,
+  MapDef, MapMeta, MapText, MapView, MapZone, MeasureInfo, MemberInfo, PingInfo, Point, WallCrossCheck,
   Counter, NameplateLine, RollableTable, SheetData, Shop, SoundboardSlot, TargetPreviewInfo, Token, TokenLayer, TokenShape, TokenView, VisionStats, WallType, WorldFolder,
 } from './types.js';
 import type { VisibilityLitMask } from './vision/fov.js';
@@ -191,6 +191,8 @@ export const C2S = {
   INCAP_DEATH: 'incapDeath',
   /** SWADE: roll the running die to move past Pace this turn. */
   RUN_ROLL: 'runRoll',
+  /** A player answers a wall's crossing check: which skill, and the move to retry. */
+  WALL_CHECK_ROLL: 'wallCheckRoll',
   /** Make this turn's wandering permanent: the Pace it cost is spent and the
    *  reach is re-measured from where the token now stands. */
   COMMIT_MOVE: 'commitMove',
@@ -316,8 +318,17 @@ export interface SetTerrainPayload { mapId: string; terrain?: number[]; blocked?
 
 export interface UpsertWallPayload {
   mapId: string;
-  wall: { id?: string; points: Point[]; type?: WallType; flip?: boolean; glassColor?: string; rainbow?: boolean };
+  wall: { id?: string; points: Point[]; type?: WallType; flip?: boolean; glassColor?: string; rainbow?: boolean; crossChecks?: WallCrossCheck[] };
 }
+/** A move ran into a wall the DM put a check on: pick a skill and roll, or
+ *  stay put. `q`/`r` is where the move was going, re-sent on a pass. */
+export interface WallCheckPromptPayload {
+  tokenId: string; name: string; wallId: string; checks: WallCrossCheck[]; q: number; r: number;
+}
+export interface WallCheckRollPayload { tokenId: string; wallId: string; skill: string; q: number; r: number }
+/** The check passed: the client sends the same move again, and this time
+ *  the wall is not there for it. */
+export interface WallCheckPassedPayload { tokenId: string; q: number; r: number }
 export interface DeleteWallPayload { mapId: string; wallId: string }
 export interface UpsertDoorPayload {
   mapId: string;
@@ -956,6 +967,8 @@ export const S2C = {
   INCAP_PROMPT: 'incapPrompt',
   /** SWADE: that move needs the running die — confirm or decline. */
   RUN_PROMPT: 'runPrompt',
+  WALL_CHECK_PROMPT: 'wallCheckPrompt',
+  WALL_CHECK_PASSED: 'wallCheckPassed',
   /** SWADE: a prone character is moving — stand up, or crawl? */
   CRAWL_PROMPT: 'crawlPrompt',
   /** SWADE: the fight is over and Extras are lying there — roll for them? */

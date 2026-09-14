@@ -36,6 +36,11 @@ export interface KnownWallSegment {
    * had to assume was solid would refuse shots the server would allow.
    */
   type?: Wall['type'];
+  /** The DM has put a check on this wall: a body may cross it by rolling.
+   *  The client needs it to let a drag across the wall be SENT, so the
+   *  server can ask — a clamp that treated it as stone would never let the
+   *  question be put. What the check is stays with the server until asked. */
+  check?: true;
 }
 
 /**
@@ -61,7 +66,7 @@ const SAMPLES_PER_HEX = 6;
  * exists to prevent. A seam is cosmetic; a leak is not.
  */
 function clipSegment(
-  wallId: string, type: Wall['type'], a: Point, b: Point, grid: GridConfig, seen: (hex: Hex) => boolean,
+  wallId: string, type: Wall['type'], a: Point, b: Point, grid: GridConfig, seen: (hex: Hex) => boolean, check = false,
 ): KnownWallSegment[] {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -80,16 +85,16 @@ function clipSegment(
       if (runStart === null) runStart = t;
       lastKnown = t;
     } else if (runStart !== null) {
-      push(out, wallId, type, a, dx, dy, runStart, lastKnown);
+      push(out, wallId, type, a, dx, dy, runStart, lastKnown, check);
       runStart = null;
     }
   }
-  if (runStart !== null) push(out, wallId, type, a, dx, dy, runStart, lastKnown);
+  if (runStart !== null) push(out, wallId, type, a, dx, dy, runStart, lastKnown, check);
   return out;
 }
 
 function push(
-  out: KnownWallSegment[], wallId: string, type: Wall['type'], a: Point, dx: number, dy: number, t0: number, t1: number,
+  out: KnownWallSegment[], wallId: string, type: Wall['type'], a: Point, dx: number, dy: number, t0: number, t1: number, check = false,
 ): void {
   if (t1 - t0 <= 1e-6) return;
   out.push({
@@ -97,6 +102,7 @@ function push(
     a: { x: a.x + dx * t0, y: a.y + dy * t0 },
     b: { x: a.x + dx * t1, y: a.y + dy * t1 },
     ...(type ? { type } : {}),
+    ...(check ? { check: true as const } : {}),
   });
 }
 
@@ -113,7 +119,7 @@ export function knownWallSegments(
   const out: KnownWallSegment[] = [];
   for (const wall of walls) {
     for (let i = 1; i < wall.points.length; i++) {
-      out.push(...clipSegment(wall.id, wall.type, wall.points[i - 1]!, wall.points[i]!, grid, seen));
+      out.push(...clipSegment(wall.id, wall.type, wall.points[i - 1]!, wall.points[i]!, grid, seen, (wall.crossChecks?.length ?? 0) > 0));
     }
   }
   return out;

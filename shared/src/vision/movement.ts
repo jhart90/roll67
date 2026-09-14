@@ -44,6 +44,39 @@ export function reachableAlong(from: Hex, to: Hex, input: MoveInput): Hex {
 }
 
 /**
+ * reachableAlong, but it also says WHAT stopped the walk when that was a
+ * wall the DM has put a check on.
+ *
+ * Walls with crossChecks are gates rather than stone: a body stops at one
+ * exactly as at any wall, but the answer to "why did I stop" is "roll for
+ * it", not "you can't". So the walk is taken step by step against everything
+ * else first — a closed door or a plain wall in the way wins, gate or no
+ * gate beyond it — and only a halt caused by nothing but an unpassed gate
+ * reports that gate. `passable` names gates already passed this crossing;
+ * those are simply not there.
+ */
+export function walkAlong(
+  from: Hex, to: Hex, input: MoveInput, passable: ReadonlySet<string> = new Set(),
+): { stop: Hex; gate: Wall | null } {
+  if (from.q === to.q && from.r === to.r) return { stop: { ...from }, gate: null };
+  const gates = input.walls.filter((w) => (w.crossChecks?.length ?? 0) > 0 && !passable.has(w.id));
+  const solidWalls = input.walls.filter((w) => !gates.includes(w) && !passable.has(w.id));
+  const solid = blockingSegments(solidWalls, input.doors);
+  const gateSegs = gates.map((w) => ({ wall: w, segs: blockingSegments([w], []) }));
+  const line = hexLine(from, to);
+  let last: Hex = { ...from };
+  for (let i = 1; i < line.length; i++) {
+    const step = line[i];
+    if (!inBounds(step, input.grid)) break;
+    if (solid.length > 0 && stepBlocked(line[i - 1], step, input.grid, solid)) break;
+    const gate = gateSegs.find((g) => stepBlocked(line[i - 1], step, input.grid, g.segs));
+    if (gate) return { stop: last, gate: gate.wall };
+    last = step;
+  }
+  return { stop: last, gate: null };
+}
+
+/**
  * Can a token walk from `from` to `to`? Breadth-first search over hexes,
  * where each step must not cross a wall or closed door. Bounded to a
  * neighbourhood of the endpoints so pathological drags stay cheap.

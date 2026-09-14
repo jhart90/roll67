@@ -195,9 +195,16 @@ export function registerMapEditHandlers(io: Server, socket: Socket): void {
       walls = splitWallsAtOverlap(walls, wall.points[0], wall.points[wall.points.length - 1]);
     }
     const idx = walls.findIndex((w) => w.id === id);
+    // A crossing check is a short list of (skill, target number). Clamped so
+    // a stray keystroke cannot make a TN of 4000 or a skill name a paragraph.
+    const crossChecks = (Array.isArray(wall.crossChecks) ? wall.crossChecks : [])
+      .map((c) => ({ skill: String(c?.skill ?? '').trim().slice(0, 40), tn: Math.round(Number(c?.tn)) }))
+      .filter((c) => c.skill !== '' && Number.isFinite(c.tn) && c.tn >= 1 && c.tn <= 30)
+      .slice(0, 6);
     const next: Wall = {
       id, points: wall.points, type: wall.type ?? 'solid', flip: !!wall.flip,
       ...(wall.type === 'stainedglass' ? { glassColor: wall.glassColor, rainbow: !!wall.rainbow } : {}),
+      ...(crossChecks.length > 0 ? { crossChecks } : {}),
     };
     if (idx >= 0) walls[idx] = next;
     else walls.push(next);

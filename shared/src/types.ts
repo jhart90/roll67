@@ -188,7 +188,16 @@ export interface Wall {
   glassColor?: string;
   /** Stained glass: if true, projects a rainbow fan instead of a single color. */
   rainbow?: boolean;
+  /**
+   * A wall a player may cross by passing a check — a cliff to climb, a river
+   * to swim, a hedge to force. Any one of the listed skills at its own target
+   * number does it; the player picks which to roll. Absent or empty means an
+   * ordinary wall. The DM, who crosses every wall, is never asked.
+   */
+  crossChecks?: WallCrossCheck[];
 }
+
+export interface WallCrossCheck { skill: string; tn: number }
 
 export type DoorType = 'door' | 'gate';
 

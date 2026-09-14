@@ -766,11 +766,15 @@ export function GeometryLayer() {
       {/* Walls a PLAYER has discovered, clipped by the server to the ground
           they have actually explored. Drawn thin and dim: they are there to
           say "you cannot walk through this", not to compete with the map. */}
+      {/* A wall with a crossing check on it is drawn dashed and amber: a
+          thing you can try, not a thing you walk round. */}
       {!isDm && knownWalls.map((seg, i) => (
         <line
           key={`kw-${i}`}
           x1={seg.a.x} y1={seg.a.y} x2={seg.b.x} y2={seg.b.y}
-          stroke={mapColors.wall} strokeWidth={2} strokeLinecap="round" opacity={mapColors.wallOpacity * 0.65}
+          stroke={seg.check ? '#e8b73a' : mapColors.wall} strokeWidth={seg.check ? 3 : 2} strokeLinecap="round"
+          strokeDasharray={seg.check ? '7 5' : undefined}
+          opacity={seg.check ? 0.9 : mapColors.wallOpacity * 0.65}
           pointerEvents="none"
         />
       ))}

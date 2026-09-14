@@ -1,3 +1,4 @@
+import type { WallCheckPassedPayload, WallCheckPromptPayload, WallCrossCheck } from 'shared';
 import { canMoveToken } from 'shared';
 import { create } from 'zustand';
 import { type StorageReportPayload, type UpdateMapObjectPayload,
@@ -378,6 +379,9 @@ interface GameState {
   shakenPrompt: ShakenPromptPayload | null;
   /** SWADE: that move needs the running die — confirm or decline. */
   runPrompt: RunPromptPayload | null;
+  /** A move ran into a wall with a crossing check on it: which skills may
+   *  be rolled, and the move to retry on a pass. */
+  wallCheckPrompt: WallCheckPromptPayload | null;
   /** A prone character is trying to move: stand up, or stay down and crawl? */
   crawlPrompt: CrawlPromptPayload | null;
   /** DM-only: the fight ended with Extras on the floor. Roll for them? */
@@ -714,6 +718,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   stunPrompt: null,
   incapPrompt: null,
   runPrompt: null,
+  wallCheckPrompt: null,
   crawlPrompt: null,
   aftermathPrompt: null,
   clockSeconds: 0,
@@ -959,7 +964,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [], knownWalls: [],
       viewingAs: null, dragGhosts: {}, predictedMoves: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
       worldSelectedKey: null, selectedObjectId: null, worldHover: null,
-      targeting: null, targetChoice: null, movePlan: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
+      targeting: null, targetChoice: null, movePlan: null, wallCheckPrompt: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
       // Transient slices that used to leak into the NEXT campaign: a live
       // ruler from campaign A rendering over campaign B's map, a stale error
       // toast, a presented shop, last session's initiative order.
@@ -1604,8 +1609,19 @@ export function wireSocket(): void {
     }));
   });
 
+  // The two movement questions never share the screen. The wall comes
+  // first by construction (the server asks about the wall before it counts
+  // Pace), and a run prompt arriving means the wall question is answered.
   socket.on(S2C.RUN_PROMPT, (p: RunPromptPayload) => {
-    useGameStore.setState({ runPrompt: p });
+    useGameStore.setState({ runPrompt: p, wallCheckPrompt: null });
+  });
+  socket.on(S2C.WALL_CHECK_PROMPT, (p: WallCheckPromptPayload) => {
+    useGameStore.setState({ wallCheckPrompt: p, runPrompt: null });
+  });
+  // The check passed: the same move again. Whatever the server has to say
+  // about it now (Pace, a run) it says in the usual way.
+  socket.on(S2C.WALL_CHECK_PASSED, (p: WallCheckPassedPayload) => {
+    intents.moveToken(p.tokenId, p.q, p.r);
   });
 
   socket.on(S2C.CRAWL_PROMPT, (p: CrawlPromptPayload) => {
@@ -2077,7 +2093,10 @@ export function clampToKnownWalls(tokenId: string, to: Hex, drag = false): Hex |
 
   // Each fragment is its own two-point wall; reachableAlong only cares about
   // the segments, not which polyline they came from.
-  const walls = s.knownWalls.map((seg, i) => ({
+  // A wall with a check on it is left out on purpose: the drag has to be SENT
+  // for the server to ask the question. It still stops the token — the
+  // server answers with the prompt and puts the token back.
+  const walls = s.knownWalls.filter((seg) => !seg.check).map((seg, i) => ({
     id: `known-${i}`, points: [seg.a, seg.b], type: 'solid' as const,
   }));
   const start = tokenHexFor(from);
@@ -2145,7 +2164,7 @@ export const intents = {
   setTerrain: (mapId: string, sets: { terrain?: number[]; blocked?: number[] } | number[]) =>
     socket.emit(C2S.SET_TERRAIN, { mapId, ...(Array.isArray(sets) ? { terrain: sets } : sets) }),
 
-  upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway' | 'stainedglass'; flip?: boolean; glassColor?: string; rainbow?: boolean }) =>
+  upsertWall: (mapId: string, wall: { id?: string; points: Array<{ x: number; y: number }>; type?: 'solid' | 'window' | 'oneway' | 'stainedglass'; flip?: boolean; glassColor?: string; rainbow?: boolean; crossChecks?: WallCrossCheck[] }) =>
     socket.emit(C2S.UPSERT_WALL, { mapId, wall }),
   deleteWall: (mapId: string, wallId: string) => socket.emit(C2S.DELETE_WALL, { mapId, wallId }),
   upsertDoor: (mapId: string, door: { id?: string; a: { x: number; y: number }; b: { x: number; y: number }; open?: boolean; type?: DoorType; locked?: boolean; keyName?: string | null }) =>
@@ -2468,6 +2487,11 @@ export const intents = {
   },
   /** Accept the run: roll the running die to extend this turn's Pace. */
   commitMove: (tokenId: string) => socket.emit(C2S.COMMIT_MOVE, { tokenId }),
+  wallCheckRoll: (tokenId: string, wallId: string, skill: string, q: number, r: number) => {
+    useGameStore.setState({ wallCheckPrompt: null });
+    jumpToChat();
+    socket.emit(C2S.WALL_CHECK_ROLL, { tokenId, wallId, skill, q, r });
+  },
   runRoll: (tokenId: string) => {
     socket.emit(C2S.RUN_ROLL, { tokenId });
     useGameStore.setState({ runPrompt: null });

@@ -61,6 +61,7 @@ for (const [who, s] of [['dm', dmSock], ['A', aSock], ['B', bSock]]) {
   s.on('errorMsg', (e) => console.log(`      [server error -> ${who}]`, JSON.stringify(e)));
 }
 const st = waitFor(dmSock, 'campaignState');
+const dmMapState = waitFor(dmSock, 'mapState', 8000);
 dmSock.emit('joinCampaign', { campaignId: camp.id });
 const mapId = (await st).campaign.activeMapId;
 const aJoined = waitFor(aSock, 'mapState');
@@ -300,6 +301,74 @@ console.log('map labels:');
   const gone = waitFor(bSock, 'mapEdited', 6000, (p) => p.mapId === mapId && !(p.texts ?? []).some((t) => t.id === 'lbl-mill'));
   dmSock.emit('deleteMapText', { mapId, textId: 'lbl-mill' });
   ok(!!(await quiet(gone)), 'removing it reaches players live');
+}
+
+// ---------- 6. a wall with a crossing check asks before it stops ----------
+console.log('crossing checks:');
+{
+  // Out of combat, so Pace is not in the way: the only question is the wall.
+  const over = waitFor(dmSock, 'initiativeState', 6000, (p) => p.state.active === false);
+  dmSock.emit('initSetActive', { active: false });
+  await over;
+  // Hero (B's) to a known spot; the DM moves freely.
+  const parked = waitFor(dmSock, 'tokenMoved', 6000, (p) => p.tokenId === heroTok.id && p.q === 3 && p.r === 12);
+  dmSock.emit('moveToken', { tokenId: heroTok.id, q: 3, r: 12 });
+  await parked;
+  // A wall across the seam between (3,12) and (4,12), with Athletics TN 2
+  // (a d12 all but cannot miss it) and Climbing TN 30 (nothing can).
+  const grid = (await dmMapState).map.grid;
+  const px = (h) => ({ x: grid.hexSize * Math.sqrt(3) * (h.q + h.r / 2) + grid.originX, y: grid.hexSize * 1.5 * h.r + grid.originY });
+  const a = px({ q: 3, r: 12 }), b = px({ q: 4, r: 12 });
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const wallUp = waitFor(dmSock, 'mapEdited', 6000, (p) => (p.walls ?? []).some((w) => w.crossChecks?.length === 2));
+  dmSock.emit('upsertWall', { mapId, wall: {
+    points: [{ x: mx, y: my - grid.hexSize * 3 }, { x: mx, y: my + grid.hexSize * 3 }], type: 'solid',
+    crossChecks: [{ skill: 'Athletics', tn: 2 }, { skill: 'Climbing', tn: 30 }, { skill: '', tn: 4 }, { skill: 'Notice', tn: 4000 }],
+  } });
+  const walls = (await wallUp).walls;
+  const gate = walls.find((w) => w.crossChecks?.length === 2);
+  ok(!!gate && gate.crossChecks[0].skill === 'Athletics', 'the DM saves two checks on the wall; a blank skill and an absurd TN are dropped');
+  // B has a d12 in Athletics, so TN 2 is missed only on a critical failure.
+  const armed = waitFor(bSock, 'characterUpserted', 6000, (p) => p.character.id === hero.id && (p.character.sheet.skills ?? []).some((s) => s.name === 'Athletics' && s.die === 'd12'));
+  bSock.emit('updateCharacter', { characterId: hero.id, patch: { skills: [{ name: 'Athletics', die: 'd12' }, { name: 'Shooting', die: 'd8' }] } });
+  await armed;
+  // The drag across the wall is answered with the question, not a move.
+  const asked = waitFor(bSock, 'wallCheckPrompt', 6000, (p) => p.tokenId === heroTok.id);
+  const moved = waitFor(dmSock, 'tokenMoved', 1200, (p) => p.tokenId === heroTok.id).then(() => true, () => false);
+  bSock.emit('moveToken', { tokenId: heroTok.id, q: 5, r: 12 });
+  const [prompt, movedAnyway] = await Promise.all([quiet(asked), moved]);
+  ok(!!prompt && !movedAnyway, 'walking into the wall asks for a check instead of moving');
+  ok(prompt?.wallId === gate?.id && prompt?.checks.length === 2 && prompt?.q === 5, 'the prompt names the wall, both skill options, and where the move was going');
+  // The impossible option: the roll posts, the token stays.
+  const failCard = waitFor(bSock, 'chatMsg', 6000, (p) => p.msg.roll && /can't get across/.test(p.msg.text));
+  const notPassed = waitFor(bSock, 'wallCheckPassed', 1200).then(() => true, () => false);
+  bSock.emit('wallCheckRoll', { tokenId: heroTok.id, wallId: gate.id, skill: 'Climbing', q: 5, r: 12 });
+  const [fc, passedAnyway] = await Promise.all([quiet(failCard), notPassed]);
+  ok(!!fc && !passedAnyway, 'failing the check posts the roll and grants nothing');
+  // The near-certain option: a pass tells the client to send the move again,
+  // and this time the wall is not there for it.
+  const passCard = waitFor(bSock, 'chatMsg', 8000, (p) => p.msg.roll && /makes it across|can't get across/.test(p.msg.text) && p.msg.text.includes('Athletics'));
+  const passed = waitFor(bSock, 'wallCheckPassed', 8000, (p) => p.tokenId === heroTok.id).then((p) => p, () => null);
+  bSock.emit('wallCheckRoll', { tokenId: heroTok.id, wallId: gate.id, skill: 'Athletics', q: 5, r: 12 });
+  const [pc, pass] = await Promise.all([quiet(passCard), passed]);
+  if (pc && /can't get across/.test(pc.msg.text)) {
+    console.log('      (critical failure on a d12 vs TN 2 — the one-in-seventy-two; skipping the crossing itself)');
+  } else {
+    ok(!!pass && pass.q === 5 && pass.r === 12, 'passing hands the client the move to send again');
+    const across = waitFor(dmSock, 'tokenMoved', 6000, (p) => p.tokenId === heroTok.id && p.q === 5 && p.r === 12);
+    bSock.emit('moveToken', { tokenId: heroTok.id, q: 5, r: 12 });
+    ok(!!(await quiet(across)), 'the re-sent move crosses the wall');
+    // The pass was for ONE crossing: coming back is a fresh question.
+    const askedAgain = waitFor(bSock, 'wallCheckPrompt', 6000, (p) => p.tokenId === heroTok.id);
+    bSock.emit('moveToken', { tokenId: heroTok.id, q: 3, r: 12 });
+    ok(!!(await quiet(askedAgain)), 'crossing back asks again — a pass is spent by the crossing');
+  }
+  // The DM is never asked.
+  const dmAcross = waitFor(dmSock, 'tokenMoved', 6000, (p) => p.tokenId === heroTok.id && p.q === 2 && p.r === 12);
+  const dmAsked = waitFor(dmSock, 'wallCheckPrompt', 1200).then(() => true, () => false);
+  dmSock.emit('moveToken', { tokenId: heroTok.id, q: 2, r: 12 });
+  const [dmMoved, dmPrompted] = await Promise.all([quiet(dmAcross), dmAsked]);
+  ok(!!dmMoved && !dmPrompted, 'the DM moves the token over the wall without being asked');
 }
 
 for (const s of [dmSock, aSock, bSock]) s.close();

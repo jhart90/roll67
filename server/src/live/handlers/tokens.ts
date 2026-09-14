@@ -1,9 +1,9 @@
 import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, blocksMovement, canMoveToken, conditionsOf, firstFreeHex, getCondition, hexDistance, hexLine, inBounds, packHex,
-  dieSides, pathCost, playerColorFor, reachableAlong, roll, skillDie, str, swadePace, systemFor, traitExpr, vehicleSeats,
+  dieSides, pathCost, playerColorFor, reachableAlong, roll, skillDie, str, swadeCritFail, swadePace, systemFor, traitExpr, vehicleSeats, walkAlong,
   type Character, type CommitMovePayload, type CreateTokenPayload, type DeleteTokenPayload, type DragTokenPayload,
-  type AdjustPacePayload, type GridConfig, type Hex, type JumpRollPayload, type MapDef, type MountTokenPayload, type MoveBudgetPayload, type MoveTokenPayload, type ProneMovePayload, type ReachOpts, type RunRollPayload, type Token, type TokenShape, type UpdateTokenPayload,
+  type AdjustPacePayload, type GridConfig, type Hex, type JumpRollPayload, type MapDef, type MountTokenPayload, type MoveBudgetPayload, type MoveTokenPayload, type ProneMovePayload, type ReachOpts, type RunRollPayload, type Token, type TokenShape, type UpdateTokenPayload, type WallCheckRollPayload,
 } from 'shared';
 import { assets, campaigns, characters, chat, initiative, maps, tokens } from '../../db/repos.js';
 import { db } from '../../db/db.js';
@@ -134,10 +134,27 @@ function paceFor(campaignId: string, tokenId: string, sheet: Record<string, unkn
   return Math.max(0, base + adj);
 }
 
+/**
+ * Crossing checks already passed, per campaign → token → wall: a gate the
+ * check opened stays open for that token until it is actually crossed. The
+ * pass has to outlive the roll because the move that follows it can still be
+ * refused for other reasons (past Pace, so the run prompt) and re-sent.
+ * Lapses with the turn, like everything else about a walk.
+ */
+const wallPasses = new Map<string, Map<string, Set<string>>>();
+function wallPassesFor(campaignId: string, tokenId: string): Set<string> {
+  const per = wallPasses.get(campaignId) ?? new Map<string, Set<string>>();
+  wallPasses.set(campaignId, per);
+  const set = per.get(tokenId) ?? new Set<string>();
+  per.set(tokenId, set);
+  return set;
+}
+
 /** New turn (or combat over): everyone's movement budget refills. */
 export function resetSwadeTurnMoves(campaignId: string): void {
   for (const tokenId of swadeTurnMoves.get(campaignId)?.keys() ?? []) proneIntent.delete(tokenId);
   swadeTurnMoves.delete(campaignId);
+  wallPasses.delete(campaignId);
 }
 
 /** SWADE marks its heroes and named villains as Wild Cards on the sheet;
@@ -521,24 +538,34 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     if (d.role !== 'dm') {
       const outOfCombat = !initiative.get(d.campaignId).active;
       const knownGround = drag === true && outOfCombat && hasSeenHex(d.userId, token.mapId, { q, r });
-      if (!knownGround) {
-        const stop = reachableAlong(
-          { q: token.q, r: token.r },
-          { q, r },
-          { grid: map.grid, walls: map.walls, doors: map.doors },
-        );
-        if (stop.q === token.q && stop.r === token.r) {
-          // Held up against a wall. This used to return in silence, which was
-          // fine while the client waited for permission before moving — it
-          // now moves first and waits to be corrected, so silence left the
-          // token standing inside the wall until its guard expired. Echo the
-          // token back unchanged: no toast for a bump anyone can see, but the
-          // client learns at once that nothing happened.
-          socket.emit(S2C.TOKEN_UPSERTED, { token });
-          return;
-        }
-        dest = stop;
+      // A wall the DM has put a check on is a question, not a stop: the walk
+      // halts in front of it and the player is asked to roll. That holds on
+      // remembered ground too — the drag-onto-known-ground shortcut waives
+      // ordinary walls as busywork, but a cliff with a Climbing check on it
+      // is the point of the room, not a chore.
+      const passes = wallPassesFor(d.campaignId, tokenId);
+      const input = knownGround
+        ? { grid: map.grid, walls: map.walls.filter((w) => (w.crossChecks?.length ?? 0) > 0), doors: [] }
+        : { grid: map.grid, walls: map.walls, doors: map.doors };
+      const walk = walkAlong({ q: token.q, r: token.r }, { q, r }, input, passes);
+      if (walk.gate) {
+        socket.emit(S2C.TOKEN_UPSERTED, { token });
+        socket.emit(S2C.WALL_CHECK_PROMPT, {
+          tokenId, name: token.name, wallId: walk.gate.id, checks: walk.gate.crossChecks ?? [], q, r,
+        });
+        return;
       }
+      if (walk.stop.q === token.q && walk.stop.r === token.r) {
+        // Held up against a wall. This used to return in silence, which was
+        // fine while the client waited for permission before moving — it
+        // now moves first and waits to be corrected, so silence left the
+        // token standing inside the wall until its guard expired. Echo the
+        // token back unchanged: no toast for a bump anyone can see, but the
+        // client learns at once that nothing happened.
+        socket.emit(S2C.TOKEN_UPSERTED, { token });
+        return;
+      }
+      dest = walk.stop;
     }
     // A rider goes where the horse goes. Their own legs are not in play until
     // they get off, so this is refused rather than silently dragging them out
@@ -665,6 +692,16 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
       breakAim(io, d.campaignId, characters.byId(character.id) ?? character, 'moves — the aim is lost.');
     }
     const fromHex = { q: token.q, r: token.r };
+    // A pass is good for one crossing: every gate this step actually goes
+    // through is spent. (Judged wall by wall, so a pass for the cliff is not
+    // used up by walking along it.)
+    const held = wallPasses.get(d.campaignId)?.get(tokenId);
+    if (held?.size) {
+      for (const wallId of [...held]) {
+        const w = map.walls.find((x) => x.id === wallId);
+        if (!w || walkAlong(fromHex, dest, { grid: map.grid, walls: [w], doors: [] }).gate) held.delete(wallId);
+      }
+    }
     tokens.move(tokenId, dest.q, dest.r);
     // Anyone in the saddle travels with it, to the same hex.
     for (const rider of tokens.forMap(token.mapId).filter((t) => t.mountedOn === tokenId)) {
@@ -908,6 +945,44 @@ export function registerTokenHandlers(io: Server, socket: Socket): void {
     io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     emitMoveBudget(io, d.campaignId, tokenId);
   }, 'RUN_ROLL'));
+
+  /**
+   * The answer to a wall's crossing check: roll the chosen skill against its
+   * target number. A pass opens that wall for this token's next crossing
+   * and tells the client to send the move again — the SAME move, so what
+   * follows (Pace, the run prompt) is asked in its usual place, after the
+   * question of whether the wall can be crossed at all. A failure is just a
+   * failure: the token stays put and the table sees the roll.
+   */
+  socket.on(C2S.WALL_CHECK_ROLL, safe(socket, ({ tokenId, wallId, skill, q, r }: WallCheckRollPayload) => {
+    if (!rollGate(socket)) return;
+    const d = requireCampaign(socket);
+    const token = tokens.byId(tokenId);
+    if (!token) return;
+    const character = token.characterId ? characters.byId(token.characterId) : undefined;
+    if (!character || character.system !== 'swade') return;
+    if (!canMoveToken(d.role, d.userId, token, character, moveLockedFor(d.campaignId, d.userId))) return;
+    const map = maps.byId(token.mapId);
+    const wall = map?.walls.find((w) => w.id === wallId);
+    const check = wall?.crossChecks?.find((c) => c.skill.toLowerCase() === String(skill).toLowerCase());
+    if (!map || !wall || !check) return;
+    // Unskilled is d4 at −2, as for any trait the sheet does not list.
+    const sides = skillDie(character.sheet, check.skill);
+    const br = roll(traitExpr(character.sheet, sides || 4, sides ? 0 : -2));
+    const passed = br.total >= check.tn && !swadeCritFail(br.dice, character.sheet.wildCard !== false);
+    if (passed) wallPassesFor(d.campaignId, tokenId).add(wallId);
+    const msg = chat.add(d.campaignId, {
+      userId: d.userId, fromName: d.username, fromCharacter: character.name, characterId: character.id,
+      statsUserId: character.ownerUserId ?? null, kind: 'roll',
+      text: passed
+        ? `${character.name} makes it across — ${check.skill} (TN ${check.tn})`
+        : `${character.name} can't get across — ${check.skill} (TN ${check.tn})`,
+      callout: { what: `${check.skill} — to cross`, tone: 'trait' },
+      roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
+    });
+    io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    if (passed) socket.emit(S2C.WALL_CHECK_PASSED, { tokenId, q: Number(q), r: Number(r) });
+  }, 'WALL_CHECK_ROLL'));
 
   socket.on(C2S.DRAG_TOKEN, safe(socket, ({ tokenId, x, y, done }: DragTokenPayload) => {
     const d = requireCampaign(socket);

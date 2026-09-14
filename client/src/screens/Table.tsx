@@ -43,6 +43,7 @@ import { RoundCardsOverlay } from '../table/RoundCardsOverlay';
 import { CountersOverlay } from '../table/CountersOverlay';
 import { ChaseTrack } from '../table/ChaseTrack';
 import { RunPrompt } from '../table/RunPrompt';
+import { WallCheckPrompt } from '../table/WallCheckPrompt';
 import { CrawlPrompt } from '../table/CrawlPrompt';
 import { AftermathPrompt, HealingPrompt, RepairPrompt, VehicleOocPrompt } from '../table/AftermathPrompt';
 import { PresenceBar } from '../table/PresenceBar';
@@ -540,6 +541,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <StunPrompt />
         <IncapPrompt />
         <RunPrompt />
+        <WallCheckPrompt />
         <TargetChoicePopup />
         <CrawlPrompt />
         <AftermathPrompt />

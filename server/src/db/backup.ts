@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { UPLOADS_DIR } from '../config.js';
-import { db } from './db.js';
+import { db, newId } from './db.js';
 
 /**
  * A whole campaign, out and back in.
@@ -257,6 +257,60 @@ export function collectCampaign(campaignId: string): { manifest: CampaignBackup;
       unaccountedTables: unaccountedTables(),
     },
     files,
+  };
+}
+
+/**
+ * The same campaign, as a new one: every id remade, "(copy)" on the name, a
+ * fresh invite code, and every uploaded file under a new name.
+ *
+ * The restore above is built on ids being preserved, because they live
+ * inside JSON blobs no column-aware rewrite could find. This works for the
+ * opposite reason: ids are long random strings, so an occurrence of one
+ * ANYWHERE in the serialized manifest — a column, a nested sheet row, a chat
+ * card's undo entry — can only be a reference to that entity. One pass over
+ * the text with a map of old to new catches all of them at once. Rows keyed
+ * by an integer (the chat log) simply drop their key and take a fresh one
+ * from the sequence; a thread link between two copied messages is the one
+ * thing that does not survive, which a scratch copy can live with.
+ *
+ * `fileMap` says what each file in the backup should be written AS.
+ */
+export function copyOfBackup(manifest: CampaignBackup): { manifest: CampaignBackup; fileMap: Map<string, string> } {
+  const map = new Map<string, string>();
+  const idLike = (v: unknown): v is string => typeof v === 'string' && v.length >= 12 && /^[A-Za-z0-9_-]+$/.test(v);
+  if (idLike(manifest.campaign?.id)) map.set(manifest.campaign.id, newId());
+  for (const rows of Object.values(manifest.tables ?? {})) {
+    for (const row of rows) if (idLike(row.id) && !map.has(row.id)) map.set(row.id, newId());
+  }
+  const fileMap = new Map<string, string>();
+  for (const f of manifest.files ?? []) {
+    const dot = f.name.lastIndexOf('.');
+    const fresh = `${newId()}${dot > 0 ? f.name.slice(dot) : ''}`;
+    fileMap.set(f.name, fresh);
+    map.set(f.name, fresh);
+  }
+  // Longest first, so a file name never has its id-shaped stem matched on
+  // its own by a shorter key.
+  const keys = [...map.keys()].sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = keys.length ? new RegExp(keys.join('|'), 'g') : null;
+  const swap = (text: string): string => (re ? text.replace(re, (m) => map.get(m) ?? m) : text);
+
+  const tables = JSON.parse(swap(JSON.stringify(manifest.tables ?? {}))) as Record<string, Row[]>;
+  for (const rows of Object.values(tables)) {
+    for (const row of rows) if (typeof row.id === 'number') delete row.id;
+  }
+  const name = `${manifest.campaign.name} (copy)`;
+  const campaignRow = tables.campaigns?.[0];
+  if (campaignRow) { campaignRow.name = name; campaignRow.invite_code = freshInviteCode(); }
+  return {
+    manifest: {
+      ...manifest,
+      campaign: { ...manifest.campaign, id: map.get(manifest.campaign.id) ?? manifest.campaign.id, name },
+      tables,
+      files: (manifest.files ?? []).map((f) => ({ ...f, name: fileMap.get(f.name) ?? f.name })),
+    },
+    fileMap,
   };
 }
 

@@ -61,7 +61,17 @@ function waitFor(socket, event, timeoutMs = 8000, filter = () => true) {
   });
 }
 
-function startServer(port, dataDir) {
+async function startServer(port, dataDir) {
+  // A server already answering on this port is somebody else's — most
+  // likely one this script left behind when an earlier run crashed. Every
+  // check would then run against stale code and pass or fail for reasons
+  // that have nothing to do with the working tree, so refuse loudly.
+  try {
+    const r = await fetch(`http://localhost:${port}/healthz`);
+    if (r.ok) throw new Error(`port ${port} is already serving — a stale server from an earlier run? Kill it and retry.`);
+  } catch (err) {
+    if (err instanceof Error && /already serving/.test(err.message)) throw err;
+  }
   fs.mkdirSync(dataDir, { recursive: true });
   const proc = spawn('npx', ['tsx', 'src/index.ts'], {
     cwd: path.resolve('server'),
@@ -193,10 +203,11 @@ async function main() {
     // restore reunites people with their characters.
     await login(baseB, 'backup_player', 'pw-backup-player-elsewhere');
 
-    async function restore(token_, replace) {
+    async function restore(token_, replace, copy = false) {
       const body = new FormData();
       body.append('file', new Blob([file]), 'campaign.r67campaign');
       if (replace) body.append('replace', 'true');
+      if (copy) body.append('copy', 'true');
       const r = await fetch(`${baseB}/api/campaigns/restore`, { method: 'POST', headers: { Authorization: `Bearer ${token_}` }, body });
       return { status: r.status, data: await r.json().catch(() => ({})) };
     }
@@ -211,6 +222,38 @@ async function main() {
     ok(again.status === 400, 'restoring it a second time refuses rather than duplicating');
     const overwrite = await restore(dmB.token, true);
     ok(overwrite.status === 200, 'restoring with replace overwrites cleanly');
+
+    // ---- As a copy ---------------------------------------------------------
+    console.log('restoring the same file as a copy:');
+    const copied = await restore(dmB.token, false, true);
+    ok(copied.status === 200, `a copy restores beside the original${copied.status === 200 ? '' : `: ${JSON.stringify(copied.data)}`}`);
+    ok(copied.data.campaignId && copied.data.campaignId !== campaignId, 'under a new id');
+    ok(String(copied.data.name).endsWith('(copy)'), `named as a copy (${copied.data.name})`);
+    ok(copied.data.files >= 1, 'with its own set of image files');
+    ok(copied.data.rows?.characters === overwrite.data.rows?.characters && copied.data.rows?.tokens === overwrite.data.rows?.tokens,
+      'carrying every character and token the original has');
+    const shelf = (await api(baseB, '/api/campaigns', undefined, dmB.token)).data;
+    const both = (shelf.campaigns ?? shelf ?? []);
+    ok(both.some((c) => c.id === campaignId) && both.some((c) => c.id === copied.data.campaignId), 'both campaigns sit on the shelf');
+    const orig = both.find((c) => c.id === campaignId);
+    const dup = both.find((c) => c.id === copied.data.campaignId);
+    ok(orig && dup && orig.inviteCode !== dup.inviteCode, 'the copy has its own invite code');
+    // The copy's rows point at the copy, never at the original's ids.
+    const sockOrig = await connect(baseB, dmB.token);
+    const origStateP = waitFor(sockOrig, 'campaignState');
+    sockOrig.emit('joinCampaign', { campaignId });
+    const origState = await origStateP;
+    sockOrig.close();
+    const sockCopy = await connect(baseB, dmB.token);
+    const copyStateP = waitFor(sockCopy, 'campaignState');
+    sockCopy.emit('joinCampaign', { campaignId: copied.data.campaignId });
+    const copyState = await copyStateP;
+    sockCopy.close();
+    ok(copyState.characters.length === origState.characters.length
+      && copyState.characters.every((c) => !origState.characters.some((o) => o.id === c.id))
+      && copyState.characters.every((c) => origState.characters.some((o) => o.name === c.name)),
+      'the copy\'s characters are the same people under new ids');
+    ok(copyState.campaign.id === copied.data.campaignId && copyState.campaign.name.endsWith('(copy)'), 'the copy opens as itself');
 
     // ---- Compare -----------------------------------------------------------
     console.log('comparing the rebuilt campaign against the original:');

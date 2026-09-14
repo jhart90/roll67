@@ -10,7 +10,7 @@ import { UPLOADS_DIR } from '../config.js';
 import { requireAuth, type AuthedRequest } from '../auth.js';
 import { campaigns } from '../db/repos.js';
 import {
-  BACKUP_KIND, campaignAssetFiles, collectCampaign, restoreCampaign, type CampaignBackup, type RestoreReport,
+  BACKUP_KIND, campaignAssetFiles, collectCampaign, copyOfBackup, restoreCampaign, type CampaignBackup, type RestoreReport,
 } from '../db/backup.js';
 
 /**
@@ -139,6 +139,7 @@ backupRouter.post('/campaigns/restore', requireAuth, upload.single('file'), (req
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
   const tmp = req.file.path;
   const replace = String(req.body?.replace ?? '') === 'true';
+  const copy = String(req.body?.copy ?? '') === 'true';
   // Written before the database is touched, so a failure part-way leaves
   // orphaned images rather than rows pointing at pictures that aren't there.
   const written: string[] = [];
@@ -165,6 +166,12 @@ backupRouter.post('/campaigns/restore', requireAuth, upload.single('file'), (req
     pos += manifestLen;
     if (manifest?.kind !== BACKUP_KIND) return res.status(400).json({ error: 'That is not a Roll67 campaign backup.' });
 
+    // "As a copy": a second campaign from the same file, with nothing in
+    // common with the first — new ids, new file names, "(copy)" on the name
+    // — so the DM can experiment in one while the players play in the other.
+    let fileMap = new Map<string, string>();
+    if (copy) ({ manifest, fileMap } = copyOfBackup(manifest));
+
     // What the outgoing copy owned, so a replace can tidy up after itself.
     const existing = campaigns.byId(manifest.campaign?.id ?? '');
     const oldFiles = existing ? campaignAssetFiles(existing.id) : [];
@@ -174,7 +181,9 @@ backupRouter.post('/campaigns/restore', requireAuth, upload.single('file'), (req
     const incoming = new Set<string>();
     while (pos < size) {
       const nameLen = readExact(fd, pos, 4).readUInt32LE(); pos += 4;
-      const name = readExact(fd, pos, nameLen).toString('utf-8'); pos += nameLen;
+      const packed = readExact(fd, pos, nameLen).toString('utf-8'); pos += nameLen;
+      // Under the copy's new name, when this is a copy.
+      const name = fileMap.get(packed) ?? packed;
       const dataLen = readExact(fd, pos, 4).readUInt32LE(); pos += 4;
       if (!SAFE_FILENAME.test(name)) {
         return res.status(400).json({ error: `That backup contains an unacceptable filename (${name.slice(0, 40)}).` });

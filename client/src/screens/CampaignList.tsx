@@ -308,6 +308,9 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
   /** A backup file that names a campaign already on this server, waiting for
    *  the DM to say whether it may overwrite it. */
   const [pending, setPending] = useState<{ file: File; message: string } | null>(null);
+  /** The restore as it happens: the upload's percentage, then the server's
+   *  unpacking (no number, only a sweep), then done. */
+  const [restoreProgress, setRestoreProgress] = useState<{ phase: 'uploading' | 'unpacking' | 'done'; pct: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dragFrom = useRef<number | null>(null);
 
@@ -380,31 +383,63 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
   }
 
   /** Restore-from-backup — the same flow as ever, reskinned. */
-  async function sendRestore(file: File, replace: boolean) {
+  /**
+   * Upload the file and restore it. XMLHttpRequest rather than fetch for
+   * the one thing fetch cannot do: report upload progress. A campaign's
+   * worth of map art takes a while to go up, and then a while again while
+   * the server unpacks it — with nothing on screen, that read as frozen.
+   *
+   * `mode`: 'ask' refuses if the campaign is already here (and offers the
+   * choice), 'replace' overwrites it, 'copy' makes a second campaign with
+   * new ids and "(copy)" on the name.
+   */
+  async function sendRestore(file: File, mode: 'ask' | 'replace' | 'copy') {
     setError('');
     setRestoreNote(null);
     setRestoring(true);
+    setRestoreProgress({ phase: 'uploading', pct: 0 });
     try {
       const body = new FormData();
       body.append('file', file);
-      if (replace) body.append('replace', 'true');
-      const res = await fetch('/api/campaigns/restore', { method: 'POST', headers: authHeaders(), body });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (!replace && typeof data.error === 'string' && data.error.includes('already on this server')) {
-          setPending({ file, message: data.error });
+      if (mode === 'replace') body.append('replace', 'true');
+      if (mode === 'copy') body.append('copy', 'true');
+      const { ok, data } = await new Promise<{ ok: boolean; data: Record<string, unknown> }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/campaigns/restore');
+        for (const [k, v] of Object.entries(authHeaders())) xhr.setRequestHeader(k, v);
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) setRestoreProgress({ phase: 'uploading', pct: Math.floor((ev.loaded / ev.total) * 100) });
+        };
+        // Everything is up: the server is now writing rows and images. No
+        // number to show for that, only that it is happening.
+        xhr.upload.onload = () => setRestoreProgress({ phase: 'unpacking', pct: 100 });
+        xhr.onerror = () => reject(new Error('The upload failed — check the connection and try again.'));
+        xhr.onload = () => {
+          let parsed: Record<string, unknown> = {};
+          try { parsed = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+          resolve({ ok: xhr.status >= 200 && xhr.status < 300, data: parsed });
+        };
+        xhr.send(body);
+      });
+      if (!ok) {
+        const message = typeof data.error === 'string' ? data.error : 'Restore failed.';
+        if (mode === 'ask' && message.includes('already on this server')) {
+          setRestoreProgress(null);
+          setPending({ file, message });
           return;
         }
-        throw new Error(data.error ?? 'Restore failed.');
+        throw new Error(message);
       }
       setPending(null);
       await useAuthStore.getState().loadCampaigns();
-      const rows = Object.values(data.rows ?? {}).reduce((sum: number, n) => sum + Number(n), 0);
+      const rows = Object.values((data.rows as Record<string, unknown>) ?? {}).reduce((sum: number, n) => sum + Number(n), 0);
+      setRestoreProgress({ phase: 'done', pct: 100 });
       setRestoreNote([
         `Restored "${data.name}" — ${rows} rows and ${data.files} file${data.files === 1 ? '' : 's'}.`,
-        ...(data.notes ?? []),
+        ...((data.notes as string[] | undefined) ?? []),
       ]);
     } catch (err) {
+      setRestoreProgress(null);
       setError(err instanceof Error ? err.message : 'Restore failed.');
     } finally {
       setRestoring(false);
@@ -517,16 +552,38 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
             {pending && (
               <div className="portal-hint">
                 <p>{pending.message}</p>
-                <button className="link danger" disabled={restoring} onClick={() => void sendRestore(pending.file, true)}>
+                <button className="link danger" disabled={restoring} onClick={() => void sendRestore(pending.file, 'replace')}>
                   overwrite it
                 </button>{' '}
+                <button
+                  className="link" disabled={restoring}
+                  title="A second campaign from this file — new ids, its own invite code, “(copy)” on the name. The original and its players are untouched; you get a scratch table to experiment in."
+                  onClick={() => void sendRestore(pending.file, 'copy')}
+                >
+                  make a copy
+                </button>{' '}
                 <button className="link" onClick={() => setPending(null)}>keep it</button>
+              </div>
+            )}
+            {restoreProgress && restoreProgress.phase !== 'done' && (
+              <div className="portal-hint portal-progress">
+                <p>
+                  {restoreProgress.phase === 'uploading'
+                    ? `Uploading… ${restoreProgress.pct}%`
+                    : 'Unpacking on the server — rows, then images. Large campaigns take a moment here.'}
+                </p>
+                <div className="portal-bar">
+                  <div
+                    className={restoreProgress.phase === 'unpacking' ? 'backup-bar-indeterminate' : undefined}
+                    style={{ width: restoreProgress.phase === 'unpacking' ? '35%' : `${restoreProgress.pct}%` }}
+                  />
+                </div>
               </div>
             )}
             {restoreNote && (
               <div className="portal-hint">
                 {restoreNote.map((line, i) => <p key={i} className={i === 0 ? '' : 'dim'}>{line}</p>)}
-                <button className="link" onClick={() => setRestoreNote(null)}>dismiss</button>
+                <button className="link" onClick={() => { setRestoreNote(null); setRestoreProgress(null); }}>dismiss</button>
               </div>
             )}
           </div>
@@ -538,7 +595,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = '';
-              if (file) void sendRestore(file, false);
+              if (file) void sendRestore(file, 'ask');
             }}
           />
         </>

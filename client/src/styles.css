@@ -4126,6 +4126,14 @@ th > .term { border-bottom-style: dotted; }
 .portal-cta:disabled { opacity: 0.55; cursor: default; }
 .portal-cta-small { font-size: 12px; padding: 6px 12px; }
 .portal-hint { margin: 8px 0 0; font-size: 12px; color: #cbbfa3; }
+/* The restore's progress, on the shelf: the upload's percentage, then a
+   sweep while the server unpacks. */
+.portal-progress p { margin: 0 0 6px; }
+.portal-bar {
+  height: 10px; border-radius: 999px; overflow: hidden;
+  background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 215, 94, 0.35);
+}
+.portal-bar > div { height: 100%; border-radius: 999px; background: #ffd75e; transition: width 0.2s ease-out; }
 .portal-hint .link { color: #ffd75e; }
 .portal-switch { margin-top: 8px; color: #b8a988; }
 /* Something went right on the door card — green rather than the .error red,

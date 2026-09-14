@@ -658,6 +658,11 @@ export interface InitAddPayload {
   value?: number;      // explicit value, or
   roll?: boolean;      // roll from sheet/token
   hidden?: boolean;
+  /** DM: a stand-in with no token (lava, a fuse, a sheetless creature).
+   *  In card mode it takes `card` or `slot` and keeps it every round. */
+  placeholder?: boolean;
+  card?: PlayingCard;
+  slot?: number;
 }
 /** Roll initiative for every token on a map at once (DM). */
 export interface InitRollMapPayload { mapId: string; includeGm?: boolean }
@@ -670,6 +675,10 @@ export interface InitUpdatePayload {
   name?: string;
   /** DM: re-roll this entry's initiative server-side (uses its own expr, posts to chat). */
   reroll?: boolean;
+  /** Placeholders only: give it a card (clears the slot) or a slot (clears
+   *  the card). The order re-sorts around the current turn. */
+  card?: PlayingCard;
+  slot?: number;
 }
 
 /** SWADE: DM calls for action cards for every token on a map. */

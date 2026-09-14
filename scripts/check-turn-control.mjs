@@ -303,6 +303,29 @@ console.log('map labels:');
   ok(!!(await quiet(gone)), 'removing it reaches players live');
 }
 
+// ---------- 5b. placeholders in the order ----------
+console.log('placeholders:');
+{
+  // Rolled-initiative mode here (the suite runs on values): a DM-made row
+  // with no token, at a value of its own, renamable, and DM-only.
+  const added = waitFor(dmSock, 'initiativeState', 6000, (p) => p.state.entries.some((e) => e.name === 'Rising lava' && e.placeholder === true && e.tokenId === null));
+  dmSock.emit('initAdd', { placeholder: true, name: 'Rising lava', value: 12 });
+  const lava = (await quiet(added))?.state.entries.find((e) => e.name === 'Rising lava');
+  ok(!!lava && lava.value === 12, `the DM adds a placeholder with no token (value ${lava?.value})`);
+  const seen = waitFor(bSock, 'initiativeState', 6000, (p) => p.state.entries.some((e) => e.placeholder === true && e.name === 'Rising lava'));
+  dmSock.emit('initUpdate', { entryId: lava.id, hidden: false });
+  ok(!!(await quiet(seen)), 'players see it in the tracker');
+  const renamed = waitFor(dmSock, 'initiativeState', 6000, (p) => p.state.entries.some((e) => e.id === lava.id && e.name === 'Lava (rising)'));
+  dmSock.emit('initUpdate', { entryId: lava.id, name: 'Lava (rising)' });
+  ok(!!(await quiet(renamed)), 'it can be renamed in place');
+  const playerTried = waitFor(bSock, 'errorMsg', 1500).then(() => true, () => false);
+  bSock.emit('initAdd', { placeholder: true, name: 'Cheeky', value: 99 });
+  ok(await playerTried, 'a player is refused');
+  const gone = waitFor(dmSock, 'initiativeState', 6000, (p) => !p.state.entries.some((e) => e.id === lava.id));
+  dmSock.emit('initRemove', { entryId: lava.id });
+  ok(!!(await quiet(gone)), 'and it can be removed like any row');
+}
+
 // ---------- 6. a wall with a crossing check asks before it stops ----------
 console.log('crossing checks:');
 {

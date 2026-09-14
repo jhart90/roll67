@@ -671,6 +671,18 @@ export interface InitiativeEntry {
   color?: string | null;
   /** SWADE card mode: draw order (earlier draw wins rank ties). */
   drawSeq?: number;
+  /**
+   * A DM-made stand-in with no token behind it: rising lava, a fuse, a
+   * creature with no sheet. Keeps whatever card or slot it was given from
+   * round to round instead of drawing, and is never dealt to.
+   */
+  placeholder?: boolean;
+  /**
+   * Card mode, instead of a card: a fixed place outside the deck. Negative
+   * slots act before every card (−3 first, then −2, then −1), positive ones
+   * after every card (+1, then +2, then +3).
+   */
+  slot?: number;
 }
 
 /** SWADE card mode: a combatant who still owes a draw. */

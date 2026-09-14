@@ -141,3 +141,28 @@ describe('SWADE action deck', () => {
     expect(sorted[0].name).toBe('lowCard');
   });
 });
+
+describe('placeholder slots in the card order', () => {
+  const c = (rank: number, suit: PlayingCard['suit'] = 'spades'): PlayingCard => ({ rank, suit });
+  const order = (entries: Array<{ name: string; card?: PlayingCard; slot?: number; drawSeq?: number }>) =>
+    [...entries].sort((a, b) => compareCardEntries(a, b, 'suit')).map((e) => e.name);
+
+  it('puts negative slots before every card, -3 first, and positive slots after, +3 last', () => {
+    expect(order([
+      { name: 'ace', card: c(14) }, { name: '+2', slot: 2 }, { name: '-1', slot: -1 }, { name: 'joker', card: { rank: 15, suit: null } },
+      { name: '+1', slot: 1 }, { name: '-3', slot: -3 }, { name: 'two', card: c(2, 'clubs') }, { name: '+3', slot: 3 }, { name: '-2', slot: -2 },
+    ])).toEqual(['-3', '-2', '-1', 'joker', 'ace', 'two', '+1', '+2', '+3']);
+  });
+
+  it('keeps an undrawn entry under everything, slots included', () => {
+    expect(order([{ name: 'undrawn' }, { name: '+3', slot: 3 }, { name: 'five', card: c(5) }])).toEqual(['five', '+3', 'undrawn']);
+  });
+
+  it('ranks a placeholder holding a real card among the cards, ties to the earlier draw', () => {
+    expect(order([
+      { name: 'drawn K♥', card: c(13, 'hearts'), drawSeq: 4 },
+      { name: 'placeholder K♥', card: c(13, 'hearts'), drawSeq: 0 },
+      { name: 'K♠', card: c(13, 'spades'), drawSeq: 9 },
+    ])).toEqual(['K♠', 'placeholder K♥', 'drawn K♥']);
+  });
+});

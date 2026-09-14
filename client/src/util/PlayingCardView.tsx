@@ -1,4 +1,4 @@
-import { cardName, isRedCard, rankShort, SUIT_SYMBOL, type PlayingCard } from 'shared';
+import { cardName, isRedCard, rankShort, slotLabel, SUIT_SYMBOL, type PlayingCard } from 'shared';
 
 /** A full playing-card face rendered in CSS — real suit pips (♠♥♦♣), rank
  *  corners, red/black coloring, and a 🃏 treatment for the jokers. */
@@ -23,6 +23,18 @@ export function CardFace({ card, small }: { card: PlayingCard; small?: boolean }
       {card.rank >= 11 && card.rank <= 13 && <span className="card-under-center">{suit}</span>}
       <span className="card-corner flip">{rank}<em>{suit}</em></span>
     </div>
+  );
+}
+
+/** A placeholder's slot outside the deck: "−2" before every card, "+1" after. */
+export function SlotChip({ slot }: { slot: number }) {
+  return (
+    <span className="card-chip slot"
+      title={slot < 0
+        ? `Slot ${slotLabel(slot)} — acts before every card this round (−3 first, then −2, then −1).`
+        : `Slot ${slotLabel(slot)} — acts after every card this round (+1 first, then +2, then +3).`}>
+      {slotLabel(slot)}
+    </span>
   );
 }
 

@@ -300,6 +300,25 @@ export function shuffleDeck(deck: PlayingCard[], rng: RNG = Math.random): Playin
   return deck;
 }
 
+/** The slots a placeholder may take outside the deck, first to last. */
+export const INITIATIVE_SLOTS = [-3, -2, -1, 1, 2, 3] as const;
+
+/** "−2" / "+1", the way a slot reads in the order. */
+export function slotLabel(slot: number): string {
+  return slot < 0 ? `−${-slot}` : `+${slot}`;
+}
+
+/**
+ * Where an entry stands, higher first. A card is its rank (Jokers 15, deuces
+ * 2). A negative slot stands above every card, −3 highest; a positive slot
+ * below every card, +3 lowest; and an entry with neither — one still to
+ * draw — sinks under all of it.
+ */
+function orderKey(e: { card?: PlayingCard; slot?: number }): number {
+  if (e.slot !== undefined && e.slot !== 0 && Number.isFinite(e.slot)) return e.slot < 0 ? 100 - e.slot : -e.slot;
+  return e.card?.rank ?? -10;
+}
+
 /**
  * Initiative order comparator: higher rank acts first, and equal ranks break
  * by `tieBreak` — see the note at the top of this file for why there are two.
@@ -308,12 +327,12 @@ export function shuffleDeck(deck: PlayingCard[], rng: RNG = Math.random): Playin
  * order however the ties are being settled.
  */
 export function compareCardEntries(
-  a: { card?: PlayingCard; drawSeq?: number },
-  b: { card?: PlayingCard; drawSeq?: number },
+  a: { card?: PlayingCard; drawSeq?: number; slot?: number },
+  b: { card?: PlayingCard; drawSeq?: number; slot?: number },
   tieBreak: 'draw' | 'suit' = 'draw',
 ): number {
-  const ra = a.card?.rank ?? -1;
-  const rb = b.card?.rank ?? -1;
+  const ra = orderKey(a);
+  const rb = orderKey(b);
   if (rb !== ra) return rb - ra;
   if (tieBreak === 'suit') {
     const sa = a.card?.suit ? SUIT_RANK[a.card.suit] : 0;

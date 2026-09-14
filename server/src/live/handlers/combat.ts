@@ -2,7 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   C2S, S2C, roll, systemFor, bestCastLevel, combatActions, critRange, hexDistance, hexToPixel, inBounds, num, rows, str, fmtMod,
   AMMO_BY_ROF, BENNY_FLIP_MS, MAX_WOUNDS, SECONDS_PER_ROUND, TIME_STEPS, restRecovery,
-  CHASE_TRACK_DEFAULT, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
+  CHASE_TRACK_DEFAULT, INITIATIVE_SLOTS, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
   opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
   bumpResult, chaseCritFailure, complicationFor, isComplicationCard, type ChaseTravel,
   isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILLS_SWADE, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type CardBackSpec, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
@@ -691,6 +691,36 @@ function sortInitiative(state: InitiativeState): void {
   state.entries.sort((a, b) => compareCardEntries(a, b, state.round > 1 ? 'suit' : 'draw'));
 }
 
+/** Sort the card order without moving the turn off whoever is acting. */
+function resortKeepingTurn(state: InitiativeState): void {
+  const currentId = state.entries[state.turnIdx]?.id;
+  sortInitiative(state);
+  if (currentId) {
+    const idx = state.entries.findIndex((e) => e.id === currentId);
+    if (idx >= 0) state.turnIdx = idx;
+  }
+  if (state.turnIdx >= state.entries.length) state.turnIdx = Math.max(0, state.entries.length - 1);
+}
+
+/**
+ * What a placeholder was told to be in the card order: a real card (any of
+ * the 54, jokers included) or a slot outside the deck. Validated here so a
+ * client cannot hand the tracker a rank of 99 or a slot of −40.
+ */
+function placeholderPlacement(p: { card?: PlayingCard; slot?: number }): { card: PlayingCard; value: number; drawSeq: number } | { slot: number; value: number; drawSeq: number } | null {
+  if (p.card && typeof p.card === 'object') {
+    const rank = Math.round(Number(p.card.rank));
+    const suit = p.card.suit;
+    if (rank === 15) return { card: { rank: 15, suit: null, joker: p.card.joker === 'black' ? 'black' : 'red' }, value: 15, drawSeq: 0 };
+    if (rank >= 2 && rank <= 14 && (suit === 'spades' || suit === 'hearts' || suit === 'diamonds' || suit === 'clubs')) {
+      return { card: { rank, suit }, value: rank, drawSeq: 0 };
+    }
+  }
+  const slot = Math.round(Number(p.slot));
+  if ((INITIATIVE_SLOTS as readonly number[]).includes(slot)) return { slot, value: 0, drawSeq: 0 };
+  return null;
+}
+
 /** The card back a token's character chose, or undefined for the classic.
  *  Normalized HERE, not trusted from the sheet: whatever a client managed to
  *  write into that field, what leaves this server is a valid spec whose
@@ -756,7 +786,9 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
   // the Bennies land once the table can see every card.
   const jokerDraws: Array<{ name: string; playerSide: boolean; hidden: boolean }> = [];
   for (const entry of state.entries) {
-    if (entry.held) continue;
+    // A placeholder keeps the card or slot the DM gave it: the lava does
+    // not draw for initiative.
+    if (entry.held || entry.placeholder) continue;
     const { card } = drawActionCard(state, sheetForToken(entry.tokenId));
     if (card.rank === 15) {
       state.jokerDealt = true;
@@ -4494,13 +4526,28 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       else io.to(dmRoom(d.campaignId)).emit(S2C.CHAT, { msg });
     }
 
-    state.entries.push({
+    const entry: InitiativeEntry = {
       id: newId(),
       tokenId: payload.tokenId ?? null,
       name,
       value,
       hidden: d.role === 'dm' ? !!payload.hidden : false,
-    });
+    };
+    // A placeholder: no token, never dealt to, and in card mode it takes a
+    // fixed card or a slot outside the deck and holds it round after round.
+    if (payload.placeholder && !payload.tokenId && d.role === 'dm') {
+      entry.placeholder = true;
+      if (state.cardMode) {
+        const placed = placeholderPlacement(payload);
+        if (!placed) { emitError(socket, 'Give the placeholder a card, or a slot before or after the deck.'); return; }
+        Object.assign(entry, placed);
+      }
+    }
+    state.entries.push(entry);
+    // In card mode the order IS the cards, so the newcomer takes the place
+    // its card earns — without the current combatant losing their turn to
+    // the shuffle of indexes.
+    if (state.cardMode) resortKeepingTurn(state);
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_ADD'));
@@ -4587,7 +4634,17 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     }
     if (payload.value !== undefined) entry.value = payload.value;
     if (payload.hidden !== undefined) entry.hidden = payload.hidden;
-    if (payload.name !== undefined) entry.name = payload.name;
+    if (payload.name !== undefined) entry.name = String(payload.name).trim().slice(0, 60) || entry.name;
+    // Re-placing a placeholder in the card order: a card or a slot, never
+    // both, and the order re-sorts around whoever is acting.
+    if (entry.placeholder && state.cardMode && (payload.card !== undefined || payload.slot !== undefined)) {
+      const placed = placeholderPlacement(payload);
+      if (placed) {
+        delete entry.card; delete entry.slot;
+        Object.assign(entry, placed);
+        resortKeepingTurn(state);
+      }
+    }
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
   }, 'INIT_UPDATE'));

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { intents, useGameStore } from '../store/game';
-import { CardChip } from '../util/PlayingCardView';
+import { CardChip, SlotChip } from '../util/PlayingCardView';
+import { AddPlaceholder, PlacementSelect, placementValue } from './InitiativePlaceholder';
 import { SavePrompt } from './SavePrompt';
 import { ChasePrompt } from './ChasePrompt';
 import { DealCardsPrompt } from './DealCardsPrompt';
@@ -56,7 +57,16 @@ export function InitiativePanel() {
       <ol className="init-list">
         {state.entries.map((e, i) => (
           <li key={e.id} className={`${i === state.turnIdx && state.active ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''}`}>
-            {e.card ? (
+            {e.placeholder && cardMode && isDm ? (
+              // The DM re-places a placeholder from the row itself.
+              <PlacementSelect
+                value={placementValue(e)}
+                onChange={(p) => intents.initUpdate(e.id, p)}
+                title="Where this stands in the round — a card from the deck, or a slot before or after all of them"
+              />
+            ) : e.slot ? (
+              <SlotChip slot={e.slot} />
+            ) : e.card ? (
               <CardChip card={e.card} />
             ) : cardMode ? (
               // In card mode the chip IS the reason this row sits where it
@@ -78,7 +88,20 @@ export function InitiativePanel() {
             ) : (
               <span className="init-value" title="Initiative — the higher number acts first.">{e.value}</span>
             )}
-            <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}</span>
+            {e.placeholder && isDm ? (
+              <input
+                key={`${e.id}:${e.name}`}
+                className="init-name"
+                defaultValue={e.name}
+                maxLength={60}
+                title="A placeholder — rename it here"
+                style={{ margin: 0, padding: '1px 4px', fontSize: 'inherit', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 4 }}
+                onBlur={(ev) => { const v = ev.target.value.trim(); if (v && v !== e.name) intents.initUpdate(e.id, { name: v }); }}
+                onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur(); }}
+              />
+            ) : (
+              <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}{e.placeholder ? ' ⏳' : ''}</span>
+            )}
             {isDm && (
               <span className="init-actions">
                 {/* The rewind. A player who ends their turn a beat early has
@@ -107,6 +130,9 @@ export function InitiativePanel() {
         ))}
         {state.entries.length === 0 && !cardMode && <p className="dim">Nobody in initiative yet.</p>}
       </ol>
+      {/* A stand-in with no token: the lava, the fuse, the thing with no
+          sheet. Any time, in either mode. */}
+      {isDm && <AddPlaceholder cardMode={cardMode} />}
 
       {cardMode && pending.length > 0 && (
         <div className="init-pending">

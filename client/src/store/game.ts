@@ -1,4 +1,4 @@
-import type { WallCheckPassedPayload, WallCheckPromptPayload, WallCrossCheck } from 'shared';
+import type { PlayingCard, WallCheckPassedPayload, WallCheckPromptPayload, WallCrossCheck } from 'shared';
 import { canMoveToken } from 'shared';
 import { create } from 'zustand';
 import { type StorageReportPayload, type UpdateMapObjectPayload,
@@ -2351,12 +2351,12 @@ export const intents = {
     socket.emit(C2S.ROLL_TABLE, { tableId });
   },
 
-  initAdd: (p: { tokenId?: string | null; name?: string; value?: number; roll?: boolean; hidden?: boolean }) => {
+  initAdd: (p: { tokenId?: string | null; name?: string; value?: number; roll?: boolean; hidden?: boolean; placeholder?: boolean; card?: PlayingCard; slot?: number }) => {
     if (p.roll) jumpToChat();
     socket.emit(C2S.INIT_ADD, p);
   },
   initRemove: (entryId: string) => socket.emit(C2S.INIT_REMOVE, { entryId }),
-  initUpdate: (entryId: string, fields: { value?: number; hidden?: boolean; name?: string; reroll?: boolean }) => {
+  initUpdate: (entryId: string, fields: { value?: number; hidden?: boolean; name?: string; reroll?: boolean; card?: PlayingCard; slot?: number }) => {
     if (fields.reroll) jumpToChat();
     socket.emit(C2S.INIT_UPDATE, { entryId, ...fields });
   },

@@ -525,25 +525,32 @@ const TokenPiece = memo(function TokenPiece({ token, targetState }: { token: Tok
           />
         </g>
       )}
-      {swadeWounds !== null && swadeWounds > 0 && bar && (
-        <g transform={`translate(${-barW / 2}, ${-halfH - 12})`}>
-          <rect width={barW} height={8} rx={2} fill="#10131a" stroke="#000000" strokeWidth={0.6} />
-          {Array.from({ length: bar.maxHp }, (_, i) => i < swadeWounds && (
-            <rect
-              key={i}
-              x={(barW / bar.maxHp) * i + 1.5}
-              y={1.5}
-              width={barW / bar.maxHp - 3}
-              height={5}
-              rx={1}
-              fill="#d92626"
-            />
-          ))}
-        </g>
-      )}
+      {/* SWADE wounds: red slashes struck straight across the art, one per
+          wound — a "\" for the first, an X for two, and a third bar through
+          the X for the last. The old bar of red thirds above the token read
+          as a health bar, and a full red bar over an Extra with its ONE
+          wound looked like full health rather than a body on the floor. A
+          slash over the face cannot be read as anything but hurt. Drawn
+          with a dark halo so it stands on any art, and never on the token's
+          own hit area. */}
+      {swadeWounds !== null && swadeWounds > 0 && bar && (() => {
+        const len = Math.min(halfW, halfH) * 0.92;
+        const w = Math.max(3, radius * 0.16);
+        const angles = [45, -45, 90].slice(0, Math.min(3, swadeWounds));
+        return (
+          <g pointerEvents="none" opacity={0.95}>
+            {angles.map((a) => (
+              <g key={a} transform={`rotate(${a})`}>
+                <line x1={-len} y1={0} x2={len} y2={0} stroke="#10131a" strokeWidth={w * 1.7} strokeLinecap="round" />
+                <line x1={-len} y1={0} x2={len} y2={0} stroke="#e02424" strokeWidth={w} strokeLinecap="round" />
+              </g>
+            ))}
+          </g>
+        );
+      })()}
       {conditionIcons.length > 0 && (
         <text
-          y={-halfH - (swadeWounds !== null && swadeWounds > 0 ? 17 : 5)}
+          y={-halfH - 5}
           textAnchor="middle"
           fontSize={13}
           style={{ userSelect: 'none', pointerEvents: 'none' }}

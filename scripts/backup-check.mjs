@@ -163,6 +163,8 @@ async function main() {
     const res = await fetch(`${baseA}/api/campaigns/${campaignId}/backup`, { headers: { Authorization: `Bearer ${dm.token}` } });
     ok(res.ok, 'the DM can download a backup');
     const file = Buffer.from(await res.arrayBuffer());
+    ok(Number(res.headers.get('content-length')) === file.length, `the declared Content-Length is the file's exact size (${file.length} bytes), so a progress bar can be honest`);
+    ok(Number(res.headers.get('x-backup-files')) >= 1, 'the header says how many files are inside');
     ok(file.subarray(0, 7).toString('ascii') === 'R67CAMP', 'the file starts with the format’s magic bytes');
     const manifestLen = file.readUInt32LE(8);
     const manifest = JSON.parse(zlib.gunzipSync(file.subarray(12, 12 + manifestLen)).toString('utf-8'));

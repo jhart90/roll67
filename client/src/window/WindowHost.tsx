@@ -28,6 +28,7 @@ import { NpcBoostWizard } from '../panels/NpcBoostWizard';
 import { LevelUpWizard } from '../panels/LevelUpWizard';
 import { Compendium } from '../panels/Compendium';
 import { CardBackEditor } from '../panels/CardBackEditor';
+import { BackupProgressWindow } from '../panels/BackupProgressWindow';
 import { AssetPickerWindow, SheetPickerWindow, parsePickerKey } from '../panels/SheetPickerWindow';
 
 /** Mounted once at the top level: renders every open window instance,
@@ -124,6 +125,9 @@ export function WindowHost() {
             content = ch ? <Compendium character={ch} onClose={onClose} /> : null;
             break;
           }
+          case 'backupProgress':
+            content = <BackupProgressWindow />;
+            break;
           case 'cardBack': {
             const ch = characters.find((c) => c.id === w.key);
             content = ch ? <CardBackEditor character={ch} onClose={onClose} /> : null;

@@ -475,6 +475,10 @@ interface GameState {
    *  the plan is dropped. The layer draws the cheapest route to the hex
    *  under the pointer and what it costs; clicking walks it. */
   movePlan: { tokenId: string } | null;
+  /** A campaign backup in flight: bytes so far against the server's exact
+   *  total, how many files it holds, and how it ended. Read by the progress
+   *  window; written by the download itself. */
+  backupProgress: { received: number; total: number; files: number; phase: 'packing' | 'downloading' | 'done' | 'failed'; error?: string; name?: string } | null;
   /** Toggle the move planner for the token this player most plausibly
    *  means: the selected one, else the one whose turn it is, else their
    *  only piece on this map. */
@@ -863,6 +867,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   camera: { x: 0, y: 0, scale: 1 },
   tool: 'select',
   targetChoice: null,
+  backupProgress: null,
   movePlan: null,
   toggleMovePlan() {
     const s = get();

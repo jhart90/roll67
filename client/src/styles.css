@@ -4193,3 +4193,8 @@ th > .term { border-bottom-style: dotted; }
 .storage-saved { color: #6ee7a8; }
 .storage-waste { color: #e0a86a; }
 .storage-actions { display: flex; gap: 10px; align-items: center; }
+
+/* The backup window's "packing" bar: no total yet, so it sweeps. */
+@keyframes backup-bar-sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.backup-bar-indeterminate { animation: backup-bar-sweep 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .backup-bar-indeterminate { animation: none; width: 100% !important; opacity: 0.5; } }

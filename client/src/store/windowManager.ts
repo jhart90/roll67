@@ -28,7 +28,10 @@ export type WindowKind =
   | 'sheetPicker'
   | 'assetPicker'
   // The card-back studio: pattern, border and paint for one character.
-  | 'cardBack';
+  | 'cardBack'
+  // A campaign backup being packed and pulled down — a progress bar you can
+  // move out of the way, not a spinner you wait behind.
+  | 'backupProgress';
 
 export interface WindowInstance {
   /** `${kind}:${key}` — opening the same kind+key again focuses this instance. */

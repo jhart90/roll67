@@ -91,6 +91,18 @@ backupRouter.get('/campaigns/:campaignId/backup', requireAuth, async (req, res) 
   res.setHeader('Content-Disposition', `attachment; filename="${slug}-${stamp}.r67campaign"`);
 
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(manifest), 'utf-8'));
+  // The exact size, up front. The client reads the body as it arrives and
+  // shows how far along it is; without a total it could only count bytes
+  // with no idea of the end, which is the spinner this replaces. Every part
+  // is fixed-size or measurable before a byte goes out, so the figure is
+  // exact and the stream is exactly that long.
+  const total = MAGIC.length + 4 + gz.length + files.reduce((sum, file, i) => {
+    let size = 0;
+    try { size = fs.statSync(file).size; } catch { /* a missing file is written as empty below */ }
+    return sum + 4 + Buffer.byteLength(manifest.files[i].name, 'utf-8') + 4 + size;
+  }, 0);
+  res.setHeader('Content-Length', String(total));
+  res.setHeader('X-Backup-Files', String(files.length));
   await writeTo(res, MAGIC);
   await writeTo(res, u32(gz.length));
   await writeTo(res, gz);
@@ -99,7 +111,10 @@ backupRouter.get('/campaigns/:campaignId/backup', requireAuth, async (req, res) 
     const name = Buffer.from(manifest.files[i].name, 'utf-8');
     await writeTo(res, u32(name.length));
     await writeTo(res, name);
-    const data = fs.readFileSync(files[i]);
+    // A file that vanished between the manifest and here is written empty
+    // rather than aborting the stream — the declared length must hold.
+    let data: Buffer;
+    try { data = fs.readFileSync(files[i]); } catch { data = Buffer.alloc(0); }
     await writeTo(res, u32(data.length));
     await writeTo(res, data);
   }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DiceSpeed } from 'shared';
 import { authHeaders } from '../api';
 import { intents, useGameStore } from '../store/game';
+import { openWindow } from '../store/windowManager';
 import {
   MAP_COLORS_DEFAULT, ROLL_DETAILS, UI_THEMES, readClosedSections, saveClosedSections, type MapColors,
 } from '../util/appearance';
@@ -288,21 +289,51 @@ function DmSection({ closed, onToggle }: { closed: Set<string>; onToggle: (t: st
     setNameDraft(null);
   }
 
+  // The body is read chunk by chunk rather than as one blob, so the progress
+  // window can show bytes against the exact total the server declares. The
+  // browser's own download only appears once the whole file is here, which
+  // used to be a silent wait of a minute or more on a big campaign.
   async function downloadBackup() {
     if (!campaign) return;
     setBusy(true);
+    const progress = (patch: Partial<NonNullable<ReturnType<typeof useGameStore.getState>['backupProgress']>>) =>
+      useGameStore.setState((s) => ({ backupProgress: { received: 0, total: 0, files: 0, phase: 'packing', ...s.backupProgress, ...patch } }));
+    useGameStore.setState({ backupProgress: { received: 0, total: 0, files: 0, phase: 'packing' } });
+    openWindow('backupProgress', 'main', {}, `Backup — ${campaign.name}`);
     try {
       const res = await fetch(`/api/campaigns/${campaign.id}/backup`, { headers: authHeaders() });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Backup failed');
-      const url = URL.createObjectURL(await res.blob());
+      const total = Number(res.headers.get('content-length')) || 0;
+      const files = Number(res.headers.get('x-backup-files')) || 0;
+      progress({ total, files, phase: 'downloading' });
+      const chunks: BlobPart[] = [];
+      let received = 0;
+      if (res.body) {
+        const reader = res.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.byteLength;
+          progress({ received });
+        }
+      } else {
+        const blob = await res.blob();
+        chunks.push(blob);
+        received = blob.size;
+      }
+      if (total > 0 && received !== total) throw new Error(`The download stopped short — ${received} of ${total} bytes arrived. Try again.`);
+      const url = URL.createObjectURL(new Blob(chunks, { type: 'application/octet-stream' }));
       const a = document.createElement('a');
       a.href = url;
       const slug = campaign.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'campaign';
       a.download = `${slug}-${new Date().toISOString().slice(0, 10)}.r67campaign`;
       a.click();
       URL.revokeObjectURL(url);
+      progress({ received: total || received, total: total || received, phase: 'done', name: a.download });
       useGameStore.getState().toast('Backup saved. Keep it somewhere that isn’t this server.', 'info');
     } catch (err) {
+      progress({ phase: 'failed', error: err instanceof Error ? err.message : 'Backup failed' });
       useGameStore.getState().toast(err instanceof Error ? err.message : 'Backup failed');
     } finally {
       setBusy(false);

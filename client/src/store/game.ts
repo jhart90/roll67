@@ -1,3 +1,4 @@
+import { canMoveToken } from 'shared';
 import { create } from 'zustand';
 import { type StorageReportPayload, type UpdateMapObjectPayload,
   C2S, S2C, aoeCentredOnSelf, castableLevels, combatActions, systemFor,
@@ -466,6 +467,15 @@ interface GameState {
    *  piece overlapping a small one): the candidates, and where the click
    *  was, for the chooser that asks which was meant. */
   targetChoice: { tokenIds: string[]; x: number; y: number } | null;
+  /** Planning a walk (the M key): which token, until a hex is clicked or
+   *  the plan is dropped. The layer draws the cheapest route to the hex
+   *  under the pointer and what it costs; clicking walks it. */
+  movePlan: { tokenId: string } | null;
+  /** Toggle the move planner for the token this player most plausibly
+   *  means: the selected one, else the one whose turn it is, else their
+   *  only piece on this map. */
+  toggleMovePlan(): void;
+  cancelMovePlan(): void;
   /** Token whose inspector panel is open (right-click), separate from selection. */
   inspectorTokenId: string | null;
   openInspector(id: string | null): void;
@@ -848,6 +858,29 @@ export const useGameStore = create<GameState>((set, get) => ({
   camera: { x: 0, y: 0, scale: 1 },
   tool: 'select',
   targetChoice: null,
+  movePlan: null,
+  toggleMovePlan() {
+    const s = get();
+    if (s.movePlan) { set({ movePlan: null }); return; }
+    if (!s.you || !s.map || s.targeting || s.aoeTargeting) return;
+    const me = s.asUserId();
+    if (!me) return;
+    const locked = s.myMoveLocked();
+    const mine = (t: TokenView) => canMoveToken(s.you!.role, me, t, s.characters.find((c) => c.id === t.characterId), locked);
+    const onMap = Object.values(s.tokens).filter((t) => t.mapId === s.map!.id && !t.mountedOn);
+    const selected = s.selectedTokenId ? s.tokens[s.selectedTokenId] : undefined;
+    const up = s.initiativeState.active ? s.tokens[s.initiativeState.entries[s.initiativeState.turnIdx]?.tokenId ?? ''] : undefined;
+    const own = onMap.filter((t) => mine(t) && (s.isDm() ? false : true));
+    const pick = (selected && mine(selected) && selected.mapId === s.map.id) ? selected
+      : (up && mine(up) && up.mapId === s.map.id) ? up
+        : own.length === 1 ? own[0] : undefined;
+    if (!pick) {
+      s.toast(locked ? 'Movement is locked.' : 'Select one of your tokens first, then press M.', 'info');
+      return;
+    }
+    set({ movePlan: { tokenId: pick.id }, selectedTokenId: pick.id, selectedTokenIds: [pick.id], tool: 'select' });
+  },
+  cancelMovePlan() { if (get().movePlan) set({ movePlan: null }); },
   selectedTokenId: null,
   selectedTokenIds: [],
   worldSelectedKey: null,
@@ -926,7 +959,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [], knownWalls: [],
       viewingAs: null, dragGhosts: {}, predictedMoves: {}, selectedTokenId: null, selectedTokenIds: [], inspectorTokenId: null,
       worldSelectedKey: null, selectedObjectId: null, worldHover: null,
-      targeting: null, targetChoice: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
+      targeting: null, targetChoice: null, movePlan: null, aoeTargeting: null, aoePreviews: {}, targetPreviews: {}, floats: [], projectiles: [], aoeBursts: [], castPrompt: null, mapObjects: {}, lootPopupId: null, inspectedObjectId: null,
       // Transient slices that used to leak into the NEXT campaign: a live
       // ruler from campaign A rendering over campaign B's map, a stale error
       // toast, a presented shop, last session's initiative order.

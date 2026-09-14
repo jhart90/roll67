@@ -1,5 +1,5 @@
 import type { Door, GridConfig, Hex, Wall } from './types.js';
-import { hexDistance } from './hex/coords.js';
+import { hexDistance, hexNeighbors } from './hex/coords.js';
 import { hexToPixel } from './hex/pixel.js';
 import { hexLine } from './hex/line.js';
 import { packHex } from './hex/pack.js';
@@ -73,4 +73,55 @@ export function reachableHexes(from: Hex, left: number, opts: ReachOpts): Hex[] 
     }
   }
   return out;
+}
+
+/**
+ * The cheapest walk from `from` to `to` — hex by hex, round walls, through
+ * rough ground at its double rate — or null when nothing reaches it.
+ *
+ * pathCost above measures a straight line, which is what a single drag is.
+ * This is for planning: the player points at a hex and wants to know what
+ * getting there actually costs, doors and corners included, before they
+ * spend anything. Dijkstra with integer step costs, so a bucket queue is
+ * enough; `limit` stops the search well short of the whole map.
+ */
+export function shortestPath(from: Hex, to: Hex, opts: ReachOpts, limit = 64): { path: Hex[]; cost: number } | null {
+  if (from.q === to.q && from.r === to.r) return { path: [from], cost: 0 };
+  if (!inBounds(to, opts.grid)) return null;
+  const blocked = new Set(opts.blocked);
+  const target = packHex(to);
+  if (blocked.has(target)) return null;
+  const rough = opts.crawling ? new Set<number>() : new Set(opts.terrain);
+  const segs = opts.sight ? blockingSegments(opts.sight.walls, opts.sight.doors) : [];
+  const start = packHex(from);
+  const best = new Map<number, number>([[start, 0]]);
+  const prev = new Map<number, Hex>();
+  const at = new Map<number, Hex>([[start, from]]);
+  const buckets: number[][] = [[start]];
+  for (let cost = 0; cost <= limit; cost++) {
+    const bucket = buckets[cost];
+    if (!bucket) continue;
+    for (const key of bucket) {
+      if ((best.get(key) ?? Infinity) !== cost) continue; // a cheaper visit already handled it
+      if (key === target) {
+        const path: Hex[] = [];
+        for (let k: number | undefined = key; k !== undefined; k = prev.has(k) ? packHex(prev.get(k)!) : undefined) path.push(at.get(k)!);
+        return { path: path.reverse(), cost };
+      }
+      const here = at.get(key)!;
+      for (const nbr of hexNeighbors(here)) {
+        if (!inBounds(nbr, opts.grid)) continue;
+        const nk = packHex(nbr);
+        if (blocked.has(nk)) continue;
+        const step = cost + (rough.has(nk) ? 2 : 1);
+        if (step > limit || step >= (best.get(nk) ?? Infinity)) continue;
+        if (segs.length > 0 && rayBlocked(hexToPixel(here, opts.grid), hexToPixel(nbr, opts.grid), segs)) continue;
+        best.set(nk, step);
+        prev.set(nk, here);
+        at.set(nk, nbr);
+        (buckets[step] ??= []).push(nk);
+      }
+    }
+  }
+  return null;
 }

@@ -5,6 +5,7 @@ import { worldDrag } from '../store/worldDrag';
 import { mapPixelSize, StageContext, type StageApi } from '../util/stage';
 import { AoeTemplateLayer } from './AoeTemplateLayer';
 import { RangeRulerLayer } from './RangeRulerLayer';
+import { MovePlanLayer } from './MovePlanLayer';
 import { BackgroundCanvas } from './BackgroundCanvas';
 import { CombatTextLayer } from './CombatTextLayer';
 import { DrawingLayer } from './DrawingLayer';
@@ -118,7 +119,19 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
         useGameStore.getState().cancelAoeTargeting();
         return;
       }
+      if (e.key === 'Escape' && useGameStore.getState().movePlan) {
+        e.preventDefault();
+        useGameStore.getState().cancelMovePlan();
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // M: plan a move — point at a hex, read what the walk costs, click to
+      // take it. In a fight or out of one.
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        useGameStore.getState().toggleMovePlan();
+        return;
+      }
 
       if (e.key === '=' || e.key === '+') {
         e.preventDefault();
@@ -418,6 +431,7 @@ export function MapStage({ children }: { children?: React.ReactNode }) {
           <PingMeasureLayer />
           <AoeTemplateLayer />
           <RangeRulerLayer />
+          <MovePlanLayer />
           <TargetPreviewLayer />
           <CombatTextLayer />
           <TerrainPainter />

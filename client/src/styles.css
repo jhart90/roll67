@@ -2961,6 +2961,19 @@ th > .term { border-bottom-style: dotted; }
 /* The "commit movement" offer hangs just under the bar, centred like the
    banner it belongs to. Its own fill, because it must read on any player
    colour the bar happens to be wearing. */
+/* The standing "dice / movement locked" warning in the top bar. Its own red,
+   whatever colour the bar is wearing for the current turn. */
+.lock-banner, .topbar.in-combat .lock-banner {
+  display: inline-flex; align-items: center; gap: 8px; margin-left: 6px;
+  padding: 3px 12px; border-radius: 999px; white-space: nowrap;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+  background: #8a2a2a; color: #ffffff; border: 1px solid #e07070;
+  box-shadow: 0 0 0 2px rgba(224, 112, 112, 0.25);
+  animation: lock-banner-in 0.35s ease-out;
+}
+.lock-banner-detail { font-weight: 500; opacity: 0.85; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+@keyframes lock-banner-in { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
 .commit-move-chip,
 .topbar.in-combat .commit-move-chip {
   position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);

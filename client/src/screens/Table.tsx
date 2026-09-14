@@ -31,6 +31,7 @@ import { BennyMenu } from '../table/BennyMenu';
 import { KeyringMenu } from '../table/KeyringMenu';
 import { TimeMenu } from '../table/TimeMenu';
 import { LockMenu } from '../table/LockMenu';
+import { LockBanner } from '../table/LockBanner';
 import { CookPrompt } from '../table/CookPrompt';
 import { CalledShotPrompt } from '../table/CalledShotPrompt';
 import { BlastPrompt } from '../table/BlastPrompt';
@@ -200,6 +201,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
         <button className="link" onClick={onExit}>← campaigns</button>
         <span className="topbar-title">{campaign.name}</span>
         {map && <span className="dim">· {map.name}</span>}
+        <LockBanner />
         <span className="spacer" />
         {/* The preview's own switch stays on `isDmAccount` — it is the way OUT
             of the preview, so it has to outlive being inside one. Everything

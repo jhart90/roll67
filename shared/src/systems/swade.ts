@@ -325,6 +325,35 @@ export function swadeToughness(sheet: SheetData): number {
 }
 
 /**
+ * The Toughness a particular blow is measured against — THE number for
+ * "did it hurt", worked out in one place so the card's preview and the
+ * damage that actually lands can never disagree.
+ *
+ * Toughness is 2 + half Vigor + Armor. Two things move it for one attack:
+ *   - a shield's ranged bonus (+2 for a Medium/Large Shield) counts only
+ *     against ranged attacks, so it is added for those — this is the
+ *     "Toughness vs ranged" the sheet shows;
+ *   - Armor Piercing lowers the ARMOR part, never the flesh: AP 2 against
+ *     leather (+2) takes the whole armor away, AP 2 against plate (+4)
+ *     leaves 2, and AP against an unarmored target does nothing.
+ * The shield used to be subtracted from the damage instead, and AP only
+ * ate the shield — so a 7 against "Toughness vs ranged 7" read as no
+ * effect with no arithmetic on screen to say why, and AP never pierced
+ * worn armor at all.
+ */
+export function swadeEffectiveToughness(
+  sheet: SheetData, opts: { ranged: boolean; ap: number },
+): { toughness: number; base: number; shield: number; pierced: number } {
+  const base = swadeToughness(sheet);
+  if (isVehicle(sheet)) return { toughness: base, base, shield: 0, pierced: 0 };
+  const shield = opts.ranged ? swadeRangedArmor(sheet) : 0;
+  const armor = equippedGearBonuses(sheet).armor
+    + (sheet.armorActive === true ? 2 : 0) + (sheet.protectionActive === true ? 2 : 0) + shield;
+  const pierced = Math.min(Math.max(0, Math.floor(opts.ap) || 0), armor);
+  return { toughness: base + shield - pierced, base, shield, pierced };
+}
+
+/**
  * Bonus to a named trait (skill or attribute) from everything that can grant
  * one: equipped gear (a Lockpick's +1 Thievery), Edges (Alertness's +2
  * Notice), and Hindrances (Clueless's −2 Common Knowledge). Gear only counts

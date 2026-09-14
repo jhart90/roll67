@@ -5,7 +5,7 @@ import {
   CHASE_TRACK_DEFAULT, INITIATIVE_SLOTS, chaseIncrement, chaseAction, chaseRangeYards, changePosition, clampToTrack, speedBonus, canFlee, fleePenalty,
   opposedManeuver, ramDamage, boardOutcome, BOARD_MOD, EVADE_MOD, UNSTABLE_PLATFORM_MOD, FALL_FROM_VEHICLE_DAMAGE,
   bumpResult, chaseCritFailure, complicationFor, isComplicationCard, type ChaseTravel,
-  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILLS_SWADE, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type CardBackSpec, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
+  isVehicle, maneuveringSkillFor, vehicleHandling, vehicleParry, vehicleWoundCap, repairAttempts, repairOutcome, REPAIR_HOURS_PER_WOUND, SKILLS_SWADE, SKILL_ATTR_SWADE, hasHeavyArmor, isAbomination, isConstruct, isUndead, sizeAttackMod, sizeAttackTag, swadeWoundCap, swadeEffectiveToughness, effectiveCover, coverGradeFor, COVER_LABEL, calledShotTag, clampCalledShotPenalty, dieSides, gangUpBonus, traitModWhy, reachableAlong, skillDie, soakSuccesses, swadeDamageOutcome, traitExpr, type CardBackSpec, type GangUpCombatant, type MapDef, type MapZone, type PlayingCard,
   coverAdjustedDamage, hotPotatoPenalty, type BlastCandidate, type BlastResponsePayload,
   applyDamageDefenses, attackAdvantage, conditionCombat, conditionsOf, critDamageExpr, getCondition, rayBlocked, sightSegments,
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, rangeFigure, tokensCaughtInAoe, usableAmount,
@@ -3389,7 +3389,8 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         // Damage is measured against Toughness, so that is the number the
         // reroll's card should name — "9 vs Toughness 8", not "9 vs the 7 you
         // rolled before", which tells nobody whether it hurt.
-        const tough = targetChar?.system === 'swade' ? swadeToughness(targetChar.sheet) : 0;
+        const tough = targetChar?.system === 'swade'
+          ? swadeEffectiveToughness(targetChar.sheet, { ranged: !!action.ranged, ap: action.ap ?? 0 }).toughness : 0;
         recordBennyRoll(
           io, d.campaignId, actor, 'damage', action.amountExpr, amountRoll.total, `their ${action.label} damage`,
           false,
@@ -3397,14 +3398,17 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         );
       }
       let magnitude = Math.max(0, amountRoll.total);
+      let resistTag = '';
       // Cover Armor Bonus: the obstacle that made the shot harder also
-      // absorbs part of what gets through (+2 armor per cover grade).
+      // absorbs part of what gets through (+2 armor per cover grade). SAID
+      // on the card: silently it turned a roll that equalled Toughness into
+      // "no effect" with nothing on screen to explain it.
       if (actor.system === 'swade' && coverPenalty < 0 && hit) {
         magnitude = Math.max(0, magnitude + coverPenalty);
+        resistTag += ` (cover armor ${coverPenalty})`;
       }
       // Save-based spells scale the rolled damage (half / none on a save).
       if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
-      let resistTag = '';
       // Heavy Armor: an ordinary weapon does not scratch a Gargantuan hull —
       // not less damage, none. The fight has to be won with a Heavy Weapon or
       // some other way entirely, and saying so plainly is the point: a player
@@ -3422,18 +3426,12 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           magnitude = defended.amount;
           resistTag = ` (${defended.label})`;
         }
-        // SWADE shields: armor that counts only vs ranged attacks (a Medium/
-        // Large Shield's +2) soaks that much off any ranged hit automatically.
-        // The weapon's AP (armor piercing) eats through that soak first.
-        if (action.ranged && targetChar.system === 'swade') {
-          const dr = Math.max(0, swadeRangedArmor(targetChar.sheet) - (action.ap ?? 0));
-          if (dr > 0 && magnitude > 0) {
-            magnitude = Math.max(0, magnitude - dr);
-            resistTag += ` (shield −${dr} vs ranged)`;
-          } else if (swadeRangedArmor(targetChar.sheet) > 0 && (action.ap ?? 0) > 0) {
-            resistTag += ` (AP ${action.ap} pierces shield)`;
-          }
-        }
+        // A shield's ranged bonus and the weapon's AP are no longer taken off
+        // the DAMAGE here: they move the Toughness the damage is measured
+        // against (swadeEffectiveToughness, below), so the card can show the
+        // arithmetic — "7 vs. Toughness 9 (+2 shield vs ranged, −AP 2 = 7)"
+        // — and a roll that equals the number on the sheet reads as the
+        // Shaken it is.
       }
       // Wound-mending never reaches here — it is the whole of its own branch
       // at the top of resolveDamage, where the Healing roll's margin decides
@@ -3466,7 +3464,14 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           if (targetChar.system === 'swade' && delta < 0) {
             // The wound ladder, not the HP pool: preview the same outcome
             // applyHpDelta will compute when it actually lands.
-            const toughness = Number(systemFor('swade').derive(targetChar.sheet).toughness) || 4;
+            // The very same Toughness applyHpDelta will use when the hit
+            // lands — one helper, both places. Ties go to the attacker: a
+            // damage total EQUAL to this number Shakes.
+            const def = swadeEffectiveToughness(targetChar.sheet, { ranged: !!action.ranged, ap: action.ap ?? 0 });
+            const toughness = def.toughness || 4;
+            const toughnessMath = def.shield || def.pierced
+              ? ` (${def.base}${def.shield ? ` +${def.shield} shield vs ranged` : ''}${def.pierced ? ` −AP ${def.pierced}` : ''} = ${toughness})`
+              : '';
             const out = swadeDamageOutcome(-delta, toughness, {
               alreadyShaken: conditionsOf(targetChar.sheet).includes('shaken'),
               wildCard: targetChar.sheet.wildCard !== false,
@@ -3479,7 +3484,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
               }),
             });
             defenseTag = ` (Toughness ${toughness})`;
-            verdictRow = `${out.verdict} (${-delta} vs. Toughness ${toughness})`;
+            verdictRow = `${out.verdict} (${-delta} vs. Toughness ${toughness}${toughnessMath})`;
             statusRow = out.stateNote ?? '';
             poisonLands = out.shaken && !!action.poison;
           } else {
@@ -3495,7 +3500,8 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
             const fresh = characters.byId(targetId);
             let hit: string | null = null;
             if (fresh) {
-              applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name, action.damageType);
+              applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name, action.damageType,
+                { ranged: !!action.ranged, ap: action.ap ?? 0 });
               // In SWADE the number is not the news: 9 damage means nothing
               // until it has met a Toughness. Float the verdict instead.
               if (delta < 0) hit = swadeHitText(fresh, characters.byId(targetId) ?? fresh);

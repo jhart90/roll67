@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeToughness, bennyPurse as swadeBennyPurse, type BennyPurse, vehicleWoundCap, WRECK_DAMAGE, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetCard, type SheetData } from 'shared';
+import { MAX_WOUNDS, S2C, addTally, isAbomination, isVehicle, rollOutOfControl, rollVehicleCrit, swadeCritFail, swadeEffectiveToughness, swadeToughness, bennyPurse as swadeBennyPurse, type BennyPurse, vehicleWoundCap, WRECK_DAMAGE, type DieRoll, conditionsOf, disruptionPatch, hasActivePowers, usesArcaneDevice, DEATHS_KEY, KILLS_KEY, dieSides, firstFreeHex, getCondition, hasConcentrationAdvantage, num, packHex, roll, rollInjuryTable, str, swadeDamageOutcome, swadeWoundCap, swadeHealOutcome, systemFor, traitExpr, type Character, type ImpactKind, type SheetCard, type SheetData } from 'shared';
 import { campaigns, characters, chat, mapObjects, maps, tokens, worldFolders } from '../db/repos.js';
 import { campaignRoom, dmRoom, userRoom } from './hub.js';
 import { socketsSeeingHex, syncMapVision } from './visionService.js';
@@ -308,6 +308,9 @@ export function applyHpDelta(
    *  untyped hit is exactly the anonymous violence Invulnerability shrugs
    *  off, so leaving it out is the safe default rather than a gap. */
   damageType?: string,
+  /** The attack this damage came from, for the Toughness it is measured
+   *  against: a shield counts only vs ranged, and AP pierces armor. */
+  attack?: { ranged?: boolean; ap?: number },
 ): { character: Character; note: string } {
   // SWADE characters use the real damage ladder — Shaken and Wounds against
   // Toughness — never the HP pool. Every damage/heal site funnels through
@@ -315,7 +318,7 @@ export function applyHpDelta(
   // heals alike.
   if (character.system === 'swade') {
     return delta < 0
-      ? applySwadeDamage(io, campaignId, character, -delta, sourceLabel, attackerName, damageType)
+      ? applySwadeDamage(io, campaignId, character, -delta, sourceLabel, attackerName, damageType, attack)
       : applySwadeHeal(io, campaignId, character, delta);
   }
   const { patch, note, status, concCheck } = computeHpDelta(character, delta);
@@ -677,14 +680,15 @@ export function resolveOutOfControl(io: Server, campaignId: string, ch: Characte
 /** Damage vs Toughness: no effect / Shaken / Wounds / Incapacitated. */
 function applySwadeDamage(
   io: Server, campaignId: string, character: Character, damage: number, sourceLabel?: string,
-  attackerName?: string, damageType?: string,
+  attackerName?: string, damageType?: string, attack?: { ranged?: boolean; ap?: number },
 ): { character: Character; note: string } {
   // A machine takes its hits on its own ladder — see applyVehicleDamage.
   if (isVehicle(character.sheet)) {
     return applyVehicleDamage(io, campaignId, character, damage, sourceLabel);
   }
-  const derived = systemFor('swade').derive(character.sheet);
-  const toughness = Number(derived.toughness) || 4;
+  // The same Toughness the attack card previewed: shield vs ranged, AP vs
+  // armor. Damage with no attack behind it (a fall, a trap) has neither.
+  const toughness = swadeEffectiveToughness(character.sheet, { ranged: !!attack?.ranged, ap: attack?.ap ?? 0 }).toughness || 4;
   const wildCard = character.sheet.wildCard !== false;
   const out = swadeDamageOutcome(damage, toughness, {
     alreadyShaken: conditionsOf(character.sheet).includes('shaken'),

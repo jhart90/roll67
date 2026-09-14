@@ -314,12 +314,27 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
   // the dice, so it lights up for every roll from every source (attacks, saves,
   // trait rolls, a cooked grenade) without the server tagging each one.
   const snakeEyes = system === 'swade' && swadeSnakeEyes(r.dice);
+  // Every roll with a verdict reads like the attack card: one bold line, in
+  // the outcome's colour, under the dice, saying whether it passed, what
+  // was compared and what came of it. The attack card sends that line
+  // separately (outcomeNote); most other rolls — a save, a damage roll, a
+  // Shooting roll for a template, a check to cross a wall — carry it inside
+  // their text, which used to render as the dim label ABOVE the dice, where
+  // the one thing the table needed to read was the easiest to skim past.
+  // So for a pass/fail roll with no separate note, the text becomes the
+  // verdict: a single line moves down whole; a multi-line card keeps its
+  // first line as the heading ("Kira's Pistol damage roll") and the rest
+  // ("1 Wound (17 vs. Toughness 12) / now 3 Wounds, Shaken") is the verdict.
+  const textIsVerdict = !!r.outcome && !msg.outcomeNote && !!msg.text;
+  const lines = textIsVerdict ? msg.text.split('\n').filter((l) => l.trim() !== '') : [];
+  const label = textIsVerdict ? (lines.length > 1 ? lines[0] : '') : msg.text;
+  const verdict = textIsVerdict ? (lines.length > 1 ? lines.slice(1).join('\n') : msg.text) : (msg.outcomeNote ?? '');
   return (
     <div className={`roll-card ${isCrit ? 'crit' : ''} ${isFumble || snakeEyes ? 'fumble' : ''} ${snakeEyes ? 'critfail' : ''}`}>
       {snakeEyes && <div className="critfail-banner">💀 Snake Eyes — Critical Failure</div>}
-      {msg.text && (
+      {(label || msg.actionName) && (
         <div className="roll-label">
-          <Highlighted text={msg.text} hl={hl} />
+          {label && <Highlighted text={label} hl={hl} />}
           {msg.actionName && <> <ActionTerm name={msg.actionName} /></>}
         </div>
       )}
@@ -351,7 +366,11 @@ function RollCard({ msg, hl }: { msg: ChatMessage; hl: NameHighlights }) {
       </div>
       {/* Why it landed, last — the dice come first, the verdict reads as their
           conclusion rather than a spoiler above them. */}
-      {msg.outcomeNote && <div className="roll-outcome">{markIncapacitated(msg.outcomeNote)}</div>}
+      {verdict && (
+        <div className="roll-outcome">
+          {textIsVerdict ? <Highlighted text={verdict} hl={hl} /> : markIncapacitated(verdict)}
+        </div>
+      )}
     </div>
   );
 }

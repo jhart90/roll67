@@ -27,7 +27,12 @@ export function BackupProgressWindow() {
     : p.phase === 'done' ? 'Backup saved'
       : packing ? 'Packing up the campaign…' : `Downloading… ${pct}%`;
   return (
-    <div style={{ width: 'min(420px, 90vw)', padding: '10px 14px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    // Its own panel fill: the window frame supplies the title bar and nothing
+    // behind the body, so without this the bar floated over the map.
+    <div style={{
+      width: 'min(420px, 90vw)', padding: '10px 14px 14px', display: 'flex', flexDirection: 'column', gap: 8,
+      background: 'var(--panel)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px',
+    }}>
       <strong>{label}</strong>
       <div
         role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={packing ? undefined : pct}

@@ -4070,10 +4070,17 @@ th > .term { border-bottom-style: dotted; }
   opacity: 0.42;
   transition: opacity 0.22s ease;
 }
+/* The approach zone: the card wakes when the cursor comes within 46px. It
+   is a positioned pseudo-element, so without a z-index it painted ABOVE the
+   card's own buttons and swallowed every click on them — the three buttons
+   did nothing. Below the content (but above the card's background, since
+   the card is its own stacking context) it still catches the hover outside
+   the card and never gets between the pointer and a button. */
 .portal-card-quiet::before {
   content: '';
   position: absolute; inset: -46px;
   border-radius: 24px;
+  z-index: -1;
 }
 .portal-card-quiet:hover, .portal-card-quiet:focus-within { opacity: 1; }
 .portal-card-quiet .portal-stack { min-width: min(174px, 60vw); gap: 7px; }

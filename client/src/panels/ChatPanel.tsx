@@ -464,11 +464,11 @@ function BennyRerollItems({ ch, msgId, resist, onDone }: { ch: Character; msgId:
   const thisDamage = !!st?.damageMsgIds?.includes(msgId);
   const thisCrit = !!st?.critFailMsgIds?.includes(msgId);
   const tracked = thisTrait || thisDamage || thisCrit;
-  // A resist roll is filed under the defender, but the server does not bank it
-  // for a reroll: buying it back would have to undo the Stun or the Shaken it
-  // decided. Say so, rather than offer "your latest" and reroll some OTHER roll.
+  // A resist card the server is not tracking is either one that succeeded —
+  // nothing to buy back — or one from before a restart. Either way, offering
+  // "your latest" here would reroll some OTHER roll, so say why instead.
   if (resist && !tracked) {
-    return <div className="chat-menu-note dim">Resist rolls can't be rerolled with a Benny here yet.</div>;
+    return <div className="chat-menu-note dim">Only a failed resist roll can be rerolled with a Benny.</div>;
   }
   if (!broke && tracked) {
     if (thisCrit) {

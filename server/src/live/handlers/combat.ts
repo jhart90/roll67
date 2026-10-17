@@ -24,7 +24,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens, redactChat } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, bennyPurse, emitBennyState, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, bennyPurse, emitBennyState, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordResistRoll, reverseResistEffects, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { rollGate } from '../locks.js';
 import { applyAdv } from './chat.js';
@@ -324,7 +324,8 @@ function resolvePoison(
   poison: { mod: number; effect: string; kind?: string }, sourceLabel: string,
 ): void {
   const fresh = characters.byId(target.id) ?? target;
-  const br = roll(traitExpr(fresh.sheet, dieSides(String(fresh.sheet.vigor ?? 'd4')), poison.mod));
+  const poisonExpr = traitExpr(fresh.sheet, dieSides(String(fresh.sheet.vigor ?? 'd4')), poison.mod);
+  const br = roll(poisonExpr);
   const resisted = br.total >= 4;
   const effectWord = poison.effect === 'incapacitated' ? 'Incapacitated'
     : poison.effect === 'shaken' ? 'Shaken'
@@ -343,6 +344,15 @@ function resolvePoison(
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
   if (resisted) return;
+  // Banked before the effect lands below, so a Benny that turns this into a
+  // success knows exactly what to take back off.
+  recordResistRoll(io, campaignId, fresh, {
+    expr: poisonExpr, total: br.total, tn: 4, label: `their resist against the ${label.toLowerCase()}`,
+    source: `the ${label.toLowerCase()} from ${sourceLabel}`, msgId: msg.id,
+    critFail: swadeRollFailed(fresh, br.dice), settleMs: 1000,
+    conditions: poison.effect === 'fatigue' ? [] : [poison.effect === 'paralyzed' ? 'paralyzed' : poison.effect === 'shaken' ? 'shaken' : 'incapacitated'],
+    fatigue: poison.effect === 'fatigue',
+  });
   if (poison.effect === 'fatigue') {
     // Fatigue is a track, not a condition: two levels and they are out.
     const after = Math.min(2, num(fresh.sheet, 'fatigue', 0) + 1);
@@ -518,6 +528,7 @@ function resolveSwadeManeuver(
       recipients: null,
     });
     io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
+    return msg;
   };
   const mapMod = multiActionPenaltyFor(campaignId, actor.id);
   spendAction(campaignId, actor.id);
@@ -564,14 +575,15 @@ function resolveSwadeManeuver(
   setTimeout(() => {
     const freshTarget = characters.byId(targetChar.id);
     if (!freshTarget) return;
-    const dBr = roll(traitExpr(freshTarget.sheet, spec.dSides));
+    const dExpr = traitExpr(freshTarget.sheet, spec.dSides);
+    const dBr = roll(dExpr);
     const success = aBr.total >= 4 && aBr.total > dBr.total;
     const raiseWin = success && aBr.total - dBr.total >= 4;
     // The defender's arm: say it is a resist, against what, and what it cost.
     const lost = kind === 'test' ? (raiseWin ? 'Distracted and Shaken' : 'Distracted')
       : kind === 'grapple' ? (raiseWin ? 'Bound' : 'Entangled')
         : (raiseWin ? 'shoved back 2 and Prone' : 'shoved back');
-    postRoll(
+    const dMsg = postRoll(
       freshTarget,
       `${freshTarget.name} resists ${actor.name}\u2019s ${kind === 'test' ? 'Test' : kind === 'grapple' ? 'Grapple' : 'Push'}`
         + ` — ${spec.dLabel}: ${dBr.total} vs their ${spec.aLabel} ${aBr.total}\n`
@@ -579,6 +591,19 @@ function resolveSwadeManeuver(
       dBr, !success,
       { who: freshTarget.name, byUserId: freshTarget.ownerUserId ?? null, tone: 'save', what: `resisting ${actor.name}\u2019s ${verb} — ${spec.dLabel}` },
     );
+    // Losing a Test or a Grapple is the defender's to buy back: they need to
+    // MATCH the attacker's total (ties go to the resister). A Push already
+    // moved them, which no reroll puts back, so it is not offered.
+    if (success && kind !== 'push') {
+      recordResistRoll(io, campaignId, freshTarget, {
+        expr: dExpr, total: dBr.total, tn: aBr.total,
+        label: `their resist against ${actor.name}'s ${verb}`,
+        source: `${actor.name}'s ${kind === 'test' ? 'Test' : 'Grapple'}`,
+        msgId: dMsg.id, critFail: swadeRollFailed(freshTarget, dBr.dice),
+        settleMs: diceSettleDelayMs(dBr.dice) + 1500,
+        conditions: kind === 'test' ? ['distracted', 'shaken'] : ['entangled', 'bound'],
+      });
+    }
 
     setTimeout(() => {
       const fresh = characters.byId(targetChar.id);
@@ -1868,6 +1893,19 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       threadId: spec.leadMessageId,
     });
     io.to(campaignRoom(spec.campaignId)).emit(S2C.CHAT, { msg });
+    // Their Benny can buy this back. The damage and conditions land after
+    // every target has rolled, so the effects are measured after that.
+    if (!passed && ch?.system === 'swade') {
+      const what = spec.label?.trim() || 'the effect';
+      recordResistRoll(io, spec.campaignId, ch, {
+        expr: sc.expr, total: br.total, tn: sc.threshold,
+        label: spec.evasion ? `their dive clear of ${what}` : `their resist against ${what}`,
+        source: spec.attackerName ? `${spec.attackerName}\u2019s ${what}` : what,
+        msgId: msg.id, critFail: swadeRollFailed(ch, br.dice),
+        settleMs: (targets.length - i) * SAVE_STEP_DELAY_MS + (hasDamage ? 7000 : 2500),
+        conditions: spec.appliesCondition ? [spec.appliesCondition] : [], damage: hasDamage,
+      });
+    }
 
     if (i + 1 < targets.length) setTimeout(() => postSave(i + 1), SAVE_STEP_DELAY_MS);
     else if (hasDamage) setTimeout(postDamage, SAVE_STEP_DELAY_MS);
@@ -3158,7 +3196,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     let hitLabel = '';
     // The attack card shows this under the dice instead of in its headline.
     let attackOutcome = '';
-    let deferredSave: { total: number; threshold: number; label: string; passed: boolean } | null = null;
+    let deferredSave: { total: number; threshold: number; label: string; passed: boolean; expr?: string; crit?: boolean } | null = null;
     if (action.saveId && action.effect === 'damage') {
       // Monster stat-block attacks (breath weapons, etc.) bake in a fixed DC
       // rather than deriving one from the actor's spellcasting stat.
@@ -3177,7 +3215,10 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       // 5e's threshold is always the caster's DC; SWN's is target-number based
       // (ignores the caster's DC entirely) — showing sc.threshold is correct
       // for both instead of hard-coding "vs DC" around the 5e-only casterDc.
-      deferredSave = { total: attackBreakdown.total, threshold: sc.threshold, label: sc.label, passed };
+      deferredSave = {
+        total: attackBreakdown.total, threshold: sc.threshold, label: sc.label, passed,
+        expr: sc.expr, crit: swadeRollFailed(targetChar, attackBreakdown.dice),
+      };
     } else if (action.attackExpr) {
       // Net advantage folds the roller's choice with attacker/target
       // conditions. On 1d20 systems that becomes advantage/disadvantage
@@ -3407,6 +3448,13 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
         });
         io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+        if (!passed && fresh.system === 'swade' && conditionId) {
+          recordResistRoll(io, d.campaignId, fresh, {
+            expr: sc.expr, total: br.total, tn: sc.threshold, label: `their resist against ${action.label}`,
+            source: `${actor.name}\u2019s ${action.label}`, msgId: msg.id, critFail: swadeRollFailed(fresh, br.dice),
+            settleMs: diceSettleDelayMs(br.dice) + 1500, conditions: [conditionId],
+          });
+        }
         if (!passed) setTimeout(applyCondition, diceSettleDelayMs(br.dice));
       }, delayMs);
     };
@@ -3713,7 +3761,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     };
 
     if (deferredSave) {
-      const { total, threshold, label, passed } = deferredSave;
+      const { total, threshold, label, passed, expr: resistExpr, crit: resistCrit } = deferredSave;
       const noDamage = saveScale === 0;
       // A fully-negated save still spends the ammo/item that was used --
       // and it must be consumed BEFORE the card is posted, since chat.add
@@ -3750,6 +3798,16 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       }, noDamage && undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg: saveMsg });
+      // A failed resist is the DEFENDER's to buy back with a Benny. Banked
+      // before its effects land, so a reroll knows what it has to undo.
+      if (!passed && isSwade && targetChar && resistExpr) {
+        recordResistRoll(io, d.campaignId, targetChar, {
+          expr: resistExpr, total, tn: threshold, label: `their resist against ${action.label}`,
+          source: `${actor.name}\u2019s ${action.label}`, msgId: saveMsg.id, critFail: resistCrit,
+          settleMs: SAVE_STEP_DELAY_MS + (dealsDamage ? 7000 : 1500),
+          conditions: conditionId ? [conditionId] : [], damage: dealsDamage,
+        });
+      }
       if (noDamage) return; // save passed & negates: no damage, no condition
       // A condition-only spell (Hold Person: no damage dice at all) has
       // nothing left to roll -- the failed save above IS the whole
@@ -5188,11 +5246,47 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         // it bought; the dice wait until it has landed and faded, because two
         // animations playing over each other is two nobody watches.
         postStatusLine(io, d.campaignId, `🪙 ${ch.name} spends a Benny to reroll ${rec.label}.`);
+        // A resist reroll has to wait for the failure's effects to finish
+        // landing (a damage roll may still be in the air), so it knows exactly
+        // what a success should take back off.
+        const resistWait = rec.resist ? Math.max(0, rec.resist.settleAt + 250 - Date.now() - BENNY_FLIP_MS) : 0;
         setTimeout(() => {
           const now = characters.byId(ch.id);
           if (!now) return;
           const b = roll(rec.expr);
           const better = b.total > rec.total;
+          // A failed RESIST: the Stun, the Shaken, the Wound already landed.
+          // A reroll that now beats the number takes exactly those back off;
+          // one that still fails is banked again for another Benny.
+          if (rec.resist && rec.tn !== undefined) {
+            const tn = rec.tn;
+            const rerollCrit = critFailFor(io, d.campaignId, now, b.dice);
+            const best = Math.max(rec.total, rerollCrit ? 0 : b.total);
+            const nowResists = best >= tn;
+            const lifted = nowResists && rec.resist.effects
+              ? reverseResistEffects(io, d.campaignId, now, rec.resist.effects) : [];
+            const rerollMsg = postRoll(
+              `${now.name} rerolls the resist against ${rec.resist.source} — ${b.total} vs TN ${tn}`
+                + (better ? '' : ` (the original ${rec.total} stands)`) + '\n'
+                + (nowResists
+                  ? `RESISTED after all — ${lifted.length > 0 ? lifted.join(', ') : 'nothing left to undo'}`
+                  : 'still FAILED — the effects stand'),
+              b, nowResists, `rerolling the resist — ${rec.label}`,
+            );
+            if (rec.msgId && rerollMsg) {
+              markObsolete(io, d.campaignId, rec.msgId,
+                nowResists ? `Overturned by a Benny reroll — ${b.total} vs TN ${tn}.` : `Rerolled with a Benny — still a failure.`);
+            }
+            if (!nowResists && rerollMsg) {
+              // Still failed: the same effects, open to one more Benny.
+              recordResistRoll(io, d.campaignId, now, {
+                expr: rec.expr, total: best, tn, label: rec.label, source: rec.resist.source,
+                msgId: rerollMsg.id, critFail: rerollCrit, settleMs: 0, conditions: [],
+                effects: rec.resist.effects,
+              });
+            }
+            return;
+          }
           // A Soak reroll is not just a better number on a card: the same
           // attack's Wounds come off for real. Keep whichever roll went
           // further, apply only what the first one did not, and re-record so
@@ -5260,7 +5354,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           // and everything that follows, run from the attack's own closure so
           // it is the same resolution the first roll would have had.
           if (turned && rec.onHit) setTimeout(rec.onHit, diceSettleDelayMs(b.dice));
-        }, BENNY_FLIP_MS);
+        }, BENNY_FLIP_MS + resistWait);
         break;
       }
       case 'redraw-card': {

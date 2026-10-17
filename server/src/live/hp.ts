@@ -812,6 +812,20 @@ export interface BennyRollRec {
   /** The chat card this roll was posted as, so a reroll that overtakes it can
    *  put a cover on the dice the table already watched. */
   msgId?: number;
+  /** This was a FAILED resist roll, and here is what failing cost — so a
+   *  Benny that turns it into a success can take exactly that back off. */
+  resist?: ResistRec;
+}
+
+/** What one failed resist did to its defender. */
+export interface ResistEffects { conditions: string[]; wounds: number; fatigue: number }
+export interface ResistRec {
+  /** What it was resisting, for the reroll card: "Glarer’s Falcon Glare". */
+  source: string;
+  /** When the effects have all landed and been measured. */
+  settleAt: number;
+  /** Filled in at settleAt: the difference the failure made. */
+  effects?: ResistEffects;
 }
 /**
  * Every rerollable roll a character has made recently, newest last — not just
@@ -951,6 +965,89 @@ export function recordBennyRoll(
     bank(ch, rec);
   }
   emitBennyState(io, campaignId, ch);
+}
+
+/**
+ * A failed resist roll, banked for the DEFENDER's Benny.
+ *
+ * A resist is not like a missed attack, where a reroll simply finishes what
+ * the miss left undone: by the time anyone right-clicks, the failure has
+ * already Stunned them, Shaken them, or Wounded them. So the defender is
+ * measured now, and again once the effects have landed (`settleMs`), and the
+ * difference — only conditions the effect could have caused, and Wounds or
+ * Fatigue only if it could cause those — is what a successful reroll takes
+ * off again. Measuring the difference rather than restoring a snapshot means
+ * nothing that happens to them later is undone by mistake.
+ */
+const RESIST_COMPANIONS: Record<string, string[]> = {
+  stunned: ['prone'],
+  paralyzed: ['stunned', 'prone'],
+  bound: ['entangled'],
+};
+function effectSnap(ch: Character): ResistEffects {
+  return { conditions: conditionsOf(ch.sheet), wounds: num(ch.sheet, 'wounds', 0), fatigue: num(ch.sheet, 'fatigue', 0) };
+}
+export function recordResistRoll(
+  io: Server, campaignId: string, ch: Character,
+  opts: {
+    expr: string; total: number; tn: number; label: string; source: string; msgId: number;
+    critFail?: boolean; settleMs: number;
+    /** Conditions the effect inflicts (its own, plus Stunned's Prone etc.). */
+    conditions: string[];
+    /** It deals damage: Shaken, Wounds and what follows them are its doing too. */
+    damage?: boolean;
+    /** It costs Fatigue (poison). */
+    fatigue?: boolean;
+    /** Already measured — a reroll that still failed carries the original's. */
+    effects?: ResistEffects;
+  },
+): void {
+  if (ch.system !== 'swade') return;
+  const before = effectSnap(characters.byId(ch.id) ?? ch);
+  const allow = new Set(opts.conditions.flatMap((c) => [c, ...(RESIST_COMPANIONS[c] ?? [])]));
+  if (opts.damage) for (const c of ['shaken', 'incapacitated', 'bleeding']) allow.add(c);
+  if (opts.fatigue) allow.add('incapacitated');
+  const resist: ResistRec = { source: opts.source, settleAt: Date.now() + opts.settleMs };
+  bank(ch, {
+    kind: 'trait', expr: opts.expr, total: opts.total, label: opts.label, at: Date.now(),
+    tn: opts.tn, tnName: 'TN', hit: false, msgId: opts.msgId, resist,
+    ...(opts.critFail ? { critFail: true } : {}),
+  });
+  emitBennyState(io, campaignId, characters.byId(ch.id) ?? ch);
+  if (opts.effects) { resist.effects = opts.effects; return; }
+  setTimeout(() => {
+    const after = effectSnap(characters.byId(ch.id) ?? ch);
+    resist.effects = {
+      conditions: after.conditions.filter((c) => !before.conditions.includes(c) && allow.has(c)),
+      wounds: opts.damage ? Math.max(0, after.wounds - before.wounds) : 0,
+      fatigue: opts.fatigue ? Math.max(0, after.fatigue - before.fatigue) : 0,
+    };
+  }, opts.settleMs);
+}
+
+/** Take a failed resist's effects back off. Returns what was lifted, in words. */
+export function reverseResistEffects(io: Server, campaignId: string, ch: Character, eff: ResistEffects): string[] {
+  const fresh = characters.byId(ch.id) ?? ch;
+  const lifted: string[] = [];
+  const patch: SheetData = {};
+  const cur = conditionsOf(fresh.sheet);
+  const gone = eff.conditions.filter((c) => cur.includes(c));
+  if (gone.length > 0) {
+    patch.conditions = cur.filter((c) => !gone.includes(c));
+    lifted.push(...gone.map((c) => `no longer ${getCondition(c)?.label ?? c}`));
+  }
+  if (eff.wounds > 0) {
+    const w = num(fresh.sheet, 'wounds', 0);
+    const back = Math.min(w, eff.wounds);
+    if (back > 0) { patch.wounds = w - back; lifted.push(`${back} Wound${back === 1 ? '' : 's'} undone`); }
+  }
+  if (eff.fatigue > 0) {
+    const f = num(fresh.sheet, 'fatigue', 0);
+    const back = Math.min(f, eff.fatigue);
+    if (back > 0) { patch.fatigue = f - back; lifted.push(`${back} Fatigue undone`); }
+  }
+  if (Object.keys(patch).length > 0) persistSheet(io, campaignId, fresh, patch);
+  return lifted;
 }
 
 /**

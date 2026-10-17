@@ -70,7 +70,9 @@ const glarer = await makeChar('Glarer', {
     { name: 'Shriek', skill: 'Shooting', damage: '0', dtype: '', range: 0, save: 'spirit', saveMod: -1, onSave: 'negate', saveDc: 4, condition: 'shaken', aoeShape: 'cone', aoeSize: 54, wielded: true },
   ],
 });
-const tester = await makeChar('Tester', { agility: 'd6', spirit: 'd6', vigor: 'd6' });
+// A Wild Card with a weak Agility: fails a resist often enough to test, and
+// has the Bennies to buy one back.
+const tester = await makeChar('Tester', { agility: 'd4', spirit: 'd6', vigor: 'd6', wildCard: true, bennies: 6 });
 const gTok = await place(glarer, 5, 5);
 const tTok = await place(tester, 7, 5);
 
@@ -104,7 +106,73 @@ if (s) {
   ok(s.callout?.who === 'Tester', `the cone banner names the defender, not the GM's account (${s.callout?.who})`);
 }
 
-ok(errors.length === 0, `no server errors (${errors.join(' ; ')})`);
+// 3. A Benny buys back a FAILED resist — and takes its effect off again.
+let testerSheet = tester.sheet;
+sock.on('characterUpserted', (p) => { if (p.character.id === tester.id) testerSheet = p.character.sheet; });
+let bState = null;
+sock.on('bennyState', (p) => { if (p.characterId === tester.id) bState = p; });
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const conds = () => (Array.isArray(testerSheet.conditions) ? testerSheet.conditions : []);
+const reset = async () => {
+  // Whatever the last glare did has to land before it can be wiped.
+  await pause(4500);
+  sock.emit('updateCharacter', { characterId: tester.id, patch: { conditions: [], bennies: 6 } });
+  await pause(1000);
+};
+
+await pause(1500);
+await reset();
+ok(conds().length === 0, `setup: Tester starts clean (${conds().join(',') || 'none'})`);
+
+// Dice decide: a resist has to fail, then a Benny has to beat it before
+// snake eyes (a Critical Failure, which no Benny buys back) ends the try.
+let checked = false;
+let resolved = null;
+for (let attempt = 0; attempt < 6 && !resolved; attempt++) {
+  let failed = null;
+  for (let i = 0; i < 12 && !failed; i++) {
+    const card = waitFor(sock, 'chatMsg', 8000, (p) => /resists Glarer’s Glare/.test(p.msg?.text ?? ''));
+    sock.emit('combatAction', { characterId: glarer.id, actionId: 'attack:0', sourceTokenId: gTok.id, targetTokenId: tTok.id, adv: null });
+    const m = (await card).msg;
+    await pause(400);
+    if (/^FAILED/.test(m.text.split('\n')[1] ?? '') && !(bState?.critFailMsgIds ?? []).includes(m.id)) failed = m;
+    else await reset();
+  }
+  if (!failed) continue;
+  await pause(5500); // the Distracted lands, and the effect is measured
+  if (!checked) {
+    checked = true;
+    ok(conds().includes('distracted'), `the failed resist left them Distracted (${conds().join(',')})`);
+    ok((bState?.traitMsgIds ?? []).includes(failed.id), 'the failed resist card is offered for a Benny');
+  }
+  let cardId = failed.id;
+  for (let tries = 0; tries < 5 && !resolved; tries++) {
+    const before = errors.length;
+    const reroll = waitFor(sock, 'chatMsg', 12000, (p) => /rerolls the resist against/.test(p.msg?.text ?? '')).catch(() => null);
+    sock.emit('bennyUse', { characterId: tester.id, use: 'reroll-trait', messageId: cardId });
+    const r = (await reroll)?.msg;
+    if (!r) break;
+    console.log(`      reroll: ${r.text.replace('\n', ' / ')}`);
+    if (/RESISTED after all/.test(r.text)) resolved = r;
+    else {
+      await pause(1200);
+      // Snake eyes on the reroll: that one stands, and is refused politely.
+      if ((bState?.critFailMsgIds ?? []).includes(r.id) || errors.length > before) break;
+      cardId = r.id;
+    }
+  }
+  if (!resolved) await reset();
+}
+ok(!!resolved, 'a Benny turned the failure into a success');
+if (resolved) {
+  ok(/no longer Distracted/.test(resolved.text), `the card says what came off (${resolved.text.split('\n')[1]})`);
+  await pause(800);
+  ok(!conds().includes('distracted'), `and Tester really is no longer Distracted (${conds().join(',') || 'none'})`);
+}
+
+// A refused Critical Failure is the rule working, not a server fault.
+const realErrors = errors.filter((e) => !/Critical Failure/.test(e));
+ok(realErrors.length === 0, `no server errors (${realErrors.join(' ; ')})`);
 sock.close();
 console.log('');
 console.log(failures === 0 ? 'resist cards: all checks passed' : `resist cards: ${failures} check(s) FAILED`);

@@ -333,7 +333,12 @@ function resolvePoison(
   const label = poison.kind === 'infection' ? 'Infection' : 'Poison';
   const msg = chat.add(campaignId, {
     userId: null, fromName: 'System', kind: 'roll', characterId: fresh.id,
-    text: `${fresh.name} — ${label} (Vigor${fmtMod(poison.mod)}) from ${sourceLabel}: ${resisted ? 'shrugs it off' : `takes ${effectWord}`}`,
+    text: `${fresh.name} resists the ${label.toLowerCase()} from ${sourceLabel} — Vigor roll${poison.mod ? ` ${fmtMod(poison.mod)}` : ''}: ${br.total} vs TN 4\n`
+      + (resisted ? `RESISTED — shrugs it off` : `FAILED — ${effectWord}`),
+    callout: {
+      who: fresh.name, byUserId: fresh.ownerUserId ?? null, tone: 'save',
+      what: `resisting ${label.toLowerCase()} — Vigor`,
+    },
     roll: { ...br, outcome: resisted ? 'success' as const : 'failure' as const }, recipients: null,
   });
   io.to(campaignRoom(campaignId)).emit(S2C.CHAT, { msg });
@@ -504,10 +509,11 @@ function resolveSwadeManeuver(
 ): void {
   const campaignId = d.campaignId;
   if (!targetChar) { emitError(socket, 'That maneuver needs a character target.'); return; }
-  const postRoll = (ch: Character, text: string, br: ReturnType<typeof roll>, ok: boolean | null) => {
+  const postRoll = (ch: Character, text: string, br: ReturnType<typeof roll>, ok: boolean | null, callout?: RollCalloutInfo) => {
     const msg = chat.add(campaignId, {
       userId: d.userId, fromName: d.username, fromCharacter: ch.name,
       characterId: ch.id, statsUserId: ch.ownerUserId, kind: 'roll', text,
+      ...(callout ? { callout } : {}),
       roll: ok === null ? br : { ...br, outcome: ok ? 'success' as const : 'failure' as const },
       recipients: null,
     });
@@ -561,7 +567,18 @@ function resolveSwadeManeuver(
     const dBr = roll(traitExpr(freshTarget.sheet, spec.dSides));
     const success = aBr.total >= 4 && aBr.total > dBr.total;
     const raiseWin = success && aBr.total - dBr.total >= 4;
-    postRoll(freshTarget, `${freshTarget.name} resists — ${spec.dLabel} ${dBr.total} vs ${aBr.total}`, dBr, !success);
+    // The defender's arm: say it is a resist, against what, and what it cost.
+    const lost = kind === 'test' ? (raiseWin ? 'Distracted and Shaken' : 'Distracted')
+      : kind === 'grapple' ? (raiseWin ? 'Bound' : 'Entangled')
+        : (raiseWin ? 'shoved back 2 and Prone' : 'shoved back');
+    postRoll(
+      freshTarget,
+      `${freshTarget.name} resists ${actor.name}\u2019s ${kind === 'test' ? 'Test' : kind === 'grapple' ? 'Grapple' : 'Push'}`
+        + ` — ${spec.dLabel}: ${dBr.total} vs their ${spec.aLabel} ${aBr.total}\n`
+        + (success ? `FAILED — ${lost}` : 'RESISTED — holds firm'),
+      dBr, !success,
+      { who: freshTarget.name, byUserId: freshTarget.ownerUserId ?? null, tone: 'save', what: `resisting ${actor.name}\u2019s ${verb} — ${spec.dLabel}` },
+    );
 
     setTimeout(() => {
       const fresh = characters.byId(targetChar.id);
@@ -1578,6 +1595,30 @@ function postCastCard(
   return msg.id;
 }
 
+/**
+ * The bold line under a SWADE resist roll: did they resist, and what did that
+ * spare them (or not).
+ *
+ * Every resisted effect posts the DEFENDER's dice, often filed under the
+ * attacker's name. "Success (DC 4)" left the table guessing whose success it
+ * was and what it bought; this says it in the defender's terms.
+ */
+function resistVerdict(o: { passed: boolean; condition?: string; dealsDamage?: boolean; evasion?: boolean }): string {
+  const cond = o.condition ? (getCondition(o.condition)?.label ?? o.condition) : '';
+  if (o.evasion) {
+    return o.passed ? 'DIVES CLEAR — no damage'
+      : `CAUGHT — ${['takes the damage', cond].filter(Boolean).join(', ')}`;
+  }
+  if (o.passed) return `RESISTED — ${cond ? `not ${cond}` : 'no effect'}${o.dealsDamage ? ', no damage' : ''}`;
+  return `FAILED — ${[cond, o.dealsDamage ? 'takes the damage' : ''].filter(Boolean).join(', ') || 'the effect lands'}`;
+}
+
+/** "Tester resists the Turret's Sonic Shriek" — the heading of a resist card. */
+function resistHeading(who: string, attacker: string | undefined, what: string | undefined, evasion = false): string {
+  const source = what?.trim() ? `${attacker ? `${attacker}\u2019s ` : ''}${what.trim()}` : (attacker ? `${attacker}\u2019s attack` : 'the effect');
+  return evasion ? `${who} dives clear of ${source}` : `${who} resists ${source}`;
+}
+
 /** Fold an attack's resist modifier ("Vigor −2 or Stunned") into the
  *  target's roll, and say so on the label so the card shows why it failed. */
 function withSaveMod(sc: { expr: string; label: string }, mod: number | undefined): void {
@@ -1753,11 +1794,20 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       what: spec.evasion ? 'roll as a group to evade!' : `roll ${sc.label} as a group!`,
       holdMs: CALLOUT_HOLD_MS,
     });
+    const swadeCard = targets[0].ch?.system === 'swade';
+    const evadeLabel = spec.evasion ? `${sc.label} \u22122` : sc.label;
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
-      text: `${who} — group ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`
-        + ' — one roll, with a Wild Die, stands for all of them',
-      callout: { what: `${sc.label} — group roll`, tone: 'save' },
+      text: swadeCard
+        ? `${resistHeading(who, spec.attackerName, spec.label, spec.evasion)} — group ${evadeLabel}: ${br.total} vs TN ${sc.threshold}`
+          + ' (one roll, with a Wild Die, stands for all of them)\n'
+          + resistVerdict({ passed, condition: spec.appliesCondition, dealsDamage: hasDamage, evasion: spec.evasion })
+        : `${who} — group ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`
+          + ' — one roll, with a Wild Die, stands for all of them',
+      callout: {
+        who, byUserId: targets[0].ch?.ownerUserId ?? null, tone: 'save',
+        what: spec.evasion ? `diving clear as a group — ${evadeLabel}` : `resisting as a group — ${sc.label}`,
+      },
       characterId: targets[0].ch?.id ?? null,
       roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       threadId: spec.leadMessageId,
@@ -1797,10 +1847,21 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
       what: spec.evasion ? 'is rolling to evade!' : `is rolling ${sc.label}!`,
       holdMs: CALLOUT_HOLD_MS,
     });
+    const evadeLabel = spec.evasion ? `${sc.label} \u22122` : sc.label;
     const msg = chat.add(spec.campaignId, {
       userId: spec.userId, fromName: spec.username, kind: 'roll',
-      text: `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
-      callout: { what: spec.evasion ? `${sc.label} — Evasion` : `${sc.label} — ${spec.label?.trim() || 'save'}`, tone: 'save' },
+      text: ch?.system === 'swade'
+        ? `${resistHeading(tok.name, spec.attackerName, spec.label, spec.evasion)} — ${evadeLabel}: ${br.total} vs TN ${sc.threshold}\n`
+          + resistVerdict({ passed, condition: spec.appliesCondition, dealsDamage: hasDamage, evasion: spec.evasion })
+        : `${tok.name} — ${sc.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+      // The banner names whoever is rolling, in their colour — not the DM who
+      // fired the cone, which is who it showed while the dice were in the air.
+      callout: {
+        who: tok.name, byUserId: ch?.ownerUserId ?? null, tone: 'save',
+        what: spec.evasion
+          ? `diving clear of ${spec.label?.trim() || 'the blast'} — ${evadeLabel}`
+          : `resisting ${spec.label?.trim() || 'the effect'} — ${sc.label}`,
+      },
       // The save is the TARGET's roll — their stats, not the caster's.
       characterId: ch?.id ?? null, statsUserId: ch?.ownerUserId ?? null,
       roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
@@ -3333,7 +3394,14 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         const passed = br.total >= sc.threshold && !swadeRollFailed(fresh, br.dice);
         const msg = chat.add(d.campaignId, {
           userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll',
-          text: `${tgt.name} — ${sc.label} vs ${action.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+          text: fresh.system === 'swade'
+            ? `${resistHeading(tgt.name, actor.name, action.label)} — ${sc.label}: ${br.total} vs TN ${sc.threshold}\n`
+              + resistVerdict({ passed, condition: conditionId })
+            : `${tgt.name} — ${sc.label} vs ${action.label}: ${passed ? 'Success' : 'Failure'} (DC ${sc.threshold})`,
+          callout: {
+            who: tgt.name, byUserId: fresh.ownerUserId ?? null, tone: 'save',
+            what: `resisting ${action.label} — ${sc.label}`,
+          },
           // The rider save is the TARGET's roll — their stats, not the caster's.
           characterId: fresh.id, statsUserId: fresh.ownerUserId,
           roll: { ...br, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
@@ -3665,16 +3733,19 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       // the DEFENDER's, under the attacker's name. "Turret attacks Tester …
       // SAVE (negated entirely)" read as a big attack roll that somehow did
       // nothing. Say whose roll it is, and what they did or did not suffer.
-      const condName = conditionId ? (getCondition(conditionId)?.label ?? conditionId) : '';
-      const saveText = actor.system === 'swade'
-        ? `${tgt.name} resists ${actor.name}’s ${action.label} — ${label} ${total} vs ${thName} ${threshold}\n`
-          + (passed
-            ? `RESISTED — ${condName ? `not ${condName}` : 'no effect'}${dealsDamage ? ', no damage' : ''}`
-            : `FAILED — ${[condName, dealsDamage ? 'takes the damage' : ''].filter(Boolean).join(', ') || 'the effect lands'}`)
+      const isSwade = actor.system === 'swade';
+      const saveText = isSwade
+        ? `${resistHeading(tgt.name, actor.name, action.label)} — ${label}: ${total} vs ${thName} ${threshold}\n`
+          + resistVerdict({ passed, condition: conditionId, dealsDamage })
         : `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${thName} ${threshold} · ${passed ? 'SAVE' : 'FAIL'} (${consequence})`;
       const saveMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: saveText,
-        // The dice on this card are the TARGET's saving throw.
+        // The dice on this card are the TARGET's saving throw — so the banner
+        // over the map names them, in their colour, not the attacker.
+        callout: {
+          who: tgt.name, byUserId: targetChar?.ownerUserId ?? null, tone: 'save',
+          what: `resisting ${action.label} — ${label}`,
+        },
         characterId: targetChar?.id ?? null, statsUserId: targetChar?.ownerUserId ?? null,
         roll: { ...attackBreakdown!, outcome: passed ? 'success' as const : 'failure' as const }, recipients: null,
       }, noDamage && undo.length > 0 ? undo : undefined);

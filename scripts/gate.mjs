@@ -113,6 +113,7 @@ async function main() {
     ['world-tree nesting', 'check-tree-nesting.mjs'],
     ['turn control + handoff', 'check-turn-control.mjs'],
     ['benny reroll by card', 'check-benny-reroll.mjs'],
+    ['resist cards + banner', 'check-resist-cards.mjs'],
   ];
   for (const [label, script] of liveSuites) {
     const r = await run(label, 'node', [`scripts/${script}`, base]);

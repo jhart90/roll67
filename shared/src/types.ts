@@ -581,7 +581,15 @@ export interface DiceLook {
   wildText?: string;
   ace?: AceStyle;
 }
-export interface RollCalloutInfo { what: string; tone?: RollCalloutTone; look?: DiceLook }
+export interface RollCalloutInfo {
+  what: string; tone?: RollCalloutTone; look?: DiceLook;
+  /** Whose dice these are, when it is not the character the card is filed
+   *  under. A resist roll is posted with the attack that forced it, but the
+   *  dice belong to the DEFENDER, and the banner has to say so. */
+  who?: string;
+  /** …and whose colour the banner wears (null: nobody's, an NPC). */
+  byUserId?: string | null;
+}
 
 export interface ChatMessage {
   id: number;

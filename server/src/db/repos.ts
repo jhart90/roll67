@@ -1709,7 +1709,7 @@ export const chat = {
     let callout = msg.callout ?? null;
     if (msg.roll && msg.characterId) {
       const look = diceLookFor(msg.characterId);
-      if (look) callout = { what: callout?.what ?? msg.roll.expression, ...(callout?.tone ? { tone: callout.tone } : {}), look };
+      if (look) callout = { ...(callout ?? {}), what: callout?.what ?? msg.roll.expression, look };
     }
     const info = stmt(
       `INSERT INTO chat_messages (campaign_id, user_id, from_name, from_character, character_id, action_name, outcome_note, kind, text, roll_json, recipients_json, hidden, undo_json, card_json, callout_json, thread_id, created_at)

@@ -452,7 +452,7 @@ function useOwnRollCharacter(msg: ChatMessage | null): Character | null {
     ?? characters.find((c) => mine(c) && c.name === msg.fromCharacter) ?? null;
 }
 
-function BennyRerollItems({ ch, msgId, onDone }: { ch: Character; msgId: number; onDone: () => void }) {
+function BennyRerollItems({ ch, msgId, resist, onDone }: { ch: Character; msgId: number; resist: boolean; onDone: () => void }) {
   const bennyState = useGameStore((s) => s.bennyState);
   const gmPool = useGameStore((s) => s.gmBennies);
   const st = bennyState[ch.id];
@@ -464,6 +464,12 @@ function BennyRerollItems({ ch, msgId, onDone }: { ch: Character; msgId: number;
   const thisDamage = !!st?.damageMsgIds?.includes(msgId);
   const thisCrit = !!st?.critFailMsgIds?.includes(msgId);
   const tracked = thisTrait || thisDamage || thisCrit;
+  // A resist roll is filed under the defender, but the server does not bank it
+  // for a reroll: buying it back would have to undo the Stun or the Shaken it
+  // decided. Say so, rather than offer "your latest" and reroll some OTHER roll.
+  if (resist && !tracked) {
+    return <div className="chat-menu-note dim">Resist rolls can't be rerolled with a Benny here yet.</div>;
+  }
   if (!broke && tracked) {
     if (thisCrit) {
       return <div className="chat-menu-note dim">That roll was a Critical Failure — no Benny can buy it back.</div>;
@@ -662,7 +668,7 @@ export function ChatPanel() {
 
       {menu && menuMsg && (isDm || menuCh) && (
         <AnchoredMenu x={menu.x} y={menu.y} className="chat-context-menu" onClick={(e) => e.stopPropagation()}>
-          {menuCh && <BennyRerollItems ch={menuCh} msgId={menu.id} onDone={() => setMenu(null)} />}
+          {menuCh && <BennyRerollItems ch={menuCh} msgId={menu.id} resist={menuMsg.callout?.tone === 'save'} onDone={() => setMenu(null)} />}
           {isDm && (menuMsg.hidden ? (
             <>
               <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>

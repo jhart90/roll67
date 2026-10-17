@@ -1493,12 +1493,15 @@ export function wireSocket(): void {
           dice: shown,
           anim: {
             id, dice: shown, byName: msg.fromName,
-            byUserId: msg.fromUserId, characterId: msg.characterId ?? null,
+            // A resist roll names its own roller: the defender, not whoever
+            // fired the thing they are resisting.
+            byUserId: msg.callout?.byUserId !== undefined ? msg.callout.byUserId : msg.fromUserId,
+            characterId: msg.characterId ?? null,
             look: msg.callout?.look ?? null,
             total: msg.roll.total, expression: msg.roll.expression,
             // Whoever the dice belong to: the character if there is one, the
             // account otherwise — a bare /r is the player rolling, not a token.
-            who: msg.fromCharacter || msg.fromName,
+            who: msg.callout?.who || msg.fromCharacter || msg.fromName,
             // What the handler said it was, or the expression itself. Every
             // roll says SOMETHING, even a hand-typed 2d6+3.
             what: msg.callout?.what || msg.roll.expression,

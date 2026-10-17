@@ -110,6 +110,7 @@ export function combatActions(character: Character): CombatAction[] {
         }
         : {}),
       ...(atk.thrown === true ? { thrown: true } : {}),
+      ...(atk.recall === true ? { recall: true } : {}),
       ...(num(atk, 'shock', 0) > 0 && num(atk, 'shockAc', 0) > 0
         ? { shockDamage: num(atk, 'shock', 0), shockAc: num(atk, 'shockAc', 0) } : {}),
       // SWADE has no half-damage save. Evasion is all or nothing — "those

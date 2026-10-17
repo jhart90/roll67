@@ -107,6 +107,11 @@ const WEAPONS: W[] = [
   // exist before self-contained cartridges.
   ['Gatling Gun (Crank)', 'Ranged', '2d8!', 'kinetic', 'ranged', ['range 120/240/480', 'AP 2', 'mag 40', 'RoF 3', 'snapfire', 'era: old west — automatic parity with the M-16 (5.56mm)', 'caliber: bullets-medium']],
   ['Pulse Repeater Rifle', 'Ranged', '2d8!', 'energy', 'ranged', ['range 120/240/480', 'AP 2', 'mag 60', 'RoF 3', 'era: future — automatic parity', 'caliber: battery-rifle']],
+  // Twice a 9mm's damage per hit (4d6! is exactly double 2d6!, aces and
+  // all), but each throw costs the next turn to call it home — so over a
+  // fight it hits as hard as the Glock, one turn in two. No Str die: that
+  // would break the parity.
+  ['Plasma-Javelin', 'Ranged', '4d6!', 'energy', 'ranged', ['range 30/60/120', 'AP 1', 'thrown', 'recalls to the thrower — the Recall takes a whole turn', 'min Str d6', 'era: 27th century — sidearm parity with the Glock (9mm), averaged over throw and recall'], 400, 3],
   ['Gladius', 'Melee', '1d6!', 'slashing', 'str', ['era: ancient Rome — blade parity with Short Sword & Bowie Knife']],
   ['Bowie Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: old west — blade parity']],
   ['Carbon-Edge Knife', 'Melee', '1d6!', 'slashing', 'str', ['era: future — blade parity']],

@@ -157,6 +157,9 @@ export interface CombatAction {
   /** SWADE: lobbed rather than fired (a grenade). Thrown weapons have no
    *  Extreme band — past Long they are simply out of range. */
   thrown?: boolean;
+  /** SWADE: a thrown weapon that comes back to its thrower. Once thrown it is
+   *  spent until Recalled, which takes the thrower's whole next turn. */
+  recall?: boolean;
   /** SWN: shock — this much damage lands even on a MISS against targets
    *  whose AC is at or below shockAc (the "shock N/AC M" weapon tag). */
   shockDamage?: number;

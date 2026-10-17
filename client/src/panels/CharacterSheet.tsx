@@ -952,6 +952,13 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
               .filter((it) => str(it, 'caliber', '').toLowerCase() === caliber)
               .reduce((a, it) => a + Math.max(0, num(it, 'qty', 0)), 0)
             : Infinity;
+          // A returning weapon is Recalled, not reloaded: no rounds, a whole turn.
+          if (atk.recall === true) {
+            const check = num(atk, 'ammo', 0) >= num(atk, 'maxAmmo', 0)
+              ? { ok: false, reason: 'Already in hand.' }
+              : { ok: true, ammoItemName: 'its thrower — takes the whole turn' };
+            return { atk, i, check: check as ReturnType<typeof swnReloadCheck> };
+          }
           const check = num(atk, 'ammo', 0) >= num(atk, 'maxAmmo', 0)
             ? { ok: false, reason: 'Already fully loaded.' }
             : rounds <= 0
@@ -1061,6 +1068,7 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                 disabled={!canRoll || !myToken || dry || stowed}
                 title={stowed ? `${a.label} isn't in hand — tick Wielded on its card to use it`
                   : !myToken ? "Place this character's token on the map first"
+                  : dry && a.recall ? `${a.label} is still out — Recall it (a whole turn) before throwing again`
                   : dry ? `Needs ${minNeeded} round${minNeeded === 1 ? '' : 's'} — only ${ammoLeft} left. Reload!`
                     : maxRof >= 2 && !a.suppressive ? 'Choose a rate of fire, then pick a target'
                       : a.effect === 'heal' ? `${a.label} — choose who to treat`
@@ -1201,10 +1209,11 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
               <button
                 className="roll-btn"
                 disabled={!canRoll || !check.ok}
-                title={check.ok ? `Reload from ${check.ammoItemName}` : check.reason}
+                title={!check.ok ? check.reason
+                  : atk.recall === true ? `Recall to ${check.ammoItemName}` : `Reload from ${check.ammoItemName}`}
                 onClick={() => intents.reloadWeapon(character.id, i)}
               >
-                <span>🔄 Reload {str(atk, 'name', 'Weapon')}</span>
+                <span>{atk.recall === true ? '↩️ Recall' : '🔄 Reload'} {str(atk, 'name', 'Weapon')}</span>
                 <span className="roll-btn-expr">{num(atk, 'ammo', 0)}/{num(atk, 'maxAmmo', 0)}</span>
               </button>
             </div>

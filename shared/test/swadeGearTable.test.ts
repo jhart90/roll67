@@ -608,3 +608,34 @@ describe('ammunition weighs by the round, not by the box', () => {
     for (const e of ammo) expect(e.gear?.weight, e.name).toBeGreaterThan(0);
   });
 });
+
+describe('Plasma-Javelin: double a 9mm per hit, a 9mm per turn', () => {
+  const rowFor = (name: string): SheetData =>
+    applyEntry(byName.get(name)!, swade.defaultSheet())!.row as SheetData;
+  // An acing dN averages (N+1)/2 · N/(N−1): the 6 rolls again and adds.
+  const acingMean = (n: number) => ((n + 1) / 2) * (n / (n - 1));
+  const mean = (expr: string) => {
+    const m = expr.match(/^(\d+)d(\d+)!$/)!;
+    return Number(m[1]) * acingMean(Number(m[2]));
+  };
+
+  it('throws for twice the Glock\'s expected damage, with the same AP', () => {
+    const jav = rowFor('Plasma-Javelin');
+    const glock = rowFor('Glock (9mm)');
+    expect(mean(String(jav.damage))).toBeCloseTo(2 * mean(String(glock.damage)), 10);
+    expect(jav.ap).toBe(glock.ap);
+  });
+
+  it('is one throw that comes back by Recall, thrown with Athletics', () => {
+    expect(rowFor('Plasma-Javelin')).toMatchObject({
+      skill: 'Athletics', thrown: true, recall: true, ammo: 1, maxAmmo: 1,
+    });
+    // A plain thrown spear is not a returning weapon.
+    expect(rowFor('Spear/Javelin').recall).toBeUndefined();
+  });
+
+  it('carries the recall flag onto its combat action', () => {
+    const ch = { id: 'c', system: 'swade', sheet: { ...swade.defaultSheet(), attacks: [rowFor('Plasma-Javelin')] } } as unknown as Character;
+    expect(combatActions(ch).find((a) => a.label === 'Plasma-Javelin')?.recall).toBe(true);
+  });
+});

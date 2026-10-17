@@ -345,6 +345,9 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       // nonsense: it cannot reach four times as far just for a penalty.
       const hardRange = /\bmax range\b/i.test(propText);
       const thrown = propText.toLowerCase().includes('thrown');
+      // "recalls to the thrower": the one throw comes back by Recall (a whole
+      // turn) rather than by picking up another from the pack.
+      const recall = thrown && /\brecalls to the thrower\b/i.test(propText);
       return {
         listId: 'attacks',
         row: {
@@ -367,6 +370,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
           ...(hardRange ? { hardRange: true } : {}),
           ...(thrown ? { thrown: true } : {}),
+          ...(recall ? { recall: true } : {}),
           weight: weightFor(entry.name, 'weapon', entry.gear?.weight),
           notes: propText,
         },

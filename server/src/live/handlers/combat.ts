@@ -432,6 +432,14 @@ export function resolveShakenRecovery(io: Server, campaignId: string, ch: Charac
 /** SWADE Multi-Action tracking: actions taken this turn, per character. */
 const swadeActionCounts = new Map<string, Map<string, number>>();
 
+/** Who has spent this turn Recalling a returning weapon (the Plasma-Javelin).
+ *  The Recall is the whole turn, so they attack with nothing until their
+ *  next one. Cleared with the action ledger. */
+const swadeRecalling = new Map<string, Set<string>>();
+function recallingThisTurn(campaignId: string, characterId: string): boolean {
+  return swadeRecalling.get(campaignId)?.has(characterId) ?? false;
+}
+
 /** How many actions this character has already spent this turn — what the
  *  Multi-Action penalty is counted from, and what the turn coach reads. */
 export function actionsTakenThisTurn(campaignId: string, characterId: string): number {
@@ -627,6 +635,7 @@ function finishTurnTransition(io: Server, campaignId: string, state: InitiativeS
     }
   }
   swadeActionCounts.delete(campaignId);
+  swadeRecalling.delete(campaignId);
   if (prev?.system === 'swade') expireTurnConditions(io, campaignId, prev);
   const ch = combatantChar(state, state.turnIdx);
   if (ch?.system === 'swade') startOfTurnRecovery(io, campaignId, ch);
@@ -2802,6 +2811,10 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     let actor: Character = actorMaybe;
     const action = combatActions(actor).find((a) => a.id === p.actionId);
     if (!action) { emitError(socket, 'That action is no longer available.'); return; }
+    if (recallingThisTurn(d.campaignId, actor.id)) {
+      emitError(socket, `${actor.name} spent this turn recalling a weapon — attack again next turn.`);
+      return;
+    }
 
     // SWADE: the shooter picks how many rounds this attack fires (1..RoF);
     // default is the weapon's full RoF. Drives Recoil, burst hits, and ammo.
@@ -4224,6 +4237,35 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       const maxAmmo = row ? num(row, 'maxAmmo', 0) : 0;
       const ammo = row ? num(row, 'ammo', 0) : 0;
       if (!row || maxAmmo <= 0) { emitError(socket, 'That weapon has no magazine to reload.'); return; }
+      // A returning weapon isn't reloaded, it's called home — and the call is
+      // the thrower's whole turn, so it can't be thrown again until the next.
+      // That turn's wait is what holds its double damage to a pistol's rate.
+      if (row.recall === true) {
+        const weapon = str(row, 'name', 'The weapon');
+        if (ammo >= maxAmmo) { emitError(socket, `${weapon} is already in hand.`); return; }
+        const combat = initiative.get(d.campaignId).active;
+        if (combat && actionsTakenThisTurn(d.campaignId, actor.id) > 0) {
+          emitError(socket, `Recalling ${weapon} takes the whole turn — it must be the only thing done.`);
+          return;
+        }
+        atks[attackIndex] = { ...row, ammo: maxAmmo };
+        const updated = persistSheet(io, d.campaignId, actor, { attacks: atks });
+        if (combat) {
+          spendAction(d.campaignId, actor.id);
+          const set = swadeRecalling.get(d.campaignId) ?? new Set<string>();
+          swadeRecalling.set(d.campaignId, set);
+          set.add(actor.id);
+        }
+        const msg = chat.add(d.campaignId, {
+          userId: d.userId, fromName: d.username, kind: 'system',
+          text: combat
+            ? `↩️ ${updated.name} recalls ${weapon} — it streaks back to hand, and the turn is spent. It can be thrown again next turn.`
+            : `↩️ ${updated.name} recalls ${weapon} to hand.`,
+          roll: null, recipients: null,
+        }, [{ t: 'field', characterId: actor.id, key: 'attacks', value: atksBefore }]);
+        io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+        return;
+      }
       if (ammo >= maxAmmo) { emitError(socket, `${str(row, 'name', 'That weapon')} is already loaded.`); return; }
       // Rounds come out of matching-caliber ammunition in inventory (partial
       // reloads allowed). Caliber-less legacy weapons still reload free.
@@ -5444,6 +5486,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
       resetSwadeTurnMoves(d.campaignId);
       swadeActionCounts.delete(d.campaignId);
+      swadeRecalling.delete(d.campaignId);
       broadcastInitiative(io, d.campaignId);
       offerAftermath(io, d.campaignId);
       return;
@@ -5888,6 +5931,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     initiative.set(d.campaignId, { entries: [], turnIdx: 0, round: 1, active: false });
     resetSwadeTurnMoves(d.campaignId);
     swadeActionCounts.delete(d.campaignId);
+    swadeRecalling.delete(d.campaignId);
     broadcastInitiative(io, d.campaignId);
     if (ending.active) offerAftermath(io, d.campaignId);
   }, 'INIT_CLEAR'));

@@ -52,6 +52,10 @@ interface AttackMeta {
   poisonEffect?: 'fatigue' | 'shaken' | 'incapacitated' | 'paralyzed';
   /** Lobbed with Athletics (an oil lamp, a grenade) rather than fired. */
   thrown?: boolean;
+  /** What the move looks like and why it does what it does — shown on the
+   *  attack card. Avoid the words the engine reads out of notes ("thrown",
+   *  "RoF n", "improvised") unless they are meant. */
+  notes?: string;
   /** Ignores up to 4 points of Scale penalty against something smaller. */
   swat?: boolean;
   /** Templates can be dived away from by default (see the builder below);
@@ -510,8 +514,8 @@ const ROWS: Row[] = [
     attrs: ['d6', 'd6', 'd6', 'd6', 'd6'],
     skills: [['Athletics', 'd6'], ['Common Knowledge', 'd6'], ['Fighting', 'd6'], ['Notice', 'd6'], ['Stealth', 'd8'], ['Thievery', 'd6']],
     attacks: [
-      ['Copper Chisel', 'Fighting', '1d6!+1d4!', 'piercing', 5],
-      ['Sling', 'Athletics', '1d6!+1d4!', 'bludgeoning', 20],
+      ['Copper Chisel', 'Fighting', '1d6!+1d4!', 'piercing', 5, { notes: 'A stonecutter’s chisel, sharpened for prising gold leaf off coffins and just as good for the soft parts of a person. Copper is soft, so it is a stab rather than a cut: piercing, and no better than a knife.' }],
+      ['Sling', 'Athletics', '1d6!+1d4!', 'bludgeoning', 20, { notes: 'A strip of plaited flax and a pouch of river stones every boy on the west bank learns to use. The robber’s Strength puts the weight behind the stone, so it bruises rather than cuts.' }],
     ],
     hindrances: [['Greedy', 'Minor']],
     gear: [
@@ -524,8 +528,8 @@ const ROWS: Row[] = [
     attrs: ['d6', 'd6', 'd8', 'd8', 'd8'],
     skills: [['Athletics', 'd6'], ['Common Knowledge', 'd6'], ['Fighting', 'd8'], ['Intimidation', 'd6'], ['Notice', 'd6'], ['Persuasion', 'd6'], ['Stealth', 'd6'], ['Thievery', 'd8']],
     attacks: [
-      ['Bronze Adze', 'Fighting', '1d8!+1d6!', 'slashing', 5],
-      ['Copper Chisel', 'Fighting', '1d8!+1d4!', 'piercing', 5],
+      ['Bronze Adze', 'Fighting', '1d8!+1d6!', 'slashing', 5, { notes: 'The tool he cut tombs with for twenty years: a heavy bronze blade lashed across a wooden haft. He swings it the way he dressed limestone, down and through, and his mason’s arms put a Strength d8 behind every blow.' }],
+      ['Copper Chisel', 'Fighting', '1d8!+1d4!', 'piercing', 5, { notes: 'Kept in his belt for the blocking stones and the coffin lids. In a scuffle it goes in short and under the ribs.' }],
     ],
     edges: ['Brawny'],
     hindrances: [['Greedy', 'Major'], ['Phobia', 'Minor']],
@@ -539,8 +543,8 @@ const ROWS: Row[] = [
     attrs: ['d6', 'd6', 'd6', 'd6', 'd6'],
     skills: [['Athletics', 'd6'], ['Fighting', 'd8'], ['Intimidation', 'd6'], ['Notice', 'd8'], ['Shooting', 'd6'], ['Survival', 'd6']],
     attacks: [
-      ['Khopesh', 'Fighting', '1d6!+1d8!', 'slashing', 5],
-      ['Bow', 'Shooting', '2d6!', 'piercing', 60],
+      ['Khopesh', 'Fighting', '1d6!+1d8!', 'slashing', 5, { notes: 'The sickle-sword of the New Kingdom: a bronze blade curved like a forearm, made to hook a shield aside and cut whatever was behind it. A long sword’s weight in a policeman’s hand.' }],
+      ['Bow', 'Shooting', '2d6!', 'piercing', 60, { notes: 'A self bow and reed arrows, for the man running off across the scree with a sack of gold. The Medjay grew up as desert scouts, and they do not miss much at twelve inches.' }],
     ],
     armor: [['Hide Cuirass', 1, 0], ['Small Shield', 0, 1]],
     gear: [
@@ -555,8 +559,8 @@ const ROWS: Row[] = [
     attrs: ['d10', 'd4', 'd12', 'd8', 'd10'],
     skills: [['Fighting', 'd4'], ['Notice', 'd6']],
     attacks: [
-      ['Shock Swarm', 'Fighting', '2d4!', 'lightning', 0, { aoeShape: 'sphere', aoeHexes: 3, evadable: false }],
-      ['Filament Snare', 'Shooting', '0', '', 0, { aoeShape: 'sphere', aoeHexes: 3, save: 'agility', onSave: 'negate', condition: 'entangled', evadable: false }],
+      ['Shock Swarm', 'Fighting', '2d4!', 'lightning', 0, { aoeShape: 'sphere', aoeHexes: 3, evadable: false, notes: 'Thousands of scarabs pour over everyone under the swarm. Each one carries a capacitor the size of a lentil and discharges it on contact. No single sting matters, but hundreds a second do: 2d4 electrical damage to everyone in the template, and there is nowhere to dive because the swarm moves with you.' }],
+      ['Filament Snare', 'Shooting', '0', '', 0, { aoeShape: 'sphere', aoeHexes: 3, save: 'agility', onSave: 'negate', condition: 'entangled', evadable: false, notes: 'The scarabs stop biting and start running laps, spinning a near-invisible microfilament around legs and wrists. Anyone in the swarm rolls Agility to tear free before the loops close. Failing leaves them Entangled, wrapped like a mummy in a line finer than hair and stronger than rope.' }],
     ],
     pace: 6,
     construct: true,
@@ -569,8 +573,8 @@ const ROWS: Row[] = [
     attrs: ['d6', 'd4', 'd6', 'd6', 'd6'],
     skills: [['Athletics', 'd8'], ['Fighting', 'd6'], ['Notice', 'd6']],
     attacks: [
-      ['Faience Hoe', 'Fighting', '1d6!+1d4!', 'bludgeoning', 5],
-      ['Clinging Grab', 'Fighting', '1d6!', 'bludgeoning', 5, { riderSave: 'strength', condition: 'entangled' }],
+      ['Faience Hoe', 'Fighting', '1d6!+1d4!', 'bludgeoning', 5, { notes: 'The tiny hoe every shabti carries for its work in the fields of the afterlife. Glazed ceramic over an alloy core, swung at kneecaps by something that does not tire.' }],
+      ['Clinging Grab', 'Fighting', '1d6!', 'bludgeoning', 5, { riderSave: 'strength', condition: 'entangled', notes: 'The figurine drops its tools and wraps both arms round an ankle, with servos built to lift ten times its own weight. The grab itself barely hurts. Then the target rolls Strength to shake it off, and failing leaves them Entangled with a ceramic servant locked onto their leg while the jars line up a shot.' }],
     ],
     armor: [['Glazed Faience Shell', 2, 0]],
     traits: [['Size -2', -2]],
@@ -583,8 +587,8 @@ const ROWS: Row[] = [
     attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
     skills: [['Notice', 'd8'], ['Shooting', 'd8']],
     attacks: [
-      ['Neural Pulse', 'Shooting', '0', 'energy', 60, { save: 'vigor', saveMod: -1, onSave: 'negate', condition: 'stunned' }],
-      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+      ['Neural Pulse', 'Shooting', '0', 'energy', 60, { save: 'vigor', saveMod: -1, onSave: 'negate', condition: 'stunned', notes: 'The human-headed lid opens its painted mouth and a directed pulse scrambles the motor nerves. No to-hit roll: the target rolls Vigor −1 or is Stunned, dropping and twitching. It is resisted at −1 because a corridor-mounted emitter runs hotter than a hand-held one.' }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60, { notes: 'The jar stops apologising. A tight bolt of energy for the Agent carrying a funerary object: 2d6, aimed to wound. Khay built it in and hoped nobody would ever make him use it.' }],
     ],
     armor: [['Alabaster over Alloy', 2, 0]],
     traits: [['Size -1', -1]],
@@ -598,8 +602,8 @@ const ROWS: Row[] = [
     attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
     skills: [['Notice', 'd8'], ['Shooting', 'd8']],
     attacks: [
-      ['Sonic Shriek', 'Shooting', '0', '', 0, { aoeShape: 'cone', aoeSize: 54, save: 'spirit', saveMod: -1, onSave: 'negate', condition: 'shaken', evadable: false }],
-      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+      ['Sonic Shriek', 'Shooting', '0', '', 0, { aoeShape: 'cone', aoeSize: 54, save: 'spirit', saveMod: -1, onSave: 'negate', condition: 'shaken', evadable: false, notes: 'The baboon head throws back its jaw and screams a tuned frequency down the corridor in a cone. It hurts nothing, but the shriek gets behind the eyes and makes every instinct say run. Everyone in the cone rolls Spirit −1 or is Shaken. Nobody can dive clear of a sound, and the −1 is how loud stone corridors make it.' }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60, { notes: 'The jar stops apologising. A tight bolt of energy for the Agent carrying a funerary object: 2d6, aimed to wound.' }],
     ],
     armor: [['Alabaster over Alloy', 2, 0]],
     traits: [['Size -1', -1]],
@@ -613,8 +617,8 @@ const ROWS: Row[] = [
     attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
     skills: [['Notice', 'd8'], ['Shooting', 'd8']],
     attacks: [
-      ['Tracking Dart', 'Shooting', '1d4!', 'piercing', 60, { condition: 'vulnerable' }],
-      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+      ['Tracking Dart', 'Shooting', '1d4!', 'piercing', 60, { condition: 'vulnerable', notes: 'The jackal head spits a fine dart. It barely breaks the skin (1d4), but its tip is a beacon. Every other jar, drone and scarab in the tomb now knows exactly where that Agent is, so a hit leaves them Vulnerable until they spend an action digging it out.' }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60, { notes: 'The jar stops apologising. A tight bolt of energy for the Agent carrying a funerary object: 2d6, aimed to wound.' }],
     ],
     armor: [['Alabaster over Alloy', 2, 0]],
     traits: [['Size -1', -1]],
@@ -628,8 +632,8 @@ const ROWS: Row[] = [
     attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
     skills: [['Notice', 'd8'], ['Shooting', 'd8']],
     attacks: [
-      ['Falcon Glare', 'Shooting', '0', 'energy', 60, { save: 'agility', onSave: 'negate', condition: 'distracted' }],
-      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+      ['Falcon Glare', 'Shooting', '0', 'energy', 60, { save: 'agility', onSave: 'negate', condition: 'distracted', notes: 'The falcon’s eyes flare with a focused solar-white flash at one face. There is no to-hit roll: the target rolls Agility to look away in time, and failing leaves them Distracted, seeing green suns for the next few seconds.' }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60, { notes: 'The jar stops apologising. A tight bolt of energy for the Agent carrying a funerary object: 2d6, aimed to wound.' }],
     ],
     armor: [['Alabaster over Alloy', 2, 0]],
     traits: [['Size -1', -1]],
@@ -645,8 +649,8 @@ const ROWS: Row[] = [
     attrs: ['d6', 'd4', 'd6', 'd10', 'd8'],
     skills: [['Athletics', 'd6'], ['Fighting', 'd8'], ['Intimidation', 'd8'], ['Notice', 'd6']],
     attacks: [
-      ['Crushing Grip', 'Fighting', '1d10!+1d6!', 'bludgeoning', 5, { riderSave: 'agility', condition: 'entangled' }],
-      ['Natron Mist', 'Shooting', '0', '', 0, { aoeShape: 'cone', aoeSize: 30, save: 'vigor', onSave: 'negate', condition: 'distracted' }],
+      ['Crushing Grip', 'Fighting', '1d10!+1d6!', 'bludgeoning', 5, { riderSave: 'agility', condition: 'entangled', notes: 'Linen-wrapped hands close with exoskeleton force, a Strength d10 squeeze that grinds bone. Once the grip lands, the target rolls Agility to twist out before the fingers lock. Failing leaves them Entangled in the mummy’s arms.' }],
+      ['Natron Mist', 'Shooting', '0', '', 0, { aoeShape: 'cone', aoeSize: 30, save: 'vigor', onSave: 'negate', condition: 'distracted', notes: 'A hiss from the wrappings: a short cone of embalmers’ natron salt laced with a sedative aerosol. It stings the eyes and slows the thoughts. Everyone in the cone rolls Vigor or is Distracted, coughing salt.' }],
     ],
     armor: [['Resin-Soaked Linen over Alloy', 2, 0]],
     pace: 4,
@@ -659,8 +663,8 @@ const ROWS: Row[] = [
     attrs: ['d8', 'd6', 'd8', 'd10', 'd10'],
     skills: [['Athletics', 'd8'], ['Fighting', 'd10'], ['Intimidation', 'd8'], ['Notice', 'd10'], ['Stealth', 'd8']],
     attacks: [
-      ['Basalt Jaws', 'Fighting', '1d10!+1d6!', 'piercing', 5, { ap: 2 }],
-      ['Pounce', 'Fighting', '1d10!+1d6!+4', 'piercing', 5, { ap: 2, riderSave: 'agility', condition: 'prone' }],
+      ['Basalt Jaws', 'Fighting', '1d10!+1d6!', 'piercing', 5, { ap: 2, notes: 'A jackal’s bite in polished basalt over steel. The teeth are machined edges driven by hydraulic jaws, and they punch through 2 points of armour as though it were linen.' }],
+      ['Pounce', 'Fighting', '1d10!+1d6!+4', 'piercing', 5, { ap: 2, riderSave: 'agility', condition: 'prone', notes: 'Use only after the Sentinel has run at least 4″ straight at its target. A quarter-ton of black stone leaves the plinth like a hunting dog: +4 damage from the momentum, then the target rolls Agility to keep their feet and is knocked Prone on a failure. Anubis weighing the heart, with the scales tipped.' }],
     ],
     armor: [['Basalt Shell', 3, 0]],
     edges: ['Alertness'],
@@ -676,8 +680,8 @@ const ROWS: Row[] = [
     attrs: ['d8', 'd4', 'd6', 'd4', 'd6'],
     skills: [['Athletics', 'd6'], ['Notice', 'd10'], ['Shooting', 'd8']],
     attacks: [
-      ['Akh Light', 'Shooting', '0', 'energy', 60, { save: 'agility', onSave: 'negate', condition: 'vulnerable' }],
-      ['Ba Lance', 'Shooting', '2d6!', 'energy', 60],
+      ['Akh Light', 'Shooting', '0', 'energy', 60, { save: 'agility', onSave: 'negate', condition: 'vulnerable', notes: 'The ba-bird’s human face blazes with a searchlight, the akh, the soul made light, pinned on one Agent. They roll Agility to get out of the beam. Failing leaves them Vulnerable: lit up in a dark tomb, with every other guardian now able to see exactly where to strike.' }],
+      ['Ba Lance', 'Shooting', '2d6!', 'energy', 60, { notes: 'A lance of gold light from between the drone’s talons: 2d6 energy. The ba-birds hold it back until the Desecration Clock flips or someone has started smashing things, because their first job is to watch.' }],
     ],
     armor: [['Gilded Feathers', 1, 0]],
     traits: [['Size -1', -1]],
@@ -691,8 +695,8 @@ const ROWS: Row[] = [
     attrs: ['d6', 'd6', 'd6', 'd6', 'd6'],
     skills: [['Athletics', 'd6'], ['Faith', 'd4'], ['Fighting', 'd6'], ['Notice', 'd6']],
     attacks: [
-      ['Mallet', 'Fighting', '1d6!+1d4!', 'bludgeoning', 5],
-      ['Thrown Oil Lamp', 'Athletics', '2d4!', 'fire', 15, { aoeShape: 'sphere', aoeHexes: 1, thrown: true }],
+      ['Mallet', 'Fighting', '1d6!+1d4!', 'bludgeoning', 5, { notes: 'A carpenter’s wooden mallet from the workmen’s village, swung by someone who believes the sun god is watching. Bludgeoning, Strength plus a d4.' }],
+      ['Thrown Oil Lamp', 'Athletics', '2d4!', 'fire', 15, { aoeShape: 'sphere', aoeHexes: 1, thrown: true, notes: 'A lit clay lamp full of sesame oil, lobbed with Athletics into a Small template. It bursts and spreads burning oil: 2d4 fire to everyone it splashes. In a tomb full of resin-soaked linen, that fire may well spread.' }],
     ],
     hindrances: [['Delusional', 'Major']],
     gear: [['Oil Lamps', 'Three of them, lit; each one is a thrown lamp.']],
@@ -837,7 +841,9 @@ function sheetFor(r: Row): SheetData {
     } : {}),
     skills: r.skills.map(([name, die]) => ({ name, die, notes: '' })),
     attacks: r.attacks.map(([name, skill, damage, dtype, range, meta]) => ({
-      name, skill, damage, dtype, range, notes: '',
+      // A stat block's attacks are what it fights with: in hand, not in a
+      // pack. Without this the card read "Not being wielded" under a bite.
+      name, skill, damage, dtype, range, notes: meta?.notes ?? '', wielded: true,
       ...(meta?.save ? { save: meta.save, onSave: meta.onSave ?? 'negate', saveDc: 4 } : {}),
       ...(meta?.save && meta.saveMod ? { saveMod: meta.saveMod } : {}),
       ...(meta?.condition ? { condition: meta.condition } : {}),

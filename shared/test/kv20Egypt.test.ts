@@ -89,6 +89,18 @@ describe('KV20 bestiary', () => {
     expect([snare.saveId, snare.appliesCondition]).toEqual(['agility', 'entangled']);
   });
 
+  it('describes every move, and arrives with it in hand', () => {
+    const kv20 = NPCS_SWADE.filter((n) => n.category === 'Egypt'
+      && !/Nekhet|Sabu|Khay|Menka|Golden Scarab,/.test(n.name));
+    expect(kv20.length).toBe(13);
+    for (const n of kv20) {
+      for (const atk of n.sheet.attacks as Array<Record<string, unknown>>) {
+        expect(String(atk.notes ?? '').length, `${n.name}: ${atk.name}`).toBeGreaterThan(60);
+        expect(atk.wielded, `${n.name}: ${atk.name}`).toBe(true);
+      }
+    }
+  });
+
   it("the cultists' lamp is thrown with Athletics, and the Khemet patches heal", () => {
     expect(action('Servant of the Shining Khepri', 'Thrown Oil Lamp').thrown).toBe(true);
     const patch = action('Nekhet, Khemet Field Commander', 'Compact Medical Patch');

@@ -274,10 +274,10 @@ describe('SWADE gear tables', () => {
     ['Crossbow', 50, '2d6!', 2],
     ['Heavy Crossbow', 75, '2d8!', 2],
     ['Longbow', 75, '2d6!', 1],
-    ['Sling', 20, '1d4!', 0],
-    ['Axe, Throwing', 15, '1d6!', 0],
-    ['Spear/Javelin', 15, '1d6!', 0],
-    ['Compound Bow', 60, '1d6!', 1],
+    ['Sling', 20, '1d6!+1d4!', 0],
+    ['Axe, Throwing', 15, '1d6!+1d6!', 0],
+    ['Spear/Javelin', 15, '1d6!+1d6!', 0],
+    ['Compound Bow', 60, '1d6!+1d6!', 1],
     ['Crossbow (Modern)', 75, '2d6!', 2],
     ['Flintlock Pistol', 25, '2d6!+1', 0],
     ['Musket', 50, '2d8!', 0],
@@ -610,17 +610,22 @@ describe('ammunition weighs by the round, not by the box', () => {
 });
 
 describe('Plasma-Javelin: double a 9mm per hit, a 9mm per turn', () => {
-  const rowFor = (name: string): SheetData =>
-    applyEntry(byName.get(name)!, swade.defaultSheet())!.row as SheetData;
-  // An acing dN averages (N+1)/2 · N/(N−1): the 6 rolls again and adds.
+  const rowFor = (name: string, strength = 'd6'): SheetData =>
+    applyEntry(byName.get(name)!, { ...swade.defaultSheet(), strength })!.row as SheetData;
+  // An acing dN averages (N+1)/2 · N/(N−1): the top face rolls again and adds.
   const acingMean = (n: number) => ((n + 1) / 2) * (n / (n - 1));
-  const mean = (expr: string) => {
-    const m = expr.match(/^(\d+)d(\d+)!$/)!;
-    return Number(m[1]) * acingMean(Number(m[2]));
-  };
+  const mean = (expr: string) => expr.split('+').reduce((sum, term) => {
+    const m = term.match(/^(\d+)d(\d+)!$/)!;
+    return sum + Number(m[1]) * acingMean(Number(m[2]));
+  }, 0);
 
-  it('throws for twice the Glock\'s expected damage, with the same AP', () => {
-    const jav = rowFor('Plasma-Javelin');
+  it('adds the thrower\'s Str die, like any SWADE thrown weapon', () => {
+    expect(rowFor('Plasma-Javelin', 'd6').damage).toBe('1d6!+3d6!');
+    expect(rowFor('Plasma-Javelin', 'd10').damage).toBe('1d10!+3d6!');
+  });
+
+  it('throws for twice the Glock\'s expected damage at its minimum Str d6, with the same AP', () => {
+    const jav = rowFor('Plasma-Javelin', 'd6');
     const glock = rowFor('Glock (9mm)');
     expect(mean(String(jav.damage))).toBeCloseTo(2 * mean(String(glock.damage)), 10);
     expect(jav.ap).toBe(glock.ap);

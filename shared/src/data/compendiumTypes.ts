@@ -321,10 +321,13 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       // Mechanical props become live columns: "AP n" pierces ranged armor,
       // "±1 Parry" feeds derived Parry once the weapon is marked wielded,
       // and "mag n" pre-fills the server-enforced ammo counter.
+      // Thrown and muscle-drawn ranged weapons (a javelin, a sling, a
+      // compound bow) say "add Str die to damage" and compose the same way.
       const melee = w.ability === 'str';
-      const strDie = /^d\d+$/.test(String(sheet.strength ?? '')) ? String(sheet.strength) : 'd6';
-      const damage = melee ? (w.damage ? `1${strDie}!+${w.damage}` : `1${strDie}!`) : w.damage;
       const propText = w.props.join(', ');
+      const addsStr = melee || /\badd Str die to damage\b/i.test(propText);
+      const strDie = /^d\d+$/.test(String(sheet.strength ?? '')) ? String(sheet.strength) : 'd6';
+      const damage = addsStr ? (w.damage ? `1${strDie}!+${w.damage}` : `1${strDie}!`) : w.damage;
       const ap = Number(propText.match(/\bAP (\d+)/i)?.[1] ?? 0);
       const parryUp = propText.match(/\+(\d+) Parry/i);
       const parryDown = propText.match(/Parry [−-](\d+)/i);

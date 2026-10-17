@@ -193,6 +193,9 @@ export interface CombatAction {
    *  than derived from the caster's ability/proficiency (PC spells). Wins
    *  over the derived spellDc when resolving a saveId action. */
   fixedDc?: number;
+  /** SWADE: a flat modifier on the target's resisting trait roll — the −2 in
+   *  "Vigor −2 or Stunned". Negative is harder to resist. */
+  saveMod?: number;
   /** Status condition (by id, see effects.ts CONDITIONS) inflicted on the
    *  target: on a FAILED save for save-based actions, on a HIT for attack-
    *  roll actions (optionally gated by its own rider save below), or

@@ -880,6 +880,8 @@ interface GroupSaveSpec {
   appliesCondition?: string;
   /** SWADE Evasion: the save is an Agility dive at −2. */
   evasion?: boolean;
+  /** The attack's own resist modifier (Hapy's shriek: Spirit −1). */
+  saveMod?: number;
   /** SWADE Group Roll: one roll decides the whole mob (see runGroupSave). */
   group?: boolean;
   /** SWADE Covering: somebody threw themselves on the grenade. They take
@@ -1576,6 +1578,14 @@ function postCastCard(
   return msg.id;
 }
 
+/** Fold an attack's resist modifier ("Vigor −2 or Stunned") into the
+ *  target's roll, and say so on the label so the card shows why it failed. */
+function withSaveMod(sc: { expr: string; label: string }, mod: number | undefined): void {
+  if (!mod) return;
+  sc.expr = `${sc.expr}${mod > 0 ? '+' : ''}${mod}`;
+  sc.label = `${sc.label} ${mod > 0 ? '+' : '−'}${Math.abs(mod)}`;
+}
+
 function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
   const targets: { tok: Token; ch: Character | undefined; sc: { expr: string; threshold: number; label: string } }[] = [];
   let touchedMap: string | null = null;
@@ -1587,6 +1597,7 @@ function runGroupSave(io: Server, spec: GroupSaveSpec): boolean {
     const sc = ch ? systemFor(ch.system).saveCheck(ch.sheet, spec.saveId, spec.dc) : { expr: '1d20', threshold: spec.dc, label: spec.saveId };
     // Evasion is a desperate dive: the Agility roll takes −2.
     if (spec.evasion && ch) sc.expr = `${sc.expr}-2`;
+    if (ch) withSaveMod(sc, spec.saveMod);
     targets.push({ tok, ch, sc });
   }
   if (targets.length === 0) return false;
@@ -3094,6 +3105,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       const sc = targetChar
         ? systemFor(targetChar.system).saveCheck(targetChar.sheet, action.saveId, casterDc)
         : { expr: '1d20', threshold: casterDc, label: `${action.saveId.toUpperCase()} save` };
+      if (targetChar) withSaveMod(sc, action.saveMod);
       attackBreakdown = roll(sc.expr);
       const passed = attackBreakdown.total >= sc.threshold && !swadeRollFailed(targetChar, attackBreakdown.dice);
       // SWADE is all or nothing: a successful Evasion or resisted effect takes
@@ -4059,6 +4071,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           leadMessageId: lead,
           tokenIds: hitIds, saveId: action.saveId ?? 'agility', dc: casterDc,
           ...(evadeable ? { evasion: true } : {}),
+          ...(action.saveId && action.saveMod ? { saveMod: action.saveMod } : {}),
           damageExpr, onSave: action.onSave ?? (evadeable ? 'negate' : 'half'),
           damageType: action.damageType, label: castLabel,
           ...(mod.cover ? { cover: mod.cover } : {}),

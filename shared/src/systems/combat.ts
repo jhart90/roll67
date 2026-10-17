@@ -122,6 +122,7 @@ export function combatActions(character: Character): CombatAction[] {
         onSave: (character.system === 'swade' || str(atk, 'onSave', 'half') === 'negate')
           ? 'negate' as const : 'half' as const,
         fixedDc: num(atk, 'saveDc', 13),
+        ...(num(atk, 'saveMod', 0) !== 0 ? { saveMod: num(atk, 'saveMod', 0) } : {}),
       } : {}),
       ...(aoeShape && (aoeSize > 0 || aoeHexes > 0)
         ? { aoe: { shape: aoeShape as AoeShape, sizeFt: aoeSize, ...(aoeHexes > 0 ? { sizeHexes: aoeHexes } : {}), ...(aoeWidth > 0 ? { widthFt: aoeWidth } : {}) } }

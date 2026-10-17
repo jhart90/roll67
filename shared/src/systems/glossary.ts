@@ -268,6 +268,7 @@ const SWADE_SHEET: Record<string, string> = {
   'Boosts trait': 'While equipped, this item adds its bonus to the named skill or attribute roll.',
   'Affects trait': 'The skill or attribute this Hindrance modifies — its penalty folds into that roll automatically.',
   'Resisted by': 'The trait the target rolls to resist this power. Success negates or halves the effect.',
+  'Resist mod': 'A modifier on the target’s resisting roll — the −2 in “Vigor −2 or Stunned”. Negative is harder to shrug off.',
   'On success': 'What happens when the target resists: the effect is negated entirely, or damage is halved.',
   Severity: 'Minor Hindrances are worth 1 build point, Major ones 2 — and Major flaws bite harder in play.',
   Concept: 'A one-line summary of who your character is — pure flavor, but it anchors everything else.',

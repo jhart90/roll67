@@ -342,7 +342,16 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       const blastMatch = propText.match(/\b(small|medium|large) blast/i);
       const blastHexes = blastMatch ? ({ small: 1, medium: 3, large: 5 } as Record<string, number>)[blastMatch[1].toLowerCase()] : 0;
       const coneTemplate = /cone template/i.test(propText);
-      const stunRider = /vigor roll or stunned/i.test(propText);
+      // "<Trait> roll [±N] or <Condition>" — "Vigor roll or Stunned", or the
+      // Khemet kit's "Spirit roll −1 or Shaken". The roll replaces the to-hit,
+      // as it always has for the Stun Gun; the modifier rides along.
+      const rider = propText.match(
+        /\b(agility|smarts|spirit|strength|vigor) roll(?: ([+−-]\d+))? or (shaken|distracted|vulnerable|entangled|bound|stunned|blinded|prone)\b/i,
+      );
+      const riderMod = rider?.[2] ? Number(rider[2].replace('−', '-')) : 0;
+      // "a hit leaves the target <Condition>": no roll to shake it, it just lands.
+      const onHit = rider ? null
+        : propText.match(/\ba hit leaves the target (distracted|vulnerable|entangled|prone)\b/i);
       // "max range" says the listed range is all there is — no Medium at −2,
       // no Long at −4. For a spray can or a contact weapon the band ladder is
       // nonsense: it cannot reach four times as far just for a penalty.
@@ -370,7 +379,11 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           // attack you can throw yourself clear of, so the ones that come
           // with a template arrive with the box already ticked.
           ...(blastHexes > 0 || coneTemplate ? { evadable: true } : {}),
-          ...(stunRider ? { save: 'vigor', onSave: 'negate', condition: 'stunned' } : {}),
+          ...(rider ? {
+            save: rider[1].toLowerCase(), onSave: 'negate', condition: rider[3].toLowerCase(),
+            ...(riderMod ? { saveMod: riderMod } : {}),
+          } : {}),
+          ...(onHit ? { condition: onHit[1].toLowerCase() } : {}),
           ...(hardRange ? { hardRange: true } : {}),
           ...(thrown ? { thrown: true } : {}),
           ...(recall ? { recall: true } : {}),

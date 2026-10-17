@@ -812,6 +812,9 @@ const gearTab: SheetTab = {
         // Burst Template — but the sheet gave nowhere to read or change them,
         // so the panel that promised "save / condition / AoE" opened empty.
         { id: 'save', label: 'Resisted by', type: 'select', width: 'sixth', default: '', options: ['', 'agility', 'smarts', 'spirit', 'strength', 'vigor'] },
+        // "Vigor −2 or Stunned": the modifier on the target's resisting roll.
+        // Negative makes it harder to shrug off, which is what the book means.
+        { id: 'saveMod', label: 'Resist mod', type: 'number', width: 'sixth', default: 0 },
         { id: 'condition', label: 'Inflicts', type: 'select', width: 'sixth', default: '', options: ['', 'shaken', 'distracted', 'vulnerable', 'entangled', 'bound', 'stunned', 'frightened', 'blinded', 'prone', 'unconscious'] },
         { id: 'aoeShape', label: 'Area', type: 'select', width: 'sixth', default: '', options: ['', 'sphere', 'cone', 'line', 'cube'] },
         { id: 'aoeHexes', label: 'Area (tiles)', type: 'number', width: 'sixth', default: 0 },

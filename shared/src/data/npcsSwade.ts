@@ -26,7 +26,13 @@ type Skill = [string, string];                          // name, die
 interface AttackMeta {
   save?: 'agility' | 'smarts' | 'spirit' | 'strength' | 'vigor';
   onSave?: 'half' | 'negate';
+  /** Modifier on the resisting roll: −2 is "Vigor −2 or Stunned". */
+  saveMod?: number;
   condition?: string;
+  /** A to-hit attack whose condition is shaken off AFTER it lands: roll to
+   *  hit, deal damage, then the target resists with this trait or takes
+   *  `condition`. Without it, a to-hit condition simply lands on a hit. */
+  riderSave?: 'agility' | 'smarts' | 'spirit' | 'strength' | 'vigor';
   aoeShape?: 'cone' | 'sphere' | 'line';
   aoeSize?: number;
   /** SWADE blast template in tiles-beyond-target (Small 1, Medium 3, Large 5). */
@@ -44,6 +50,8 @@ interface AttackMeta {
   infection?: boolean;
   poisonMod?: number;
   poisonEffect?: 'fatigue' | 'shaken' | 'incapacitated' | 'paralyzed';
+  /** Lobbed with Athletics (an oil lamp, a grenade) rather than fired. */
+  thrown?: boolean;
   /** Ignores up to 4 points of Scale penalty against something smaller. */
   swat?: boolean;
   /** Templates can be dived away from by default (see the builder below);
@@ -51,7 +59,8 @@ interface AttackMeta {
   evadable?: boolean;
 }
 type Attack = [string, 'Fighting' | 'Shooting' | 'Athletics', string, string, number, AttackMeta?]; // name, skill, damage, dtype, range ft
-type Armor = [string, number, number];                  // name, armor, parryBonus
+type Armor = [string, number, number];
+interface GearMech { heal?: boolean; qty?: number; rangeFt?: number }                  // name, armor, parryBonus
 
 interface Row {
   name: string;
@@ -71,8 +80,10 @@ interface Row {
   /** [name, severity] — Hindrances are roleplay guidance plus any modifier
    *  columns the compendium entry carries. */
   hindrances?: [string, 'Minor' | 'Major'][];
-  /** Non-weapon kit: [name, notes]. Rollable weapons belong in `attacks`. */
-  gear?: [string, string][];
+  /** Non-weapon kit: [name, notes, mech?]. Rollable weapons belong in
+   *  `attacks`. `mech` makes a row a real action: `heal` is a Healing roll
+   *  (a success mends a Wound, a raise two) spent from `qty` uses. */
+  gear?: [string, string, GearMech?][];
   /**
    * An arcane caster's background, skill and pool — and the powers it knows.
    *
@@ -391,7 +402,7 @@ const ROWS: Row[] = [
       ['Chronometric Scanner', 'Reads temporal signatures at close range — how he sometimes seems to know what the Agents are about to do. An Agent carrying active futuretech is far easier for him to pick out of a crowd.'],
       ['Forged Administrative Seals & Period Documents', 'Passes any ordinary inspection by ancient authority, and lets him order Egyptians about with every appearance of the right to do it.'],
       ['Translation Implant', 'Speaks and reads whatever is spoken to him, flawlessly and without a tell.'],
-      ['Compact Medical Patch', 'One use: a Healing roll on himself or an adjacent Khemet operative.'],
+      ['Compact Medical Patch', 'One use: a Healing roll on himself or an adjacent Khemet operative — a success heals a Wound, a raise two, and either steadies the Shaken.', { heal: true, qty: 1 }],
       ['Egyptian Currency', 'Deben of copper and silver — bribes, passage, and the appearance of legitimate office.'],
     ],
     pace: 6,
@@ -459,7 +470,7 @@ const ROWS: Row[] = [
     hindrances: [['Loyal', 'Major'], ['Mean', 'Minor'], ['Vengeful', 'Minor']],
     gear: [
       ['Restraints Disguised As Rope', 'He would rather take an Agent than kill one.'],
-      ['Emergency Medical Patch', 'One use, on himself or an ally beside him.'],
+      ['Emergency Medical Patch', 'One use, on himself or an ally beside him: a Healing roll heals a Wound, two on a raise, and steadies the Shaken.', { heal: true, qty: 1 }],
       ['Khemet Communicator', 'Nekhet hears whatever Menka sees.'],
       ['Egyptian Shield, Rope, Water, Period Currency', 'The kit of an ordinary necropolis guard, maintained far better than an ordinary guard maintains anything.'],
     ],
@@ -471,8 +482,8 @@ const ROWS: Row[] = [
     attrs: ['d10', 'd8', 'd8', 'd8', 'd10'],
     skills: [['Athletics', 'd10'], ['Fighting', 'd8'], ['Intimidation', 'd8'], ['Notice', 'd12'], ['Shooting', 'd8'], ['Stealth', 'd10']],
     attacks: [
-      ['Blinding Solar Flash', 'Shooting', '0', 'energy', 27, { aoeShape: 'cone', aoeSize: 54, save: 'agility', onSave: 'negate', condition: 'distracted' }],
-      ['Stun Pulse', 'Shooting', '0', 'energy', 30, { save: 'vigor', onSave: 'negate', condition: 'stunned' }],
+      ['Blinding Solar Flash', 'Shooting', '0', 'energy', 27, { aoeShape: 'cone', aoeSize: 54, save: 'agility', saveMod: -2, onSave: 'negate', condition: 'distracted' }],
+      ['Stun Pulse', 'Shooting', '0', 'energy', 30, { save: 'vigor', saveMod: -2, onSave: 'negate', condition: 'stunned' }],
       ['Ram', 'Fighting', '1d8!+1d6!', 'bludgeoning', 5],
       ['Mechanical Mandibles', 'Fighting', '1d8!+1d4!', 'piercing', 5],
     ],
@@ -483,7 +494,210 @@ const ROWS: Row[] = [
     construct: true,
     immune: 'poison',
     infravision: true,
-    note: 'Wild Card. A dog-sized autonomous security drone built in the shape of a sacred scarab and left to guard the necropolis. A polished golden shell over sensors, articulated limbs, folded flight systems and nonlethal weapons \u2014 and the reason tomb robbers tell stories about a divine guardian.\n\nPLAYER-FACING: an enormous golden scarab, motionless, somewhere no insect should be. It does not breathe and it does not blink, and it is watching. A close inspection finds seams, articulated plates, sensor lenses and materials the New Kingdom could not make.\n\nDM-ONLY: it escalates, it does not murder. Blinding Solar Flash to open, Stun Pulse on anyone who keeps coming, shoving to move people off ledges and away from artifacts \u2014 and it bites only if restrained, badly damaged, robbed of a funerary object, or if someone threatens whoever it recognises as its controller.\n\nNOT ON THE SHEET \u2014 apply these yourself. FLIGHT: Flying Pace 12 in short violent bursts, staying low along cliffs and walls, which is what keeps the divine-guardian story alive. WALL CRAWLER: it climbs sheer rock, mudbrick and ceilings at full Pace with no Athletics roll \u2014 its best trick is being found already clinging to the cliff above the party. ADVANCED SENSORS: on top of the Infravision on the sheet, it ignores up to 4 points of penalty from darkness, smoke or dust when making Notice rolls, and reads motion, body heat, unusual metal, live electronics and futuretech emissions. FEARSOME DISPLAY: when it unfolds its wings, lights its eyes and starts the buzzing, anyone seeing it for the first time may owe a Fear check \u2014 ancient Egyptians certainly, CSB Agents normally not. RAM: +2 damage if it moved at least 4\u2033 first, and it is often better as an Athletics Test to shove someone than as an attack that hurts them.\n\nWHAT THE SHEET CANNOT SAY \u2014 both ranged weapons should be resisted at \u22122 and there is nowhere to record that, so take it off yourself: Agility \u22122 against the Flash, Vigor \u22122 against the Pulse. The Flash leaves targets Vulnerable as well as Distracted, and an attack carries one condition, so add Vulnerable by hand. A target who makes the Pulse\u2019s Vigor roll should end up Distracted rather than untouched; the sheet can only negate it outright.\n\nToughness 10 (4) from Vigor d10, +4 carapace and Size \u22121: ordinary hand weapons and weak firearms scratch it without making it invulnerable. Construct IS live here \u2014 +2 to shake off Shaken, one Wound level ignored, nothing extra from a Called Shot, never Bleeds Out, and it is repaired rather than healed. Immune to poison, and to disease, which the engine has no damage type for. Speed: d8 running die.' },
+    note: 'Wild Card. A dog-sized autonomous security drone built in the shape of a sacred scarab and left to guard the necropolis. A polished golden shell over sensors, articulated limbs, folded flight systems and nonlethal weapons \u2014 and the reason tomb robbers tell stories about a divine guardian.\n\nPLAYER-FACING: an enormous golden scarab, motionless, somewhere no insect should be. It does not breathe and it does not blink, and it is watching. A close inspection finds seams, articulated plates, sensor lenses and materials the New Kingdom could not make.\n\nDM-ONLY: it escalates, it does not murder. Blinding Solar Flash to open, Stun Pulse on anyone who keeps coming, shoving to move people off ledges and away from artifacts \u2014 and it bites only if restrained, badly damaged, robbed of a funerary object, or if someone threatens whoever it recognises as its controller.\n\nNOT ON THE SHEET \u2014 apply these yourself. FLIGHT: Flying Pace 12 in short violent bursts, staying low along cliffs and walls, which is what keeps the divine-guardian story alive. WALL CRAWLER: it climbs sheer rock, mudbrick and ceilings at full Pace with no Athletics roll \u2014 its best trick is being found already clinging to the cliff above the party. ADVANCED SENSORS: on top of the Infravision on the sheet, it ignores up to 4 points of penalty from darkness, smoke or dust when making Notice rolls, and reads motion, body heat, unusual metal, live electronics and futuretech emissions. FEARSOME DISPLAY: when it unfolds its wings, lights its eyes and starts the buzzing, anyone seeing it for the first time may owe a Fear check \u2014 ancient Egyptians certainly, CSB Agents normally not. RAM: +2 damage if it moved at least 4\u2033 first, and it is often better as an Athletics Test to shove someone than as an attack that hurts them.\n\nWHAT THE SHEET CANNOT SAY \u2014 the \u22122 on both ranged weapons IS on the sheet now (Agility \u22122 against the Flash, Vigor \u22122 against the Pulse) and rolls itself. The Flash leaves targets Vulnerable as well as Distracted, and an attack carries one condition, so add Vulnerable by hand. A target who makes the Pulse\u2019s Vigor roll should end up Distracted rather than untouched; the sheet can only negate it outright.\n\nToughness 10 (4) from Vigor d10, +4 carapace and Size \u22121: ordinary hand weapons and weak firearms scratch it without making it invulnerable. Construct IS live here \u2014 +2 to shake off Shaken, one Wound level ignored, nothing extra from a Called Shot, never Bleeds Out, and it is repaired rather than healed. Immune to poison, and to disease, which the engine has no damage type for. Speed: d8 running die.' },
+
+  // ---------- Egypt: the KV20 delve ----------
+  // Four waves down Hatshepsut's tomb, tuned for six Novice Agents with one or
+  // two Advances. Khemet tech is nonlethal by default and escalates on THE
+  // DESECRATION CLOCK: once an Agent picks up a funerary object, every Khemet
+  // construct that can see them switches to its lethal weapon against them
+  // (+1 to hit). KV20 is cut through rotten shale — any blast template inside
+  // the tomb makes everyone within 2″ of it roll Agility or take 2d6 and be
+  // Entangled under the fall.
+
+  // --- Wave 1: the cliff entrance ---
+  { name: 'Tomb Robber', category: 'Egypt', tier: 1, wild: false,
+    attrs: ['d6', 'd6', 'd6', 'd6', 'd6'],
+    skills: [['Athletics', 'd6'], ['Common Knowledge', 'd6'], ['Fighting', 'd6'], ['Notice', 'd6'], ['Stealth', 'd8'], ['Thievery', 'd6']],
+    attacks: [
+      ['Copper Chisel', 'Fighting', '1d6!+1d4!', 'piercing', 5],
+      ['Sling', 'Athletics', '1d6!+1d4!', 'bludgeoning', 20],
+    ],
+    hindrances: [['Greedy', 'Minor']],
+    gear: [
+      ['Torch', 'An hour of light in a 4″ radius — and the thing every guard on the valley floor is looking for.'],
+      ['Mallet, Rope & Grain Sacks', 'For the blocking, the shaft, and the gold leaf scraped off the coffins.'],
+    ],
+    pace: 6,
+    note: 'Necropolis workmen gone bad: stonecutters and labourers who know the valley better than the guards do. Breaking the seal of KV20 at night when the Agents arrive.\n\nMORALE: they break and run once half the gang is down, and they will happily lead the Agents into whatever stopped the LAST gang that went in. The robbery trials of the late New Kingdom are full of men exactly like these.' },
+  { name: 'Amenpanefer, Stonemason & Gang Boss', category: 'Egypt', tier: 3, wild: true,
+    attrs: ['d6', 'd6', 'd8', 'd8', 'd8'],
+    skills: [['Athletics', 'd6'], ['Common Knowledge', 'd6'], ['Fighting', 'd8'], ['Intimidation', 'd6'], ['Notice', 'd6'], ['Persuasion', 'd6'], ['Stealth', 'd6'], ['Thievery', 'd8']],
+    attacks: [
+      ['Bronze Adze', 'Fighting', '1d8!+1d6!', 'slashing', 5],
+      ['Copper Chisel', 'Fighting', '1d8!+1d4!', 'piercing', 5],
+    ],
+    edges: ['Brawny'],
+    hindrances: [['Greedy', 'Major'], ['Phobia', 'Minor']],
+    gear: [
+      ['Stonemason’s Tools', 'He cut tombs in this valley for twenty years before he started opening them.'],
+      ['Copper Deben & a Gold Ring', 'Last week’s takings. A bribe, if the Agents ask the right way.'],
+    ],
+    pace: 6,
+    note: 'Wild Card. Named for the real stonemason whose confession survives among the Ramesside tomb-robbery papyri.\n\nPLAYER-FACING: a broad, scarred quarryman with a mason’s squint, running a crew that is clearly not supposed to be here.\n\nDM-ONLY: he has already been inside. Something gold with wings flashed light in his eyes and two of his men stopped moving; he thinks it was a god. Spare him and he will sell the Agents his route past the first niches (Wave 2 starts with the Agents knowing where the canopic jars are) — or follow them in to steal what they uncover.\n\nMOVESET — stays behind two robbers, fights with the adze, and surrenders the moment he is Wounded.' },
+  { name: 'Medjay Patrolman', category: 'Egypt', tier: 2, wild: false,
+    attrs: ['d6', 'd6', 'd6', 'd6', 'd6'],
+    skills: [['Athletics', 'd6'], ['Fighting', 'd8'], ['Intimidation', 'd6'], ['Notice', 'd8'], ['Shooting', 'd6'], ['Survival', 'd6']],
+    attacks: [
+      ['Khopesh', 'Fighting', '1d6!+1d8!', 'slashing', 5],
+      ['Bow', 'Shooting', '2d6!', 'piercing', 60],
+    ],
+    armor: [['Hide Cuirass', 1, 0], ['Small Shield', 0, 1]],
+    gear: [
+      ['Signal Horn', 'One blast brings the rest of the patrol. Three blasts brings the necropolis.'],
+      ['Torch & Water Skin', 'A night on the valley floor.'],
+    ],
+    pace: 6,
+    note: 'The desert police who patrol the royal necropolis — whose job is precisely to stop people breaking into tombs at night.\n\nTHE CLOCK: they arrive 3 rounds after the first gunshot, scream or explosion at the entrance, four of them, from behind. They arrest rather than kill, and anyone who is not a robber gets the chance to talk. Futuretech in plain view makes that conversation very short.' },
+
+  // --- Wave 2: the descending corridor ---
+  { name: 'Khepri Swarm (Golden Scarabs)', category: 'Egypt', tier: 2, wild: false,
+    attrs: ['d10', 'd4', 'd12', 'd8', 'd10'],
+    skills: [['Fighting', 'd4'], ['Notice', 'd6']],
+    attacks: [
+      ['Shock Swarm', 'Fighting', '2d4!', 'lightning', 0, { aoeShape: 'sphere', aoeHexes: 3, evadable: false }],
+      ['Filament Snare', 'Shooting', '0', '', 0, { aoeShape: 'sphere', aoeHexes: 3, save: 'agility', onSave: 'negate', condition: 'entangled', evadable: false }],
+    ],
+    pace: 6,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    resist: 'slashing, piercing',
+    vulnerable: 'lightning',
+    note: 'Swarm. Thousands of thumbnail-sized golden scarabs, Khay’s work: each one a sensor, a capacitor and six legs.\n\nPLAYER-FACING: golden scarab amulets, scattered on the corridor floor and packed into the cracks in the shale. Then they all turn over at once.\n\nMOVESET — on its turn the swarm does ONE of: Shock Swarm (2d4 to everyone under it, no to-hit, no diving clear) or Filament Snare (everyone under it rolls Agility or is Entangled). Move it over the Agents first; the template rides on the swarm.\n\nNOT ON THE SHEET — FLIGHT: Pace 10 flying. SPLIT: when Wounded it becomes two swarms on Small templates (aoeHexes 1); a Small swarm that is Wounded is gone. STOMP: an Agent standing in it can do their Strength damage to it as an action. SWARM: cutting and piercing barely touch it (resisted on the sheet); blasts work normally — and in KV20 a blast brings the ceiling down. Electricity and EMP are what it fears (+4, on the sheet).' },
+  { name: 'Ushabti Drone', category: 'Egypt', tier: 1, wild: false,
+    attrs: ['d6', 'd4', 'd6', 'd6', 'd6'],
+    skills: [['Athletics', 'd8'], ['Fighting', 'd6'], ['Notice', 'd6']],
+    attacks: [
+      ['Faience Hoe', 'Fighting', '1d6!+1d4!', 'bludgeoning', 5],
+      ['Clinging Grab', 'Fighting', '1d6!', 'bludgeoning', 5, { riderSave: 'strength', condition: 'entangled' }],
+    ],
+    armor: [['Glazed Faience Shell', 2, 0]],
+    traits: [['Size -2', -2]],
+    pace: 6,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    note: 'A knee-high blue-faience servant figurine with a hoe in one hand and a basket in the other — the shabti buried by the hundred to do the dead’s work for them. These ones get up.\n\nPLAYER-FACING: rows of little blue mummiform figures in the niches. On activation every one of them stands and answers, in Middle Egyptian, “Here I am.”\n\nMOVESET — they are there to hold Agents still while the canopic jars work. Gang up three to an Agent and use Clinging Grab: a hit, then Strength or Entangled. Size −2 means attacks against them are at −2.\n\nPILE ON (not on the sheet): their Gang Up bonus counts double when they Grapple.' },
+  { name: 'Canopic Turret (Imsety)', category: 'Egypt', tier: 1, wild: false,
+    attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
+    skills: [['Notice', 'd8'], ['Shooting', 'd8']],
+    attacks: [
+      ['Neural Pulse', 'Shooting', '0', 'energy', 60, { save: 'vigor', saveMod: -1, onSave: 'negate', condition: 'stunned' }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+    ],
+    armor: [['Alabaster over Alloy', 2, 0]],
+    traits: [['Size -1', -1]],
+    pace: 0,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    infravision: true,
+    note: 'One of four canopic jars set into the corridor niches; this lid is the human head of Imsety. Stationary — Pace 0, Parry 2.\n\nNEURAL PULSE: the target rolls Vigor −1 or is Stunned. PULSE BOLT is the Desecration Clock weapon: use it only against an Agent carrying a funerary object.\n\nThe jars murmur polite apologies in Middle Egyptian while they fire. Smashing the lid is a Called Shot (−4) that removes the weapon.' },
+  { name: 'Canopic Turret (Hapy)', category: 'Egypt', tier: 1, wild: false,
+    attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
+    skills: [['Notice', 'd8'], ['Shooting', 'd8']],
+    attacks: [
+      ['Sonic Shriek', 'Shooting', '0', '', 0, { aoeShape: 'cone', aoeSize: 54, save: 'spirit', saveMod: -1, onSave: 'negate', condition: 'shaken', evadable: false }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+    ],
+    armor: [['Alabaster over Alloy', 2, 0]],
+    traits: [['Size -1', -1]],
+    pace: 0,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    infravision: true,
+    note: 'A canopic jar whose lid is the baboon head of Hapy. Stationary — Pace 0, Parry 2.\n\nSONIC SHRIEK: a Cone Template from the jar; everyone in it rolls Spirit −1 or is Shaken. Nobody dives clear of a sound. Fired down a corridor it reaches the whole party.\n\nPULSE BOLT is the Desecration Clock weapon, for an Agent carrying a funerary object.' },
+  { name: 'Canopic Turret (Duamutef)', category: 'Egypt', tier: 1, wild: false,
+    attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
+    skills: [['Notice', 'd8'], ['Shooting', 'd8']],
+    attacks: [
+      ['Tracking Dart', 'Shooting', '1d4!', 'piercing', 60, { condition: 'vulnerable' }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+    ],
+    armor: [['Alabaster over Alloy', 2, 0]],
+    traits: [['Size -1', -1]],
+    pace: 0,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    infravision: true,
+    note: 'A canopic jar whose lid is the jackal head of Duamutef. Stationary — Pace 0, Parry 2.\n\nTRACKING DART: a Shooting roll; a hit does 1d4 and leaves the target Vulnerable, so every other jar and drone has an easier shot at them. Pulling the dart out costs the Agent an action.\n\nPULSE BOLT is the Desecration Clock weapon, for an Agent carrying a funerary object.' },
+  { name: 'Canopic Turret (Qebehsenuef)', category: 'Egypt', tier: 1, wild: false,
+    attrs: ['d4', 'd6', 'd6', 'd4', 'd8'],
+    skills: [['Notice', 'd8'], ['Shooting', 'd8']],
+    attacks: [
+      ['Falcon Glare', 'Shooting', '0', 'energy', 60, { save: 'agility', onSave: 'negate', condition: 'distracted' }],
+      ['Pulse Bolt (Desecration)', 'Shooting', '2d6!', 'energy', 60],
+    ],
+    armor: [['Alabaster over Alloy', 2, 0]],
+    traits: [['Size -1', -1]],
+    pace: 0,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    infravision: true,
+    note: 'A canopic jar whose lid is the falcon head of Qebehsenuef. Stationary — Pace 0, Parry 2.\n\nFALCON GLARE: a focused solar flash at one Agent; Agility or Distracted. Pair it with Duamutef’s dart and the target is both easy to hit and bad at hitting back.\n\nPULSE BOLT is the Desecration Clock weapon, for an Agent carrying a funerary object.' },
+
+  // --- Wave 3: the antechamber ---
+  { name: 'Sahu Frame (Techno-Mummy)', category: 'Egypt', tier: 2, wild: false,
+    attrs: ['d6', 'd4', 'd6', 'd10', 'd8'],
+    skills: [['Athletics', 'd6'], ['Fighting', 'd8'], ['Intimidation', 'd8'], ['Notice', 'd6']],
+    attacks: [
+      ['Crushing Grip', 'Fighting', '1d10!+1d6!', 'bludgeoning', 5, { riderSave: 'agility', condition: 'entangled' }],
+      ['Natron Mist', 'Shooting', '0', '', 0, { aoeShape: 'cone', aoeSize: 30, save: 'vigor', onSave: 'negate', condition: 'distracted' }],
+    ],
+    armor: [['Resin-Soaked Linen over Alloy', 2, 0]],
+    pace: 4,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    vulnerable: 'fire',
+    note: 'A linen-wrapped alloy exoskeleton around a gel core, laid out on a bier like a burial. It is not a body. Nobody has told the Egyptians that.\n\nPLAYER-FACING: a mummy, sitting up.\n\nMOVESET — Crushing Grip: a hit, then the target rolls Agility or is Entangled in its hands. Natron Mist: a short cone of salt-and-sedative; Vigor or Distracted. Two frames on one Agent is the plan.\n\nNOT ON THE SHEET — THE REVEAL: the first time a frame is Wounded or hit by fire, the wrappings burn or slough off. Drop the armour to +1 (Toughness 7), and it stops pretending: Pace 8, +1 to Fighting. FEAR: Egyptians who see one move make a Fear check at −2; Agents make one ordinary Fear check the first time. Fire is +4 damage against it (on the sheet) — the wrappings are resin.' },
+  { name: 'Inpu Sentinel', category: 'Egypt', tier: 4, wild: true,
+    attrs: ['d8', 'd6', 'd8', 'd10', 'd10'],
+    skills: [['Athletics', 'd8'], ['Fighting', 'd10'], ['Intimidation', 'd8'], ['Notice', 'd10'], ['Stealth', 'd8']],
+    attacks: [
+      ['Basalt Jaws', 'Fighting', '1d10!+1d6!', 'piercing', 5, { ap: 2 }],
+      ['Pounce', 'Fighting', '1d10!+1d6!+4', 'piercing', 5, { ap: 2, riderSave: 'agility', condition: 'prone' }],
+    ],
+    armor: [['Basalt Shell', 3, 0]],
+    edges: ['Alertness'],
+    pace: 8,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    infravision: true,
+    note: 'Wild Card. A life-size black jackal lying on a gilded shrine-chest, ears up, exactly like the Anubis that guarded Tutankhamun’s treasury. It is guarding this one.\n\nPLAYER-FACING: a magnificent statue of Anubis, black and gold, watching the doorway to the burial chamber.\n\nDM-ONLY — THE WEIGHING: it does nothing at all until someone touches a funerary object. Then it comes off the plinth for THAT Agent, at +2 to every roll against them, and ignores everyone else unless attacked. It is the Desecration Clock with teeth.\n\nMOVESET — Pounce only after moving at least 4″ straight at the target (the +4 is on the sheet; the hit leaves them rolling Agility or Prone). Then Basalt Jaws every round. If its target drops the object and backs away, it returns to the plinth.' },
+
+  // --- Wave 4: burial chamber J ---
+  { name: 'Ba-Bird Drone', category: 'Egypt', tier: 2, wild: false,
+    attrs: ['d8', 'd4', 'd6', 'd4', 'd6'],
+    skills: [['Athletics', 'd6'], ['Notice', 'd10'], ['Shooting', 'd8']],
+    attacks: [
+      ['Akh Light', 'Shooting', '0', 'energy', 60, { save: 'agility', onSave: 'negate', condition: 'vulnerable' }],
+      ['Ba Lance', 'Shooting', '2d6!', 'energy', 60],
+    ],
+    armor: [['Gilded Feathers', 1, 0]],
+    traits: [['Size -1', -1]],
+    pace: 12,
+    construct: true,
+    fearless: true,
+    immune: 'poison',
+    infravision: true,
+    note: 'A hawk with a human face, the ba-soul exactly as the tomb paintings show it, hovering under the burial chamber ceiling. Its Pace is flight; it never lands.\n\nMOVESET — AKH LIGHT: a searchlight pinned on one Agent; Agility or Vulnerable, and while it holds the beam the Golden Scarab and the frames ignore darkness against that Agent. BA LANCE: 2d6 energy, but hold it for the Desecration Clock or once the Agents have smashed something.\n\nThe eyes of the room: kill these first and the rest of the wave is fighting in the dark.' },
+  { name: 'Servant of the Shining Khepri', category: 'Egypt', tier: 1, wild: false,
+    attrs: ['d6', 'd6', 'd6', 'd6', 'd6'],
+    skills: [['Athletics', 'd6'], ['Faith', 'd4'], ['Fighting', 'd6'], ['Notice', 'd6']],
+    attacks: [
+      ['Mallet', 'Fighting', '1d6!+1d4!', 'bludgeoning', 5],
+      ['Thrown Oil Lamp', 'Athletics', '2d4!', 'fire', 15, { aoeShape: 'sphere', aoeHexes: 1, thrown: true }],
+    ],
+    hindrances: [['Delusional', 'Major']],
+    gear: [['Oil Lamps', 'Three of them, lit; each one is a thrown lamp.']],
+    pace: 6,
+    note: 'Necropolis workmen who have seen the Golden Scarab fly and decided it is Khepri, the rising sun, come down to guard the dead king. Sabu has been encouraging them.\n\nTHE CLOCK: four of them come down the corridor behind the Agents once Wave 4 begins.\n\nFANATIC: they do not flee while the Golden Scarab is still moving. PROOF: an Agent who shows them the machine underneath (a Called Shot that cracks the Scarab’s shell, or holding up a dead scarab drone) and makes a Persuasion roll breaks their nerve, and they stop fighting.' },
 
   // ---------- Nazareth (Scenario) ----------
   // NPCs for the first-century time-intrusion scenario. Novice-tuned: low
@@ -625,7 +839,10 @@ function sheetFor(r: Row): SheetData {
     attacks: r.attacks.map(([name, skill, damage, dtype, range, meta]) => ({
       name, skill, damage, dtype, range, notes: '',
       ...(meta?.save ? { save: meta.save, onSave: meta.onSave ?? 'negate', saveDc: 4 } : {}),
+      ...(meta?.save && meta.saveMod ? { saveMod: meta.saveMod } : {}),
       ...(meta?.condition ? { condition: meta.condition } : {}),
+      // SWADE resists at TN 4 whatever DC is stored; it only has to be > 0.
+      ...(meta?.riderSave && !meta.save ? { conditionSave: meta.riderSave, conditionDc: 4 } : {}),
       // A template is either measured in feet (cones) or in tiles beyond the
       // target (SWADE's Small/Medium/Large blasts). Requiring aoeSize dropped
       // every tile-based one on the floor: 21 attacks — every swarm, the
@@ -650,12 +867,18 @@ function sheetFor(r: Row): SheetData {
       ...(meta?.poison ? { poison: true, poisonMod: meta.poisonMod ?? 0, poisonEffect: meta.poisonEffect ?? 'fatigue' } : {}),
       ...(meta?.infection ? { infection: true, poisonMod: meta.poisonMod ?? 0, poisonEffect: meta.poisonEffect ?? 'shaken' } : {}),
       ...(meta?.swat ? { swat: true } : {}),
+      ...(meta?.thrown ? { thrown: true } : {}),
     })),
     armor: (r.armor ?? []).map(([name, armor, parryBonus]) => ({ name, armor, parryBonus, equipped: true, notes: '' })),
     ...(r.traits ? { racialTraits: r.traits.map(([name, toughnessBonus]) => ({ name, toughnessBonus, notes: '' })) } : {}),
     ...(r.edges ? { edges: r.edges.map((name) => ({ name, ...traitColumnsFor(name) })) } : {}),
     ...(r.hindrances ? { hindrances: r.hindrances.map(([name, severity]) => ({ name, severity, ...traitColumnsFor(name) })) } : {}),
-    ...(r.gear ? { inventory: r.gear.map(([name, notes]) => ({ name, qty: 1, weight: 0, equipped: true, notes })) } : {}),
+    ...(r.gear ? {
+      inventory: r.gear.map(([name, notes, mech]) => ({
+        name, qty: mech?.qty ?? 1, weight: 0, equipped: true, notes,
+        ...(mech?.heal ? { effect: 'heal', amount: '', range: mech.rangeFt ?? 5 } : {}),
+      })),
+    } : {}),
     ...(r.arcane ? {
       arcaneBackground: r.arcane.background,
       arcaneSkill: r.arcane.skill,

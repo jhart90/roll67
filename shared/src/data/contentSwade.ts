@@ -235,6 +235,19 @@ const WEAPONS: W[] = [
   ['Mk II Grenade (WWII Pineapple)', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 20/40/80', 'thrown', 'medium blast'], 40, 1],
   ['Potato Masher (WWII)', 'Ranged', '3d6!-2', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast'], 50, 2],
   ['Mk67 Grenade (Modern)', 'Ranged', '3d6!', 'kinetic', 'ranged', ['range 25/50/100', 'thrown', 'medium blast'], 50, 1],
+  // ---- Ancient Egypt: tomb-cutters' tools and the Khemet-Prime kit ----
+  // The Khemet pieces are what Agents can salvage in KV20. Their riders are
+  // written in the "<Trait> roll [mod] or <Condition>" form applyEntry reads,
+  // so a looted emitter arrives on a sheet already rolling its resist.
+  ['Bronze Adze', 'Melee', '1d6!', 'slashing', 'str', ['era: ancient Egypt — the carpenter’s and tomb-cutter’s tool', 'min Str d6'], 20, 3],
+  ['Copper Chisel', 'Melee', '1d4!', 'piercing', 'str', ['era: ancient Egypt — a stonecutter’s chisel', 'min Str d4'], 5, 1],
+  ['Thrown Oil Lamp', 'Ranged', '2d4!', 'fire', 'ranged', ['range 15/30/60', 'thrown', 'small blast', 'may set fires', 'era: ancient Egypt'], 2, 1],
+  ['Khemet Shock Baton', 'Melee', '1d6!', 'energy', 'str', ['Vigor roll or Stunned', 'looks like a guard’s plain wooden baton', 'era: 27th century — Khemet-Prime']],
+  ['Concealed Pulse Projector', 'Ranged', '2d6!', 'energy', 'ranged', ['range 60/120/240', 'AP 2', 'mag 20', 'concealable — worn as a bracelet or staff head', 'era: 27th century — Khemet-Prime sidearm', 'caliber: battery-pistol']],
+  ['Neural Pulse Emitter', 'Ranged', '0', 'energy', 'ranged', ['range 60/120/240', 'nonlethal', 'Vigor roll −1 or Stunned', 'mag 6', 'pried from an Imsety canopic jar', 'era: 27th century — Khemet-Prime']],
+  ['Hapy Shriek Emitter', 'Ranged', '0', '', 'ranged', ['cone template', 'nonlethal', 'Spirit roll −1 or Shaken', 'mag 3', 'pried from a baboon-headed canopic jar', 'era: 27th century — Khemet-Prime']],
+  ['Duamutef Dart Launcher', 'Ranged', '1d4!', 'piercing', 'ranged', ['range 60/120/240', 'a hit leaves the target Vulnerable', 'mag 6', 'pried from a jackal-headed canopic jar', 'era: 27th century — Khemet-Prime']],
+  ['Solar Flash Lens', 'Ranged', '0', 'energy', 'ranged', ['cone template', 'nonlethal', 'Agility roll −2 or Distracted', 'mag 3', 'the Golden Scarab’s eye, cut out of its head', 'era: 27th century — Khemet-Prime']],
   // ---- Mines. Emplaced rather than aimed; the range is reach to set one. ----
   ['Anti-Personnel Mine', 'Heavy Weapon', '2d6!+2', 'kinetic', 'ranged', ['small blast', 'Heavy Weapon', 'buried; a Notice roll spots it before the step, then Repair to disarm'], 100, 10],
   ['Anti-Tank Mine', 'Heavy Weapon', '4d6!', 'kinetic', 'ranged', ['medium blast', 'Heavy Weapon', 'AP 5, or half the vehicle’s Armor rounded up — whichever is better'], 200, 20],
@@ -336,6 +349,10 @@ const ARMOR: A[] = [
   ['Body Armor (Military)', 'Armor', 4, 0, 'Plate carrier with ballistic inserts'],
   ['Powered Battle Armor', 'Armor', 10, 0, 'Sci-fi powered exoskeleton; sealed and strength-boosting'],
   ['Energy Shield', 'Shield', 2, 4, '+2 Parry, +4 Armor vs ranged energy'],
+  // ---- Ancient Egypt & Khemet-Prime ----
+  ['Medjay Hide Cuirass', 'Armor', 1, 0, 'Rawhide over the torso; what the necropolis police wear on patrol · Min Str d4', 30, 6],
+  ['Concealed Khemet Mesh', 'Armor', 2, 0, '27th-century weave sewn inside period linen; torso, arms and legs. Passes for an official’s kilt and shawl.', 2000, 2],
+  ['Khemet Reactive Mesh', 'Armor', 3, 0, 'A heavier Khemet weave that flashes blue where a blow lands; torso, arms and legs. Passes for a guard’s kit.', 4000, 4],
 ];
 
 // [name, ppCost, rankReq, subtitle, mech?]
@@ -600,6 +617,13 @@ const GEAR: G[] = [
   ['Parabolic Microphone', 'Hear a whisper up to 200 yards off', 750, 4],
   ['Telephone Tap', 'Listens in on a wired line', 250, 0],
   ['Transmitter Detector', 'Sweeps a room for bugs', 525, 1],
+  // ---- Ancient Egypt & Khemet-Prime (salvage from KV20) ----
+  ['Khemet Medical Patch', 'One use. Treating a Wound is a Healing roll — a success heals one, a raise two, and either steadies the Shaken.', 500, 0, undefined, { qty: 1 }],
+  ['Scarab Pendant (Temporal Communicator)', 'Reaches anyone else carrying one anywhere in the operating window. Looks like devotional jewellery.', 1500, 0],
+  ['Chronometric Scanner', 'Reads temporal signatures and futuretech emissions at close range; +2 to Notice rolls made to spot either (add it by hand)', 3000, 1],
+  ['Sensor Incense', 'The smoke leaves microscopic sensors behind; whoever holds the paired receiver sees anywhere it was burned', 800, 1],
+  ['Translation Implant', 'Speaks and reads any language spoken to the wearer, flawlessly and without a tell', 5000, 0],
+  ['Forged Priestly Seals', 'Opens doors and explains your presence anywhere in a temple or necropolis complex, until someone checks', 300, 0],
 ];
 
 // ---------- Edges ----------

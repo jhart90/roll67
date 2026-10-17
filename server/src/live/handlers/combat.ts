@@ -4002,7 +4002,13 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     // Grenade deals no damage, and its victims must not be made to roll Vigor
     // for a grenade that was never landed in the first place. A grenade that
     // already went off in the thrower's hand needs no throwing roll.
-    if (actor.system === 'swade' && action.source === 'attack' && !action.suppressive && !cookBlewUp) {
+    //
+    // Only a template that is PLACED somewhere can land somewhere else. A
+    // swarm, a tail sweep or a shockwave is centred on the attacker, and a
+    // cone or line erupts from them: nothing is thrown or fired at a point,
+    // so there is no roll to make and nowhere for it to drift.
+    const placed = !aoeCentredOnSelf(action) && action.aoe?.shape !== 'cone' && action.aoe?.shape !== 'line';
+    if (actor.system === 'swade' && action.source === 'attack' && !action.suppressive && !cookBlewUp && placed) {
       const row = rows(actor.sheet, 'attacks')[action.index];
       const thrown = action.thrown === true || /thrown/i.test(str(row ?? {}, 'notes', ''));
       const skillName = thrown ? 'Athletics' : 'Shooting';

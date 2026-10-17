@@ -12,7 +12,7 @@ import { applyUndo } from '../undo.js';
 // NOTE: hp.ts also imports applyAdv from this file -- a deliberate, safe
 // circular import (both sides are hoisted function declarations used only at
 // call time, never during module evaluation).
-import { clearConcentrationEffects, critFailFor, recordBennyRoll } from '../hp.js';
+import { clearConcentrationEffects, critFailFor, emitBennyState, noteBennyRollMessage, recordBennyRoll } from '../hp.js';
 import { ironDiceInfo, rotateIronDice } from '../ironDice.js';
 import { rollGate } from '../locks.js';
 
@@ -144,6 +144,15 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
     const breakdown = roll(expr);
     if (character.system === 'swade') breakdown.modWhy = traitModWhy(character.sheet);
     const label = `${rollable.label}${adv === 'adv' ? ' (advantage)' : adv === 'dis' ? ' (disadvantage)' : ''}`;
+    // A roll clicked off the sheet is the commonest thing a player wants to
+    // spend a Benny on, and this path never banked one — so right-clicking
+    // an Agility or Notice card always said there was nothing to reroll.
+    const isDamage = /^damage_/.test(rollable.id) || /damage/i.test(rollable.label);
+    const kind = isDamage ? 'damage' as const : 'trait' as const;
+    if (character.system === 'swade') {
+      const critFail = !isDamage && critFailFor(io, d.campaignId, character, breakdown.dice);
+      recordBennyRoll(io, d.campaignId, character, kind, expr, breakdown.total, label, critFail);
+    }
     const msg = chat.add(d.campaignId, {
       userId: d.userId,
       fromName: d.username,
@@ -153,6 +162,10 @@ export function registerChatHandlers(io: Server, socket: Socket): void {
       roll: breakdown,
       recipients: null,
     });
+    if (character.system === 'swade') {
+      noteBennyRollMessage(character.id, kind, msg.id);
+      emitBennyState(io, d.campaignId, characters.byId(character.id) ?? character);
+    }
     deliver(io, d.campaignId, msg);
   }, 'SHEET_ROLL'));
 
@@ -340,17 +353,24 @@ function runSheetRoll(
   if (character.system === 'swade') breakdown.modWhy = traitModWhy(character.sheet);
   // Any SWADE sheet roll is a trait test a Benny may reroll — unless it came
   // up a Critical Failure, which the book says must be accepted.
-  const sheetCritFail = character.system === 'swade'
-    && critFailFor(io, campaignId, character, breakdown.dice);
-  recordBennyRoll(io, campaignId, character, 'trait', rollable.expr, breakdown.total, rollable.label, sheetCritFail);
   // The banner over the map while these dice are in the air. A damage roll
-  // off the sheet is not a trait test, and the table can see which is which.
+  // off the sheet is not a trait test, and the table can see which is which —
+  // and so can the Benny, which rerolls it as damage (no Critical Failure).
   const isDamage = /^damage_/.test(rollable.id) || /damage/i.test(rollable.label);
+  const sheetCritFail = character.system === 'swade' && !isDamage
+    && critFailFor(io, campaignId, character, breakdown.dice);
+  const kind = isDamage ? 'damage' as const : 'trait' as const;
+  recordBennyRoll(io, campaignId, character, kind, rollable.expr, breakdown.total, rollable.label, sheetCritFail);
   const msg = chat.add(campaignId, {
     callout: { what: isDamage ? `${rollable.label} — damage` : `${rollable.label} — trait test`, tone: isDamage ? 'damage' : 'trait' },
     userId, fromName: username, fromCharacter: character.name, characterId: character.id, kind: 'roll',
     text: rollable.label, roll: breakdown, recipients: null,
   });
+  // Tie the roll to its card, so right-clicking THIS card rerolls THIS roll.
+  if (character.system === 'swade') {
+    noteBennyRollMessage(character.id, kind, msg.id);
+    emitBennyState(io, campaignId, characters.byId(character.id) ?? character);
+  }
   deliver(io, campaignId, msg);
 }
 
@@ -455,6 +475,10 @@ function tryTraitRoll(
     text: gm ? `(GM roll) ${text}` : text,
     roll: breakdown, recipients: dmNames,
   });
+  if (character.system === 'swade') {
+    noteBennyRollMessage(character.id, 'trait', msg.id);
+    emitBennyState(io, campaignId, characters.byId(character.id) ?? character);
+  }
   deliver(io, campaignId, msg);
   return true;
 }

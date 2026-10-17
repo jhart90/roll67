@@ -25,6 +25,7 @@ import { buildDirectory, broadcastDirectory } from '../directory.js';
 import { getAudioState } from './library.js';
 import { foldersVisibleTo, shopsForUser, sendShopPresentationTo } from './world.js';
 import { emitMoveBudget, moveBudgetFor } from './tokens.js';
+import { emitAllBennyStates } from '../hp.js';
 
 function handoutsVisibleTo(campaignId: string, userId: string, isDm: boolean) {
   const all = handouts.forCampaign(campaignId);
@@ -213,6 +214,10 @@ export function registerSessionHandlers(io: Server, socket: Socket): void {
       if (camp) emitCustomNpcs(socket, d.userId, camp.system);
     }
     sendMapState(socket);
+    // Which of their recent cards a Benny can still reroll — otherwise a
+    // refreshed page offers nothing on rolls the server would happily redo.
+    emitAllBennyStates(io, campaignId, characters.forCampaign(campaignId)
+      .filter((c) => (role === 'dm' ? !c.ownerUserId : c.ownerUserId === d.userId)));
     // The turn budget lives in the server's memory for the length of a turn
     // and is normally announced when that turn begins — so somebody who
     // refreshes mid-turn arrives to a map with no reach on it and no turn

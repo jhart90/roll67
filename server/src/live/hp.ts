@@ -777,6 +777,8 @@ function applySwadeDamage(
  * can't be Benny'd back at the evening table.
  */
 export interface BennyRollRec {
+  /** A trait test or a damage roll — the two things a Benny rerolls. */
+  kind: 'trait' | 'damage';
   expr: string; total: number; label: string; at: number;
   /** A Critical Failure cannot be rerolled, even with a Benny — the book is
    *  explicit that it ends the attempt and must be accepted. Recorded with
@@ -811,25 +813,51 @@ export interface BennyRollRec {
    *  put a cover on the dice the table already watched. */
   msgId?: number;
 }
-export const lastBennyRolls = new Map<string, { trait?: BennyRollRec; damage?: BennyRollRec }>();
+/**
+ * Every rerollable roll a character has made recently, newest last — not just
+ * the latest one.
+ *
+ * This used to be ONE trait slot and ONE damage slot per character, lapsing
+ * after five minutes. So a player who made an attack, then a Notice roll, then
+ * right-clicked the attack card found the Benny would reroll the Notice roll,
+ * or nothing at all — and anyone who thought about it for more than five
+ * minutes was told the roll had gone. Now each roll is kept against the chat
+ * card it was posted as, and the card you right-click is the roll you buy.
+ */
+export const lastBennyRolls = new Map<string, BennyRollRec[]>();
+
+/** Long enough for a whole scene, short enough that last week's roll is not
+ *  still sitting there waiting to be bought back. */
+const BENNY_REROLL_TTL_MS = 3 * 60 * 60_000;
+/** Per character. Plenty for a fight; the oldest fall off the front. */
+const BENNY_HISTORY = 40;
+
+function freshHistory(characterId: string): BennyRollRec[] {
+  const now = Date.now();
+  const list = (lastBennyRolls.get(characterId) ?? []).filter((r) => now - r.at <= BENNY_REROLL_TTL_MS);
+  lastBennyRolls.set(characterId, list);
+  return list;
+}
+
+function freshBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRollRec | null {
+  const list = freshHistory(characterId);
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].kind === kind) return list[i];
+  return null;
+}
 
 /**
  * Tie the roll just banked to the card it was posted as.
  *
  * Separate from recordBennyRoll because the card does not exist yet when the
- * roll is recorded — the id comes back from chat.add a line later. A caller
- * that forgets simply gets no cover on the superseded roll, which is a
- * missing nicety rather than a wrong result.
+ * roll is recorded — the id comes back from chat.add a line later. A roll with
+ * no card can still be bought back as "your latest", but only a roll tied to
+ * its card can be bought back by right-clicking THAT card.
  */
 export function noteBennyRollMessage(characterId: string, kind: 'trait' | 'damage', msgId: number): void {
-  const rec = lastBennyRolls.get(characterId)?.[kind];
-  if (rec) rec.msgId = msgId;
-}
-const BENNY_REROLL_TTL_MS = 5 * 60_000;
-
-function freshBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRollRec | null {
-  const rec = lastBennyRolls.get(characterId)?.[kind];
-  return rec && Date.now() - rec.at <= BENNY_REROLL_TTL_MS ? rec : null;
+  const rec = freshBennyRoll(characterId, kind);
+  // Never re-point a roll that already has its card: a healing card posted
+  // after an attack must not steal the attack's damage roll.
+  if (rec && msgId && !rec.msgId) rec.msgId = msgId;
 }
 
 /** The purse rule (see shared/systems/swade), with the GM's pool looked up. */
@@ -868,6 +896,10 @@ export function spendBenny(
 /** Tell the owner which Benny reroll buttons are currently live. */
 export function emitBennyState(io: Server, campaignId: string, ch: Character): void {
   const trait = freshBennyRoll(ch.id, 'trait');
+  const list = freshHistory(ch.id);
+  const cards = (kind: 'trait' | 'damage') => list
+    .filter((r) => r.kind === kind && r.msgId && !(kind === 'trait' && r.critFail))
+    .map((r) => r.msgId!);
   // A DM's own characters answer to the DM, and they can spend too — their
   // own hand if they are a Wild Card, the GM's pool either way.
   const room = ch.ownerUserId ? userRoom(ch.ownerUserId) : dmRoom(campaignId);
@@ -878,7 +910,22 @@ export function emitBennyState(io: Server, campaignId: string, ch: Character): v
     canRerollTrait: !!trait && !trait.critFail,
     canRerollDamage: freshBennyRoll(ch.id, 'damage') !== null,
     ...(trait?.critFail ? { traitCritFail: true } : {}),
+    traitMsgIds: cards('trait'),
+    damageMsgIds: cards('damage'),
+    critFailMsgIds: list.filter((r) => r.kind === 'trait' && r.critFail && r.msgId).map((r) => r.msgId!),
   });
+}
+
+/** Resend every character's reroll state to whoever controls it — on join,
+ *  so a refreshed page still knows its own cards are rerollable. */
+export function emitAllBennyStates(io: Server, campaignId: string, list: Character[]): void {
+  for (const ch of list) if (ch.system === 'swade' && lastBennyRolls.has(ch.id)) emitBennyState(io, campaignId, ch);
+}
+
+function bank(ch: Character, rec: BennyRollRec): void {
+  const list = freshHistory(ch.id);
+  list.push(rec);
+  if (list.length > BENNY_HISTORY) list.splice(0, list.length - BENNY_HISTORY);
 }
 
 export function recordBennyRoll(
@@ -889,13 +936,20 @@ export function recordBennyRoll(
   against?: { tn: number; tnName: string; hit: boolean; onHit?: () => void },
 ): void {
   if (ch.system !== 'swade') return;
-  const rec = lastBennyRolls.get(ch.id) ?? {};
-  rec[kind] = {
-    expr, total, label, at: Date.now(),
+  const rec: BennyRollRec = {
+    kind, expr, total, label, at: Date.now(),
     ...(critFail ? { critFail: true } : {}),
     ...(against ? { tn: against.tn, tnName: against.tnName, hit: against.hit, onHit: against.onHit } : {}),
   };
-  lastBennyRolls.set(ch.id, rec);
+  // The attack path records the same roll twice — once early so a Critical
+  // Failure can be refused, again once the TN is known. The second call
+  // refines the first rather than banking a twin with no card.
+  const prev = freshBennyRoll(ch.id, kind);
+  if (prev && !prev.msgId && prev.total === total && Date.now() - prev.at < 10_000) {
+    Object.assign(prev, rec);
+  } else {
+    bank(ch, rec);
+  }
   emitBennyState(io, campaignId, ch);
 }
 
@@ -910,15 +964,28 @@ export function recordSoakRoll(
   expr: string, total: number, offerWounds: number, removed: number,
 ): void {
   if (ch.system !== 'swade') return;
-  const rec = lastBennyRolls.get(ch.id) ?? {};
-  rec.trait = { expr, total, label: 'their Soak roll', at: Date.now(), soak: { offerWounds, removed } };
-  lastBennyRolls.set(ch.id, rec);
+  bank(ch, { kind: 'trait', expr, total, label: 'their Soak roll', at: Date.now(), soak: { offerWounds, removed } });
   emitBennyState(io, campaignId, ch);
 }
 
-/** The reroll a Benny buys, if the original is still fresh. */
-export function takeBennyRoll(characterId: string, kind: 'trait' | 'damage'): BennyRollRec | null {
-  return freshBennyRoll(characterId, kind);
+/**
+ * The reroll a Benny buys, if the original is still fresh — taken off the
+ * books, because the reroll re-records whichever result now stands.
+ *
+ * With a card id it is THAT card's roll, whichever kind it is: the card is the
+ * subject. Without one, the latest roll of the asked-for kind.
+ */
+export function takeBennyRoll(characterId: string, kind: 'trait' | 'damage', msgId?: number): BennyRollRec | null {
+  const list = freshHistory(characterId);
+  let i = -1;
+  if (msgId) i = list.findIndex((r) => r.msgId === msgId);
+  else for (let j = list.length - 1; j >= 0 && i < 0; j--) if (list[j].kind === kind) i = j;
+  if (i < 0) return null;
+  const rec = list[i];
+  // A Critical Failure stays on the books: refusing it is the caller's job,
+  // and the menu should go on saying why.
+  if (!(rec.kind === 'trait' && rec.critFail)) list.splice(i, 1);
+  return rec;
 }
 
 /**

@@ -112,6 +112,7 @@ async function main() {
     ['shopkeeper range', 'check-shopkeeper.mjs'],
     ['world-tree nesting', 'check-tree-nesting.mjs'],
     ['turn control + handoff', 'check-turn-control.mjs'],
+    ['benny reroll by card', 'check-benny-reroll.mjs'],
   ];
   for (const [label, script] of liveSuites) {
     const r = await run(label, 'node', [`scripts/${script}`, base]);

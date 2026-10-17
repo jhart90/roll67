@@ -1463,7 +1463,11 @@ export interface BlastResponsePayload {
 /** The Benny-menu uses the server can automate. Soak rides the existing SOAK_ROLL flow. */
 export type BennyUseId =
   | 'reroll-trait' | 'recover-shaken' | 'redraw-card' | 'reroll-damage' | 'regain-pp' | 'influence';
-export interface BennyUsePayload { characterId: string; use: BennyUseId }
+export interface BennyUsePayload {
+  characterId: string; use: BennyUseId;
+  /** The chat card right-clicked: reroll THAT roll rather than the latest. */
+  messageId?: number;
+}
 export interface BennyAwardPayload { characterId: string }
 /** Start a new session: every hero draws a fresh hand of Bennies. */
 export interface SessionStartPayload { confirm: true }
@@ -1646,6 +1650,11 @@ export interface BennyStatePayload {
   /** The last trait roll was a Critical Failure, which no Benny can buy back.
    *  Sent so the menu can SAY that rather than simply offering nothing. */
   traitCritFail?: boolean;
+  /** The chat cards whose trait / damage roll a Benny can still reroll. */
+  traitMsgIds?: number[];
+  damageMsgIds?: number[];
+  /** Cards whose trait roll was a Critical Failure — so the menu can say so. */
+  critFailMsgIds?: number[];
 }
 /** Set the color of the pips/numbers painted on your own dice ("#rrggbb", or null for automatic contrast). */
 export interface SetDiceTextColorPayload { color: string | null }

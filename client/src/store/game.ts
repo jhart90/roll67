@@ -2419,7 +2419,7 @@ export const intents = {
     useGameStore.setState({ blastOffer: null });
   },
   /** Spend a Benny from the Benny menu. */
-  bennyUse: (characterId: string, use: BennyUseId) => socket.emit(C2S.BENNY_USE, { characterId, use }),
+  bennyUse: (characterId: string, use: BennyUseId, messageId?: number) => socket.emit(C2S.BENNY_USE, { characterId, use, ...(messageId ? { messageId } : {}) }),
   /** DM: hand a character a Benny (announced in chat). */
   awardBenny: (characterId: string) => socket.emit(C2S.BENNY_AWARD, { characterId }),
   /** DM: lay out a chase track between these tokens. */

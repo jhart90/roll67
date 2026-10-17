@@ -422,10 +422,11 @@ function ChatFrom({ msg, playerHidden }: { msg: ChatMessage; playerHidden: boole
  * test" meant the one on screen. Here the card you right-clicked IS the
  * subject.
  *
- * Eligibility is the server's: it tracks the most recent rerollable trait and
- * damage roll per character (they lapse after five minutes, and a Critical
- * Failure cannot be rerolled). This only offers what that state already says
- * is available, so the menu can never promise something the server refuses.
+ * Eligibility is the server's: it keeps every rerollable roll a character
+ * made in the last three hours against the card it was posted as, and tells
+ * us which cards those are. Right-click one of them and the Benny rerolls
+ * THAT roll. A card the server never tied to a roll (or one from before a
+ * restart) still gets the old offer: your latest trait test or damage.
  */
 /**
  * The character of YOURS that made this roll, if any — the one a Benny could
@@ -441,16 +442,54 @@ function ChatFrom({ msg, playerHidden }: { msg: ChatMessage; playerHidden: boole
  */
 function useOwnRollCharacter(msg: ChatMessage | null): Character | null {
   const asUser = useGameStore((s) => s.asUserId());
+  const isDm = useGameStore((s) => s.isDm());
   const characters = useGameStore((s) => s.characters);
   const system = useGameStore((s) => s.campaign?.system);
-  if (!msg || system !== 'swade' || msg.kind !== 'roll' || !msg.fromCharacter) return null;
-  return characters.find((c) => c.ownerUserId === asUser && c.name === msg.fromCharacter) ?? null;
+  if (!msg || system !== 'swade' || !msg.roll || !msg.fromCharacter) return null;
+  // Prefer the id the card carries; the name is the fallback for older cards.
+  const mine = (c: Character) => c.ownerUserId === asUser || (isDm && !c.ownerUserId);
+  return characters.find((c) => mine(c) && msg.characterId && c.id === msg.characterId)
+    ?? characters.find((c) => mine(c) && c.name === msg.fromCharacter) ?? null;
 }
 
-function BennyRerollItems({ ch, onDone }: { ch: Character; onDone: () => void }) {
+function BennyRerollItems({ ch, msgId, onDone }: { ch: Character; msgId: number; onDone: () => void }) {
   const bennyState = useGameStore((s) => s.bennyState);
+  const gmPool = useGameStore((s) => s.gmBennies);
   const st = bennyState[ch.id];
-  const broke = num(ch.sheet, 'bennies', 0) < 1;
+  // An Extra the GM runs spends from the pool; anyone else from their hand.
+  const broke = num(ch.sheet, 'bennies', 0) < 1 && !(!ch.ownerUserId && (gmPool ?? 0) > 0);
+
+  // THIS card's roll, when the server knows which roll it was.
+  const thisTrait = !!st?.traitMsgIds?.includes(msgId);
+  const thisDamage = !!st?.damageMsgIds?.includes(msgId);
+  const thisCrit = !!st?.critFailMsgIds?.includes(msgId);
+  const tracked = thisTrait || thisDamage || thisCrit;
+  if (!broke && tracked) {
+    if (thisCrit) {
+      return <div className="chat-menu-note dim">That roll was a Critical Failure — no Benny can buy it back.</div>;
+    }
+    return (
+      <>
+        {thisTrait && (
+          <button
+            title="Reroll this trait test — wild die included — and keep whichever result is better."
+            onClick={() => { intents.bennyUse(ch.id, 'reroll-trait', msgId); onDone(); }}
+          >
+            🪙 Use Benny to re-roll this
+          </button>
+        )}
+        {thisDamage && (
+          <button
+            title="Reroll this damage from scratch and keep whichever total is better."
+            onClick={() => { intents.bennyUse(ch.id, 'reroll-damage', msgId); onDone(); }}
+          >
+            🪙 Use Benny to re-roll this damage
+          </button>
+        )}
+        <hr />
+      </>
+    );
+  }
 
   /**
    * Why there is nothing to click.
@@ -477,7 +516,7 @@ function BennyRerollItems({ ch, onDone }: { ch: Character; onDone: () => void })
           title="Reroll the whole trait test — wild die included — and keep whichever set you prefer."
           onClick={() => { intents.bennyUse(ch.id, 'reroll-trait'); onDone(); }}
         >
-          🪙 Use Benny to re-roll a Trait test
+          🪙 Use Benny to re-roll your latest Trait test
         </button>
       )}
       {st!.canRerollDamage && (
@@ -485,7 +524,7 @@ function BennyRerollItems({ ch, onDone }: { ch: Character; onDone: () => void })
           title="Reroll the damage from scratch and keep whichever total you prefer."
           onClick={() => { intents.bennyUse(ch.id, 'reroll-damage'); onDone(); }}
         >
-          🪙 Use Benny to re-roll damage
+          🪙 Use Benny to re-roll your latest damage
         </button>
       )}
       {st!.traitCritFail && (
@@ -623,7 +662,7 @@ export function ChatPanel() {
 
       {menu && menuMsg && (isDm || menuCh) && (
         <AnchoredMenu x={menu.x} y={menu.y} className="chat-context-menu" onClick={(e) => e.stopPropagation()}>
-          {menuCh && <BennyRerollItems ch={menuCh} onDone={() => setMenu(null)} />}
+          {menuCh && <BennyRerollItems ch={menuCh} msgId={menu.id} onDone={() => setMenu(null)} />}
           {isDm && (menuMsg.hidden ? (
             <>
               <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>

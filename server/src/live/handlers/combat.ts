@@ -24,7 +24,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens, redactChat } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, bennyPurse, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, bennyPurse, emitBennyState, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { rollGate } from '../locks.js';
 import { applyAdv } from './chat.js';
@@ -3601,6 +3601,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       }, undo.length > 0 ? undo : undefined);
       io.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
       noteBennyRollMessage(actor.id, 'damage', msg.id);
+      if (actor.system === 'swade') emitBennyState(io, d.campaignId, characters.byId(actor.id) ?? actor);
 
       if (applyToTarget) {
         const settleMs = diceSettleDelayMs(cardRoll.dice);
@@ -3660,7 +3661,17 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       const consequence = noDamage ? 'negated entirely'
         : passed ? (dealsDamage ? 'half damage' : 'effect avoided')
           : (dealsDamage ? 'full damage' : 'effect applies');
-      const saveText = `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${thName} ${threshold} · ${passed ? 'SAVE' : 'FAIL'} (${consequence})`;
+      // SWADE has no to-hit on a resisted attack: the dice on this card are
+      // the DEFENDER's, under the attacker's name. "Turret attacks Tester …
+      // SAVE (negated entirely)" read as a big attack roll that somehow did
+      // nothing. Say whose roll it is, and what they did or did not suffer.
+      const condName = conditionId ? (getCondition(conditionId)?.label ?? conditionId) : '';
+      const saveText = actor.system === 'swade'
+        ? `${tgt.name} resists ${actor.name}’s ${action.label} — ${label} ${total} vs ${thName} ${threshold}\n`
+          + (passed
+            ? `RESISTED — ${condName ? `not ${condName}` : 'no effect'}${dealsDamage ? ', no damage' : ''}`
+            : `FAILED — ${[condName, dealsDamage ? 'takes the damage' : ''].filter(Boolean).join(', ') || 'the effect lands'}`)
+        : `${actor.name} attacks ${tgt.name}: ${action.label} — ${label} ${total} vs ${thName} ${threshold} · ${passed ? 'SAVE' : 'FAIL'} (${consequence})`;
       const saveMsg = chat.add(d.campaignId, {
         userId: d.userId, fromName: d.username, fromCharacter: actor.name, kind: 'roll', text: saveText,
         // The dice on this card are the TARGET's saving throw.
@@ -3719,6 +3730,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       // Tie the banked reroll to this card, so a Benny that overtakes it can
       // cover the dice the table already watched.
       noteBennyRollMessage(actor.id, 'trait', attackMsg.id);
+      if (actor.system === 'swade') emitBennyState(io, d.campaignId, characters.byId(actor.id) ?? actor);
       if (!hit) {
         // Innocent Bystander: a missed SWADE shot whose skill die shows a 1
         // hits a random target adjacent to the intended one.
@@ -4826,6 +4838,8 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       callout: { what: 'Soaking Wounds — Vigor', tone: 'benny' },
     });
     io2.to(campaignRoom(d.campaignId)).emit(S2C.CHAT, { msg });
+    noteBennyRollMessage(ch.id, 'trait', msg.id);
+    emitBennyState(io2, d.campaignId, characters.byId(ch.id) ?? ch);
   }
 
   /**
@@ -5032,7 +5046,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
 
   // The Benny menu: every automatable use from the SWADE Benny table. Soak
   // rides the existing SOAK_ROLL flow; everything else lands here.
-  socket.on(C2S.BENNY_USE, safe(socket, ({ characterId, use }: BennyUsePayload) => {
+  socket.on(C2S.BENNY_USE, safe(socket, ({ characterId, use, messageId }: BennyUsePayload) => {
     if (!rollGate(socket)) return;
     const d = requireCampaign(socket);
     const ch = characters.byId(characterId);
@@ -5080,12 +5094,17 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       }
       case 'reroll-trait':
       case 'reroll-damage': {
-        const kind = use === 'reroll-trait' ? 'trait' as const : 'damage' as const;
-        const rec = takeBennyRoll(ch.id, kind);
+        const asked = use === 'reroll-trait' ? 'trait' as const : 'damage' as const;
+        // Right-clicked on a card: that card's roll. From the Benny menu: the latest.
+        const rec = takeBennyRoll(ch.id, asked, typeof messageId === 'number' ? messageId : undefined);
         if (!rec) {
-          emitError(socket, `No recent ${kind} roll to reroll.`);
+          emitError(socket, typeof messageId === 'number'
+            ? `That roll can't be rerolled any more — rolls stay open for three hours, and not across a server restart.`
+            : `${ch.name} has no ${asked} roll from the last three hours to reroll.`);
+          emitBennyState(io, d.campaignId, ch);
           return;
         }
+        const kind = rec.kind;
         // A Critical Failure ends the attempt and must be accepted — the one
         // thing a Benny cannot buy back. Refused before the chip is spent.
         if (rec.critFail) {
@@ -5114,13 +5133,15 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
             );
             const gained = removed - rec.soak.removed;
             recordSoakRoll(io, d.campaignId, characters.byId(now.id) ?? now, rec.expr, best, rec.soak.offerWounds, removed);
-            postRoll(
+            const soakMsg = postRoll(
               `${now.name} rerolls the Soak — ${b.total} vs the original ${rec.total}: `
               + (gained > 0
                 ? `${gained} more Wound${gained === 1 ? '' : 's'} soaked (now ${woundsAfter})`
                 : 'no better — the wounds stand'),
               b, gained > 0, 'rerolling the Soak — Vigor',
             );
+            noteBennyRollMessage(now.id, 'trait', soakMsg.id);
+            emitBennyState(io, d.campaignId, characters.byId(now.id) ?? now);
             return;
           }
           const rerollCrit = kind === 'trait' && critFailFor(io, d.campaignId, now, b.dice);
@@ -5163,6 +5184,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           }
           // Whichever card counts is the one a FURTHER Benny should overtake.
           noteBennyRollMessage(now.id, kind, (better ? rerollMsg?.id : rec.msgId) ?? rerollMsg?.id ?? 0);
+          emitBennyState(io, d.campaignId, characters.byId(now.id) ?? now);
           // A miss turned into a hit finishes the job it started: the damage
           // and everything that follows, run from the attack's own closure so
           // it is the same resolution the first roll would have had.

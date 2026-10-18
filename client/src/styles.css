@@ -1526,6 +1526,12 @@ button.link:hover { text-decoration: underline; }
   border: 1px solid transparent;
 }
 .sheet-name:hover, .sheet-name:focus { border-color: var(--border); background: var(--panel-2); }
+.sheet-share-vision {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; white-space: nowrap; cursor: pointer; color: var(--text-dim, #9aa3b5);
+}
+.sheet-share-vision:has(input:checked) { color: #9fd8d2; }
+.sheet-share-vision input { margin: 0; }
 
 /* Six tabs, one of them a sentence long — the row scrolls sideways rather
    than squeezing every title until none of them is readable. */

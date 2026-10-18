@@ -1480,6 +1480,24 @@ export function CharacterSheetWindow({ characterId, onClose }: { characterId: st
           {you.role === 'dm' && (
             <OwnerSelect characterId={character.id} ownerUserId={character.ownerUserId} compact />
           )}
+          {/* Lend this character's eyes to the whole table without handing
+              anyone the reins: every player sees what its tokens see, and
+              nobody but its owner (or the DM) can move it. DM-only. */}
+          {you.role === 'dm' && (
+            <label
+              className="sheet-share-vision"
+              title={character.sheet.sharedVision === true
+                ? 'Every player sees what this character’s tokens see. Untick to take it back.'
+                : 'Let every player see what this character’s tokens see — without giving them control of it.'}
+            >
+              <input
+                type="checkbox"
+                checked={character.sheet.sharedVision === true}
+                onChange={(e) => intents.updateCharacter(character.id, { sharedVision: e.target.checked })}
+              />
+              👁 Share vision with players
+            </label>
+          )}
         </div>
 
         <div className="sheet-tabs">

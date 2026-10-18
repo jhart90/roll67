@@ -95,12 +95,18 @@ export function tokenVision(token: Token): VisionStats {
   return DEFAULT_VISION;
 }
 
-/** Tokens through which a user sees on a map (owned characters, token layer). */
+/**
+ * Tokens through which a user sees on a map: their own characters', plus any
+ * the DM has shared with the table — a scout drone, a familiar, a lighthouse
+ * keeper — whose sight every player gets WITHOUT getting control of it.
+ * Token layer only: a shared token the DM has hidden on the GM layer stays
+ * the DM's secret, eyes and all.
+ */
 function viewerTokensFor(userId: string, mapTokens: Token[]): Token[] {
   return mapTokens.filter((t) => {
     if (t.layer !== 'token' || !t.characterId) return false;
     const ch = charById(t.characterId);
-    return ch?.ownerUserId === userId;
+    return ch?.ownerUserId === userId || ch?.sheet?.sharedVision === true;
   });
 }
 

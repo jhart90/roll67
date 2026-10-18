@@ -349,7 +349,13 @@ export function registerCharacterHandlers(io: Server, socket: Socket): void {
     // unchanged and in no greater quantity — they can drop keys, never forge
     // or edit them. (The DM edits keys freely; that is what the Key Manager
     // is for.)
-    const safePatch = d.role === 'dm' ? patch : withPlayerSafeKeys(character, patch);
+    let safePatch = d.role === 'dm' ? patch : withPlayerSafeKeys(character, patch);
+    // Sharing a token's sight with the whole table is the DM's call, never a
+    // player's — even on their own sheet.
+    if (d.role !== 'dm' && 'sharedVision' in safePatch) {
+      const { sharedVision: _ignored, ...rest } = safePatch;
+      safePatch = rest;
+    }
     applyCharacterPatch(io, d.campaignId, character, safePatch, name, d.username);
   }, 'UPDATE_CHARACTER'));
 

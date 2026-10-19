@@ -14,8 +14,9 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { io } from 'socket.io-client';
 
-const PORT_A = 3901;
-const PORT_B = 3902;
+// Overridable so a stray server squatting on the defaults does not block the check.
+const PORT_A = Number(process.env.BACKUP_PORT_A ?? 3901);
+const PORT_B = Number(process.env.BACKUP_PORT_B ?? 3902);
 let failures = 0;
 
 function ok(cond, label) {

@@ -14,6 +14,7 @@ import { DoorInspector } from '../table/DoorInspector';
 import { ChatPanel } from '../panels/ChatPanel';
 import { InitiativePanel } from '../panels/InitiativePanel';
 import { WorldTreePanel } from '../panels/WorldTreePanel';
+import { QuietYearPanel } from '../panels/QuietYearPanel';
 import { ShopStorefront } from '../panels/ShopStorefront';
 import { TargetPopup } from '../panels/TargetPopup';
 import { CastLevelPopup } from '../panels/CastLevelPopup';
@@ -115,6 +116,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
   const [showDice, setShowDice] = useState(false);
   const [showAudio, setShowAudio] = useState(false);
   const dockTab = useGameStore((s) => s.dockTab);
+  const quietYear = useGameStore((s) => s.campaign?.system === 'quietyear');
   const setDockTab = useGameStore((s) => s.setDockTab);
   const turnTint = useTurnTint();
   const showCharacterCreator = useGameStore((s) => s.showCharacterCreator);
@@ -266,7 +268,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
 
         <aside className="dock">
           <div className="dock-tabs">
-            {(['world', 'chat', 'initiative'] as DockTab[]).map((t) => (
+            {(quietYear ? ['year', 'chat', 'world'] as DockTab[] : ['world', 'chat', 'initiative'] as DockTab[]).map((t) => (
               <button
                 key={t}
                 className={dockTab === t ? 'active' : ''}
@@ -279,6 +281,7 @@ export function Table({ campaignId, onExit }: { campaignId: string; onExit: () =
           {dockTab === 'world' && <WorldTreePanel />}
           {dockTab === 'chat' && <ChatPanel />}
           {dockTab === 'initiative' && <InitiativePanel />}
+          {dockTab === 'year' && quietYear && <QuietYearPanel />}
         </aside>
 
         {showMaps && isDm && (

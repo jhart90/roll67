@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
 CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade')),
+  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade', 'quietyear')),
   dm_user_id TEXT NOT NULL REFERENCES users(id),
   invite_code TEXT UNIQUE NOT NULL,
   active_map_id TEXT,
@@ -251,7 +251,7 @@ CREATE TABLE IF NOT EXISTS rollable_tables (
 CREATE TABLE IF NOT EXISTS custom_npcs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade')),
+  system TEXT NOT NULL CHECK (system IN ('dnd5e', 'swn', 'swade', 'quietyear')),
   name TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'Player Added',
   challenge_label TEXT NOT NULL DEFAULT '',

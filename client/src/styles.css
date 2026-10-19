@@ -4220,3 +4220,57 @@ th > .term { border-bottom-style: dotted; }
 @keyframes backup-bar-sweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .backup-bar-indeterminate { animation: backup-bar-sweep 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .backup-bar-indeterminate { animation: none; width: 100% !important; opacity: 0.5; } }
+
+/* ---------- The Quiet Year ---------- */
+.qy-panel { padding: 8px 10px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.qy-section { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel); }
+.qy-section h3 { margin: 0 0 6px; font-size: 15px; }
+.qy-section h4 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); }
+.qy-help { font-size: 12px; margin: 4px 0; line-height: 1.35; }
+.qy-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.qy-row input, .qy-row select { flex: 1 1 120px; min-width: 0; }
+.qy-text { width: 100%; box-sizing: border-box; resize: vertical; }
+.qy-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.qy-plain { list-style: none; margin: 2px 0; padding: 0; }
+.qy-plain li { padding: 1px 0; }
+.qy-seats { margin: 2px 0 4px; padding-left: 20px; }
+.qy-mini { margin-left: 6px; display: inline-flex; gap: 2px; }
+.qy-mini .link { padding: 0 3px; }
+.qy-season-bar { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.qy-season { font-size: 11px; padding: 2px 6px; border-radius: 10px; border: 1px solid var(--border); color: var(--text-dim); }
+.qy-season.now { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.qy-season small { opacity: .7; }
+.qy-week { margin: 2px 0 8px; }
+.qy-phase { border-left: 3px solid var(--border); padding: 4px 0 4px 8px; margin: 6px 0; }
+.qy-phase.now { border-left-color: var(--accent); }
+.qy-phase.done { opacity: .75; }
+.qy-phase.later { opacity: .45; }
+.qy-phase-title { font-weight: 700; font-size: 12px; margin-bottom: 4px; }
+.qy-card-face { display: inline-block; font-weight: 700; font-size: 16px; padding: 4px 10px; border-radius: 6px; background: #f3efe4; color: #2a2620; margin-bottom: 6px; }
+.qy-options { display: flex; flex-direction: column; gap: 6px; }
+.qy-option { text-align: left; white-space: pre-line; line-height: 1.35; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+.qy-option.chosen { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.qy-option.faded { opacity: .45; }
+.qy-rules { font-size: 11px; color: #e8c46a; }
+.qy-inline summary { font-size: 12px; color: var(--text-dim); cursor: pointer; margin-top: 6px; }
+.qy-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.qy-tabs button { font-size: 12px; padding: 3px 7px; }
+.qy-tabs button.active { border-color: var(--accent); color: var(--text); }
+.qy-discussion { background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 6px; padding: 6px 8px; }
+.qy-opening { margin-bottom: 4px; }
+.qy-statement { padding: 2px 0 2px 10px; border-left: 2px solid var(--border); margin: 2px 0; }
+.qy-end { width: 100%; margin-top: 6px; }
+.qy-projects h4 { margin-top: 10px; }
+.qy-project { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.qy-die { flex: none; width: 24px; height: 24px; border-radius: 5px; background: #f3efe4; color: #2a2620; font-weight: 800; display: grid; place-items: center; box-shadow: inset 0 -2px 0 rgba(0,0,0,.25); }
+.qy-project-text { flex: 1; min-width: 0; }
+.qy-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.qy-list h4 { margin-top: 0; }
+.qy-list input { width: 100%; box-sizing: border-box; font-size: 12px; }
+.qy-x { font-size: 10px; opacity: .6; }
+.qy-contempt { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.qy-contempt-seat b { color: #d26c6c; letter-spacing: 1px; }
+.qy-log { margin: 6px 0 0; padding-left: 16px; max-height: 260px; overflow-y: auto; font-size: 12px; }
+.qy-log li { margin: 2px 0; }
+.qy-log-contempt b { color: #d26c6c; }
+.qy-over { border-color: #8fb3d9; background: color-mix(in srgb, #8fb3d9 12%, var(--panel)); }

@@ -109,6 +109,8 @@ const SPECS: TableSpec[] = [
   { table: 'rollable_tables', scope: 'campaign' },
   { table: 'custom_items', scope: 'campaign' },
   { table: 'counters', scope: 'campaign' },
+  // The Quiet Year's whole year — deck, week, projects, lists, Contempt, log.
+  { table: 'quiet_year', scope: 'campaign' },
   { table: 'dm_notes', scope: 'campaign' },
   { table: 'private_notes', scope: 'campaign', users: [['user_id', 'drop']] },
   { table: 'roll_stats', scope: 'campaign', users: [['user_id', 'drop']] },

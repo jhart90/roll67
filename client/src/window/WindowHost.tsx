@@ -107,6 +107,15 @@ export function WindowHost() {
             content = system === 'swade' ? <SwadeCharacterCreator onClose={onClose} />
               : system === 'swn' ? <SwnCharacterCreator onClose={onClose} />
                 : system === 'dnd5e' ? <Dnd5eCharacterCreator onClose={onClose} />
+                  // Nobody plays a character in The Quiet Year: the players
+                  // are the community's voices, and the people they name go
+                  // on the Names card in the Year tab.
+                  : system === 'quietyear' ? (
+                    <p className="dim" style={{ padding: 16, maxWidth: 360 }}>
+                      The Quiet Year has no player characters — everyone plays the community as a whole.
+                      Named figures go on the Names card in the Year tab.
+                    </p>
+                  )
                   : null;
             break;
           case 'levelUp': {

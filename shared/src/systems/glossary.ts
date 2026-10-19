@@ -424,9 +424,23 @@ export const NON_RULES_LABELS = new Set(
   ].map((s) => s.toLowerCase()),
 );
 
+// ---------- The Quiet Year ----------
+// The game's own vocabulary, summarised in our words.
+const TERMS_QUIET: Record<string, string> = {
+  Week: 'One player’s turn: play a card, adjust the project dice, then take one action. Fifty-two cards, fifty-two weeks — if the year lasts that long.',
+  Season: 'Each suit is a season: Hearts are Spring, Diamonds Summer, Clubs Autumn, Spades Winter. They are played in that order.',
+  Abundance: 'Something the community has plenty of. Projects, cards and discoveries add to or take from the list.',
+  Scarcity: 'Something the community lacks or needs. A Scarcity left too long tends to become a crisis.',
+  Contempt: 'A token you take when you feel unheard or disregarded — you never get to argue out of turn. Discard one when someone heals a past tension.',
+  Project: 'Work the community commits to, 1–6 weeks long. Its die ticks down by one each week; at zero it is done, and whoever started it says how it turned out.',
+  Discussion: 'Open with a question or a statement; everyone else weighs in once, clockwise, in a sentence or two. Nothing is decided.',
+  'Discover Something New': 'Introduce a new situation — a problem, an opportunity, or both — and draw it small on the map.',
+  'Frost Shepherds': 'They come with the King of Spades. When that card is drawn, the game is over.',
+};
+
 // ---------- lookup ----------
 
-type GlossarySystem = 'dnd5e' | 'swn' | 'swade';
+type GlossarySystem = 'dnd5e' | 'swn' | 'swade' | 'quietyear';
 
 function lowerMap(...sets: Array<Record<string, string>>): Map<string, string> {
   const m = new Map<string, string>();
@@ -438,6 +452,7 @@ const LOWER: Record<GlossarySystem, Map<string, string>> = {
   swade: lowerMap(COMMON, TERMS_SWADE, SWADE_SHEET),
   swn: lowerMap(COMMON, TERMS_SWN),
   dnd5e: lowerMap(COMMON, TERMS_5E),
+  quietyear: lowerMap(TERMS_QUIET),
 };
 
 /** Case-insensitive glossary lookup. Returns undefined for unknown terms so

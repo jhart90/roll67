@@ -25,6 +25,7 @@ import { registerTableHandlers } from './live/handlers/table.js';
 import { registerLibraryHandlers } from './live/handlers/library.js';
 import { registerWorldHandlers } from './live/handlers/world.js';
 import { registerMapObjectHandlers } from './live/handlers/mapObjects.js';
+import { registerQuietYearHandlers } from './live/handlers/quietYear.js';
 import { registerCounterHandlers } from './live/handlers/counters.js';
 import { flushAllVisionMemory } from './live/visionService.js';
 
@@ -95,6 +96,7 @@ io.on('connection', (socket) => {
   registerLibraryHandlers(io, socket);
   registerWorldHandlers(io, socket);
   registerMapObjectHandlers(io, socket);
+  registerQuietYearHandlers(io, socket);
 });
 
 httpServer.listen(PORT, () => {

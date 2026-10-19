@@ -171,6 +171,9 @@ export const C2S = {
   BLAST_RESPONSE: 'blastResponse',
   /** SWADE: spend a Benny from the Benny menu (reroll, recover, redraw…). */
   BENNY_USE: 'bennyUse',
+  /** The Quiet Year: ask for the shared state, or take an action on it. */
+  QY_GET: 'qyGet',
+  QY_ACTION: 'qyAction',
   /** SWADE: DM hands a character a Benny (announced in chat). */
   BENNY_AWARD: 'bennyAward',
   /** SWADE: a new session — Bennies are drawn afresh. */
@@ -962,6 +965,8 @@ export const S2C = {
   BLAST_OFFER_CLOSED: 'blastOfferClosed',
   /** SWADE: which Benny reroll options are currently live for your character. */
   BENNY_STATE: 'bennyState',
+  /** The Quiet Year's whole shared state, after any change. */
+  QY_STATE: 'qyState',
   /** SWADE: how many Bennies are in the GM's own pool (DM only). */
   GM_BENNIES: 'gmBennies',
   /** SWADE: what is left of a token's Pace this turn, for the range shading. */
@@ -1665,3 +1670,7 @@ export interface SetUsernamePayload { username: string }
 /** The campaign's party (default) map changed. */
 export interface ActiveMapPayload { mapId: string | null }
 export interface ErrorMsgPayload { message: string }
+
+/** The Quiet Year: one action on the shared year (see shared/quietYear.ts). */
+export interface QyActionPayload { action: import('./quietYear.js').QyAction }
+export interface QyStatePayload { state: import('./quietYear.js').QyState }

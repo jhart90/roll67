@@ -12,6 +12,7 @@ const SYSTEM_SHEET: Record<GameSystem, () => SheetData> = {
   swade: () => swade.defaultSheet(),
   swn: () => swn.defaultSheet(),
   dnd5e: () => dnd5e.defaultSheet(),
+  quietyear: () => ({}),
 };
 
 function charWith(system: GameSystem, sheet: SheetData): Character {

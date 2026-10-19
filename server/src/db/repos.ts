@@ -4,7 +4,7 @@ import type {
   GridConfig, Handout, InitiativeState, LocationNode, Light, LootItem, Macro, MapDef, MapMeta, MapText,
   Counter, MapZone, RollableTable, RollBreakdown, Role, SheetCard, SheetData, Shop, ShopItem, SoundboardSlot, RollCalloutInfo, Token, Wall, WorldFolder,
 } from 'shared';
-import { MAX_HANDOUT_IMAGES, isAceStyle, isCounterPosition, statEntriesFromDice, type AceStyle, type DiceLook, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
+import { MAX_HANDOUT_IMAGES, qyNormalize, type QyState, isAceStyle, isCounterPosition, statEntriesFromDice, type AceStyle, type DiceLook, type DieRoll, type RollStatRow, type UndoEntry } from 'shared';
 import { db, newId, now, stmt } from './db.js';
 
 /** SWADE's dice roles, and the column each one persists to. */
@@ -276,7 +276,9 @@ export const campaigns = {
       .run(id, dmUserId, 'dm');
     // Seed a starter map and make it active: a campaign with no maps opens
     // onto an empty black stage, which reads as a broken load.
-    const starter = maps.create(id, 'Starting Map');
+    // The Quiet Year is played on one shared sheet of paper that everyone
+    // draws on and everyone sees — a scene, not a fogged battlemap.
+    const starter = system === 'quietyear' ? maps.create(id, 'The Map', true) : maps.create(id, 'Starting Map');
     campaigns.setActiveMap(id, starter.id);
     return toCampaignInfo({ id, name, system, dm_user_id: dmUserId, invite_code: inviteCode, active_map_id: starter.id });
   },
@@ -2060,5 +2062,18 @@ export const customItems = {
   },
   delete(id: string): void {
     stmt('DELETE FROM custom_items WHERE id = ?').run(id);
+  },
+};
+
+/** The Quiet Year's one shared document per campaign (see shared/quietYear.ts). */
+export const quietYear = {
+  get(campaignId: string): QyState {
+    const row = stmt('SELECT state_json FROM quiet_year WHERE campaign_id = ?').get(campaignId) as { state_json: string } | undefined;
+    return qyNormalize(row ? safeParse<unknown>(row.state_json, null) : null);
+  },
+  set(campaignId: string, state: QyState): void {
+    stmt(`INSERT INTO quiet_year (campaign_id, state_json, updated_at) VALUES (?, ?, ?)
+          ON CONFLICT(campaign_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at`)
+      .run(campaignId, JSON.stringify(state), now());
   },
 };

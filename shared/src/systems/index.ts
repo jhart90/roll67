@@ -3,6 +3,7 @@ import type { SystemSchema } from './types.js';
 import { dnd5e } from './dnd5e.js';
 import { swn } from './swn.js';
 import { swade } from './swade.js';
+import { quietyear } from './quietyear.js';
 
 export * from './types.js';
 export * from './cards.js';
@@ -40,7 +41,8 @@ export * from './swadeChase.js';
 export * from './swadeCreation.js';
 export * from './swnCreation.js';
 
-export const SYSTEMS: Record<GameSystem, SystemSchema> = { dnd5e, swn, swade };
+export const SYSTEMS: Record<GameSystem, SystemSchema> = { dnd5e, swn, swade, quietyear };
+export { quietyear };
 
 export function systemFor(system: GameSystem): SystemSchema {
   return SYSTEMS[system];

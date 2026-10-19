@@ -8,6 +8,7 @@ const SYSTEM_LABELS: Record<GameSystem, string> = {
   dnd5e: 'D&D 5e',
   swn: 'Stars Without Number',
   swade: 'Savage Worlds (SWADE)',
+  quietyear: 'The Quiet Year',
 };
 
 /**
@@ -530,6 +531,7 @@ export function CampaignList({ onOpen }: { onOpen: (campaignId: string) => void 
                   <option value="dnd5e">D&amp;D 5e</option>
                   <option value="swn">Stars Without Number</option>
                   <option value="swade">Savage Worlds (SWADE)</option>
+                  <option value="quietyear">The Quiet Year</option>
                 </select>
                 <div className="portal-row">
                   <button type="submit" className="portal-cta">Summon It</button>

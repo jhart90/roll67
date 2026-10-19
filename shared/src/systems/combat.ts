@@ -4,7 +4,8 @@ import { hasDiscipline, swn } from './swn.js';
 import { gearTraitBonus, skillDie, swade, swadeArcaneExpr, swadeStowed, traitExpr } from './swade.js';
 import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
-const SYSTEMS = { dnd5e, swn, swade };
+import { quietyear } from './quietyear.js';
+const SYSTEMS = { dnd5e, swn, swade, quietyear };
 
 /** Arm's length: what a heal with no range of its own can reach. */
 export const TOUCH_FT = 5;

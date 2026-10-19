@@ -61,7 +61,7 @@ export function NpcLibrary({ onClose }: { onClose: () => void }) {
       <div className="sheet-window npc-library">
         <div className="sheet-header">
           <h3 style={{ margin: 0 }}>NPC Library</h3>
-          <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : system === 'swn' ? 'Stars Without Number' : 'Savage Worlds'}</span>
+          <span className="dim">{entries.length} of {npcsForSystem(system).length} · {system === 'dnd5e' ? 'D&D 5e' : system === 'swn' ? 'Stars Without Number' : system === 'quietyear' ? 'The Quiet Year' : 'Savage Worlds'}</span>
           <span className="spacer" />
           <button
             className="link"

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { sheetTermDesc, termDesc } from 'shared';
 
-type GlossarySystem = 'dnd5e' | 'swn' | 'swade';
+type GlossarySystem = 'dnd5e' | 'swn' | 'swade' | 'quietyear';
 
 /**
  * Build a system-bound `<T>` shorthand: `<T>Parry</T>` looks the child text

@@ -17,6 +17,8 @@ export const CURRENCIES: Record<GameSystem, Currency[]> = {
   ],
   swn: [{ id: 'credits', label: 'Credits' }],
   swade: [{ id: 'dollars', label: 'Currency ($)' }],
+  // A community rebuilding after the collapse trades in goods, not coin.
+  quietyear: [],
 };
 
 export function currenciesFor(system: GameSystem): Currency[] {

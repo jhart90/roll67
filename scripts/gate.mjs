@@ -115,6 +115,7 @@ async function main() {
     ['benny reroll by card', 'check-benny-reroll.mjs'],
     ['resist cards + banner', 'check-resist-cards.mjs'],
     ['shared vision', 'check-shared-vision.mjs'],
+    ['the quiet year', 'check-quiet-year.mjs'],
   ];
   for (const [label, script] of liveSuites) {
     const r = await run(label, 'node', [`scripts/${script}`, base]);

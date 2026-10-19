@@ -222,7 +222,7 @@ export interface CombatAction {
 }
 
 export interface SystemSchema {
-  id: 'dnd5e' | 'swn' | 'swade';
+  id: 'dnd5e' | 'swn' | 'swade' | 'quietyear';
   name: string;
   tabs: SheetTab[];
   /** The tab set a sheet with `vehicle: true` renders instead — a machine's

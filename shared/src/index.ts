@@ -38,3 +38,4 @@ export * from './systems/index.js';
 export * from './data/npcLibrary.js';
 export * from './data/compendium.js';
 export * from './data/npcGen.js';
+export * from './quietYear.js';

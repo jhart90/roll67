@@ -4,7 +4,7 @@ import type { PlayingCard } from './systems/cards.js';
 
 // ---------- Accounts & campaigns ----------
 
-export type GameSystem = 'dnd5e' | 'swn' | 'swade';
+export type GameSystem = 'dnd5e' | 'swn' | 'swade' | 'quietyear';
 export type Role = 'dm' | 'player';
 
 export interface UserInfo {

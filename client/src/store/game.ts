@@ -1,4 +1,4 @@
-import type { PlayingCard, WallCheckPassedPayload, WallCheckPromptPayload, WallCrossCheck } from 'shared';
+import type { PlayingCard, QyAction, QyState, QyStatePayload, WallCheckPassedPayload, WallCheckPromptPayload, WallCrossCheck } from 'shared';
 import { canMoveToken } from 'shared';
 import { create } from 'zustand';
 import { type StorageReportPayload, type UpdateMapObjectPayload,
@@ -210,7 +210,7 @@ export function armShopFor(characterId: string): void { pendingShopFor = charact
 export function armBodyLoot(characterId: string): void { pendingBodyLootFor = characterId; }
 
 export type Tool = 'select' | 'wall' | 'door' | 'light' | 'draw' | 'measure' | 'erase' | 'ping' | 'spawn' | 'loot' | 'terrain' | 'text';
-export type DockTab = 'chat' | 'initiative' | 'world';
+export type DockTab = 'chat' | 'initiative' | 'world' | 'year';
 
 /** What a Called Shot is aimed at, chosen before the roll goes out. */
 export type CalledShotAim = { label: string; penalty: number; damageBonus?: number };
@@ -418,6 +418,8 @@ interface GameState {
   rollStatsData: Record<string, RollStatsPayload>;
   /** SWADE: per-character flags for which Benny rerolls are currently live. */
   bennyState: Record<string, BennyStatePayload>;
+  /** The Quiet Year's shared state, for campaigns playing it. */
+  qyState: QyState | null;
   /** SWADE: how many Bennies sit in the GM's own pool (DM only). */
   gmBennies: number;
   /**
@@ -715,6 +717,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setHoloPlacing(holoPlacing) { set({ holoPlacing }); },
   blastOffer: null,
   bennyState: {},
+  qyState: null,
   gmBennies: 0,
   moveBudgets: {},
   bleedPrompt: null,
@@ -963,7 +966,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // one would append stray entries to a fresh log.
     resetChatQueue();
     set({
-      you: null, campaign: null, members: [], characters: [], mapsMeta: [],
+      you: null, campaign: null, members: [], characters: [], mapsMeta: [], qyState: null,
       handoutList: [], macroList: [], chatLog: [], map: null, dmGeometry: null,
       tokens: {}, drawingList: [], visible: null, fade: null, visiblePolygons: null, fadePolygons: null,
       visibleLitMask: null, fadeLitMask: null, explored: null, exploredLog: null, knownDoors: [], knownWalls: [],
@@ -1211,6 +1214,16 @@ export function wireSocket(): void {
       chatLog: p.chatTail,
       mapObjects: mapObjectsById(p.mapObjects ?? []),
     });
+    // The Quiet Year has no turn tracker or character roster to speak of:
+    // its table is the year itself, so that is the tab it opens on.
+    if (p.campaign.system === 'quietyear') {
+      socket.emit(C2S.QY_GET);
+      useGameStore.setState({ dockTab: 'year' });
+    }
+  });
+
+  socket.on(S2C.QY_STATE, (p: QyStatePayload) => {
+    useGameStore.setState({ qyState: p.state });
   });
 
   socket.on(S2C.COUNTERS_ALL, (p: { counters: Counter[] }) => {
@@ -2422,6 +2435,7 @@ export const intents = {
     useGameStore.setState({ blastOffer: null });
   },
   /** Spend a Benny from the Benny menu. */
+  qy: (action: QyAction) => socket.emit(C2S.QY_ACTION, { action }),
   bennyUse: (characterId: string, use: BennyUseId, messageId?: number) => socket.emit(C2S.BENNY_USE, { characterId, use, ...(messageId ? { messageId } : {}) }),
   /** DM: hand a character a Benny (announced in chat). */
   awardBenny: (characterId: string) => socket.emit(C2S.BENNY_AWARD, { characterId }),

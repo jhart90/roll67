@@ -369,6 +369,52 @@ migrateSystemSwade('custom_npcs', `
 `);
 db.exec('CREATE INDEX IF NOT EXISTS idx_custom_npcs_user ON custom_npcs(user_id)');
 
+// 'quietyear' joins the system CHECK on campaigns and custom_npcs. Same
+// rename-rebuild-copy as the 'swade' migration above, with the same two
+// pragmas (see that comment — without them every child row is wiped), but
+// built from the table's OWN stored CREATE statement with only the CHECK list
+// widened: columns added since (gm_bennies, clock_seconds, …) come through
+// exactly as they are rather than depending on a hand-copied schema here.
+function migrateSystemQuietYear(table: string): void {
+  const existing = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table) as
+    | { sql: string }
+    | undefined;
+  if (!existing || existing.sql.includes("'quietyear'")) return;
+  const check = /CHECK\s*\(\s*system\s+IN\s*\(([^)]*)\)\s*\)/i;
+  if (!check.test(existing.sql)) return;
+  const createSql = existing.sql.replace(check, (_m, list: string) => `CHECK (system IN (${list.trim()}, 'quietyear'))`);
+  // The rebuild drops the table's indexes with it; put them back after.
+  const indexes = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL`)
+    .all(table) as Array<{ sql: string }>).map((r) => r.sql);
+  const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name).join(', ');
+  db.pragma('foreign_keys = OFF');
+  db.pragma('legacy_alter_table = ON');
+  try {
+    db.transaction(() => {
+      db.exec(`ALTER TABLE ${table} RENAME TO ${table}_pre_qy`);
+      db.exec(createSql);
+      db.exec(`INSERT INTO ${table} (${cols}) SELECT ${cols} FROM ${table}_pre_qy`);
+      db.exec(`DROP TABLE ${table}_pre_qy`);
+      for (const sql of indexes) db.exec(sql.replace(/CREATE (UNIQUE )?INDEX /i, 'CREATE $1INDEX IF NOT EXISTS '));
+    })();
+  } finally {
+    db.pragma('legacy_alter_table = OFF');
+    db.pragma('foreign_keys = ON');
+  }
+}
+migrateSystemQuietYear('campaigns');
+migrateSystemQuietYear('custom_npcs');
+
+// The Quiet Year's shared state — the deck, the week, the projects, the
+// lists, the Contempt, the log — one JSON document per campaign.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS quiet_year (
+    campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id) ON DELETE CASCADE,
+    state_json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  )
+`);
+
 // Lifetime roll statistics: one aggregate row per (scope, key, result). The
 // account view sums rows across characters; the character view groups them by
 // the user who was rolling. Empty-string ids stand in for "none" so the

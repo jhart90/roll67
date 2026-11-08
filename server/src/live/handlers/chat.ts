@@ -1,6 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import {
-  C2S, S2C, DiceParseError, SKILLS_SWADE, castableLevels, dieSides, fmtMod, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor, traitExpr, traitModWhy,
+  C2S, S2C, DiceParseError, SKILLS_SWADE, parseSpeakAs, castableLevels, dieSides, fmtMod, num, roll, rows, splitRollLabel, str, summarizeRollStats, systemFor, traitExpr, traitModWhy,
   type CastSpellPayload, type ChatMessage, type ChatPayload, type DeleteMacroPayload,
   type ModerateMessagePayload, type ReorderMacrosPayload, type RollBreakdown, type RollStatRow, type RollStatsGetPayload,
   type RollStatsUserBlock, type SaveMacroPayload,
@@ -604,8 +604,24 @@ function handleChatText(
     return;
   }
 
+  // /as <name>: <message> — the DM speaks in someone else's voice: an NPC on
+  // the map, a voice over a radio, a machine. The colon separates a name of
+  // any length; without one, the longest character name the text starts with
+  // is the speaker, and failing that the first word is.
+  const asMatch = text.match(/^\/as\s+(.+)$/i);
+  if (asMatch) {
+    if (role !== 'dm') { emitError(socket, 'Only the DM speaks as someone else.'); return; }
+    const parsed = parseSpeakAs(asMatch[1], characters.forCampaign(campaignId).map((c) => c.name));
+    if (!parsed) { emitError(socket, 'Say something: /as <name>: <message> — e.g. /as Sabu: Put down your weapons.'); return; }
+    const msg = chat.add(campaignId, {
+      userId, fromName: parsed.name, kind: 'say', text: parsed.body, roll: null, recipients: null,
+    });
+    deliver(io, campaignId, msg);
+    return;
+  }
+
   if (text.startsWith('/')) {
-    emitError(socket, 'Commands: /r <dice or trait name±N> [# label], /gr <dice or trait> [# label], /w <player, character, or dm> <message>, #macro — e.g. /r spirit+2, /r hack-1');
+    emitError(socket, `Commands: /r <dice or trait name±N> [# label], /gr <dice or trait> [# label], /w <player, character, or dm> <message>, ${role === 'dm' ? '/as <name>: <message>, ' : ''}#macro — e.g. /r spirit+2, /r hack-1`);
     return;
   }
 

@@ -702,7 +702,7 @@ export function ChatPanel() {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="/r 2d6+3 · /w name (or dm) hi · #macro"
+          placeholder={isDm ? '/r 2d6+3 · /w name hi · /as Sabu: words · #macro' : '/r 2d6+3 · /w name (or dm) hi · #macro'}
         />
         <button type="submit">Send</button>
       </form>

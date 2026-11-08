@@ -46,17 +46,22 @@ function parseQty(raw: string, unlimited: boolean): number {
 }
 
 /** One row of stock: read-only with edit/delete, or inline-editing. */
-function StockRow({ item, showPrice, unlimited, editing, onEdit, onSave, onDelete, onCancel }: {
+function StockRow({ item, showPrice, unlimited, editing, onEdit, onSave, onDelete, onCancel, dmNote, onDmNote }: {
   item: StockValue; showPrice: boolean; unlimited: boolean; editing: boolean;
   onEdit: () => void; onSave: (it: StockValue) => void; onDelete: () => void; onCancel: () => void;
+  /** Undefined when this list keeps no DM notes (a shop); '' when it does but this row has none. */
+  dmNote?: string; onDmNote?: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(() => draftOf(item, unlimited));
+  const [noteDraft, setNoteDraft] = useState(dmNote ?? '');
   // Re-seed from the CURRENT item every time editing begins — never trust a
   // draft captured at mount to still match what this row displays.
-  useEffect(() => { if (editing) setDraft(draftOf(item, unlimited)); }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (editing) { setDraft(draftOf(item, unlimited)); setNoteDraft(dmNote ?? ''); } }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  const keepsNotes = dmNote !== undefined && !!onDmNote;
 
   if (editing) {
     return (
+      <>
       <div className="stock-row editing">
         <input className="stk-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name" />
         {showPrice && (
@@ -64,19 +69,31 @@ function StockRow({ item, showPrice, unlimited, editing, onEdit, onSave, onDelet
         )}
         <input className="stk-qty" type="number" value={draft.qty} onChange={(e) => setDraft({ ...draft, qty: e.target.value })} placeholder={unlimited ? '∞' : '1'} />
         <input className="stk-notes" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Description" />
-        <button className="icon-btn" title="Save" onClick={() => onSave({
-          ...item,
-          name: draft.name.trim() || item.name,
-          price: showPrice ? Number(draft.price) || 0 : 0,
-          qty: parseQty(draft.qty, unlimited),
-          notes: draft.notes,
-        })}>✓</button>
+        <button className="icon-btn" title="Save" onClick={() => {
+          if (keepsNotes && noteDraft.trim() !== (dmNote ?? '')) onDmNote!(noteDraft.trim());
+          onSave({
+            ...item,
+            name: draft.name.trim() || item.name,
+            price: showPrice ? Number(draft.price) || 0 : 0,
+            qty: parseQty(draft.qty, unlimited),
+            notes: draft.notes,
+          });
+        }}>✓</button>
         <button className="icon-btn" title="Cancel" onClick={onCancel}>✕</button>
       </div>
+      {keepsNotes && (
+        <div className="stock-row stk-dmnote-edit">
+          <span className="stk-dmnote-lock" title="DM only — players never receive this">🔒</span>
+          <input className="stk-dmnote-input" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
+            placeholder="DM-only note (e.g. replica — Khemet tracker inside)" />
+        </div>
+      )}
+      </>
     );
   }
 
   return (
+    <>
     <div className="stock-row">
       <span className="stk-name">
         {item.name}
@@ -89,6 +106,10 @@ function StockRow({ item, showPrice, unlimited, editing, onEdit, onSave, onDelet
       <button className="icon-btn" title="Edit" onClick={onEdit}>✎</button>
       <button className="icon-btn danger" title="Delete" onClick={onDelete}>🗑</button>
     </div>
+    {keepsNotes && dmNote && (
+      <div className="stk-dmnote" title="DM only — players never receive this">🔒 {dmNote}</div>
+    )}
+    </>
   );
 }
 
@@ -98,7 +119,7 @@ function StockRow({ item, showPrice, unlimited, editing, onEdit, onSave, onDelet
  * editing state and the drafts.
  */
 export function StockList({
-  items, onChange, system, title = 'Stock', showPrice = true, unlimited = true, emptyText,
+  items, onChange, system, title = 'Stock', showPrice = true, unlimited = true, emptyText, dmNotes, onDmNote,
 }: {
   items: KeyedStock[];
   onChange: (next: KeyedStock[]) => void;
@@ -109,6 +130,10 @@ export function StockList({
   /** Shops stock ∞ of a thing; a chest holds a countable pile. */
   unlimited?: boolean;
   emptyText?: string;
+  /** Chests keep a secret note per item for the DM, stored apart from the
+   *  item (see LOOT_NOTE_SET). Omitted for shops. */
+  dmNotes?: Record<string, string>;
+  onDmNote?: (key: string, text: string) => void;
 }) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
@@ -161,7 +186,13 @@ export function StockList({
             editing={editingKey === it.key}
             onEdit={() => setEditingKey(it.key)}
             onCancel={() => setEditingKey(null)}
-            onDelete={() => { onChange(items.filter((x) => x.key !== it.key)); setEditingKey(null); }}
+            dmNote={onDmNote ? (dmNotes?.[it.key] ?? '') : undefined}
+            onDmNote={onDmNote ? (text) => onDmNote(it.key, text) : undefined}
+            onDelete={() => {
+              if (onDmNote && dmNotes?.[it.key]) onDmNote(it.key, '');
+              onChange(items.filter((x) => x.key !== it.key));
+              setEditingKey(null);
+            }}
             onSave={(next) => {
               onChange(items.map((x) => (x.key === it.key ? { ...next, key: it.key } : x)));
               setEditingKey(null);

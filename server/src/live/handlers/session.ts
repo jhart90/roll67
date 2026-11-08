@@ -12,7 +12,7 @@ import path from 'node:path';
 import { CHAT_TAIL, UPLOADS_DIR } from '../../config.js';
 import { validUsername } from '../../auth.js';
 import {
-  assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, drawings, isDiceSpeed,
+  assetFolders, assets, audioTracks, campaigns, characters, chat, customItems, lootNotes, drawings, isDiceSpeed,
   handouts, initiative, locations, macros, mapObjects, maps, rollableTables, shops, soundboard, users, worldFolders, worldSort, worldVis,
 } from '../../db/repos.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, onlineUsers, safe, sdata, userRoom, viewerFor } from '../hub.js';
@@ -59,6 +59,8 @@ export function sendWorldViewTo(socket: Socket): void {
   socket.emit(S2C.HANDOUTS, { handouts: handoutsVisibleTo(campaignId, v.userId, v.isDm) });
   socket.emit(S2C.WORLD_SORT, { orders: worldSort.forCampaign(campaignId) });
   socket.emit(S2C.CUSTOM_ITEMS, { items: customItems.forCampaign(campaignId) });
+  // A DM previewing a player sees no loot notes, as that player would not.
+  socket.emit(S2C.LOOT_NOTES, { notes: v.isDm ? lootNotes.forCampaign(campaignId) : {} });
   // Pinned pills belong to a person, so the preview shows the previewed
   // player's — the DM's own row of macros is not what that player sees.
   socket.emit(S2C.MACROS, { macros: macros.forUser(v.userId, campaignId) });

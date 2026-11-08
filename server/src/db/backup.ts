@@ -112,6 +112,7 @@ const SPECS: TableSpec[] = [
   // The Quiet Year's whole year — deck, week, projects, lists, Contempt, log.
   { table: 'quiet_year', scope: 'campaign' },
   { table: 'dm_notes', scope: 'campaign' },
+  { table: 'loot_notes', scope: 'campaign' },
   { table: 'private_notes', scope: 'campaign', users: [['user_id', 'drop']] },
   { table: 'roll_stats', scope: 'campaign', users: [['user_id', 'drop']] },
   { table: 'custom_npcs', scope: 'dmLibrary', users: [['user_id', 'dm']] },

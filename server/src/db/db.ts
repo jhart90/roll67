@@ -560,6 +560,18 @@ db.exec(`
   )
 `);
 
+// DM-only secret notes per loot item (a chest's or a loose pile's contents),
+// keyed by the LootItem id. A separate table for the same reason as dm_notes:
+// items travel to players inside map objects and chest folders.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS loot_notes (
+    campaign_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    text TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (campaign_id, item_id)
+  )
+`);
+
 // Repair FK references broken by migrateAssetsAudioKind running with foreign_keys=ON.
 // The RENAME redirected FK constraints in maps/tokens/handouts/audio_tracks to point
 // to the temp table name; after DROP that table the constraints became invalid.

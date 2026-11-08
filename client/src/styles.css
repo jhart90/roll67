@@ -4274,3 +4274,8 @@ th > .term { border-bottom-style: dotted; }
 .qy-log li { margin: 2px 0; }
 .qy-log-contempt b { color: #d26c6c; }
 .qy-over { border-color: #8fb3d9; background: color-mix(in srgb, #8fb3d9 12%, var(--panel)); }
+/* A chest item's DM-only note: amber, under its row, never sent to players. */
+.stk-dmnote { font-size: 11px; color: var(--accent-2); padding: 0 2px 2px 8px; overflow-wrap: anywhere; }
+.stock-row.stk-dmnote-edit { padding-left: 8px; }
+.stk-dmnote-lock { flex: 0 0 auto; font-size: 11px; }
+.stock-row .stk-dmnote-input { flex: 1 1 auto; border-color: var(--accent-2); }

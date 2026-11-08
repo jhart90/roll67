@@ -19,6 +19,7 @@ export function ChestFolderEditor({ folderId, onClose }: { folderId: string; onC
   const folder = useGameStore((s) => s.worldFolderList.find((f) => f.id === folderId));
   const campaign = useGameStore((s) => s.campaign);
   const isDm = useGameStore((s) => s.isDm());
+  const lootNotes = useGameStore((s) => s.lootNotes);
 
   // Rows keep their id as the React key, so editing one can never lose track
   // of which item it is — the same contract the placed chest's editor keeps.
@@ -65,6 +66,8 @@ export function ChestFolderEditor({ folderId, onClose }: { folderId: string; onC
         gains art, a lock, and a carrier.
       </p>
       <StockList
+        dmNotes={lootNotes}
+        onDmNote={intents.setLootNote}
         items={stock}
         onChange={saveStock}
         system={campaign.system}

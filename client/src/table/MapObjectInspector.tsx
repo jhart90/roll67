@@ -12,6 +12,7 @@ export function MapObjectInspector() {
   const you = useGameStore((s) => s.you);
   const characters = useGameStore((st) => st.characters);
   const campaign = useGameStore((s) => s.campaign);
+  const lootNotes = useGameStore((s) => s.lootNotes);
   const obj = useGameStore((s) => (s.inspectedObjectId ? s.mapObjects[s.inspectedObjectId] : null));
   const fileRef = useRef<HTMLInputElement>(null);
   const detailRef = useRef<HTMLInputElement>(null);
@@ -104,6 +105,8 @@ export function MapObjectInspector() {
           price column is off. */}
       {obj.kind === 'chest' && (
         <StockList
+          dmNotes={lootNotes}
+          onDmNote={intents.setLootNote}
           items={stock}
           onChange={saveStock}
           system={campaign.system}

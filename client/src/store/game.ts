@@ -406,6 +406,8 @@ interface GameState {
   counters: Counter[];
   /** Every counter in the campaign (for the world tree), role-filtered. */
   allCounters: Counter[];
+  /** DM only: secret notes on loot items, keyed by item id. */
+  lootNotes: Record<string, string>;
   /** My own private notes per character (each user only ever gets their own). */
   privateNotesData: Record<string, string>;
   /** DM-only: secret notes per character (DM clients only ever receive these). */
@@ -739,6 +741,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   privateNotesData: {},
   counters: [],
   allCounters: [],
+  lootNotes: {},
   roundCardsDeal: null,
   targeting: null,
   aoeTargeting: null,
@@ -1224,6 +1227,10 @@ export function wireSocket(): void {
 
   socket.on(S2C.QY_STATE, (p: QyStatePayload) => {
     useGameStore.setState({ qyState: p.state });
+  });
+
+  socket.on(S2C.LOOT_NOTES, (p: { notes: Record<string, string> }) => {
+    useGameStore.setState({ lootNotes: p.notes ?? {} });
   });
 
   socket.on(S2C.COUNTERS_ALL, (p: { counters: Counter[] }) => {
@@ -2463,6 +2470,7 @@ export const intents = {
     socket.emit(C2S.WORLD_OVERRIDE, { kind, key, mode }),
   /** DM counters: banner bars over the map. */
   counterCreate: (mapId: string) => socket.emit(C2S.COUNTER_CREATE, { mapId }),
+  setLootNote: (itemId: string, text: string) => socket.emit(C2S.LOOT_NOTE_SET, { itemId, text }),
   counterUpdate: (counterId: string, patch: Partial<Counter>) => socket.emit(C2S.COUNTER_UPDATE, { counterId, patch }),
   counterDelete: (counterId: string) => socket.emit(C2S.COUNTER_DELETE, { counterId }),
   /** My own private notes on a character (public-sheet scratchpad). */

@@ -269,6 +269,8 @@ export const C2S = {
   DELETE_CUSTOM_NPC: 'deleteCustomNpc',
   // DM counters (banner bars over the map)
   COUNTER_CREATE: 'counterCreate',
+  /** DM: set (or clear, with empty text) the secret note on one loot item. */
+  LOOT_NOTE_SET: 'lootNoteSet',
   COUNTER_UPDATE: 'counterUpdate',
   COUNTER_DELETE: 'counterDelete',
   COUNTERS_GET: 'countersGet',
@@ -1021,6 +1023,8 @@ export const S2C = {
   COUNTERS: 'counters',
   /** Every counter in the campaign (for the world tree), role-filtered. */
   COUNTERS_ALL: 'countersAll',
+  /** DM only: every loot item's secret note, keyed by item id. */
+  LOOT_NOTES: 'lootNotes',
   CUSTOM_NPCS: 'customNpcs',
   MAP_OBJECT_UPSERTED: 'mapObjectUpserted',
   MAP_OBJECT_REMOVED: 'mapObjectRemoved',
@@ -1674,3 +1678,9 @@ export interface ErrorMsgPayload { message: string }
 /** The Quiet Year: one action on the shared year (see shared/quietYear.ts). */
 export interface QyActionPayload { action: import('./quietYear.js').QyAction }
 export interface QyStatePayload { state: import('./quietYear.js').QyState }
+
+/** A loot item's DM-only note. Kept OUT of the item itself: map objects and
+ *  chest folders reach players along many paths, and a field that has to be
+ *  stripped on every one of them is a field that eventually leaks. */
+export interface LootNoteSetPayload { itemId: string; text: string }
+export interface LootNotesPayload { notes: Record<string, string> }

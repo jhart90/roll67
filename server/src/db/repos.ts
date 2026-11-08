@@ -1611,6 +1611,22 @@ export const dmNotes = {
   },
 };
 
+/** DM-only notes on loot items — see the loot_notes table. */
+export const lootNotes = {
+  forCampaign(campaignId: string): Record<string, string> {
+    const rows = stmt('SELECT item_id, text FROM loot_notes WHERE campaign_id = ?').all(campaignId) as Array<{ item_id: string; text: string }>;
+    return Object.fromEntries(rows.map((r) => [r.item_id, r.text]));
+  },
+  set(campaignId: string, itemId: string, text: string): void {
+    if (!text) {
+      stmt('DELETE FROM loot_notes WHERE campaign_id = ? AND item_id = ?').run(campaignId, itemId);
+      return;
+    }
+    stmt(`INSERT INTO loot_notes (campaign_id, item_id, text) VALUES (?, ?, ?)
+          ON CONFLICT(campaign_id, item_id) DO UPDATE SET text = excluded.text`).run(campaignId, itemId, text);
+  },
+};
+
 /** Lifetime roll statistics, aggregated so they never grow with playtime. */
 export const rollStats = {
   /** Fold one roll's dice into the aggregates for this user + character. */

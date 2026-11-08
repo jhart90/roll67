@@ -6,9 +6,9 @@ import {
   type DeleteWorldFolderPayload, type DropFolderOnCharacterPayload, type DropFolderOnMapPayload, type DropShopOnMapPayload, type GameSystem,
   type PresentShopPayload, type ShopAtTokenPayload,
   type SheetData, type Shop, type ShopItem, type UpdateCustomItemPayload, type UpdateLocationPayload, type UpdateShopPayload,
-  type UpdateWorldFolderPayload, type WorldReorderPayload,
+  type UpdateWorldFolderPayload, type WorldReorderPayload, type LootNoteSetPayload,
 } from 'shared';
-import { campaigns, characters, chat, customItems, handouts, locations, mapObjects, maps, rollableTables, shops, tokens, worldFolders, worldSort, worldVis } from '../../db/repos.js';
+import { campaigns, characters, chat, customItems, handouts, locations, lootNotes, mapObjects, maps, rollableTables, shops, tokens, worldFolders, worldSort, worldVis } from '../../db/repos.js';
 import { db } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom, viewerFor } from '../hub.js';
 import { broadcastDirectory, setFolderBroadcaster } from '../directory.js';
@@ -306,6 +306,19 @@ export function registerWorldHandlers(io: Server, socket: Socket): void {
     locations.delete(locationId);
     broadcastLocations(io, d.campaignId);
   }, 'DELETE_LOCATION'));
+
+  // ----- loot item DM notes -----
+
+  // Secret notes on chest contents ("replica", "carries a Khemet tracker").
+  // Sent to the DM room only; the item itself never carries the note.
+  socket.on(C2S.LOOT_NOTE_SET, safe(socket, ({ itemId, text }: LootNoteSetPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM keeps loot notes.'); return; }
+    const id = String(itemId ?? '').slice(0, 100);
+    if (!id) return;
+    lootNotes.set(d.campaignId, id, String(text ?? '').trim().slice(0, 1000));
+    io.to(dmRoom(d.campaignId)).emit(S2C.LOOT_NOTES, { notes: lootNotes.forCampaign(d.campaignId) });
+  }, 'LOOT_NOTE_SET'));
 
   // ----- world-tree folders -----
 

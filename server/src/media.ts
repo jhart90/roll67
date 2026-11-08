@@ -6,6 +6,14 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { imageSize } from 'image-size';
 
+// Process-wide libvips settings (they apply to every `sharp` import, not just
+// this file's). Uploads and thumbnails are occasional, so libvips's decoded-
+// image cache never earns its keep here — it just holds RAM that Railway
+// bills by the minute. Two threads instead of one per core keeps a big map
+// upload quick while capping the per-thread scratch memory.
+sharp.cache(false);
+sharp.concurrency(2);
+
 /**
  * Making an upload smaller before it lands on the volume.
  *

@@ -81,6 +81,21 @@ build.
 
 The database and all uploads live on the volume, so they survive redeploys.
 
+### Keeping the bill down
+
+Railway bills RAM by the minute, which is nearly the whole bill. The build
+bundles the server into plain JS (`server/dist/index.js`, no runtime
+transpiler), libvips's image cache is off, and the V8 heap is capped at 384 MB.
+Two more settings in the Railway dashboard:
+
+- Environment variable `MALLOC_ARENA_MAX=2` — stops glibc's per-thread memory
+  arenas (which sharp's worker threads fan out across) from creeping RSS up
+  over days.
+- **Settings → Serverless** — the service sleeps after 10 minutes with no
+  outbound traffic and wakes on the next request (a few seconds' cold start).
+  Socket.IO's 25 s heartbeat keeps it awake while anyone is connected, and the
+  snapshot schedule checks at boot, so nothing is missed while it sleeps.
+
 ### Automatic database snapshots
 
 The server keeps its own daily safety copies of the database at

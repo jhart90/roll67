@@ -60,7 +60,9 @@ function freePort() {
 
 function startServer(port, dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
-  const proc = spawn('npx', ['tsx', 'src/index.ts'], {
+  // The production bundle, exactly as Railway runs it (npm start), so the live
+  // suites exercise what actually ships rather than the tsx dev path.
+  const proc = spawn('npm', ['start'], {
     cwd: path.resolve('server'),
     env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
     shell: process.platform === 'win32',
@@ -94,6 +96,8 @@ async function main() {
   await stage('typecheck (all workspaces + hook/listener guards)', 'npm', ['run', 'typecheck']);
   await stage('unit tests (shared)', 'npm', ['test']);
   await stage('upload pipeline + thumbnails', 'npm', ['run', 'check:uploads']);
+
+  await stage('server production bundle', 'npm', ['-w', 'server', 'run', 'build']);
 
   // One throwaway server for every live socket suite.
   const port = await freePort();

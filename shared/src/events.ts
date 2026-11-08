@@ -144,6 +144,14 @@ export const C2S = {
   CHASE_MOVE: 'chaseMove',
   /** SWADE: spend the turn's action on a chase maneuver — Force, Ram, Board… */
   CHASE_ACTION: 'chaseAction',
+  /** SWADE: DM starts a Dramatic Task on the tracker — tokens against the clock. */
+  DTASK_START: 'dtaskStart',
+  /** SWADE: DM adds or takes away Task Tokens by hand. */
+  DTASK_ADJUST: 'dtaskAdjust',
+  /** SWADE: DM counts a chat roll toward the task (success +1, each raise +1). */
+  DTASK_COUNT_ROLL: 'dtaskCountRoll',
+  /** SWADE: DM ends the task; the fight (if any) carries on. */
+  DTASK_END: 'dtaskEnd',
   INIT_SET_ACTIVE: 'initSetActive',
   INIT_ROLL_MAP: 'initRollMap',
   /** SWADE: DM deals a fresh action deck — everyone owes a card draw. */
@@ -1684,3 +1692,7 @@ export interface QyStatePayload { state: import('./quietYear.js').QyState }
  *  stripped on every one of them is a field that eventually leaks. */
 export interface LootNoteSetPayload { itemId: string; text: string }
 export interface LootNotesPayload { notes: Record<string, string> }
+
+export interface DramaticTaskStartPayload { name: string; tokensNeeded: number; maxRounds: number }
+export interface DramaticTaskAdjustPayload { delta: number; why?: string }
+export interface DramaticTaskCountRollPayload { messageId: number }

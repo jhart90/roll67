@@ -11,7 +11,8 @@ import {
   swnMod, isPsychicMishap, rollMishap, hasSavageAttacker, obscureBetween, rangeFigure, tokensCaughtInAoe, usableAmount,
   type AoeShape, type DieRoll, type SheetCard, type RollCalloutInfo, type BennyAwardPayload, type BennyUsePayload, type BleedRollPayload, type ShakenRollPayload, type StunRollPayload, type IncapRollPayload, type IncapDeathPayload, type CombatAimPayload, type CastAoePayload, type Character, type CombatActionPayload, type DeathSavePayload, type Hex, type ImpactKind,
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitSetTurnPayload, type InitUpdatePayload, type InitiativeState,
-  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RequestTestPayload, type TestOutcomePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
+  type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type DramaticTaskStartPayload, type DramaticTaskAdjustPayload, type DramaticTaskCountRollPayload, type DramaticTaskState,
+  newDramaticTask, adjustTaskTokens, taskRound, taskStatus, tokensForRoll, isTaskComplication, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RequestTestPayload, type TestOutcomePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
   buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, normalizeCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type AttackPreviewPayload, type AttackPreviewResultPayload, type CoverGrade, type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
@@ -5700,6 +5701,107 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
   }, 'CHASE_END'));
+
+  // ---------- Dramatic Tasks ----------
+  //
+  // The task rides the tracker (see swadeDramaticTask.ts): it starts on the
+  // current round and reads its own round off the tracker's, so it needs no
+  // hook in any of the places a round advances or rewinds.
+
+  /** The line every token change posts: what moved, and where it stands. */
+  const taskLine = (campaignId: string, round: number, task: DramaticTaskState, lead: string) => {
+    const tail = taskStatus(task, round) === 'complete'
+      ? ` ✅ ${task.name} is done — ${task.tokens}/${task.tokensNeeded} Task Tokens.`
+      : ` (${task.tokens}/${task.tokensNeeded}, round ${Math.min(taskRound(task, round), task.maxRounds)} of ${task.maxRounds})`;
+    postStatusLine(io, campaignId, `⏳ ${lead}${tail}`);
+  };
+
+  socket.on(C2S.DTASK_START, safe(socket, ({ name, tokensNeeded, maxRounds }: DramaticTaskStartPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM starts a Dramatic Task.'); return; }
+    const state = initiative.get(d.campaignId);
+    if (!state.active) {
+      emitError(socket, 'Start the fight first: a Dramatic Task is dealt Action Cards each round, so it runs on the initiative tracker.');
+      return;
+    }
+    const task = newDramaticTask(String(name ?? ''), Number(tokensNeeded), Number(maxRounds), state.round);
+    state.dramaticTask = task;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    postStatusLine(io, d.campaignId,
+      `⏳ Dramatic Task: ${task.name} — ${task.tokensNeeded} Task Tokens in ${task.maxRounds} round${task.maxRounds === 1 ? '' : 's'}. A success earns a token and each raise another; anyone dealt a Club has a Complication (−2, and failing it is a disaster).`);
+  }, 'DTASK_START'));
+
+  socket.on(C2S.DTASK_ADJUST, safe(socket, ({ delta, why }: DramaticTaskAdjustPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const state = initiative.get(d.campaignId);
+    const task = state.dramaticTask;
+    const n = Math.round(Number(delta));
+    if (!task || !Number.isFinite(n) || n === 0) return;
+    const reason = String(why ?? '').trim().slice(0, 80);
+    adjustTaskTokens(task, Math.max(-30, Math.min(30, n)), 'GM', reason || 'by hand', state.round);
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    const moved = task.log[task.log.length - 1]?.delta ?? 0;
+    if (moved === 0) return;
+    taskLine(d.campaignId, state.round, task,
+      `${moved > 0 ? '+' : ''}${moved} Task Token${Math.abs(moved) === 1 ? '' : 's'}${reason ? ` — ${reason}` : ''}.`);
+  }, 'DTASK_ADJUST'));
+
+  socket.on(C2S.DTASK_COUNT_ROLL, safe(socket, ({ messageId }: DramaticTaskCountRollPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const state = initiative.get(d.campaignId);
+    const task = state.dramaticTask;
+    if (!task) { emitError(socket, 'No Dramatic Task is running.'); return; }
+    const id = Number(messageId);
+    if (!Number.isInteger(id) || chat.campaignOf(id) !== d.campaignId) return;
+    if (task.countedMsgIds.includes(id)) { emitError(socket, 'That roll already counted toward the task.'); return; }
+    const msg = chat.byId(id);
+    if (!msg?.roll || !Number.isFinite(msg.roll.total)) { emitError(socket, 'Only a roll can count toward the task.'); return; }
+
+    // A Club in this roller's hand this round is a Complication. Found by
+    // the character the roll belongs to, through their token on the tracker.
+    const entry = msg.characterId
+      ? state.entries.find((e) => e.tokenId && tokens.byId(e.tokenId)?.characterId === msg.characterId)
+      : undefined;
+    const complication = isTaskComplication(entry?.card);
+    const r = tokensForRoll(msg.roll.total, complication);
+    const who = msg.fromCharacter ?? msg.fromName;
+    const what = msg.actionName || msg.text || 'roll';
+
+    task.countedMsgIds.push(id);
+    if (task.countedMsgIds.length > 200) task.countedMsgIds.splice(0, task.countedMsgIds.length - 200);
+    adjustTaskTokens(task, r.tokens, who,
+      `${what}: ${r.adjusted}${complication ? ' (Complication −2)' : ''} — ${r.success ? (r.raises > 0 ? `success, ${r.raises} raise${r.raises === 1 ? '' : 's'}` : 'success') : 'failure'}`,
+      state.round);
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+
+    const club = complication ? ' after the Club’s −2' : '';
+    const score = r.complicationFailed
+      ? `♣ ${who} fails a Complication (${r.adjusted} after −2) — disaster: by the book the task fails, or the GM names a setback.`
+      : r.tokens > 0
+        ? `${who}: ${r.adjusted}${club} — ${r.raises > 0 ? `a success and ${r.raises} raise${r.raises === 1 ? '' : 's'}` : 'a success'}, +${r.tokens} Task Token${r.tokens === 1 ? '' : 's'}.`
+        : `${who}: ${r.adjusted}${club} — no tokens.`;
+    taskLine(d.campaignId, state.round, task, score);
+  }, 'DTASK_COUNT_ROLL'));
+
+  socket.on(C2S.DTASK_END, safe(socket, () => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const state = initiative.get(d.campaignId);
+    const task = state.dramaticTask;
+    if (!task) return;
+    const status = taskStatus(task, state.round);
+    delete state.dramaticTask;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+    postStatusLine(io, d.campaignId, status === 'complete'
+      ? `⏳ ${task.name} — succeeded with ${task.tokens}/${task.tokensNeeded} Task Tokens.`
+      : `⏳ ${task.name} — ended at ${task.tokens}/${task.tokensNeeded} Task Tokens${status === 'outOfTime' ? ', out of time' : ''}.`);
+  }, 'DTASK_END'));
 
   /**
    * Change Position, or drop back.

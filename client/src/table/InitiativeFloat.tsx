@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { intents, useGameStore } from '../store/game';
 import { CardChip } from '../util/PlayingCardView';
+import { ComplicationMark, DramaticTaskBar } from '../panels/DramaticTask';
 
 /** The tool rail owns the left edge: a 40px button plus 6px padding either
  *  side plus its border. Starting at 16 put the tracker on top of it. */
@@ -85,6 +86,7 @@ export function InitiativeFloat() {
         <span className="spacer" />
         <button className="link" onClick={() => setDismissed(true)}>✕</button>
       </div>
+      <DramaticTaskBar state={state} compact />
       <ol className="init-list">
         {rotated.map(({ entry, roundOffset }, i) => (
           <li key={entry.id} className={`${i === 0 ? 'current' : ''} ${entry.hidden ? 'hidden-entry' : ''}`}>
@@ -94,7 +96,7 @@ export function InitiativeFloat() {
               <span className="init-round-break">round {state.round + roundOffset}</span>
             )}
             {entry.card ? <CardChip card={entry.card} /> : <span className="init-value">{entry.value}</span>}
-            <span className="init-name">{entry.name}{entry.hidden ? ' 🕶' : ''}{entry.held ? ' ⏸' : ''}</span>
+            <span className="init-name">{entry.name}{entry.hidden ? ' 🕶' : ''}{entry.held ? ' ⏸' : ''}<ComplicationMark state={state} entry={entry} /></span>
             {entry.held && (entry.ownerUserId === you.userId || you.role === 'dm') && (
               <button className="link" title="Stop holding — act right now" onClick={() => intents.actNow(entry.id)}>▶ act</button>
             )}

@@ -7,6 +7,7 @@ import { ChasePrompt } from './ChasePrompt';
 import { DealCardsPrompt } from './DealCardsPrompt';
 import { FearPrompt } from './FearPrompt';
 import { TestPrompt } from './TestPrompt';
+import { ComplicationMark, DramaticTaskBar, DramaticTaskPrompt } from './DramaticTask';
 
 export function InitiativePanel() {
   const you = useGameStore((s) => s.you);
@@ -19,6 +20,7 @@ export function InitiativePanel() {
   const [dealing, setDealing] = useState(false);
   const [fearing, setFearing] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [tasking, setTasking] = useState(false);
 
   const isDm = useGameStore((s) => s.isDm());
   const floatHidden = useGameStore((s) => s.initFloatHidden);
@@ -53,6 +55,8 @@ export function InitiativePanel() {
           </button>
         )}
       </div>
+
+      <DramaticTaskBar state={state} />
 
       <ol className="init-list">
         {state.entries.map((e, i) => (
@@ -100,7 +104,7 @@ export function InitiativePanel() {
                 onKeyDown={(ev) => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur(); }}
               />
             ) : (
-              <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}{e.placeholder ? ' ⏳' : ''}</span>
+              <span className="init-name">{e.name}{e.hidden ? ' 🕶' : ''}{e.placeholder ? ' ⏳' : ''}<ComplicationMark state={state} entry={e} /></span>
             )}
             {isDm && (
               <span className="init-actions">
@@ -184,6 +188,9 @@ export function InitiativePanel() {
             ? <button title="Tear down the Chase Card track; the fight carries on" onClick={() => intents.chaseEnd()}>🏁 End chase</button>
             : <button title="Lay out a Chase Card track — a chase IS the combat, and deals Action Cards as usual" onClick={() => setChasing(true)}>🏁 Start a chase</button>)}
           {swade && <button title="Spirit roll against something horrific, with the Fear Table for failures" onClick={() => setFearing(true)}>😱 Call for Fear</button>}
+          {swade && state.active && (state.dramaticTask
+            ? null
+            : <button title="Tokens against the clock — earn them before the rounds run out; Clubs are Complications" onClick={() => setTasking(true)}>⏳ Dramatic Task</button>)}
           {swade && <button title="An opposed trick — Taunt, a trip, a stare-down — to leave a foe Distracted or Vulnerable" onClick={() => setTesting(true)}>🤼 Call for a Test</button>}
         </div>
       )}
@@ -192,6 +199,7 @@ export function InitiativePanel() {
       {dealing && <DealCardsPrompt onClose={() => setDealing(false)} />}
       {fearing && <FearPrompt onClose={() => setFearing(false)} />}
       {testing && <TestPrompt onClose={() => setTesting(false)} />}
+      {tasking && <DramaticTaskPrompt onClose={() => setTasking(false)} />}
 
       {isDm && state.entries.length > 0 && (
         <div className="row init-controls">

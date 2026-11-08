@@ -116,6 +116,7 @@ async function main() {
     ['resist cards + banner', 'check-resist-cards.mjs'],
     ['shared vision', 'check-shared-vision.mjs'],
     ['the quiet year', 'check-quiet-year.mjs'],
+    ['thebes GM tools', 'check-thebes-tools.mjs'],
   ];
   for (const [label, script] of liveSuites) {
     const r = await run(label, 'node', [`scripts/${script}`, base]);

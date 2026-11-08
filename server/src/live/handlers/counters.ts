@@ -24,9 +24,10 @@ function countersFor(campaignId: string, userId: string, list: Counter[], overMa
     return o ? o === 'reveal' : disc.has(`map:${mapId}`);
   };
   return list
-    // An all-maps counter shown over a map is known wherever that map is; in
-    // the world tree it lists under its home map like any other.
-    .filter((c) => counterSharedWith(c, userId) && knowsMap(c.allMaps && overMapId ? overMapId : c.mapId))
+    // An all-maps counter over a map is campaign-wide by design: shared is
+    // enough. In the world tree (no map asked about) it lists under its home
+    // map, and follows that map's knowledge rule like any other.
+    .filter((c) => counterSharedWith(c, userId) && ((c.allMaps && overMapId) || knowsMap(c.mapId)))
     .map((c) => ({ ...c, sharedWith: null }));
 }
 

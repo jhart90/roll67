@@ -741,6 +741,9 @@ export interface InitiativeState {
    *  progress — so calling the chase off puts the tracker away too, instead
    *  of leaving a turn order ticking over a fight nobody started. */
   chaseOwnsCombat?: boolean;
+  /** SWADE Dramatic Task running on this tracker: tokens against the clock,
+   *  its rounds read off this tracker's (see swadeDramaticTask.ts). */
+  dramaticTask?: import('./systems/swadeDramaticTask.js').DramaticTaskState;
 }
 
 // ---------- Drawings, pings, measurement ----------

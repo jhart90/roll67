@@ -1761,6 +1761,11 @@ export const chat = {
     const r = stmt('SELECT * FROM chat_messages WHERE id = ?').get(id) as ChatRow | undefined;
     return r ? toChatMsg(r) : undefined;
   },
+  /** Which campaign a message belongs to — for checking a client-named id. */
+  campaignOf(id: number): string | undefined {
+    const r = stmt('SELECT campaign_id FROM chat_messages WHERE id = ?').get(id) as { campaign_id: string } | undefined;
+    return r?.campaign_id;
+  },
   setHidden(id: number, hidden: boolean): void {
     stmt('UPDATE chat_messages SET hidden = ? WHERE id = ?').run(hidden ? 1 : 0, id);
   },

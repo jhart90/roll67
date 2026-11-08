@@ -4279,3 +4279,25 @@ th > .term { border-bottom-style: dotted; }
 .stock-row.stk-dmnote-edit { padding-left: 8px; }
 .stk-dmnote-lock { flex: 0 0 auto; font-size: 11px; }
 .stock-row .stk-dmnote-input { flex: 1 1 auto; border-color: var(--accent-2); }
+
+/* Dramatic Task: token pips against the clock, over the initiative list. */
+.dtask-bar { border: 1px solid var(--accent-2); border-radius: 6px; padding: 6px 8px; margin: 4px 0 8px; background: var(--panel-2); }
+.dtask-bar.compact { margin: 2px 6px 6px; padding: 4px 6px; }
+.dtask-bar.dtask-complete { border-color: var(--ok); }
+.dtask-bar.dtask-outOfTime { border-color: var(--danger); }
+.dtask-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.dtask-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dtask-round { color: var(--text-dim); white-space: nowrap; }
+.dtask-complete .dtask-round { color: var(--ok); }
+.dtask-outOfTime .dtask-round { color: var(--danger); }
+.dtask-pips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 4px; }
+.dtask-pip { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--accent-2); background: transparent; }
+.dtask-pip.on { background: var(--accent-2); }
+.dtask-complete .dtask-pip.on { background: var(--ok); border-color: var(--ok); }
+.dtask-extra { font-size: 11px; color: var(--accent-2); }
+.dtask-count { margin-left: auto; font-size: 11px; color: var(--text-dim); }
+.dtask-controls { gap: 4px; margin-top: 6px; align-items: center; }
+.dtask-controls button:not(.link) { width: auto; padding: 2px 8px; }
+.dtask-hint { font-size: 11px; margin: 4px 0 0; }
+.dtask-log { margin: 6px 0 0; padding-left: 16px; font-size: 11px; max-height: 120px; overflow-y: auto; }
+.dtask-club { margin-left: 4px; color: var(--accent-2); cursor: help; }

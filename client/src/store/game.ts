@@ -2451,6 +2451,15 @@ export const intents = {
     socket.emit(C2S.CHASE_START, { tokenIds, incrementId, trackLength }),
   /** DM: tear the track down. */
   chaseEnd: () => socket.emit(C2S.CHASE_END, {}),
+  /** DM: start a Dramatic Task on the tracker. */
+  dtaskStart: (name: string, tokensNeeded: number, maxRounds: number) =>
+    socket.emit(C2S.DTASK_START, { name, tokensNeeded, maxRounds }),
+  /** DM: move Task Tokens by hand. */
+  dtaskAdjust: (delta: number, why?: string) => socket.emit(C2S.DTASK_ADJUST, { delta, why }),
+  /** DM: score a chat roll toward the task. */
+  dtaskCountRoll: (messageId: number) => socket.emit(C2S.DTASK_COUNT_ROLL, { messageId }),
+  /** DM: end the task. */
+  dtaskEnd: () => socket.emit(C2S.DTASK_END, {}),
   /** Change Position (free, or as an action for +2), or drop back. */
   chaseMove: (entryId: string, mode: 'free' | 'action' | 'dropBack', direction: 'forward' | 'back') =>
     socket.emit(C2S.CHASE_MOVE, { entryId, mode, direction }),

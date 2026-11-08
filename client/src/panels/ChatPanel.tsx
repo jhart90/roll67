@@ -655,6 +655,7 @@ export function ChatPanel() {
   }
 
   const menuMsg = menu ? chatLog.find((m) => m.id === menu.id) : null;
+  const dramaticTask = useGameStore((s) => s.initiativeState.dramaticTask);
   // Whether this message has anything to offer THIS viewer. A player looking
   // at somebody else's roll gets no menu at all rather than an empty box.
   const menuCh = useOwnRollCharacter(menuMsg ?? null);
@@ -669,6 +670,18 @@ export function ChatPanel() {
       {menu && menuMsg && (isDm || menuCh) && (
         <AnchoredMenu x={menu.x} y={menu.y} className="chat-context-menu" onClick={(e) => e.stopPropagation()}>
           {menuCh && <BennyRerollItems ch={menuCh} msgId={menu.id} resist={menuMsg.callout?.tone === 'save'} onDone={() => setMenu(null)} />}
+          {isDm && dramaticTask && menuMsg.roll && !menuMsg.hidden && (
+            dramaticTask.countedMsgIds.includes(menuMsg.id)
+              ? <button disabled>⏳ Counted toward the task</button>
+              : (
+                <button
+                  title={`Score this roll toward “${dramaticTask.name}”: a success earns a Task Token, each raise another; a Club in the roller’s hand takes −2`}
+                  onClick={() => { intents.dtaskCountRoll(menu.id); setMenu(null); }}
+                >
+                  ⏳ Count toward the task
+                </button>
+              )
+          )}
           {isDm && (menuMsg.hidden ? (
             <>
               <button onClick={() => { intents.moderateMessage(menu.id, 'unhide'); setMenu(null); }}>Unhide</button>

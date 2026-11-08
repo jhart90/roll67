@@ -16,7 +16,7 @@ function requireCampaign(socket: Socket) {
  *
  *  `sharedWith` is stripped on the way out: who else can see the doom clock is
  *  the DM's business, and shipping the list would let a player read it. */
-function countersFor(campaignId: string, userId: string, list: Counter[]): Counter[] {
+function countersFor(campaignId: string, userId: string, list: Counter[], overMapId?: string): Counter[] {
   const disc = worldVis.discovered(campaignId, userId);
   const ov = worldVis.overrides(campaignId);
   const knowsMap = (mapId: string) => {
@@ -24,7 +24,9 @@ function countersFor(campaignId: string, userId: string, list: Counter[]): Count
     return o ? o === 'reveal' : disc.has(`map:${mapId}`);
   };
   return list
-    .filter((c) => counterSharedWith(c, userId) && knowsMap(c.mapId))
+    // An all-maps counter shown over a map is known wherever that map is; in
+    // the world tree it lists under its home map like any other.
+    .filter((c) => counterSharedWith(c, userId) && knowsMap(c.allMaps && overMapId ? overMapId : c.mapId))
     .map((c) => ({ ...c, sharedWith: null }));
 }
 
@@ -34,10 +36,15 @@ export function broadcastCounters(io: Server, campaignId: string, mapId: string)
   const every = counters.forCampaign(campaignId);
   for (const socket of campaignSockets(io, campaignId)) {
     const v = viewerFor(sdata(socket));
-    socket.emit(S2C.COUNTERS, { mapId, counters: v.isDm ? all : countersFor(campaignId, v.userId, all) });
+    socket.emit(S2C.COUNTERS, { mapId, counters: v.isDm ? all : countersFor(campaignId, v.userId, all, mapId) });
     // The world tree lists counters under every map, so it needs them all.
     socket.emit(S2C.COUNTERS_ALL, { counters: v.isDm ? every : countersFor(campaignId, v.userId, every) });
   }
+}
+
+/** Every map's counters, for a change to one shown over all of them. */
+function broadcastCountersEverywhere(io: Server, campaignId: string): void {
+  for (const m of maps.forCampaign(campaignId)) broadcastCounters(io, campaignId, m.id);
 }
 
 export function registerCounterHandlers(io: Server, socket: Socket): void {
@@ -51,7 +58,7 @@ export function registerCounterHandlers(io: Server, socket: Socket): void {
     const map = maps.byId(mapId);
     if (!map || map.campaignId !== d.campaignId) return;
     const all = counters.forMap(mapId);
-    socket.emit(S2C.COUNTERS, { mapId, counters: d.role === 'dm' ? all : countersFor(d.campaignId, d.userId, all) });
+    socket.emit(S2C.COUNTERS, { mapId, counters: d.role === 'dm' ? all : countersFor(d.campaignId, d.userId, all, mapId) });
   }, 'COUNTERS_GET'));
 
   socket.on(C2S.COUNTER_CREATE, safe(socket, ({ mapId }: { mapId: string }) => {
@@ -86,6 +93,7 @@ export function registerCounterHandlers(io: Server, socket: Socket): void {
       clean.sharedWith = [...new Set(patch.sharedWith.filter((u): u is string => typeof u === 'string' && players.has(u)))];
     }
     if (isCounterPosition(patch.position)) clean.position = patch.position;
+    if (typeof patch.allMaps === 'boolean') clean.allMaps = patch.allMaps;
     if (typeof patch.mapId === 'string') {
       const target = maps.byId(patch.mapId);
       if (target && target.campaignId === d.campaignId) clean.mapId = patch.mapId;
@@ -95,6 +103,11 @@ export function registerCounterHandlers(io: Server, socket: Socket): void {
       clean.value = Math.max(0, Math.min(max, clean.value ?? c.value));
     }
     counters.update(counterId, clean);
+    // One that is (or just stopped being) over every map changes every map.
+    if (c.allMaps || clean.allMaps) {
+      broadcastCountersEverywhere(io, d.campaignId);
+      return;
+    }
     broadcastCounters(io, d.campaignId, c.mapId);
     if (clean.mapId && clean.mapId !== c.mapId) broadcastCounters(io, d.campaignId, clean.mapId);
   }, 'COUNTER_UPDATE'));
@@ -105,6 +118,7 @@ export function registerCounterHandlers(io: Server, socket: Socket): void {
     const c = counters.byId(counterId);
     if (!c || c.campaignId !== d.campaignId) return;
     counters.delete(counterId);
-    broadcastCounters(io, d.campaignId, c.mapId);
+    if (c.allMaps) broadcastCountersEverywhere(io, d.campaignId);
+    else broadcastCounters(io, d.campaignId, c.mapId);
   }, 'COUNTER_DELETE'));
 }

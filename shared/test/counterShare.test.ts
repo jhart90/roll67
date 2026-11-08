@@ -4,7 +4,7 @@ import { counterSharedWith, type Counter } from '../src/types.js';
 const counter = (over: Partial<Counter> = {}): Counter => ({
   id: 'c1', campaignId: 'camp', mapId: 'm1', name: 'Doom Clock',
   color: '#d92626', max: 6, value: 3,
-  visible: true, sharedWith: null, position: 'top',
+  visible: true, sharedWith: null, position: 'top', allMaps: false,
   ...over,
 });
 

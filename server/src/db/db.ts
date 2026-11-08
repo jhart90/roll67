@@ -509,6 +509,9 @@ migrateCounterSideSlots();
 // added before it would be selected into a table that has no room for it.
 // NULL is both "never set" and "everyone", which is what old counters want.
 ensureColumn('counters', 'shared_with', 'shared_with TEXT');
+// A counter shown over every map in the campaign (Timeline Stability), not
+// just its home map. After the rebuild above for the same reason as shared_with.
+ensureColumn('counters', 'all_maps', 'all_maps INTEGER NOT NULL DEFAULT 0');
 
 // A briefing image shown to players above a chest's or a shop's contents —
 // the handout half of "here is what you are looking at".

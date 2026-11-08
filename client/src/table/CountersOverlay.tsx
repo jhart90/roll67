@@ -139,10 +139,10 @@ export function CountersOverlay() {
     <div
       key={c.id}
       className={`counter-bar ${!c.visible ? 'counter-hidden' : ''}`}
-      title={!isDm ? c.name
+      title={(!isDm ? c.name
         : !c.visible ? `${c.name} — hidden from players (right-click to share)`
           : c.sharedWith === null ? `${c.name} — shared with everyone`
-            : `${c.name} — shared with ${c.sharedWith.length} player${c.sharedWith.length === 1 ? '' : 's'} (right-click to change)`}
+            : `${c.name} — shared with ${c.sharedWith.length} player${c.sharedWith.length === 1 ? '' : 's'} (right-click to change)`) + (isDm && c.allMaps ? ' · on every map' : '')}
       // Everyone can rearrange their own screen, so everyone gets the menu.
       onContextMenu={(e) => { e.preventDefault(); setMenu({ id: c.id, x: e.clientX, y: e.clientY }); }}
       draggable
@@ -214,6 +214,15 @@ export function CountersOverlay() {
               <>
                 <SharePicker counter={menuCounter} />
                 <button onClick={() => { setEditing(menuCounter); closeMenu(); }}>✏️ Edit…</button>
+                <button
+                  className={menuCounter.allMaps ? 'active' : ''}
+                  title={menuCounter.allMaps
+                    ? 'Shown over every map in the campaign. Click to keep it on its own map only.'
+                    : 'Show this counter over every map in the campaign — a meter that follows the party'}
+                  onClick={() => { intents.counterUpdate(menu.id, { allMaps: !menuCounter.allMaps }); closeMenu(); }}
+                >
+                  {menuCounter.allMaps ? '🌐 On every map ✓' : '🌐 Show on every map'}
+                </button>
                 <hr />
               </>
             )}

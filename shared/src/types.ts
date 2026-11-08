@@ -351,6 +351,10 @@ export interface Counter {
    *  banners; left and right are narrow columns down the sides, kept clear of
    *  the tool rail, the chat dock, and the bottom pill/Benny/Keyring row. */
   position: CounterPosition;
+  /** Shown over EVERY map in the campaign, not just its own — a campaign-wide
+   *  meter like Timeline Stability that must follow the party from map to
+   *  map. `mapId` stays its home: where it sits in the world tree. */
+  allMaps: boolean;
 }
 
 /** Whether a counter reaches one player, ignoring whether they know its map. */

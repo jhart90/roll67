@@ -1529,8 +1529,12 @@ export const counters = {
     const row = stmt('SELECT * FROM counters WHERE id = ?').get(id) as Record<string, unknown> | undefined;
     return row ? toCounter(row) : undefined;
   },
+  /** The counters shown over one map: its own, and every all-maps counter
+   *  in the same campaign. */
   forMap(mapId: string): Counter[] {
-    return (stmt('SELECT * FROM counters WHERE map_id = ? ORDER BY created_at').all(mapId) as Array<Record<string, unknown>>).map(toCounter);
+    return (stmt(`SELECT * FROM counters WHERE map_id = ?
+                    OR (all_maps = 1 AND campaign_id = (SELECT campaign_id FROM maps WHERE id = ?))
+                  ORDER BY created_at`).all(mapId, mapId) as Array<Record<string, unknown>>).map(toCounter);
   },
   forCampaign(campaignId: string): Counter[] {
     return (stmt('SELECT * FROM counters WHERE campaign_id = ? ORDER BY created_at').all(campaignId) as Array<Record<string, unknown>>).map(toCounter);
@@ -1539,9 +1543,9 @@ export const counters = {
     const cur = this.byId(id);
     if (!cur) return;
     const next = { ...cur, ...patch };
-    stmt(`UPDATE counters SET map_id = ?, name = ?, color = ?, max = ?, value = ?, visible = ?, shared_with = ?, position = ? WHERE id = ?`)
+    stmt(`UPDATE counters SET map_id = ?, name = ?, color = ?, max = ?, value = ?, visible = ?, shared_with = ?, position = ?, all_maps = ? WHERE id = ?`)
       .run(next.mapId, next.name, next.color, next.max, next.value, next.visible ? 1 : 0,
-        next.sharedWith === null ? null : JSON.stringify(next.sharedWith), next.position, id);
+        next.sharedWith === null ? null : JSON.stringify(next.sharedWith), next.position, next.allMaps ? 1 : 0, id);
   },
   delete(id: string): void {
     stmt('DELETE FROM counters WHERE id = ?').run(id);
@@ -1573,6 +1577,7 @@ function toCounter(row: Record<string, unknown>): Counter {
     // Any unrecognised value falls back to the top banner rather than
     // vanishing into a dock that doesn't render.
     position: isCounterPosition(row.position) ? row.position : 'top',
+    allMaps: row.all_maps === 1,
   };
 }
 

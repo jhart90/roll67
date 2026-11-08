@@ -39,6 +39,7 @@ export {
 export * from './swadeVehicles.js';
 export * from './swadeChase.js';
 export * from './swadeDramaticTask.js';
+export * from './initiativeOrder.js';
 export * from './swadeCreation.js';
 export * from './swnCreation.js';
 

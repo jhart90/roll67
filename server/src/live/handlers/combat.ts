@@ -13,7 +13,8 @@ import {
   type InitAddPayload, type InitiativeEntry, type InitRemovePayload, type InitRollMapPayload, type InitSetTurnPayload, type InitUpdatePayload, type InitiativeState,
   type AdvanceTimePayload, type AftermathRollPayload, type ChaseStartPayload, type DramaticTaskStartPayload, type DramaticTaskAdjustPayload, type DramaticTaskCountRollPayload, type DramaticTaskState,
   newDramaticTask, adjustTaskTokens, taskRound, taskStatus, tokensForRoll, isTaskComplication, type ChaseMovePayload, type ChaseActionPayload, type ChaseParticipant, type ChaseState, type HealingRollPayload, type VehicleOocRollPayload, type RepairRollPayload, type RequestSavePayload, type RequestTestPayload, type TestOutcomePayload, type RollBreakdown, type SheetData, type Token, type UndoEntry, type UsePowerPayload,
-  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, normalizeCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
+  buildDeck, shuffleDeck, cardName, cardShort, compareCardEntries, arrangeInitiative, moveInitiativeEntry, ungroupInitiativeEntry, syncInitiativeGroups,
+  type InitMovePayload, type InitUngroupPayload, normalizeCardBack, swadeRangedArmor, swnReloadCheck, withRaiseDie,
   type AttackPreviewPayload, type AttackPreviewResultPayload, type CoverGrade, type InitCardCallPayload, type InitCardDrawPayload, type InitDealInPayload, type PendingCardDraw, type ReloadWeaponPayload,
   type InitRollCallPayload, type InitRollMinePayload, type PendingInitiative, type SoakRollPayload,
   swadeWoundsHealed, swadeRangeBand, swadeCritFail, swadeBurstCritFail, swadeAmmoLeft, swadeBennyMax, aoeCentredOnSelf, swadeToughness,
@@ -739,8 +740,15 @@ function drawActionCard(
  * watching, so draw order settles it; every round after is dealt in a server
  * loop nobody saw, so the book's suit order does — see cards.ts.
  */
+/**
+ * Put the tracker in order. Card mode by the cards, otherwise by the rolled
+ * value — either way through arrangeInitiative, so the DM's groups stay
+ * together on their leader's card and rows moved by hand keep their place.
+ */
 function sortInitiative(state: InitiativeState): void {
-  state.entries.sort((a, b) => compareCardEntries(a, b, state.round > 1 ? 'suit' : 'draw'));
+  state.entries = state.cardMode
+    ? arrangeInitiative(state.entries, (a, b) => compareCardEntries(a, b, state.round > 1 ? 'suit' : 'draw'))
+    : arrangeInitiative(state.entries, (a, b) => b.value - a.value);
 }
 
 /** Sort the card order without moving the turn off whoever is acting. */
@@ -841,6 +849,10 @@ function redealRoundCards(io: Server, campaignId: string, state: InitiativeState
     // A placeholder keeps the card or slot the DM gave it: the lava does
     // not draw for initiative.
     if (entry.held || entry.placeholder) continue;
+    // A group member acts on its leader's card (synced when the order is
+    // arranged below); it does not draw one of its own.
+    if (entry.groupId && state.entries.some((x) => x.id === entry.groupId)) continue;
+    delete entry.manualOrder;
     const { card } = drawActionCard(state, sheetForToken(entry.tokenId));
     if (card.rank === 15) {
       state.jokerDealt = true;
@@ -4774,6 +4786,9 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     const wasCurrent = idx === state.turnIdx;
     const prevChar = wasCurrent ? combatantChar(state, idx) : undefined;
     state.entries.splice(idx, 1);
+    // Removing a group's leader hands the group to its first member, in
+    // place: the rows do not move, so the turn arithmetic below holds.
+    syncInitiativeGroups(state.entries);
     if (idx < state.turnIdx) {
       state.turnIdx--;
     } else if (wasCurrent && state.turnIdx >= state.entries.length) {
@@ -5502,12 +5517,46 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
     if (state.active) finishTurnTransition(io, d.campaignId, state, prevChar);
   }, 'INIT_PREV'));
 
+  // The DM's drag and drop on the tracker: move a row to a gap, or drop it
+  // onto another to group them on that row's card. The turn stays with
+  // whoever has it — the pointer follows the person, not the row number.
+  socket.on(C2S.INIT_MOVE, safe(socket, ({ entryId, targetId, where }: InitMovePayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') { emitError(socket, 'Only the DM rearranges initiative.'); return; }
+    if (where !== 'before' && where !== 'after' && where !== 'onto') return;
+    const state = initiative.get(d.campaignId);
+    const next = moveInitiativeEntry(state.entries, String(entryId), String(targetId), where);
+    if (!next) return;
+    const currentId = state.entries[state.turnIdx]?.id;
+    state.entries = next;
+    const idx = currentId ? state.entries.findIndex((e) => e.id === currentId) : -1;
+    state.turnIdx = idx >= 0 ? idx : Math.min(state.turnIdx, Math.max(0, state.entries.length - 1));
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+  }, 'INIT_MOVE'));
+
+  socket.on(C2S.INIT_UNGROUP, safe(socket, ({ entryId }: InitUngroupPayload) => {
+    const d = requireCampaign(socket);
+    if (d.role !== 'dm') return;
+    const state = initiative.get(d.campaignId);
+    const next = ungroupInitiativeEntry(state.entries, String(entryId));
+    if (!next) return;
+    const currentId = state.entries[state.turnIdx]?.id;
+    state.entries = next;
+    const idx = currentId ? state.entries.findIndex((e) => e.id === currentId) : -1;
+    if (idx >= 0) state.turnIdx = idx;
+    initiative.set(d.campaignId, state);
+    broadcastInitiative(io, d.campaignId);
+  }, 'INIT_UNGROUP'));
+
   socket.on(C2S.INIT_SORT, safe(socket, () => {
     const d = requireCampaign(socket);
     if (d.role !== 'dm') return;
     const state = initiative.get(d.campaignId);
-    if (state.cardMode) sortInitiative(state);
-    else state.entries.sort((a, b) => b.value - a.value);
+    // The DM's sort lets the cards (or rolls) decide again: hand placements
+    // are forgotten, groups are kept.
+    for (const e of state.entries) delete e.manualOrder;
+    sortInitiative(state);
     state.turnIdx = 0;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
@@ -6263,7 +6312,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       });
       added++;
     }
-    state.entries.sort((a, b) => b.value - a.value);
+    sortInitiative(state);
     state.turnIdx = 0;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);
@@ -6358,7 +6407,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       value: breakdown.total, hidden: pending.hidden,
     });
     // Keep the order live as results come in: highest first, next up on top.
-    state.entries.sort((a, b) => b.value - a.value);
+    sortInitiative(state);
     state.turnIdx = 0;
     initiative.set(d.campaignId, state);
     broadcastInitiative(io, d.campaignId);

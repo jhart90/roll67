@@ -2451,6 +2451,11 @@ export const intents = {
     socket.emit(C2S.CHASE_START, { tokenIds, incrementId, trackLength }),
   /** DM: tear the track down. */
   chaseEnd: () => socket.emit(C2S.CHASE_END, {}),
+  /** DM: drop an initiative row before/after another, or onto it to group them. */
+  initMove: (entryId: string, targetId: string, where: 'before' | 'after' | 'onto') =>
+    socket.emit(C2S.INIT_MOVE, { entryId, targetId, where }),
+  /** DM: take a row out of its initiative group. */
+  initUngroup: (entryId: string) => socket.emit(C2S.INIT_UNGROUP, { entryId }),
   /** DM: start a Dramatic Task on the tracker. */
   dtaskStart: (name: string, tokensNeeded: number, maxRounds: number) =>
     socket.emit(C2S.DTASK_START, { name, tokensNeeded, maxRounds }),

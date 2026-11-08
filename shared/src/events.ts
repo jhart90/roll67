@@ -135,6 +135,10 @@ export const C2S = {
    *  ended by mistake, or a skip straight to whoever the fight is waiting on. */
   INIT_SET_TURN: 'initSetTurn',
   INIT_SORT: 'initSort',
+  /** DM: drag a row to a gap ('before'/'after' another row) or 'onto' it to group them. */
+  INIT_MOVE: 'initMove',
+  /** DM: take one row out of its initiative group. */
+  INIT_UNGROUP: 'initUngroup',
   INIT_CLEAR: 'initClear',
   /** SWADE: start a chase — lay out the Chase Card track. */
   CHASE_START: 'chaseStart',
@@ -1696,3 +1700,6 @@ export interface LootNotesPayload { notes: Record<string, string> }
 export interface DramaticTaskStartPayload { name: string; tokensNeeded: number; maxRounds: number }
 export interface DramaticTaskAdjustPayload { delta: number; why?: string }
 export interface DramaticTaskCountRollPayload { messageId: number }
+
+export interface InitMovePayload { entryId: string; targetId: string; where: import('./systems/initiativeOrder.js').InitiativeDropWhere }
+export interface InitUngroupPayload { entryId: string }

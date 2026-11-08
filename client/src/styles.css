@@ -4301,3 +4301,23 @@ th > .term { border-bottom-style: dotted; }
 .dtask-hint { font-size: 11px; margin: 4px 0 0; }
 .dtask-log { margin: 6px 0 0; padding-left: 16px; font-size: 11px; max-height: 120px; overflow-y: auto; }
 .dtask-club { margin-left: 4px; color: var(--accent-2); cursor: help; }
+
+/* Initiative drag & drop (DM): a dotted line where the row will land, a
+   dashed outline when it will join the row as a group. */
+.init-list li { position: relative; }
+.init-list li.init-draggable { cursor: grab; }
+.init-list li.init-dragging { opacity: 0.4; }
+.init-list li.init-drop-before::before,
+.init-list li.init-drop-after::after {
+  content: ''; position: absolute; left: 4px; right: 4px; height: 0;
+  border-top: 2px dotted var(--accent-2); pointer-events: none;
+}
+.init-list li.init-drop-before::before { top: -2px; }
+.init-list li.init-drop-after::after { bottom: -2px; }
+.init-list li.init-drop-onto { outline: 2px dashed var(--accent-2); outline-offset: -1px; background: rgba(210, 165, 108, 0.12); }
+.init-list li.init-member { margin-left: 18px; padding-left: 4px; border-left: 2px solid var(--border); border-radius: 0 6px 6px 0; }
+.init-member-mark { color: var(--text-dim); font-size: 12px; margin-right: -4px; }
+.init-list li.init-member .card-chip { opacity: 0.6; }
+.init-card-wrap { display: inline-flex; align-items: flex-start; }
+.init-manual { color: var(--accent-2); font-weight: 800; font-size: 14px; line-height: 1; margin-left: 1px; cursor: help; }
+.init-drag-hint { font-size: 11px; margin: 0 0 4px; }

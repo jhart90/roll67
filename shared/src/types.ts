@@ -695,6 +695,12 @@ export interface InitiativeEntry {
    * after every card (+1, then +2, then +3).
    */
   slot?: number;
+  /** In a group: the leader's entry id. Acts straight after the leader, on
+   *  the leader's card (see initiativeOrder.ts). */
+  groupId?: string;
+  /** Put here by the DM's hand: holds this place when the order re-sorts,
+   *  until the next deal or the DM's sort. Shown as an asterisk on the card. */
+  manualOrder?: boolean;
 }
 
 /** SWADE card mode: a combatant who still owes a draw. */

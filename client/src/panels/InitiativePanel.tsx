@@ -8,6 +8,7 @@ import { DealCardsPrompt } from './DealCardsPrompt';
 import { FearPrompt } from './FearPrompt';
 import { TestPrompt } from './TestPrompt';
 import { ComplicationMark, DramaticTaskBar, DramaticTaskPrompt } from './DramaticTask';
+import { ManualMark, isGroupMember, useInitiativeDrag } from './initiativeDrag';
 
 export function InitiativePanel() {
   const you = useGameStore((s) => s.you);
@@ -25,6 +26,8 @@ export function InitiativePanel() {
   const isDm = useGameStore((s) => s.isDm());
   const floatHidden = useGameStore((s) => s.initFloatHidden);
   const setFloatHidden = useGameStore((s) => s.setInitFloatHidden);
+  // Above the early return: a hook on every render, or none.
+  const drag = useInitiativeDrag(state.entries, isDm && state.entries.length > 1);
   if (!you) return null;
   const swade = campaign?.system === 'swade';
   const cardMode = !!state.cardMode;
@@ -58,9 +61,14 @@ export function InitiativePanel() {
 
       <DramaticTaskBar state={state} />
 
-      <ol className="init-list">
+      {isDm && state.entries.length > 1 && (
+        <p className="dim init-drag-hint">Drag a row to a gap to move it (it keeps its card, marked *), or onto another row to group them on that row’s card.</p>
+      )}
+      <ol className="init-list" {...drag.listProps}>
         {state.entries.map((e, i) => (
-          <li key={e.id} className={`${i === state.turnIdx && state.active ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''}`}>
+          <li key={e.id} {...drag.rowProps(e)}
+            className={`${i === state.turnIdx && state.active ? 'current' : ''} ${e.hidden ? 'hidden-entry' : ''} ${isGroupMember(e, state.entries) ? 'init-member' : ''} ${drag.rowClass(e)}`}>
+            {isGroupMember(e, state.entries) && <span className="init-member-mark" title="In a group: acts straight after its leader, on the leader’s card">↳</span>}
             {e.placeholder && cardMode && isDm ? (
               // The DM re-places a placeholder from the row itself.
               <PlacementSelect
@@ -71,7 +79,7 @@ export function InitiativePanel() {
             ) : e.slot ? (
               <SlotChip slot={e.slot} />
             ) : e.card ? (
-              <CardChip card={e.card} />
+              <span className="init-card-wrap"><CardChip card={e.card} /><ManualMark entry={e} /></span>
             ) : cardMode ? (
               // In card mode the chip IS the reason this row sits where it
               // does. An entry with no card yet showed a bare "0", which read
@@ -121,6 +129,12 @@ export function InitiativePanel() {
                 {!cardMode && (
                   <button className="link" title="Re-roll this entry's initiative" onClick={() => intents.initUpdate(e.id, { reroll: true })}>
                     🎲
+                  </button>
+                )}
+                {isGroupMember(e, state.entries) && (
+                  <button className="link" title={`Take ${e.name} out of the group — they keep the card and stand just after the group`}
+                    onClick={() => intents.initUngroup(e.id)}>
+                    ⤴
                   </button>
                 )}
                 <button className="link" title={e.hidden ? 'Reveal to players' : 'Hide from players'}

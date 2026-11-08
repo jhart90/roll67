@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { intents, useGameStore } from '../store/game';
 import { CardChip } from '../util/PlayingCardView';
 import { ComplicationMark, DramaticTaskBar } from '../panels/DramaticTask';
+import { ManualMark, isGroupMember, useInitiativeDrag } from '../panels/initiativeDrag';
 
 /** The tool rail owns the left edge: a 40px button plus 6px padding either
  *  side plus its border. Starting at 16 put the tracker on top of it. */
@@ -37,6 +38,7 @@ export function InitiativeFloat() {
   // just the interesting ones.
   const budgets = useGameStore((st) => st.moveBudgets);
   const upTokenId = useGameStore((st) => st.initiativeState.entries[st.initiativeState.turnIdx]?.tokenId ?? null);
+  const drag = useInitiativeDrag(state.entries, you?.role === 'dm' && state.entries.length > 1);
 
   if (!you || !state.active || dismissed) return null;
 
@@ -87,15 +89,17 @@ export function InitiativeFloat() {
         <button className="link" onClick={() => setDismissed(true)}>✕</button>
       </div>
       <DramaticTaskBar state={state} compact />
-      <ol className="init-list">
+      <ol className="init-list" {...drag.listProps}>
         {rotated.map(({ entry, roundOffset }, i) => (
-          <li key={entry.id} className={`${i === 0 ? 'current' : ''} ${entry.hidden ? 'hidden-entry' : ''}`}>
+          <li key={entry.id} {...drag.rowProps(entry)}
+            className={`${i === 0 ? 'current' : ''} ${entry.hidden ? 'hidden-entry' : ''} ${isGroupMember(entry, state.entries) ? 'init-member' : ''} ${drag.rowClass(entry)}`}>
             {/* Everything from here on happens next round, so say where the
                 round breaks rather than letting the wrap pass unremarked. */}
             {roundOffset > 0 && i > 0 && rotated[i - 1].roundOffset !== roundOffset && (
               <span className="init-round-break">round {state.round + roundOffset}</span>
             )}
-            {entry.card ? <CardChip card={entry.card} /> : <span className="init-value">{entry.value}</span>}
+            {isGroupMember(entry, state.entries) && <span className="init-member-mark" title="In a group: acts straight after its leader, on the leader’s card">↳</span>}
+            {entry.card ? <span className="init-card-wrap"><CardChip card={entry.card} /><ManualMark entry={entry} /></span> : <span className="init-value">{entry.value}<ManualMark entry={entry} /></span>}
             <span className="init-name">{entry.name}{entry.hidden ? ' 🕶' : ''}{entry.held ? ' ⏸' : ''}<ComplicationMark state={state} entry={entry} /></span>
             {entry.held && (entry.ownerUserId === you.userId || you.role === 'dm') && (
               <button className="link" title="Stop holding — act right now" onClick={() => intents.actNow(entry.id)}>▶ act</button>

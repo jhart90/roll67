@@ -288,6 +288,25 @@ export function swadeStowedRollable(sheet: SheetData, rollableId: string): boole
 }
 
 /**
+ * A weapon's Damage field as the dice roller can read it. The book writes
+ * melee damage as "Str+d6": the wielder's Strength die plus the weapon's.
+ * Typed that way, "Str" becomes the character's CURRENT acing Strength die
+ * (so it follows them when Strength goes up) and the weapon dice ace too,
+ * as every SWADE damage die does. A field without "Str" is left exactly as
+ * typed: compendium weapons already have the Strength die folded in.
+ */
+export function swadeDamageExpr(sheet: SheetData, damage: string): string {
+  const raw = damage.trim();
+  if (!/\bstr(?:ength)?\b/i.test(raw)) return raw;
+  const sides = dieSides(str(sheet, 'strength', 'd6')) || 6;
+  return raw
+    .replace(/\s+/g, '')
+    // Weapon dice first, so the Str die this inserts isn't touched again.
+    .replace(/(\d*)d(\d+)(!?)/gi, (_m, n: string, s: string) => `${n || '1'}d${s}!`)
+    .replace(/\bstr(?:ength)?\b/gi, `1d${sides}!`);
+}
+
+/**
  * Does this weapon row also fight hand to hand? Only a weapon that isn't
  * already a Fighting weapon can — ticking the box on a sword changes nothing.
  */
@@ -1169,7 +1188,7 @@ export const swade: SystemSchema = {
           d20: false,
         });
       }
-      let dmg = str(atk, 'damage', '').trim();
+      let dmg = swadeDamageExpr(sheet, str(atk, 'damage', ''));
       // A maintained Smite adds +2 damage to the wielded weapon.
       if (dmg && sheet.smiteActive === true && atk.wielded === true) dmg = `${dmg}+2`;
       if (dmg) {

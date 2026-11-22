@@ -1,7 +1,7 @@
 import type { AoeShape, Character, SheetData } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
-import { gearTraitBonus, skillDie, swade, swadeAlsoMelee, swadeArcaneExpr, swadeStowed, traitExpr } from './swade.js';
+import { dieSides, gearTraitBonus, skillDie, swade, swadeAlsoMelee, swadeArcaneExpr, swadeStowed, traitExpr } from './swade.js';
 import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
 import { quietyear } from './quietyear.js';
@@ -331,6 +331,31 @@ export function combatActions(character: Character): CombatAction[] {
     // Unconditional, because SWADE lets anyone try: an unskilled attempt is
     // d4−2 and a bad idea, not an impossible one. Any Healing bonus from gear
     // (a Medkit's +2) is already folded into the expression.
+    // Unarmed: a punch, a kick, a headbutt. Everyone has fists, so it is
+    // always offered — Fighting to hit (with the Wild Die), and the bare
+    // Strength die for damage (no Wild Die: damage never gets one). Rolling
+    // a Strength TRAIT test for the damage, as the table had to before this,
+    // throws a Wild Die that isn't owed. A sheet that already lists its own
+    // fists (Brawler's bigger die, Martial Artist) keeps that row instead.
+    const hasOwnFists = rows(sheet, 'attacks').some((a) => /\b(unarmed|punch|fists?|brawl)/i.test(str(a, 'name', '')));
+    if (!hasOwnFists) {
+      const strSides = dieSides(str(sheet, 'strength', 'd6')) || 6;
+      out.push({
+        id: 'unarmed',
+        label: 'Unarmed',
+        effect: 'damage',
+        attackExpr: traitExpr(sheet, skillDie(sheet, 'Fighting')),
+        amountExpr: `1d${strSides}!`,
+        rangeFt: TOUCH_FT,
+        damageType: 'bludgeoning',
+        ranged: false,
+        consumesItem: false,
+        source: 'attack',
+        index: 1090,
+        skillName: 'Fighting',
+      });
+    }
+
     out.push({
       id: 'heal:hands',
       label: 'Treat Wounds',

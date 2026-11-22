@@ -2960,7 +2960,13 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
       // no ammunition, and a stray 0 in its Ammo Left box used to read as
       // empty and tell a dinosaur to reload.
       const swadeAmmo = actor.system === 'swade' && atkRow ? swadeAmmoLeft(atkRow) : -1;
-      if (swadeAmmo >= 0) {
+      // A spear's stab needs the spear in hand, not a round: once it has been
+      // thrown there is nothing left to stab with until it is picked back up.
+      if (action.meleeMode === true && swadeAmmo === 0) {
+        emitError(socket, `${str(atkRow ?? {}, 'name', 'That weapon')} has been thrown — get it back before stabbing with it.`);
+        return;
+      }
+      if (swadeAmmo >= 0 && action.meleeMode !== true) {
         const need = AMMO_BY_ROF[Math.min(6, effRof)];
         if (swadeAmmo < need) {
           emitError(socket, `${action.label} needs ${need} round${need === 1 ? '' : 's'} at RoF ${effRof} — only ${swadeAmmo} left. Reload or fire slower.`);
@@ -3395,7 +3401,8 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
         }
       }
 
-      if (action.source === 'attack') {
+      // A spear stabbed rather than thrown stays in hand: no throw spent.
+      if (action.source === 'attack' && action.meleeMode !== true) {
         const fresh = characters.byId(actor.id) ?? actor;
         const atks = Array.isArray(fresh.sheet.attacks) ? [...(fresh.sheet.attacks as SheetData[])] : [];
         const row = atks[action.index];

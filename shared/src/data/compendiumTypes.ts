@@ -360,6 +360,9 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
       // "recalls to the thrower": the one throw comes back by Recall (a whole
       // turn) rather than by picking up another from the pack.
       const recall = thrown && /\brecalls to the thrower\b/i.test(propText);
+      // "also stabs in melee": a spear is hurled with Athletics but jabbed
+      // with Fighting, so the row ticks Melee too and offers both attacks.
+      const alsoMelee = !melee && /\balso stabs in melee\b/i.test(propText);
       return {
         listId: 'attacks',
         row: {
@@ -387,6 +390,7 @@ export function applyEntry(entry: ContentEntry, sheet: SheetData): ApplyResult |
           ...(hardRange ? { hardRange: true } : {}),
           ...(thrown ? { thrown: true } : {}),
           ...(recall ? { recall: true } : {}),
+          ...(alsoMelee ? { alsoMelee: true } : {}),
           weight: weightFor(entry.name, 'weapon', entry.gear?.weight),
           notes: propText,
         },

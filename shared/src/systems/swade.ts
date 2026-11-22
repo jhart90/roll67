@@ -281,10 +281,18 @@ export function swadeStowed(atk: SheetData): boolean {
  * those ids is not a weapon roll and is never stowed.
  */
 export function swadeStowedRollable(sheet: SheetData, rollableId: string): boolean {
-  const m = /^(?:attack|damage)_(\d+)$/.exec(rollableId);
+  const m = /^(?:attack|damage|melee)_(\d+)$/.exec(rollableId);
   if (!m) return false;
   const row = rows(sheet, 'attacks')[Number(m[1])];
   return !!row && swadeStowed(row);
+}
+
+/**
+ * Does this weapon row also fight hand to hand? Only a weapon that isn't
+ * already a Fighting weapon can — ticking the box on a sword changes nothing.
+ */
+export function swadeAlsoMelee(atk: SheetData): boolean {
+  return atk.alsoMelee === true && !/^fighting$/i.test(str(atk, 'skill', 'Fighting'));
 }
 
 /** Parry modifier from wielded weapons (a Rapier's +1, a Great Sword's −1). */
@@ -823,6 +831,10 @@ const gearTab: SheetTab = {
         // "If an attack doesn't say it can be evaded, it can't" — so it is a
         // box the attack has to tick, not something guessed from its shape.
         { id: 'evadable', label: 'Can be Evaded', type: 'checkbox', width: 'sixth' },
+        // A spear is thrown with Athletics but stabbed with Fighting. Ticking
+        // this on a ranged/thrown weapon adds a separate adjacent-only
+        // Fighting attack with the same damage, alongside the throw.
+        { id: 'alsoMelee', label: 'Melee too', type: 'checkbox', width: 'sixth' },
       ],
     },
     {
@@ -1147,6 +1159,16 @@ export const swade: SystemSchema = {
         group: 'Attacks',
         d20: false,
       });
+      // The stabbing side of a thrown spear: same weapon, Fighting roll.
+      if (swadeAlsoMelee(atk)) {
+        out.push({
+          id: `melee_${i}`,
+          label: `${name} (Fighting, melee${improvised ? ', improvised −2' : ''})`,
+          expr: traitExpr(sheet, skillDie(sheet, 'Fighting'), improvised),
+          group: 'Attacks',
+          d20: false,
+        });
+      }
       let dmg = str(atk, 'damage', '').trim();
       // A maintained Smite adds +2 damage to the wielded weapon.
       if (dmg && sheet.smiteActive === true && atk.wielded === true) dmg = `${dmg}+2`;

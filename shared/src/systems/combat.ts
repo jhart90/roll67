@@ -1,7 +1,7 @@
 import type { AoeShape, Character, SheetData } from '../types.js';
 import { dnd5e } from './dnd5e.js';
 import { hasDiscipline, swn } from './swn.js';
-import { gearTraitBonus, skillDie, swade, swadeArcaneExpr, swadeStowed, traitExpr } from './swade.js';
+import { gearTraitBonus, skillDie, swade, swadeAlsoMelee, swadeArcaneExpr, swadeStowed, traitExpr } from './swade.js';
 import { num, rows, str, usableAmount, type CombatAction } from './types.js';
 
 import { quietyear } from './quietyear.js';
@@ -138,6 +138,33 @@ export function combatActions(character: Character): CombatAction[] {
       // Put away: still listed, but greyed out and refused until drawn.
       ...(character.system === 'swade' && swadeStowed(atk) ? { stowed: true as const } : {}),
     });
+
+    // SWADE spear (or any thrown weapon ticked "Melee too"): the same weapon
+    // stabbed at an adjacent foe. Fighting to hit, arm's reach, the weapon's
+    // own damage and AP — but nothing of the throw: no range bands, no Recall,
+    // no template, and it never spends the one throw the row is holding.
+    const meleeRoll = rollables.find((r) => r.id === `melee_${i}`);
+    if (character.system === 'swade' && swadeAlsoMelee(atk) && meleeRoll) {
+      out.push({
+        id: `melee:${i}`,
+        label: `${name} (melee)`,
+        effect: 'damage',
+        attackExpr: meleeRoll.expr,
+        amountExpr: damage?.expr ?? '0',
+        rangeFt: TOUCH_FT,
+        damageType: str(atk, 'dtype', ''),
+        ranged: false,
+        consumesItem: false,
+        source: 'attack',
+        index: i,
+        skillName: 'Fighting',
+        meleeMode: true,
+        ...(num(atk, 'ap', 0) > 0 ? { ap: num(atk, 'ap', 0) } : {}),
+        ...(atk.heavy === true ? { heavy: true } : {}),
+        ...(condition && !save ? { appliesCondition: condition } : {}),
+        ...(swadeStowed(atk) ? { stowed: true as const } : {}),
+      });
+    }
 
     // SWADE Suppressive Fire: any RoF 2+ ranged weapon can hose down a
     // medium blast template instead of aiming at one target — everyone under

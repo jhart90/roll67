@@ -1068,6 +1068,7 @@ function RollsColumn({ character, canRoll }: { character: Character; canRoll: bo
                 disabled={!canRoll || !myToken || dry || stowed}
                 title={stowed ? `${a.label} isn't in hand — tick Wielded on its card to use it`
                   : !myToken ? "Place this character's token on the map first"
+                  : dry && a.meleeMode ? `${str(atkRow ?? {}, 'name', a.label)} has been thrown — get it back before stabbing with it`
                   : dry && a.recall ? `${a.label} is still out — Recall it (a whole turn) before throwing again`
                   : dry ? `Needs ${minNeeded} round${minNeeded === 1 ? '' : 's'} — only ${ammoLeft} left. Reload!`
                     : maxRof >= 2 && !a.suppressive ? 'Choose a rate of fire, then pick a target'

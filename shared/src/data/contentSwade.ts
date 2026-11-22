@@ -164,7 +164,7 @@ const WEAPONS: W[] = [
   // ---- Ranged: medieval ----
   ['Axe, Throwing', 'Ranged', '1d6!', 'slashing', 'ranged', ['range 15/30/60', 'add Str die to damage', 'thrown', 'min Str d6'], 100, 3],
   ['Net (Weighted)', 'Ranged', '0', '', 'ranged', ['range 15/30/60', 'thrown', 'a hit Entangles', 'Hardness 10, cut free only', 'min Str d6'], 50, 8],
-  ['Spear/Javelin', 'Ranged', '1d6!', 'piercing', 'ranged', ['range 15/30/60', 'add Str die to damage', 'thrown', 'min Str d6'], 100, 3],
+  ['Spear/Javelin', 'Ranged', '1d6!', 'piercing', 'ranged', ['range 15/30/60', 'add Str die to damage', 'thrown', 'also stabs in melee with Fighting', 'min Str d6'], 100, 3],
   // ---- Ranged: modern ----
   ['Compound Bow', 'Ranged', '1d6!', 'piercing', 'ranged', ['range 60/120/240', 'add Str die to damage', 'AP 1', 'min Str d6', 'caliber: arrows'], 200, 3],
   ['Crossbow (Modern)', 'Ranged', '2d6!', 'piercing', 'ranged', ['range 75/150/300', 'AP 2', 'min Str d6', 'caliber: bolts'], 300, 7],

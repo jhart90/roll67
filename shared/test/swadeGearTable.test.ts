@@ -644,3 +644,54 @@ describe('Plasma-Javelin: double a 9mm per hit, a 9mm per turn', () => {
     expect(combatActions(ch).find((a) => a.label === 'Plasma-Javelin')?.recall).toBe(true);
   });
 });
+
+describe('a spear is thrown with Athletics and stabbed with Fighting', () => {
+  const byName = new Map(contentForSystem('swade').map((e) => [e.name, e]));
+  const sheetWith = (attacks: SheetData[]): SheetData => ({
+    ...swade.defaultSheet(), strength: 'd8',
+    skills: [{ name: 'Fighting', die: 'd10' }, { name: 'Athletics', die: 'd6' }],
+    attacks,
+  });
+  const charWith = (attacks: SheetData[]) =>
+    ({ id: 'c', name: 'Spearman', system: 'swade', sheet: sheetWith(attacks) }) as unknown as Character;
+  const spearRow = () => applyEntry(byName.get('Spear/Javelin')!, sheetWith([]))!.row as SheetData;
+
+  it('arrives from the compendium with Melee too ticked', () => {
+    expect(spearRow()).toMatchObject({ skill: 'Athletics', thrown: true, alsoMelee: true, damage: '1d8!+1d6!' });
+    // A thrown axe or a grenade is not a stabbing weapon.
+    expect((applyEntry(byName.get('Axe, Throwing')!, sheetWith([]))!.row as SheetData).alsoMelee).toBeUndefined();
+  });
+
+  it('offers both a ranged throw and a separate adjacent Fighting attack', () => {
+    const acts = combatActions(charWith([spearRow()]));
+    const thrown = acts.find((a) => a.id === 'attack:0')!;
+    const stab = acts.find((a) => a.id === 'melee:0')!;
+    expect(thrown).toMatchObject({ ranged: true, thrown: true, skillName: 'Athletics' });
+    expect(stab).toMatchObject({
+      label: 'Spear/Javelin (melee)', ranged: false, rangeFt: 5, skillName: 'Fighting',
+      meleeMode: true, amountExpr: thrown.amountExpr, index: 0,
+    });
+    expect(stab.thrown).toBeUndefined();
+    // Rolled off Fighting (d10), not Athletics (d6).
+    expect(stab.attackExpr).toContain('1d10');
+    expect(stab.attackExpr).not.toEqual(thrown.attackExpr);
+  });
+
+  it('works on a hand-made thrown weapon once the box is ticked, and not before', () => {
+    const shaft = { name: 'Shaft', skill: 'Athletics', damage: '1d8!+1d6!', range: 15, thrown: true };
+    expect(combatActions(charWith([shaft])).some((a) => a.id === 'melee:0')).toBe(false);
+    expect(combatActions(charWith([{ ...shaft, alsoMelee: true }])).find((a) => a.id === 'melee:0')?.skillName).toBe('Fighting');
+  });
+
+  it('never doubles up a weapon that is already a Fighting weapon', () => {
+    const sword = { name: 'Sword', skill: 'Fighting', damage: '1d8!+1d8!', range: 5, alsoMelee: true };
+    expect(combatActions(charWith([sword])).some((a) => a.id === 'melee:0')).toBe(false);
+  });
+
+  it('greys the stab out with the weapon when it is put away', () => {
+    const stowed = { ...spearRow(), wielded: false };
+    const acts = combatActions(charWith([stowed]));
+    expect(acts.find((a) => a.id === 'melee:0')?.stowed).toBe(true);
+    expect(acts.find((a) => a.id === 'attack:0')?.stowed).toBe(true);
+  });
+});

@@ -160,6 +160,11 @@ export interface CombatAction {
   /** SWADE: a thrown weapon that comes back to its thrower. Once thrown it is
    *  spent until Recalled, which takes the thrower's whole next turn. */
   recall?: boolean;
+  /** SWADE: the hand-to-hand side of a weapon that is also thrown — a spear
+   *  stabbed with Fighting at an adjacent foe rather than hurled. It shares
+   *  the weapon's row (so it greys out once the spear has been thrown) but
+   *  never spends the throw. */
+  meleeMode?: boolean;
   /** SWN: shock — this much damage lands even on a MISS against targets
    *  whose AC is at or below shockAc (the "shock N/AC M" weapon tag). */
   shockDamage?: number;

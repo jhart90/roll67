@@ -809,6 +809,14 @@ export interface BennyRollRec {
    * of it that can drift.
    */
   onHit?: () => void;
+  /**
+   * A DAMAGE roll's counterpart to onHit. By the time anyone spends a Benny,
+   * the first total has already landed: Shaken, Wounds, or nothing. A better
+   * reroll calls this with the new total so the target ends up as though the
+   * better number had been rolled first, using the attack's own closure (its
+   * cover, armor, AP and target) rather than a second copy of that maths.
+   */
+  onBetter?: (total: number) => void;
   /** The chat card this roll was posted as, so a reroll that overtakes it can
    *  put a cover on the dice the table already watched. */
   msgId?: number;
@@ -948,12 +956,15 @@ export function recordBennyRoll(
   /** The number this roll was up against, and what happens if a reroll now
    *  clears it. See BennyRollRec. */
   against?: { tn: number; tnName: string; hit: boolean; onHit?: () => void },
+  /** A damage roll's way to land a better reroll. See BennyRollRec.onBetter. */
+  onBetter?: (total: number) => void,
 ): void {
   if (ch.system !== 'swade') return;
   const rec: BennyRollRec = {
     kind, expr, total, label, at: Date.now(),
     ...(critFail ? { critFail: true } : {}),
     ...(against ? { tn: against.tn, tnName: against.tnName, hit: against.hit, onHit: against.onHit } : {}),
+    ...(onBetter ? { onBetter } : {}),
   };
   // The attack path records the same roll twice — once early so a Critical
   // Failure can be refused, again once the TN is known. The second call
@@ -984,7 +995,7 @@ const RESIST_COMPANIONS: Record<string, string[]> = {
   paralyzed: ['stunned', 'prone'],
   bound: ['entangled'],
 };
-function effectSnap(ch: Character): ResistEffects {
+export function effectSnap(ch: Character): ResistEffects {
   return { conditions: conditionsOf(ch.sheet), wounds: num(ch.sheet, 'wounds', 0), fatigue: num(ch.sheet, 'fatigue', 0) };
 }
 export function recordResistRoll(
@@ -1023,6 +1034,17 @@ export function recordResistRoll(
       fatigue: opts.fatigue ? Math.max(0, after.fatigue - before.fatigue) : 0,
     };
   }, opts.settleMs);
+}
+
+/** What one blow did to its target: the conditions damage can cause, and the
+ *  Wounds it added. Measured as a difference so nothing else is caught up. */
+export function damageEffects(before: ResistEffects, after: ResistEffects): ResistEffects {
+  const fromDamage = ['shaken', 'incapacitated', 'bleeding'];
+  return {
+    conditions: after.conditions.filter((c) => !before.conditions.includes(c) && fromDamage.includes(c)),
+    wounds: Math.max(0, after.wounds - before.wounds),
+    fatigue: 0,
+  };
 }
 
 /** Take a failed resist's effects back off. Returns what was lifted, in words. */

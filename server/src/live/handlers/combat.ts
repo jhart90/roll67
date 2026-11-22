@@ -26,7 +26,7 @@ import {
 import { campaigns, characters, chat, initiative, maps, tokens, redactChat } from '../../db/repos.js';
 import { newId } from '../../db/db.js';
 import { campaignRoom, campaignSockets, dmRoom, emitError, safe, sdata, userRoom } from '../hub.js';
-import { aimStateFor, applyConditionTo, bennyPurse, emitBennyState, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordResistRoll, reverseResistEffects, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
+import { aimStateFor, applyConditionTo, bennyPurse, emitBennyState, spendBenny as spendOneBenny, critFailFor, swadeHitText, applyHpDelta, applySwadeWoundHeal, breakAim, clearConcentrationEffects, computeHpDelta, dropCarriedLoot, floatHp, persistSheet, noteBennyRollMessage, postStatusLine, recordBennyRoll, recordResistRoll, reverseResistEffects, effectSnap, damageEffects, type ResistEffects, recordSoakRoll, resolveIncapacitation, resolveOutOfControl, takeOocOffer, setAimState, takeBennyRoll, takeSoakOffer } from '../hp.js';
 import { socketsSeeingToken, syncMapVision } from '../visionService.js';
 import { rollGate } from '../locks.js';
 import { applyAdv } from './chat.js';
@@ -3539,6 +3539,87 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           actor = persistSheet(io, d.campaignId, actor, { res_savageAttacker: used + 1 });
         }
       }
+      /** The rolled total once cover, save scaling, Heavy Armor and the
+       *  target's resistances have had their say. A function so a Benny
+       *  reroll of this damage is measured exactly the same way. */
+      const afterDefenses = (rolled: number): { magnitude: number; resistTag: string } => {
+        let magnitude = Math.max(0, rolled);
+        let resistTag = '';
+        // Cover Armor Bonus: the obstacle that made the shot harder also
+        // absorbs part of what gets through (+2 armor per cover grade). SAID
+        // on the card: silently it turned a roll that equalled Toughness into
+        // "no effect" with nothing on screen to explain it.
+        if (actor.system === 'swade' && coverPenalty < 0 && hit) {
+          magnitude = Math.max(0, magnitude + coverPenalty);
+          resistTag += ` (cover armor ${coverPenalty})`;
+        }
+        // Save-based spells scale the rolled damage (half / none on a save).
+        if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
+        // Heavy Armor: an ordinary weapon does not scratch a Gargantuan hull —
+        // not less damage, none. The fight has to be won with a Heavy Weapon or
+        // some other way entirely, and saying so plainly is the point: a player
+        // who sees "0 — cutlass can't hurt Heavy Armor" goes looking for the
+        // cannon, where a small number just reads as bad luck.
+        if (action.effect === 'damage' && hit && targetChar && targetChar.system === 'swade'
+          && hasHeavyArmor({ size: num(targetChar.sheet, 'size', 0), flag: targetChar.sheet.heavyArmor })
+          && action.heavy !== true) {
+          magnitude = 0;
+          resistTag = ' (Heavy Armor — needs a Heavy Weapon)';
+        }
+        if (action.effect === 'damage' && hit && targetChar && magnitude > 0) {
+          const defended = applyDamageDefenses(targetChar.system, targetChar.sheet, action.damageType, magnitude);
+          if (defended.label) {
+            magnitude = defended.amount;
+            resistTag = ` (${defended.label})`;
+          }
+          // A shield's ranged bonus and the weapon's AP are no longer taken off
+          // the DAMAGE here: they move the Toughness the damage is measured
+          // against (swadeEffectiveToughness, below), so the card can show the
+          // arithmetic — "7 vs. Toughness 9 (+2 shield vs ranged, −AP 2 = 7)"
+          // — and a roll that equals the number on the sheet reads as the
+          // Shaken it is.
+        }
+        return { magnitude, resistTag };
+      };
+      /** What this blow did to a SWADE target once it landed — filled in by
+       *  applyToTarget, read by a Benny reroll of the damage so a better total
+       *  can replace the first one's effects instead of stacking on them. */
+      const landed: { done: boolean; effects?: ResistEffects } = { done: false };
+      const swadeTargetId = action.effect === 'damage' && hit && targetChar?.system === 'swade' ? targetChar.id : null;
+      /**
+       * A better damage reroll, landed for real. Takes off what the first
+       * total did (its Shaken, its Wounds) and applies the new total from
+       * there, so the target ends up where the better roll would have put
+       * them in the first place. Measuring a difference, not restoring a
+       * snapshot, so nothing that happened to them since is undone.
+       */
+      const landBetterDamage = (rolled: number, tries = 0): void => {
+        if (!swadeTargetId) return;
+        // The first total hasn't reached the target yet (its dice are still
+        // settling). Wait for it rather than landing both.
+        if (!landed.done) {
+          if (tries < 40) setTimeout(() => landBetterDamage(rolled, tries + 1), 250);
+          return;
+        }
+        const fresh = characters.byId(swadeTargetId);
+        if (!fresh) return;
+        // This same blow already put them down: a bigger number can't drop
+        // them any further, and redoing it would replay the Incapacitation.
+        if (landed.effects?.conditions.includes('incapacitated') && conditionsOf(fresh.sheet).includes('incapacitated')) return;
+        const { magnitude: m } = afterDefenses(rolled);
+        if (landed.effects) reverseResistEffects(io, d.campaignId, fresh, landed.effects);
+        const base = characters.byId(swadeTargetId) ?? fresh;
+        const before = effectSnap(base);
+        if (m > 0) {
+          applyHpDelta(io, d.campaignId, base, -m, action.spellName ?? action.label, actor.name, action.damageType,
+            { ranged: !!action.ranged, ap: action.ap ?? 0 });
+        }
+        const after = characters.byId(swadeTargetId) ?? base;
+        landed.effects = damageEffects(before, effectSnap(after));
+        const verdict = swadeHitText(base, after) ?? 'No effect';
+        floatHp(io, d.campaignId, src.mapId, tgt.id, -m, impactKind, action.damageType, verdict);
+        postStatusLine(io, d.campaignId, `🪙 ${actor.name}'s rerolled ${action.label} damage on ${tgt.name}: ${verdict.replace(/!$/, '')}.`);
+      };
       if (actor.system === 'swade' && hit) {
         // Damage is measured against Toughness, so that is the number the
         // reroll's card should name — "9 vs Toughness 8", not "9 vs the 7 you
@@ -3549,44 +3630,10 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           io, d.campaignId, actor, 'damage', action.amountExpr, amountRoll.total, `their ${action.label} damage`,
           false,
           tough > 0 ? { tn: tough, tnName: 'Toughness', hit: amountRoll.total >= tough } : undefined,
+          swadeTargetId ? (total) => landBetterDamage(total) : undefined,
         );
       }
-      let magnitude = Math.max(0, amountRoll.total);
-      let resistTag = '';
-      // Cover Armor Bonus: the obstacle that made the shot harder also
-      // absorbs part of what gets through (+2 armor per cover grade). SAID
-      // on the card: silently it turned a roll that equalled Toughness into
-      // "no effect" with nothing on screen to explain it.
-      if (actor.system === 'swade' && coverPenalty < 0 && hit) {
-        magnitude = Math.max(0, magnitude + coverPenalty);
-        resistTag += ` (cover armor ${coverPenalty})`;
-      }
-      // Save-based spells scale the rolled damage (half / none on a save).
-      if (action.effect === 'damage' && saveScale !== 1) magnitude = Math.floor(magnitude * saveScale);
-      // Heavy Armor: an ordinary weapon does not scratch a Gargantuan hull —
-      // not less damage, none. The fight has to be won with a Heavy Weapon or
-      // some other way entirely, and saying so plainly is the point: a player
-      // who sees "0 — cutlass can't hurt Heavy Armor" goes looking for the
-      // cannon, where a small number just reads as bad luck.
-      if (action.effect === 'damage' && hit && targetChar && targetChar.system === 'swade'
-        && hasHeavyArmor({ size: num(targetChar.sheet, 'size', 0), flag: targetChar.sheet.heavyArmor })
-        && action.heavy !== true) {
-        magnitude = 0;
-        resistTag = ' (Heavy Armor — needs a Heavy Weapon)';
-      }
-      if (action.effect === 'damage' && hit && targetChar && magnitude > 0) {
-        const defended = applyDamageDefenses(targetChar.system, targetChar.sheet, action.damageType, magnitude);
-        if (defended.label) {
-          magnitude = defended.amount;
-          resistTag = ` (${defended.label})`;
-        }
-        // A shield's ranged bonus and the weapon's AP are no longer taken off
-        // the DAMAGE here: they move the Toughness the damage is measured
-        // against (swadeEffectiveToughness, below), so the card can show the
-        // arithmetic — "7 vs. Toughness 9 (+2 shield vs ranged, −AP 2 = 7)"
-        // — and a roll that equals the number on the sheet reads as the
-        // Shaken it is.
-      }
+      let { magnitude, resistTag } = afterDefenses(amountRoll.total);
       // Wound-mending never reaches here — it is the whole of its own branch
       // at the top of resolveDamage, where the Healing roll's margin decides
       // the outcome and `healBlock` decides whether it counts. What is left
@@ -3654,12 +3701,16 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
             const fresh = characters.byId(targetId);
             let hit: string | null = null;
             if (fresh) {
+              const before = effectSnap(fresh);
               applyHpDelta(io, d.campaignId, fresh, delta, action.spellName ?? action.label, actor.name, action.damageType,
                 { ranged: !!action.ranged, ap: action.ap ?? 0 });
               // In SWADE the number is not the news: 9 damage means nothing
               // until it has met a Toughness. Float the verdict instead.
               if (delta < 0) hit = swadeHitText(fresh, characters.byId(targetId) ?? fresh);
+              // What this blow did, for a Benny reroll to replace.
+              if (targetId === swadeTargetId) landed.effects = damageEffects(before, effectSnap(characters.byId(targetId) ?? fresh));
             }
+            landed.done = true;
             floatHp(io, d.campaignId, src.mapId, tgt.id, delta, impactKind, action.damageType, hit ?? undefined);
           };
         } else if (tgt.bar) {
@@ -3747,6 +3798,10 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           emitProjectile(io, d.campaignId, src.mapId, src.id, tgt.id, action.damageType);
         }
         setTimeout(applyToTarget, settleMs);
+      } else {
+        // Nothing reached the target (Heavy Armor, a resistance that ate it
+        // all): there is nothing for a reroll to wait on.
+        landed.done = true;
       }
 
       // Venom, once the bite has landed and told. Scheduled a beat after the
@@ -5337,6 +5392,7 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
             io, d.campaignId, now, kind, rec.expr, best, rec.label, rerollCrit,
             rec.tn === undefined ? undefined
               : { tn: rec.tn, tnName: rec.tnName ?? 'TN', hit: nowHits, ...(nowHits ? {} : { onHit: rec.onHit }) },
+            rec.onBetter,
           );
           // "HIT" is the word for an attack roll. Damage against Toughness is
           // the other question the same shape answers, and calling a 9 against
@@ -5370,6 +5426,13 @@ function swadeShotModifiers(ctx: ShotModCtx): ShotMods {
           // and everything that follows, run from the attack's own closure so
           // it is the same resolution the first roll would have had.
           if (turned && rec.onHit) setTimeout(rec.onHit, diceSettleDelayMs(b.dice));
+          // A better DAMAGE total lands too: the first total's Shaken or
+          // Wounds come off and the new one is applied in their place. Before
+          // this a reroll only posted a card and the target never noticed.
+          if (kind === 'damage' && better && rec.onBetter) {
+            const land = rec.onBetter;
+            setTimeout(() => land(b.total), diceSettleDelayMs(b.dice));
+          }
         }, BENNY_FLIP_MS + resistWait);
         break;
       }
